@@ -1,0 +1,634 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ─────────────────────────────────────────────────────────────────────────
+   ⚠️  THE @tailwindcss/forms PLUGIN IS INTENTIONALLY NOT LOADED
+   ─────────────────────────────────────────────────────────────────────────
+   Do NOT add `@plugin "@tailwindcss/forms";` to this file.
+
+   History: this project used `@plugin "@tailwindcss/forms"` previously. The
+   plugin's base-strategy reset applies styles to bare form elements via
+   selectors like `input[type='text']` (specificity 0,0,1,1) and `select`
+   (specificity 0,0,0,1). Our `@utility form-input` compiles to a single-class
+   selector `.form-input` (specificity 0,0,1,0) — which LOSES to the plugin's
+   attribute selector. Visible symptom: form-input rendered with the plugin's
+   `border-color: #6b7280` (gray-500), padding `0.5rem 0.75rem`, font-size
+   `1rem`, etc., instead of our intended values.
+
+   We override every property the plugin sets anyway, so the plugin was pure
+   cascade noise — providing zero value and constantly fighting our utilities.
+
+   Without it, our utilities win trivially: `.form-input` (0,0,1,0) beats the
+   browser's `input { ... }` (0,0,0,1). No compound selectors needed.
+
+   What we lose: the plugin's checkbox/radio reset. We replicate it manually
+   below in `form-checkbox` (and would do the same for any future form-radio).
+
+   See FRONTEND_GUIDELINES.md §9 and §28 for the full rationale.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THEME TOKENS
+   Color palette (preserved from original).
+   ───────────────────────────────────────────────────────────────────────── */
+@theme {
+    --font-sans:   'Outfit', ui-sans-serif, system-ui, sans-serif;
+    --font-outfit: 'Outfit', sans-serif;
+
+    --color-current:     currentColor;
+    --color-transparent: transparent;
+    --color-white:       #ffffff;
+    --color-black:       #101828;
+
+    /* Brand */
+    --color-brand-25:  #f2f7ff;
+    --color-brand-50:  #ecf3ff;
+    --color-brand-100: #dde9ff;
+    --color-brand-200: #c2d6ff;
+    --color-brand-300: #9cb9ff;
+    --color-brand-400: #7592ff;
+    --color-brand-500: #465fff;
+    --color-brand-600: #3641f5;
+    --color-brand-700: #2a31d8;
+    --color-brand-800: #252dae;
+    --color-brand-900: #262e89;
+    --color-brand-950: #161950;
+
+    /* Light blue */
+    --color-blue-light-25:  #f5fbff;
+    --color-blue-light-50:  #f0f9ff;
+    --color-blue-light-100: #e0f2fe;
+    --color-blue-light-200: #b9e6fe;
+    --color-blue-light-300: #7cd4fd;
+    --color-blue-light-400: #36bffa;
+    --color-blue-light-500: #0ba5ec;
+    --color-blue-light-600: #0086c9;
+    --color-blue-light-700: #026aa2;
+    --color-blue-light-800: #065986;
+    --color-blue-light-900: #0b4a6f;
+    --color-blue-light-950: #062c41;
+
+    /* Gray */
+    --color-gray-25:   #fcfcfd;
+    --color-gray-50:   #f9fafb;
+    --color-gray-100:  #f2f4f7;
+    --color-gray-200:  #e4e7ec;
+    --color-gray-300:  #d0d5dd;
+    --color-gray-400:  #98a2b3;
+    --color-gray-500:  #667085;
+    --color-gray-600:  #475467;
+    --color-gray-700:  #344054;
+    --color-gray-800:  #1d2939;
+    --color-gray-900:  #101828;
+    --color-gray-950:  #0c111d;
+    --color-gray-dark: #1a2231;
+
+    /* Orange */
+    --color-orange-25:  #fffaf5;
+    --color-orange-50:  #fff6ed;
+    --color-orange-100: #ffead5;
+    --color-orange-200: #fddcab;
+    --color-orange-300: #feb273;
+    --color-orange-400: #fd853a;
+    --color-orange-500: #fb6514;
+    --color-orange-600: #ec4a0a;
+    --color-orange-700: #c4320a;
+    --color-orange-800: #9c2a10;
+    --color-orange-900: #7e2410;
+    --color-orange-950: #511c10;
+
+    /* Success */
+    --color-success-25:  #f6fef9;
+    --color-success-50:  #ecfdf3;
+    --color-success-100: #d1fadf;
+    --color-success-200: #a6f4c5;
+    --color-success-300: #6ce9a6;
+    --color-success-400: #32d583;
+    --color-success-500: #12b76a;
+    --color-success-600: #039855;
+    --color-success-700: #027a48;
+    --color-success-800: #05603a;
+    --color-success-900: #054f31;
+    --color-success-950: #053321;
+
+    /* Error */
+    --color-error-25:  #fffbfa;
+    --color-error-50:  #fef3f2;
+    --color-error-100: #fee4e2;
+    --color-error-200: #fecdca;
+    --color-error-300: #fda29b;
+    --color-error-400: #f97066;
+    --color-error-500: #f04438;
+    --color-error-600: #d92d20;
+    --color-error-700: #b42318;
+    --color-error-800: #912018;
+    --color-error-900: #7a271a;
+    --color-error-950: #55160c;
+
+    /* Warning */
+    --color-warning-25:  #fffcf5;
+    --color-warning-50:  #fffaeb;
+    --color-warning-100: #fef0c7;
+    --color-warning-200: #fedf89;
+    --color-warning-300: #fec84b;
+    --color-warning-400: #fdb022;
+    --color-warning-500: #f79009;
+    --color-warning-600: #dc6803;
+    --color-warning-700: #b54708;
+    --color-warning-800: #93370d;
+    --color-warning-900: #7a2e0e;
+    --color-warning-950: #4e1d09;
+
+    /* Accent */
+    --color-theme-pink-500:   #ee46bc;
+    --color-theme-purple-500: #7a5af8;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   COMPONENT UTILITIES (Tailwind v4 @utility)
+   Reusable semantic classes built from Tailwind utilities. Each one
+   replaces a class string repeated 3+ times across the Blade views.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* ── Buttons ──────────────────────────────────────────────────────────── */
+/* Primary call-to-action button (Save, Submit).
+   Height: 40px (h-10) — matches form-input / form-select / all other form
+   controls exactly. */
+@utility btn-primary {
+    @apply inline-flex items-center justify-center gap-2 h-10 rounded-md
+           font-semibold text-xs uppercase tracking-widest
+           px-4 border border-transparent
+           bg-blue-600 text-white
+           hover:bg-blue-700 active:bg-blue-800
+           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+           dark:focus:ring-offset-gray-800
+           disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+/* Secondary / Cancel button. Background and border match form-input so
+   secondary buttons sit on the same visual surface as adjacent text inputs. */
+@utility btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 h-10 rounded-md
+           font-semibold text-xs uppercase tracking-widest
+           px-4
+           bg-white dark:bg-gray-900
+           border border-gray-300 dark:border-gray-700
+           text-gray-700 dark:text-gray-300
+           hover:bg-gray-50 dark:hover:bg-gray-700
+           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
+           dark:focus:ring-offset-gray-800
+           disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+/* Destructive button (Delete). */
+@utility btn-danger {
+    @apply inline-flex items-center justify-center gap-2 h-10 rounded-md
+           font-semibold text-xs uppercase tracking-widest
+           px-4 border border-transparent
+           bg-red-600 text-white
+           hover:bg-red-500 active:bg-red-700
+           focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2
+           dark:focus:ring-offset-gray-800
+           disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+/* Add-button variant used at the top of CRUD pages. */
+@utility btn-primary-add {
+    @apply inline-flex items-center justify-center gap-2 h-10 rounded-md
+           bg-blue-600 px-6 border border-transparent
+           text-center font-medium text-sm text-white
+           hover:bg-blue-700
+           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+           dark:focus:ring-offset-gray-800
+           disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+/* Row-action: Edit (neutral). */
+@utility btn-row-neutral {
+    @apply bg-gray-100 dark:bg-gray-700
+           text-gray-700 dark:text-gray-200
+           px-3 py-1.5 rounded-md
+           hover:bg-blue-600 hover:text-white
+           text-xs font-medium;
+}
+
+/* Row-action: Delete (red). */
+@utility btn-row-danger {
+    @apply bg-red-50 dark:bg-red-900/20
+           text-red-600 dark:text-red-400
+           px-3 py-1.5 rounded-md
+           hover:bg-red-600 hover:text-white
+           text-xs font-medium;
+}
+
+/* Row-action: extra action (green, e.g. Stores button). */
+@utility btn-row-success {
+    @apply bg-green-50 dark:bg-green-900/20
+           text-green-600 dark:text-green-400
+           px-3 py-1.5 rounded-md
+           hover:bg-green-600 hover:text-white
+           text-xs font-medium;
+}
+
+/* Pagination icon button. */
+@utility btn-pager {
+    @apply p-2 border border-gray-200 dark:border-gray-700 rounded-md
+           disabled:opacity-30
+           bg-white dark:bg-gray-800
+           text-gray-600 dark:text-gray-400
+           hover:bg-gray-100 dark:hover:bg-gray-700;
+}
+
+/* Auth submit button — full-width pill on login / register / reset pages. */
+@utility btn-primary-auth {
+    @apply inline-flex items-center justify-center w-full h-10 px-4
+           rounded-lg border border-transparent
+           bg-blue-600 hover:bg-blue-700 active:bg-blue-800
+           text-white text-sm font-semibold
+           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+/* Outlined ghost button. Background and border match form-input so ghost
+   buttons sit on the same visual surface as text inputs. */
+@utility btn-ghost {
+    @apply inline-flex items-center gap-1.5 h-10 px-4 rounded-md
+           border border-gray-300 dark:border-gray-700
+           bg-white dark:bg-gray-900
+           text-sm font-medium
+           text-gray-700 dark:text-gray-300
+           hover:bg-gray-50 dark:hover:bg-gray-700
+           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+           dark:focus:ring-offset-gray-900;
+}
+
+/* Link-style button. */
+@utility btn-link {
+    @apply underline text-sm rounded-md
+           text-gray-600 dark:text-gray-400
+           hover:text-gray-900 dark:hover:text-gray-100
+           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
+           dark:focus:ring-offset-gray-800;
+}
+
+/* ── Cards / Surfaces ─────────────────────────────────────────────────── */
+@utility card {
+    @apply bg-white dark:bg-gray-800
+           rounded-2xl border border-gray-100 dark:border-gray-700
+           overflow-hidden;
+}
+
+@utility card-header {
+    @apply flex flex-col sm:flex-row sm:items-center justify-between
+           gap-4 px-5 py-4
+           border-b border-gray-100 dark:border-gray-700;
+}
+
+@utility card-body {
+    @apply p-5;
+}
+
+@utility card-footer {
+    @apply flex items-center justify-between
+           px-5 py-4
+           border-t border-gray-100 dark:border-gray-700
+           bg-gray-50/30 dark:bg-gray-800/50;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   FORM ELEMENTS
+   With the @tailwindcss/forms plugin removed, these clean @utility classes
+   win the cascade trivially against browser default styles.
+   All form-row controls share the canonical 40px height (h-10).
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Standard text input — used in admin pages (modals, forms, search).
+   Height: 40px via h-10. */
+@utility form-input {
+    @apply block w-full h-10 px-4 text-sm
+           border border-gray-300 dark:border-gray-700
+           bg-white dark:bg-gray-900
+           text-gray-800 dark:text-gray-300
+           placeholder-gray-400 dark:placeholder-gray-500
+           rounded-md
+           focus:outline-none
+           focus:border-indigo-500 dark:focus:border-indigo-600
+           focus:ring-1 focus:ring-indigo-500 dark:focus:ring-indigo-600
+           disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+/* Larger rounded variant for auth (login/register) pages — same 40px height
+   as the standard form-input. Auth pages are intentionally light-mode only
+   (the guest layout has no dark mode), so no dark counterpart is needed. */
+@utility form-input-auth {
+    @apply block w-full h-10 px-4 text-sm
+           border border-gray-300
+           bg-white text-gray-800 placeholder-gray-400
+           rounded-lg
+           focus:outline-none focus:border-blue-500
+           focus:ring-2 focus:ring-blue-500/20
+           dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100 dark:placeholder-gray-500;
+}
+
+/* ── Select dropdown ───────────────────────────────────────────────────
+   Plain CSS (not @utility) because the chevron arrow uses an inline SVG
+   background-image data URI, which is awkward inside @apply syntax.
+   The class selector `.form-select` (0,0,1,0) beats the browser default
+   `select { ... }` (0,0,0,1) — no plugin to fight.
+   Every visible property matches form-input EXCEPT the chevron arrow.
+   ───────────────────────────────────────────────────────────────────── */
+.form-select {
+    display: block;
+    width: 100%;
+    height: 2.5rem;                 /* 40px — matches form-input */
+    padding: 0 2.5rem 0 1rem;       /* px-4 left + chevron room right */
+    font-size: 0.875rem;            /* text-sm */
+    line-height: 1.25rem;
+    border-width: 1px;
+    border-style: solid;
+    border-color: var(--color-gray-300);
+    background-color: var(--color-white);
+    color: var(--color-gray-800);
+    border-radius: 0.375rem;         /* rounded-md */
+    appearance: none;
+    -webkit-appearance: none;
+    background-repeat: no-repeat;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23667085' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+    background-position: right 0.75rem center;
+    background-size: 1.25rem 1.25rem;
+}
+
+.form-select:focus {
+    outline: none;
+    border-color: #6366f1;           /* indigo-500 */
+    box-shadow: 0 0 0 1px #6366f1;
+}
+
+.form-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Dark-mode select — uses .dark variant + class for specificity */
+.dark .form-select {
+    border-color: var(--color-gray-700);
+    background-color: var(--color-gray-900);
+    color: var(--color-gray-300);
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%2398a2b3' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+}
+
+.dark .form-select:focus {
+    border-color: #4f46e5;           /* indigo-600 */
+    box-shadow: 0 0 0 1px #4f46e5;
+}
+
+/* ── Checkbox ──────────────────────────────────────────────────────────
+   Without @tailwindcss/forms, the browser's native checkbox renders by
+   default. We strip it (`appearance-none`) and draw our own check via a
+   background-image SVG that appears only when :checked.
+   ───────────────────────────────────────────────────────────────────── */
+@utility form-checkbox {
+    @apply appearance-none
+           w-4 h-4 rounded-md
+           border border-gray-300 dark:border-gray-600
+           bg-white dark:bg-gray-700
+           cursor-pointer
+           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-0
+           dark:focus:ring-offset-gray-800
+           checked:bg-blue-600 dark:checked:bg-blue-500
+           checked:border-blue-600 dark:checked:border-blue-500
+           disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+/* Custom checkmark — plain CSS because data-URI SVGs don't fit in @apply.
+   Shows only when the checkbox is checked. White stroke on the blue bg. */
+.form-checkbox:checked {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23ffffff'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E");
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+/* ── Form labels and helpers ──────────────────────────────────────────── */
+@utility form-label {
+    @apply block font-medium text-sm
+           text-gray-700 dark:text-gray-300;
+}
+
+@utility form-error {
+    @apply mt-1 text-xs text-red-500;
+}
+
+@utility form-help {
+    @apply mt-1 text-xs text-gray-500 dark:text-gray-400;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   AUTOFILL OVERRIDES
+   Chrome / WebKit apply a hard-coded light-blue background to autofilled
+   inputs via `:-webkit-autofill`, with `!important`. Standard workaround
+   is a giant inset box-shadow that masks the autofill bg, plus
+   -webkit-text-fill-color to keep our text color.
+   ───────────────────────────────────────────────────────────────────────── */
+.form-input:-webkit-autofill,
+.form-input:-webkit-autofill:hover,
+.form-input:-webkit-autofill:focus,
+.form-input-auth:-webkit-autofill,
+.form-input-auth:-webkit-autofill:hover,
+.form-input-auth:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px var(--color-white) inset !important;
+    -webkit-text-fill-color: var(--color-gray-800) !important;
+    caret-color: var(--color-gray-800);
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+.dark .form-input:-webkit-autofill,
+.dark .form-input:-webkit-autofill:hover,
+.dark .form-input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px var(--color-gray-900) inset !important;
+    -webkit-text-fill-color: var(--color-gray-300) !important;
+    caret-color: var(--color-gray-300);
+}
+
+/* ── Tables ───────────────────────────────────────────────────────────── */
+@utility table-base       { @apply w-full text-sm; }
+@utility table-head-row   { @apply border-b border-gray-100 dark:border-gray-700 text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/80; }
+@utility table-th         { @apply px-5 py-3 text-left font-semibold; }
+@utility table-th-right   { @apply px-5 py-3 text-right font-semibold; }
+@utility table-tbody      { @apply divide-y divide-gray-100 dark:divide-gray-700; }
+@utility table-row-hover  { @apply hover:bg-gray-50 dark:hover:bg-gray-700/50; }
+@utility table-cell       { @apply px-5 py-4; }
+@utility table-cell-muted { @apply px-5 py-4 text-gray-600 dark:text-gray-300; }
+
+/* ── Badges ───────────────────────────────────────────────────────────── */
+@utility badge-success {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+           bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400;
+}
+@utility badge-neutral {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+           bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400;
+}
+@utility badge-info {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+           bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400;
+}
+@utility badge-danger {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+           bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400;
+}
+
+/* ── Typography helpers ───────────────────────────────────────────────── */
+@utility text-heading       { @apply font-semibold text-xl text-gray-800 dark:text-white leading-tight; }
+@utility text-subheading    { @apply text-lg font-semibold text-gray-800 dark:text-white; }
+@utility text-card-title    { @apply text-lg font-medium text-gray-900 dark:text-gray-100; }
+@utility text-body-strong   { @apply font-medium text-gray-800 dark:text-white; }
+@utility text-body-soft     { @apply text-gray-600 dark:text-gray-300; }
+@utility text-muted-soft    { @apply text-gray-500 dark:text-gray-400; }
+@utility text-meta          { @apply text-xs text-gray-400; }
+@utility text-link-brand    { @apply text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline; }
+
+/* ── Layout helpers ───────────────────────────────────────────────────── */
+@utility page-container  { @apply max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6; }
+@utility page-toolbar    { @apply flex items-center justify-between mb-6; }
+@utility form-row-2col   { @apply grid grid-cols-1 md:grid-cols-2 gap-4; }
+@utility form-row-3col   { @apply grid grid-cols-1 md:grid-cols-3 gap-4; }
+
+/* ── Navigation (sidebar links) ───────────────────────────────────────── */
+@utility nav-link {
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap
+           text-gray-600 dark:text-gray-400
+           hover:bg-gray-100 dark:hover:bg-gray-800
+           hover:text-gray-900 dark:hover:text-white;
+}
+@utility nav-link-active {
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap
+           bg-blue-600 text-white;
+}
+
+/* Alpine cloak — hide elements until Alpine binds them. */
+[x-cloak] {
+    display: none !important;
+}
+
+/* Sidebar flash prevention — pre-Alpine equivalent of #main-sidebar's width and its
+ * label elements' x-show, keyed off the same localStorage value (see the inline script
+ * in layouts/app.blade.php). Only active until layoutHandler.init() removes the
+ * `sidebar-closed` class from <html>, at which point Alpine's own bindings take over.
+ * The base width below matches w-64 (Alpine's "open" value), which otherwise wouldn't
+ * apply until Alpine loads and evaluates :class for the first time.
+ *
+ * This must live in `@layer utilities` with :where() (zero specificity): Tailwind's
+ * @import puts its own utility classes (w-64, w-0, lg:w-19) inside CSS cascade layers,
+ * and unlayered CSS always beats layered CSS regardless of specificity — so without
+ * this @layer wrapper, this rule would permanently override Alpine's classes even
+ * after Alpine takes over, not just before. */
+@layer utilities {
+    :where(#main-sidebar) {
+        width: 16rem;
+    }
+}
+
+/* Intentionally unlayered (unlike the fallback above) so it wins over Tailwind's
+ * utility classes during the pre-Alpine window regardless of layer/specificity. It
+ * stops applying the instant `sidebar-closed` is removed, matching layoutHandler.init(). */
+html.sidebar-closed #main-sidebar {
+    width: 0;
+}
+@media (min-width: 1024px) {
+    html.sidebar-closed #main-sidebar {
+        width: 4.75rem; /* matches w-19 */
+    }
+}
+html.sidebar-closed [data-sidebar-label] {
+    display: none;
+}
+
+/* Header toggle-button icon flash prevention. These icons use :class="{ hidden: ... }"
+ * (Tailwind's `hidden` utility, not x-show). Same two-part topology as the sidebar
+ * width above: a true zero-specificity default for the common case (:where(), inside
+ * @layer utilities so it stays overridable — Tailwind's own `hidden` class lives in a
+ * cascade layer too, and unlayered CSS always wins regardless of specificity), plus an
+ * unlayered override for the uncommon case that self-invalidates the instant
+ * layoutHandler.init() removes its html class. */
+@layer utilities {
+    :where([data-sidebar-icon="closed"]) {
+        display: none;
+    }
+    :where([data-sidebar-icon="open"]) {
+        display: block;
+    }
+    :where([data-theme-icon="dark"]) {
+        display: none;
+    }
+    :where([data-theme-icon="light"]) {
+        display: block;
+    }
+}
+html.sidebar-closed [data-sidebar-icon="closed"] {
+    display: block;
+}
+html.sidebar-closed [data-sidebar-icon="open"] {
+    display: none;
+}
+html.dark [data-theme-icon="dark"] {
+    display: block;
+}
+html.dark [data-theme-icon="light"] {
+    display: none;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SCROLLBAR THEMING
+   Make native scrollbars adapt to light/dark mode.
+   ───────────────────────────────────────────────────────────────────────── */
+:root {
+    color-scheme: light;
+    scrollbar-color: theme(colors.gray.400) theme(colors.gray.100);
+}
+
+.dark {
+    color-scheme: dark;
+    scrollbar-color: theme(colors.gray.600) theme(colors.gray.800);
+}
+
+/* WebKit / Blink scrollbar styling for finer control */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+::-webkit-scrollbar-track {
+    background: theme(colors.gray.100);
+}
+::-webkit-scrollbar-thumb {
+    background: theme(colors.gray.400);
+    border-radius: 6px;
+    border: 2px solid theme(colors.gray.100);
+}
+::-webkit-scrollbar-thumb:hover {
+    background: theme(colors.gray.500);
+}
+::-webkit-scrollbar-corner {
+    background: theme(colors.gray.100);
+}
+
+.dark ::-webkit-scrollbar-track {
+    background: theme(colors.gray.800);
+}
+.dark ::-webkit-scrollbar-thumb {
+    background: theme(colors.gray.600);
+    border-color: theme(colors.gray.800);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+    background: theme(colors.gray.500);
+}
+.dark ::-webkit-scrollbar-corner {
+    background: theme(colors.gray.800);
+}
+/* Inputs inside a field that currently has a validation error (crud modals) */
+.crud-field-error input,
+.crud-field-error select,
+.crud-field-error textarea {
+    border-color: #ef4444 !important;
+}

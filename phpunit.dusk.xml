@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+>
+    <testsuites>
+        <testsuite name="Browser">
+            <directory>tests/Browser</directory>
+        </testsuite>
+    </testsuites>
+    <php>
+        <!-- Dusk drives a real server and migrates the database fresh on every test.
+             Both this test process and the dusk server load .env.dusk (APP_ENV=dusk),
+             and the DB pins below are a second lock so the dev database is never touched.
+             DuskTestCase refuses to run at all if these don't point at dusk.sqlite. -->
+        <env name="APP_ENV" value="dusk" force="true"/>
+        <env name="APP_URL" value="http://localhost:8001" force="true"/>
+        <env name="SEED_ADMIN_PASSWORD" value="test" force="true"/>
+        <env name="DB_CONNECTION" value="sqlite" force="true"/>
+        <!-- Relative on purpose: resolved from the project root, so renaming or
+             moving the project folder can never point this at the wrong database. -->
+        <env name="DB_DATABASE" value="database/dusk.sqlite" force="true"/>
+        <env name="SESSION_DRIVER" value="file" force="true"/>
+        <env name="CACHE_STORE" value="file" force="true"/>
+        <env name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <env name="MAIL_MAILER" value="log" force="true"/>
+    </php>
+</phpunit>

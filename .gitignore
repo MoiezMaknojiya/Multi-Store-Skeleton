@@ -1,0 +1,67 @@
+# ── Dependencies & build output ──────────────────────────────────────
+/node_modules
+/vendor
+/public/build
+/public/hot
+/public/storage
+
+# ── Environment & secrets — NEVER commit these ───────────────────────
+# .env.example IS tracked, so a fresh clone knows which keys to set.
+# .env.dusk stays out too (it holds the browser-test app key); recreate it
+# from .env.example when setting up Dusk on a new machine.
+.env
+.env.dusk
+.env.backup
+.env.production
+.env.local
+.env.*.local
+/auth.json
+/storage/*.key
+/storage/oauth-*.key
+
+# ── Local databases ──────────────────────────────────────────────────
+# database/.gitignore already covers these; repeated here so a stray
+# sqlite file anywhere in the project can never be committed by accident.
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+
+# ── Logs, caches & test artifacts ────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+/.phpunit.cache
+.phpunit.result.cache
+.pint.cache
+.php-cs-fixer.cache
+/storage/pail
+/storage/debugbar
+
+# ── Editors & IDE tooling ────────────────────────────────────────────
+/.fleet
+/.idea
+/.nova
+/.vscode
+/.zed
+.phpactor.json
+.phpstorm.meta.php
+_ide_helper.php
+_ide_helper_models.php
+
+# ── Claude Code ──────────────────────────────────────────────────────
+# The ruleset (.claude/rules/) and launch.json ARE tracked on purpose —
+# they are project conventions. Only per-machine settings stay local.
+.claude/settings.local.json
+
+# ── OS & scratch files ───────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.bak
+*.orig
+*.rej
+
+# ── Legacy Laravel tooling (harmless, kept from the default file) ────
+Homestead.json
+Homestead.yaml
