@@ -1,569 +1,1530 @@
 # Multi-Store Authorization System — Complete Portable Specification
 
-> **Purpose.** This document is a complete, self-contained specification of the user / store / role / permission system of the "Multi-Store Skeleton" project (originally built in Laravel). It exists so the SAME system can be re-implemented on another stack (Python) **without access to the original codebase or its author**. Every rule, condition, constraint, default, exact guard order, and the *reason* behind it is written down. Error messages that the UI or tests depend on are quoted **verbatim**.
+> **Purpose.** This document is a complete, self-contained specification of the account / store / membership / role / permission / invitation system of the "Multi-Store Skeleton" project (built in Laravel). It exists so the SAME system can be re-implemented on another stack (Python) **without access to the original codebase or its author**. Every rule, condition, constraint, default, exact guard order and — where the code or the design record gives one — the *reason* behind it is written down. Messages that the UI or the tests depend on are quoted **verbatim**; `{name}`-style placeholders mark interpolated values.
 >
-> Conventions: "422" = rejection with a message (two shapes exist — see §18.1); "403" = forbidden; "404" = hidden/not found (used deliberately so ids outside your visibility don't leak existence); "429" = rate-limited. "Actor" = the authenticated user performing a request. "Target" = the user/role/store being acted on. Laravel-specific terms are translated in §22.
+> Conventions: "422" = rejection with a message (two shapes exist — see §19.1); "403" = forbidden; "404" = hidden/not found (used deliberately so ids outside where the actor stands do not leak existence); "429" = rate-limited. "Actor" = the authenticated user performing a request. "Target" = the account / member / role / store / invitation being acted on. Laravel-specific terms are translated in §24. The digital-signage features (screens, media, playlists, channels, campaigns, dayparts) are out of scope except where they touch the people model.
 
 ---
 
 ## 1. Core concepts and vocabulary
 
-The system is a multi-tenant ("multi-store") admin panel with **three mutually exclusive tiers of users**:
+The system is a multi-tenant admin panel in which **a store is an organization** — the industry model of Slack workspaces, GitHub organizations or Shopify stores. Power comes from **membership** alone: a person is a member of a store with exactly one role there. **Nobody owns anybody**: no account records who created it, nobody sets or knows another person's password, and deleting a person deletes nothing anybody else holds. *Reason (owner, 2026-09-16): the previous model gave power through "whoever created you owns you", and a loophole hunt proved that a store user could reset the password of — and cascade-delete — a person they had created after that person was promoted to Super-Admin.*
 
-1. **Super-Admin** — holds the role *named exactly* `Super-Admin`, assigned on the **sentinel row** `store_id = 0` of the `store_user` pivot. Super admins are the only tier allowed to: assign global roles, remove global (store-0) assignments, create/edit/delete global roles, set the signup-default flag, impersonate users, and run activity-log storage maintenance.
-2. **Global users** — hold any role flagged `is_global = true`, also on the store-0 sentinel. They span every store: see **all stores**, assign/remove users in **any** store, and get the global statistics dashboard. **Their powers are still limited to their role's permissions** — being global widens *where* they act, never *what* they can do.
-3. **Store users** — assigned to real stores via `store_user`, exactly **one role per store** (DB-enforced unique). They act only inside stores they belong to, in the currently selected store context (§5, §7).
+- **Account** (`users`) — an identity: name, phone, email, password. Changed only by its owner (Profile, §14.2) or by "forgot password" (§19.4). An account by itself gives no power.
+- **Store** — the organization (tenant). It owns its memberships, its custom roles, its open invitations and its content (screens, media, playlists, dayparts, and its own channels).
+- **Membership** — a `store_user` row `(user_id, store_id > 0, role_id)`: one role per person per store (DB unique).
+- **Platform membership** — a `store_user` row on the **sentinel `store_id = 0`** holding a platform (global) role. Its holder works *above* the stores.
+- **Two tiers, mutually exclusive.** An account is a platform account (has a store-0 row), a store account (has real-store rows), or has no access at all — never both tiers. Every door that creates a membership refuses the other tier (§9.2, §9.3, §9.6, §10.2, §10.3, §13.4). *Reason (owner): mixing the tiers makes visibility and permissions too complex to reason about.*
+- **Super admin** — a platform member whose platform role is THE Super-Admin role: the role named exactly `Super-Admin`, the name compared in application code and never through a database collation (§4.1). **A super admin holds every permission** — every permission check answers yes, whatever the role's rows say (§3.3) — while the rules that are not permissions still bind them. Only super admins make and change the store roles and the platform roles (§7), look after every store's custom roles from the platform (§7.3), put anybody in any store with a role, change that role or take them out (Users → Stores, §13.4), invite platform staff, remove platform roles, "Log in as", reach the permission catalogue and run network advertising.
+- **Primary super admin** — the first person ever given Super-Admin (§4.2). Nobody may delete them or take their role; only they may delete another super admin, take Super-Admin from someone, or invite a new super admin.
+- **Role kinds** (§2.3, §7 — owner's rules, 2026-09-17: **no role is built in but Super-Admin**): **store roles** (`is_global = false`, no store) — made by a super admin and offered in every store; renamed, changed (in every store at once) and deleted while nobody holds them; **the Owner role** — the store role marked `roles.key = 'owner'`, whose holders own their store; renamed and changed like any store role, never deleted; **custom** roles (belong to one store, made inside it); **platform** roles (`is_global = true`, Super-Admin included). Owner, Admin, Staff and Viewer are only the **starter** store roles an installation begins with (§7.1).
+- **Where a permission reaches is where the role sits** (owner's rules, 2026-09-16): on a platform role, every store; on a store's role (a store role or a custom role), the one store the member holds it in. A store's role may also carry the platform permissions that can work inside one store — stores, channels, reading the activity log (`Permission::STORE_SCOPED`) — and there they act on that store alone (§3.2, §3.5). The accounts are the platform's alone: a store's people are its Members page (owner's rule, 2026-09-17, §13).
+- **The Owner role grants nothing by itself** (owner's rule, 2026-09-17: "a role does not matter, its permissions do") — it marks who owns a store: the store's "at least one Owner" (§8.2), the role public signup, owner invitations and opening a store give (§10). Deleting a store is the permission `store-destroy`, which the Owner role starts with (§7.1, §11.4); inviting to or giving the Owner role, or changing or removing an Owner, needs every permission the Owner role holds — the same reach rule as any other role (§8.1). There is no separate handover permission: giving the Owner role is how a store changes hands (§11.3, §26.16).
+- **Hierarchy** — one service, `StoreTeam` (§8): you hand out only roles whose permissions you hold, and you manage only members whose role's permissions you hold, never yourself — with no exception by role, the Owner role included (a super admin's Users → Stores from the platform is bound only by "at least one Owner", §13.4). Any member may leave a store — from the Members page, or from "Your stores" (on Settings → Stores, or on the profile) — except its last Owner. **At least one Owner, always** — changing a role or removing a member (on the Members page or from the platform's Users → Stores), leaving and self-deletion all refuse a store's last Owner; each is decided under a lock on the store row so that co-owners acting at the same moment cannot both pass (§8.2). *Reach alone would not keep it: a member who is not an Owner but holds every permission of the Owner role reaches an Owner, so the Owner count is asked on its own.*
+- **How people enter** — nobody is created by somebody else: public signup (the person creates their account and their store and becomes its Owner, §10.1) or an **email invitation** whose link lets the invitee create their own account or sign in (§9). A member whose role carries `store-store` may also open another store from Settings → Stores and becomes its Owner at once (§10.2), and a super admin may put an existing account holding no platform role straight into any store with a role (§13.4).
 
-**Tier exclusivity (hard rule):** a user is EITHER global (has a store-0 row) OR store-assigned — never both. Assigning a store to a global user is rejected, and assigning a global role to a store-assigned user is rejected ("remove the other tier first", §8.1). *Reason (owner decision): mixing the tiers makes visibility and permissions too complex to reason about.*
-
-**No enforced hierarchy (owner decision):** there are NO role levels, no rank comparisons, no "manager outranks worker" logic anywhere. Users build their own de-facto hierarchy through `created_by` chains and through which permissions they put into the roles they create. *Reason: the owner explicitly rejected enforced hierarchy — customers shape their own structure.*
-
-**The sentinel row:** `store_user.store_id` has **no foreign key** and defaults to `0`. `0` never matches a real store; it marks "this assignment is global". Any query that joins `store_user` to `stores` silently drops sentinel rows; code that needs the global assignment queries the pivot directly with `store_id = 0`.
+**The sentinel row:** `store_user.store_id` has **no foreign key** and defaults to `0`; `0` never matches a real store. Any query joining `store_user` to `stores` silently drops sentinel rows; code needing the platform row queries the pivot directly with `store_id = 0`.
 
 ---
 
 ## 2. Data model (exact schema)
 
-All tables have auto-increment integer `id` PK and `created_at`/`updated_at` unless stated otherwise.
+All tables have an auto-increment integer `id` PK and `created_at`/`updated_at` unless stated otherwise.
 
 ### 2.1 `users`
 | column | type | constraints |
 |---|---|---|
 | first_name, last_name, phone | string | NOT NULL |
-| email | string | NOT NULL, **UNIQUE** |
-| email_verified_at | timestamp | nullable. **A port needs only this column** (nulled on email change §14.2, set by the seeder) — no verification routes/emails are required; the original's scaffolded verification and confirm-password screens are unused (no route requires password confirmation) and may be omitted |
-| password | string | stored bcrypt-hashed (hash-on-write) |
-| remember_token | string | nullable — backs the login "remember me" cookie (§18.3); rotated on password reset (§18.4) |
-| created_by | FK → users.id | nullable, **ON DELETE SET NULL** |
+| email | string | NOT NULL, **UNIQUE** (DB). Written lower-cased by signup (§10.1) and by invitation registration; the profile refuses capitals (§19.2) |
+| email_verified_at | timestamp | nullable. Set by the seeder and for accounts created from an invitation link (§9.5 — opening the link proved the inbox); nulled when Profile changes the email (§14.2). **No route requires a verified email, and there is no verification flow at all**: the scaffolded verify-email screens, their routes (`verification.notice` / `.verify` / `.send`), controllers and rate limiter were deleted, together with the `password.confirm` screen (§26.8). The column stays because an invitation says the address is real; a port may keep it as a plain marker or drop it |
+| password | string | bcrypt, hash-on-write |
+| remember_token | string | nullable — backs "remember me" (§19.3); rotated on password reset, and on logout when one is set |
 
-- **There is deliberately NO `store_id` on users** — unlike `roles` (§2.3). A user's stores are exactly their `store_user` rows; nothing records "the store they were created in", because visibility does not depend on it (§6.1).
-- **`name` is computed, not stored:** `trim(first_name + ' ' + last_name)` — used for all display and for activity-log actor snapshots.
-- **NO soft delete on users** (owner decision). Deletion = hard delete + cascade (§15).
-- Companion tables: `password_reset_tokens` (email PK, token, created_at) and a server-side `sessions` table.
+- **Gone from the old model:** `created_by` (FK users, SET NULL). The create-table migration no longer adds it at all (§22), so no installation of this release has it. Nothing records who created or invited an account.
+- **`name` is computed, not stored:** `trim(first_name + ' ' + last_name)` — used for display and for activity-log actor snapshots.
+- **No soft delete** on users (owner decision). Deletion = hard delete of the row + foreign-key effects + the model's `deleted` hook, which removes what points at the account from outside the foreign keys (§15.3).
+- Companion tables: `password_reset_tokens` (email PK, token, created_at) and a server-side `sessions` table (id PK, user_id nullable indexed, ip_address, user_agent, payload, last_activity indexed) — both created with `users` by the same migration. **There is no `personal_access_tokens` table:** it went with the Sanctum scaffold and the API that never shipped (§26.8), and a test asserts the table is absent (§22). A deleted account's rows in both tables are removed by the `deleted` hook (`sessions` only on the `database` session driver, §15.3).
 
 ### 2.2 `stores`
 | column | type | constraints |
 |---|---|---|
 | name | string | NOT NULL |
-| slug | unsigned bigint | **UNIQUE**, auto-generated: current Unix time in microseconds as an integer, STRING-concatenated with a random integer 10–999, then parsed as one number; regenerated in a loop while it collides. Exact formula is not sacred — any generator of unique unsigned bigints the caller never supplies is acceptable |
+| slug | unsigned bigint | **UNIQUE**, auto-generated on create: current Unix time in microseconds, STRING-concatenated with a random integer 10–999, parsed as one number; regenerated while it collides. Any generator of unique unsigned bigints the caller never supplies is acceptable |
 | street | string | NOT NULL |
 | suite | string | nullable |
 | city | string | NOT NULL |
 | state | string(2) | NOT NULL |
 | zip_code | string(10) | NOT NULL |
 | country | string | NOT NULL |
-| is_active | boolean | default true |
-| created_by | FK → users.id | nullable, ON DELETE SET NULL |
-| deleted_at | timestamp | nullable — **stores ARE soft-deleted** (unlike users) |
+| is_active | boolean | default true — informational only (a badge); no guard, visibility rule or permission reads it. Changed only by the platform's store form (§12.3); a store opened from inside a store starts active (§10.2) |
+| accepts_network_ads | boolean | default false — signage; set only by super-admin tools, never by any form in this document |
+| created_by | FK → users.id | nullable, ON DELETE SET NULL — **history only** (the self-registered owner, the platform user who created the store, or the member who opened it from inside a store); drives no power |
+
+- **No soft delete** (owner's rule, 2026-09-17: "A to Z"): deleting a store purges what it owns and then deletes the row for good (§15.4); the people's accounts and the activity log stay. An older build had a `deleted_at` column that merely hid a deleted store; the create-table migration no longer has it (§22), and a test asserts it is absent. A deleted store is simply missing: every lookup of it answers exactly as for an id that never existed (e.g. 404 at route-model binding, §3.3).
 
 ### 2.3 `roles`
-`name` string NOT NULL (**NOT unique — not in the DB and not in validation**) · `created_by` FK users nullable SET NULL · `is_global` bool default false · `is_signup_default` bool default false · `store_id` FK → stores.id nullable ON DELETE SET NULL.
-- **Names are deliberately not unique:** the role **id** is the identity and everything joins on it. "Cashier" may exist many times — one per store, each with its own permission set — because the same person can run several stores and grant different powers in each. The ONLY name rule is that `Super-Admin` is reserved (§10.2).
-- `isGlobal()` helper: `is_global == true OR name == 'Super-Admin'` (name check = deliberate anchor; the migration adding `is_global` backfilled `true` onto Super-Admin).
-- `is_signup_default` invariant: at most ONE role holds it; never on a global role; super-admin-set only (§10.3).
-- `store_id` invariant: the store the role was built in — stamped on create from `session.current_store_id`, NULL for global roles and for roles created by super/global admins (no store context). NULL = store-less = usable in any store. Flipping a role to global clears it back to NULL. Drives per-store role isolation (§6.2) and the assign guard (§8.1 step 5).
+| column | type | constraints |
+|---|---|---|
+| name | string | NOT NULL, **NOT unique in the database** — the application keeps it new to every list the role is shown in, compared folded (§7.5) |
+| key | string(32) | nullable, **UNIQUE** — `owner` on the Owner role; `admin` / `staff` / `viewer` on the other starter roles while they exist (§7.1); NULL on every other role — no HTTP path writes a key |
+| is_global | boolean | default false |
+| store_id | FK → stores.id | nullable, **ON DELETE CASCADE** — written by the create-table migration (an older build had SET NULL, §22) — a custom role goes with its store and can never outlive it as a store role offered in every store (tested: deleting a store row straight in the database takes its custom role). The purge of §15.4 already deletes a store's custom roles before the row goes; the cascade is the backstop |
+| created_by | FK → users.id | nullable, ON DELETE SET NULL — history only |
+
+- **Gone from the old model:** `is_signup_default` — the create-table migration no longer adds it (§22), and a test asserts it is absent. Public signup finds the Owner role by `key`, never by a flag or a name.
+- **Role kinds — invariants** (owner's rules, 2026-09-17; enforced by the code paths that create roles, and by the starter roles the migrations insert, §22). What a role is for never changes once it exists:
+
+| kind | `key` | `is_global` | `store_id` | created by |
+|---|---|---|---|---|
+| Super-Admin | NULL | true (forced by the seeder) | NULL | the seeder (§21) |
+| Store role | `owner` on the Owner role, a starter key on Admin / Staff / Viewer, NULL on the rest | false | NULL | the starter-roles migration (the four starters) and the seeder (the Owner role when missing), §21–§22; a super admin, `POST /roles` on the platform with `type: store` (§7.4) |
+| Custom | NULL | false | the store | a store member, `POST /roles` inside that store (§7.4) |
+| Platform | NULL | true | NULL | a super admin, `POST /roles` on the platform with `type: platform` |
+
+- **Names are not unique in the database:** the role **id** is the identity and everything joins on it. The application keeps a name apart from every role shown in the same list (§7.5): "Cashier" may be a custom role of several stores, but not also a store role, and no role may be named like Super-Admin.
 
 ### 2.4 `permissions`
-`name` string NOT NULL, **UNIQUE at the DATABASE level** (a real unique index — unlike `roles.name`, which is validation-only) plus validation-layer uniqueness; it is the authorization key · `label` string nullable — display name, regex `^[a-zA-Z0-9 ]*$`, message **"Label can only contain letters, numbers, and spaces."** Display name falls back to raw `name` when label is null (exposed to clients as `display_name`).
+`name` string NOT NULL, **UNIQUE at the database level** (plus validation-layer uniqueness) — it is the authorization key · `label` string nullable — display name, regex `^[a-zA-Z0-9 ]*$`, message **"Label can only contain letters, numbers, and spaces."** Display name falls back to the raw `name` when `label` is null (exposed to clients as `display_name`).
 
 ### 2.5 `role_has_permissions`
-`role_id` FK CASCADE, `permission_id` FK CASCADE, **UNIQUE (role_id, permission_id)**, timestamps.
+`role_id` FK CASCADE · `permission_id` FK CASCADE · **UNIQUE (role_id, permission_id)** · timestamps.
 
 ### 2.6 `store_user` (the heart)
-`user_id` FK CASCADE · `store_id` unsigned bigint **NO FK, default 0** (so sentinel 0 can exist) · `role_id` FK roles CASCADE · **UNIQUE (store_id, user_id)** — DB guarantee of one role per store per user · timestamps.
+`user_id` FK users CASCADE · `store_id` unsigned bigint **NO FK, default 0** (so the sentinel 0 can exist) · `role_id` FK roles CASCADE · **UNIQUE (store_id, user_id)** — the DB guarantee of one role per person per store · timestamps (`created_at` is shown as the member's "Joined" date).
 
-### 2.7 `activity_logs`
-`id` · `actor_id` nullable (FK **dropped** on MySQL when partitioned — §16.5; on other drivers SET NULL) · `actor_name` string NOT NULL (snapshot) · `action` string(100) indexed · `subject_type` string(100) nullable (short class name: `User`, `Store`, `Role`, `Permission`) · `subject_id` nullable · `description` string(1000) nullable · `created_at` indexed, **no updated_at** (DATETIME on MySQL).
+### 2.7 `invitations` (new)
+| column | type | constraints |
+|---|---|---|
+| store_id | FK → stores.id | nullable, ON DELETE CASCADE — **NULL = an invitation to the platform team** (accepting creates a `store_id = 0` membership) |
+| email | string | NOT NULL — stored **lowercased and trimmed** |
+| role_id | FK → roles.id | NOT NULL, ON DELETE CASCADE |
+| token_hash | char(64) | **UNIQUE** — lowercase hex SHA-256 of the token; the token itself exists only in the email link |
+| invited_by | FK → users.id | nullable, ON DELETE SET NULL |
+| expires_at | timestamp | NOT NULL |
+
+Indexes: `(store_id, email)` and `(email)`. **There is no unique constraint on `(store_id, email)`** — "one open invitation per email per place" is enforced by the application only (§9.2, §26.4). A row exists only while the invitation is open: accepting, declining, revoking and — for the Owner invitations of a store that has no Owner — being replaced by the platform's "Invite owner", which invites another address or makes a member Owner (§10.3), delete it; deleting its role (§7.8) or its store (§15.4) deletes it too. Expired rows are **never pruned** (§26.3).
+
+### 2.8 `activity_logs`
+`id` · `actor_id` nullable (FK **dropped** on MySQL when partitioned — §17.5; on other drivers ON DELETE SET NULL) · `actor_name` string NOT NULL (snapshot) · `store_id` unsigned bigint nullable, **no foreign key** — the store the entry belongs to (§17.1); NULL for personal and platform entries, and on a database that predates the column for everything logged before it was added (it is now created with the table, §22; no FK because the table is partitioned on MySQL, which allows none, and a store's history outlives the store) · `action` string(100) indexed · `subject_type` string(100) nullable (short class name: `User`, `Store`, `Role`, `Permission`, …) · `subject_id` nullable · `description` string(1000) nullable · `created_at` indexed, **no updated_at** (DATETIME on MySQL). Index **`(store_id, created_at)`** — a store's reader always filters on the store, then on the date range that prunes the yearly partitions.
+
+### 2.9 `created_by` on content; a channel's store
+`media`, `screens`, `dayparts`, `campaigns`, `channels` and `channel_ads` (like `stores` and `roles`) carry `created_by` FK users nullable **ON DELETE SET NULL** (`screens.paired_by` likewise). It is history only: nothing is authorized, scoped or deleted through it anywhere.
+
+`channels.store_id` (created with the channels table, §22): FK → stores.id, nullable, ON DELETE CASCADE (a backstop only — §15.4 deletes a store's channels explicitly before the store row goes, so that their ads' files are unlinked too). **NULL = the platform's channel**, offered to every store; **set = that store's own channel**, offered to its own screens alone (§6.6). `channels.name` carries **no unique index** (an older build had one): a name has to stand apart only within what one store's list shows, checked by the application (§6.6).
 
 ---
 
-## 3. Permission catalog (exactly 20)
+## 3. Permission catalog (exactly 37)
 
-Names follow `{module}-{action}`; the seeder creates exactly these 20 (count asserted by tests):
+Names follow `{module}-{action}`. The Permission model holds **three lists** that together cover every labelled permission exactly once (tested): `STORE` (22), `PLATFORM` (11), `SUPER_ADMIN_ONLY` (4) — and a fourth that overlaps them, **`STORE_SCOPED` (8)**: the platform permissions a store's role may carry too, which there reach that one store (§3.5). `STORE_SCOPED` is all of `PLATFORM` except `user-view`, `user-destroy` and `activity-destroy` (tested: `PLATFORM` minus `STORE_SCOPED` is exactly those three). Labels are the exact seeded values (`Permission::LABELS`).
 
-| name | label (exact seeded value) | gates |
+### 3.1 The catalogue
+| name | label | list | gates (method + path; every route also needs auth + `throttle:admin`) |
+|---|---|---|---|
+| store-update | Update Store Details | STORE | `PUT /settings/store` (store context — the Stores tab of Settings, whose page opens with `store-view`, §11.1–§11.2); `PUT /stores/{store}` (with `global-tier`: any store, §12.3) |
+| member-view | View Members | STORE | `GET /members`, `GET /members/data` |
+| member-invite | Invite Members | STORE | `POST /members/invitations`, `POST /members/invitations/{invitation}/resend`, `DELETE /members/invitations/{invitation}` |
+| member-update | Change Member Roles | STORE | `PUT /members/{user}` |
+| member-remove | Remove Members | STORE | `DELETE /members/{user}` |
+| role-view | View Roles | STORE | `GET /roles`, `GET /roles/data`, `GET /roles/assignable` |
+| role-store | Create Roles | STORE | `POST /roles` |
+| role-update | Update Roles | STORE | `PUT /roles/{role}` |
+| role-destroy | Delete Roles | STORE | `DELETE /roles/{role}` |
+| screen-view | View Screens | STORE | screens page, data, one screen, reading its playlist |
+| screen-store | Pair Screens | STORE | pairing a TV |
+| screen-update | Update Screens | STORE | renaming / re-orienting; the default-media picker |
+| screen-destroy | Delete Screens | STORE | deleting a screen (revokes its device) |
+| screen-playlist | Change Playlists | STORE | writing, previewing and copying a playlist; the playlist's own media and channel pickers |
+| media-view | View Media Library | STORE | media page + data |
+| media-store | Upload Media | STORE | upload |
+| media-update | Update Media | STORE | title, description, schedule |
+| media-destroy | Delete Media | STORE | delete a file |
+| daypart-view | View Dayparts | STORE | dayparts page + data |
+| daypart-store | Create Dayparts | STORE | create |
+| daypart-update | Update Dayparts | STORE | update |
+| daypart-destroy | Delete Dayparts | STORE | delete |
+| user-view | View Accounts | PLATFORM | `GET /users`, `GET /users/data` (with `global-tier`, §13.1) |
+| user-destroy | Delete Accounts | PLATFORM | `DELETE /users/{user}` (with `global-tier`, §13.2) |
+| store-view | View Stores | PLATFORM · STORE_SCOPED | `GET /stores`, `GET /stores/data` (with `global-tier`); `GET /settings/store` (store context — the Stores tab of Settings, §11.1) |
+| store-store | Create Stores | PLATFORM · STORE_SCOPED | `POST /stores`, `POST /stores/{store}/owner-invitation` (both with `global-tier`); `POST /settings/store/open` (store context, §10.2) |
+| store-destroy | Delete Stores | PLATFORM · STORE_SCOPED | `DELETE /stores/{store}` (with `global-tier`); `DELETE /settings/store` (store context, §11.4) |
+| channel-view | View Channels | PLATFORM · STORE_SCOPED | channels page, data, one channel, its ads |
+| channel-store | Create Channels | PLATFORM · STORE_SCOPED | create a channel |
+| channel-update | Update Channels | PLATFORM · STORE_SCOPED | edit a channel; add / edit / reorder / remove its ads |
+| channel-destroy | Delete Channels | PLATFORM · STORE_SCOPED | delete a channel |
+| activity-view | View Activity Log | PLATFORM · STORE_SCOPED | `GET /activity`, `GET /activity/data`; `GET /activity/partitions` (with `global-tier`) |
+| activity-destroy | Delete Old Activity Logs | PLATFORM | `POST /activity/partitions/maintain` (with `global-tier`) |
+| permission-view | View Permissions | SUPER_ADMIN_ONLY | `GET /permissions`, `GET /permissions/data` (with `super-admin-tier`) |
+| permission-store | Create Permissions | SUPER_ADMIN_ONLY | `POST /permissions` (with `super-admin-tier`) |
+| permission-update | Update Permissions | SUPER_ADMIN_ONLY | `PUT /permissions/{permission}` (with `super-admin-tier`) |
+| permission-destroy | Delete Permissions | SUPER_ADMIN_ONLY | `DELETE /permissions/{permission}` (with `super-admin-tier`) |
+
+**Permissions the old model had, and no installation of this release has** (history — the catalogue the migrations insert is exactly the 37 above, §22): `user-store`, `user-update`, `user-store-view`, `user-store-assign`, `user-store-unassign`, mapped onto the `member-*` permissions and dropped in the 2026-09-16 rebuild; and `store-transfer` ("Transfer Store Ownership"), added on 2026-09-17 for a handover form on the Stores tab and deleted the same day with every grant of it (owner's rules, 2026-09-17, third round: a store changes hands on its Members page, §11.3). **Never on a store's role:** `user-view` and `user-destroy` — refused by `permissionsFor` (§7.6), and the `/users` group keeps `global-tier` whatever a role holds; the accounts are the platform's (§13). *An installation upgraded on 2026-09-17 had them stripped from its store roles and custom roles by a migration since squashed away (§22), so only a row written straight into the database can still carry one.* **Naming gotcha:** `store-store` means CREATE a store (on the platform for a customer, from Settings → Stores for the member themself — §10.2); `store-update` is a STORE permission that is dual-use (§3.5). **Labels:** `user-view` and `store-view` read "View All Accounts" / "View All Stores" in an older build; the catalogue now inserts **"View Accounts"** and **"View Stores"**, because on a store's role they no longer mean "all". No migration ever rewords a label now, but a re-seed resets every catalogued label to the value above (§21), so a rewording done on the Permissions page does not survive one.
+
+### 3.2 Which role may carry what
+*Owner's rules, 2026-09-16: the super admin sees every permission and decides who holds what; a store's people work within their store.*
+- **Where a permission reaches is where the role sits** (§3.5): on a platform role, every store; on a store's role (a store role or a custom role), the one store the member holds it in.
+- A **store's role** — a store role (the Owner role included) or a custom role, whoever writes it: a member inside the store, or a super admin on the platform (§7.4, §7.7) — carries only what can work inside one store: `belongsToStores(name) = name ∈ STORE ∪ STORE_SCOPED`. A member giving a custom role permissions inside a store may give, on top of that, only what they hold there themselves (§7.6).
+- **Never on a store's role:** `user-view` and `user-destroy` (the accounts are the platform's alone — a store's people are its Members page; owner's rule, 2026-09-17), `activity-destroy` (yearly maintenance drops every store's history at once), a permission in **no list** (one created on the Permissions page — it counts as platform-only), and the catalogue.
+- A **platform role other than Super-Admin** carries anything except `SUPER_ADMIN_ONLY` — store permissions included (§3.5).
+- `SUPER_ADMIN_ONLY` (`permission-*`) goes on **no role but Super-Admin** — not even another platform role (owner's decision, kept).
+- The **Super-Admin role** is given every permission row by the seeder and cannot be edited or deleted through HTTP (§7.7) — but its rows no longer matter for authorization: a super admin passes every permission check anyway (§3.3).
+- **Campaigns are not a permission row:** `campaign-manage` is a hand-written super-admin gate (§3.4) and stays so (owner's decision).
+- Every refusal holds **twice**: the role write refuses a misfit (§7.6) AND what only works above the stores keeps a tier lock on its route (§3.4) — `global-tier` on the Stores page and its writes (§12), the accounts pages (the whole `/users` group, §13), the activity log's partitions and maintenance, giving a store an owner, "Log in as", the platform's Users → Stores and the platform team; `super-admin-tier` on the catalogue, platform invitations, platform-role removal and Users → Stores. *Reason: a row can reach the wrong role by other means (written before the rule, or straight into the database) — tested: a store user whose role somehow holds `activity-destroy` still gets 403 from the partitions and maintenance routes, and an Owner whose role somehow holds `user-view` and `user-destroy` gets 403 from `GET /users`, `GET /users/data` and `DELETE /users/{user}`.* A platform account holding every permission row is still not a super admin: the `super-admin-tier` lock keeps it out of the catalogue (tested).
+- *Why the catalogue is never delegated (owner): every permission name is written in code on the routes, so renaming a row either breaks that feature for everybody but the super admins (whom the bypass of §3.3 lets through) or turns a harmless permission a person already holds into a powerful one.*
+
+### 3.3 Authorization wiring
+- At boot, **one gate per permission ROW** is registered: `allowed(actor) = name ∈ contextPermissionNames(actor)` (§5.3). Route middleware `can:{name}` enforces per endpoint. An ability with no gate (e.g. a deleted row) denies — except for a super admin (next point).
+- **A super admin holds every permission** (owner's rule, 2026-09-16: "sab matlab sab"). A single before-hook runs ahead of every ability check for an authenticated user: for the ability `network-ads-toggle` it abstains; otherwise, when `actor.isSuperAdmin()`, it answers **yes**; otherwise it abstains and the ability's own gate decides. So a super admin passes every `can:` middleware, `@can` and `can()` — whatever the Super-Admin role's rows say, for a permission made later on the Permissions page or one renamed, and for the hand-written `global-tier` / `super-admin-tier` / `campaign-manage` gates too (tested: a super admin whose role holds no rows reads the channels, activity and stores data, and `can('report-export')` is true for a permission created afterwards).
+  ```
+  before(actor, ability) = None if ability == 'network-ads-toggle' else (True if actor.isSuperAdmin() else None)
+  ```
+  *It answers permission checks only:* the rules that are not permissions still stand for a super admin — `network-ads-toggle` (a place — "inside a shop, while logged in as one of its people" — not a permission; tested: 403 in a store without impersonation), the primary super admin's protection (§13.2, §13.3), Super-Admin never changed and the Owner role never deleted (§7.7, §7.8), a store's last Owner, a super admin never deleting themselves (§14.2), and every "is this row within reach / inside where you stand" guard (a super admin is not a member of any store, so `currentStore()` still answers 404, §6.1).
+- **Middleware order** (framework priority, load-bearing for status codes): authentication (guest → 401 JSON / redirect to login) → rate limiting (429) → route-model binding (a missing id, a deleted store's too → **404**) → `can:` gates in declared order, group before route (**403**) → controller guards. Consequences: a nonexistent id answers 404 even to someone who lacks the permission; a refused attempt still spends the rate-limit budget.
+
+### 3.4 Hand-written gates (never grantable)
+| gate | true when | locks |
 |---|---|---|
-| user-view | View Users | users page + listing data |
-| user-store | Create Users | creating a user directly |
-| user-update | Update Users | editing another user |
-| user-destroy | Delete Users | deleting another user (cascade §15) |
-| user-store-view | View User Store Assignments | opening a user's assignments modal / listing rows |
-| user-store-assign | Assign User to Store | assigning store+role; ALSO gates both option-list endpoints (§19.2) |
-| user-store-unassign | Remove User from Store | removing an assignment |
-| store-view | View Stores | stores page + listing |
-| store-store | Create Stores | creating a store |
-| store-update | Update Stores | editing a store |
-| store-destroy | Delete Stores | soft-deleting a store |
-| role-view | View Roles | roles page + listing + reading a role's permissions + **GET /roles/assignable** (§7.1) |
-| role-store | Create Roles | creating a role |
-| role-update | Update Roles | updating a role |
-| role-destroy | Delete Roles | deleting a role |
-| permission-view | View Permissions | permissions page + listing |
-| permission-store | Create Permissions | creating a permission |
-| permission-update | Update Permissions | renaming/relabeling |
-| permission-destroy | Delete Permissions | deleting a permission |
-| activity-view | View Activity Log | activity page, data, partition status (maintenance ALSO needs super admin, §16.5) |
+| `global-tier` | `actor.globalRole() != null` | the whole `/stores` group but the switch: `GET /stores`, `GET /stores/data`, `POST /stores`, `PUT` / `DELETE /stores/{store}`, `POST /stores/{store}/owner-invitation` (§12; the sidebar's Stores link is likewise offered to platform accounts only, §20.2); `GET /activity/partitions`, `POST /activity/partitions/maintain`; the whole `/users` group (§13; the sidebar's Users group is likewise offered to platform accounts only, §20.2): `GET /users`, `GET /users/data`, `DELETE /users/{user}`, `DELETE /users/{user}/platform-role`, `POST /users/{user}/impersonate`, `GET` and `POST /users/{user}/stores`, `PUT /users/{user}/stores/{store}/role`, `DELETE /users/{user}/stores/{store}`, `/users/invitations/*`; the Activity Log page's storage panel (with `activity-destroy`, §17.5) |
+| `super-admin-tier` | `actor.isSuperAdmin()` | `/permissions/*`, `/users/invitations/*`, `DELETE /users/{user}/platform-role`, the four Users → Stores routes (`GET` / `POST /users/{user}/stores`, `PUT /users/{user}/stores/{store}/role`, `DELETE /users/{user}/stores/{store}`, §13.4); sidebar Permissions |
+| `campaign-manage` | `actor.isSuperAdmin()` | `/campaigns/*`, `PUT /network-ads/stores`; sidebar Advertising; the advertising column and counts of the stores listing |
+| `network-ads-toggle` | `session.impersonating_original_id` is set AND `session.impersonating_user_id` equals the actor's id AND the original user exists and `isSuperAdmin()` — i.e. only inside a live "Log in as" session (§14.1) | `PUT /network-ads/store`, `PUT /network-ads/screens` |
 
-**Naming gotcha (real reimplementation trap):** `user-store` means **CREATE a user** (from the REST "store" action) and belongs to the User module; only `user-store-view` / `user-store-assign` / `user-store-unassign` are the store-ASSIGNMENT permissions. The role-form checklist groups by prefix with exactly this special case, displaying groups in the fixed order User Management, User-Store Assignments, Store Management, Role Management, Permission Management (alphabetical inside each group by name) — any prefix outside that order list is appended AFTER it with a capitalized-prefix fallback title, so `activity-view` renders as a sixth group "Activity", last (visible e.g. in a super admin's checklist).
+*Reasons: `global-tier` guards what only works above the stores — the Stores page and its writes (owner's rule, 2026-09-17: a store's own people change the store they work in from the Stores tab of Settings, §11), the accounts pages (owner's rule, 2026-09-17: a store's people are its Members page, §13), yearly log maintenance and the partition status (which counts every store's rows), giving a store an owner, "Log in as", the platform team and putting people in stores, changing their role there or taking them out from the platform (Users → Stores) — and closes those doors during "Log in as", where the person acting is a store member. Channels and the activity log themselves are NOT tier-locked: a store's role may carry those permissions, and their controllers then answer for that one store (§3.5). There is no gate for the Stores tab of Settings: it opens with the permission `store-view` and each card asks its own permission (§11) — the `store-settings` gate that once opened it by `store-update`, `store-destroy` or the Owner role is gone. `campaign-manage` is not a row because a campaign has no store — a grantable row could reach a store's role and show every brand's contract.* The super-admin before-hook (§3.3) also answers these for a super admin — except `network-ads-toggle`, which it leaves to its own test.
 
-**Authorization wiring:** at boot, one gate per permission ROW is registered (name → check per §7). Route middleware `can:{name}` enforces per endpoint. There is **no implicit super-admin bypass** in the check — super admins pass because the seeder syncs all 20 permissions onto the Super-Admin role; their extra powers are separate explicit `isSuperAdmin()` checks.
+### 3.5 Dual use — a permission reaches where its role sits
+**Store permissions on a platform role:**
+- `store-update` on a platform role = edit **any** store's details (`PUT /stores/{store}`, §12.3); on a store's role it edits the details of the store the member works in (the Stores tab of Settings, §11.2) — never through the Stores page, which is the platform's (§12).
+- Content permissions (`screen-*`, `media-*`, `daypart-*`) on a platform role reach **every** store (§6.6). *Design record: "a support person with `media-view` reads every store's library".*
+- `member-*` on a platform role opens nothing (the members endpoints answer 404 — a platform account has no current store, §6.1); `role-*` on a platform role that is not Super-Admin opens nothing (roles endpoints 403, §6.5).
 
-**Capability-complete principle (owner convention):** a permission must be self-sufficient for its task. Option lists feeding an action come from dedicated endpoints gated by the action's own permission — or at minimum a permission of the SAME module — never by another module's `-view`. Concretely: the assign modal's dropdowns load from `/users/assignable-stores` and `/users/assignable-roles`, both gated `user-store-assign` (§19.2); the role form's checklist loads from `/roles/assignable`, gated `role-view` (§7.1).
+**Platform permissions on a store's role (`STORE_SCOPED`) — that store alone** (owner's rule, 2026-09-16):
+
+| permission | on a platform role | on a store's role (a store role or a custom role) |
+|---|---|---|
+| `store-view` | every store (§12.1) | the Stores tab of Settings for the store the person works in — its details, and "Your stores": every store they belong to (§11.1); the Owner and Admin roles start with it (§7.1) |
+| `store-store` | create a store for a customer with an Owner invitation (§10.2); "Invite owner" for a store with no Owner (§10.3) — both with `global-tier` | Create store on that tab: a new store they own at once — no invitation, no owner email, and the active switch stays the platform's (§10.2); never "Invite owner" |
+| `store-destroy` | delete any store (§12.4) | Delete Store on that tab: the store they work in (§11.4); the Owner role starts with it (§7.1) |
+| `channel-view` / `-store` / `-update` / `-destroy` | every channel; one made there is the platform's, offered to every store (§6.6) | the store's own channels, made there and offered to its own screens alone (§6.6) |
+| `activity-view` | every entry (§17.4) | the entries carrying this store's id (§17.4) |
+| `user-view` / `user-destroy` (not `STORE_SCOPED`) | every account — support sees store accounts only (§13.1); delete an account (§13.2) | **never** — the accounts are the platform's; a store's people are its Members page (owner's rule, 2026-09-17). `permissionsFor` refuses both on a store's role (§7.6), an upgrade stripped the rows an older build had left (§22), and the `/users` group keeps `global-tier` whatever a role holds (§13) |
+| `activity-destroy` | yearly maintenance (§17.5) | **never** — it drops every store's history at once |
+
+- A controller answering a store's role acts only on the **store the person is working in** — `currentStore()` (404 unless they are a member of it, §6.1), the same store whose role the route's gate has just read. No endpoint lets a store's role act on another store: the Stores page and its writes keep the `global-tier` lock (§12), and a member works on another of their stores by switching to it (§12.6) (owner's rule, 2026-09-17).
+- *Adding a permission to `STORE_SCOPED` is done only once its controller answers a store's role for that store alone (convention).*
+
+### 3.6 Capability-complete principle (owner convention)
+A permission must be self-sufficient for its task: option lists feeding an action come with the action's own module, with minimal fields, never through another module's `-view`. Current examples:
+- The invite and change-role pickers get their roles from `GET /members/data` (`assignable_roles`, under `member-view`) — never from the Roles page's `role-view`.
+- The role form's checklist comes from `GET /roles/assignable` (under `role-view`).
+- The playlist picker lists files through `/screens/{screen}/available-media` and channels through `/screens/{screen}/available-channels` (the platform's and the screen's own store's, each marked `is_store_channel`, §6.6), both under `screen-playlist`, never `media-view` / `channel-view`; the default-media picker uses `/screens/{screen}/media-options` (under `screen-update`).
+- The platform-staff invite picker's roles are rendered server-side into the Users page for super admins.
+- The platform's Users → Stores dialog gets the person's stores, the stores they could join, the store roles and every store's custom roles from `GET /users/{user}/stores` (§13.4), never through the Roles page.
+- The Stores tab's "Your stores" (every store the person belongs to, with their role in each, §11.1) is rendered server-side into the page, never fetched through the Stores page.
+- The stores listing carries each row's `can` (`update`, `destroy`, `invite_owner`), so its buttons need nothing else (§12.1).
+
+### 3.7 Endpoint index (people model)
+Every route below runs on the session + CSRF web stack. `{user}`, `{store}`, `{role}` and `{invitation}` segments are numeric-constrained: a non-numeric value matches no route (404). `{permission}` is not constrained but is still bound by id (404). The screens' device API (`routes/device.php`) is a separate stateless stack, out of scope, and so are the signage routes (`/screens`, `/media`, `/dayparts`, `/campaigns`, `/network-ads`, `/channels` — the last gated by `channel-*` alone, no tier lock, §6.6). **There is no `routes/api.php`** (owner decision).
+
+| method + path | middleware (beyond the web stack) | § |
+|---|---|---|
+| `GET /` | — (redirects to `/login`) | |
+| `GET /invitations/{token}` (token `[A-Za-z0-9]{64}`) | `throttle:invitation-response` | 9.5 |
+| `POST /invitations/{token}/accept` | `throttle:invitation-response`, `auth` | 9.5 |
+| `POST /invitations/{token}/register` | `throttle:invitation-response`, `guest` | 9.5 |
+| `POST /invitations/{token}/decline` | `throttle:invitation-response` | 9.5 |
+| `GET /register`, `POST /register` | `guest`; POST also `throttle:signup` | 10.1 |
+| `GET /login`, `POST /login` | `guest` | 19.3 |
+| `GET /forgot-password`, `POST /forgot-password`, `GET /reset-password/{token}`, `POST /reset-password` | `guest` | 19.4 |
+| `GET /dashboard`, `GET /select-store` | `auth` | 18 |
+| `GET /profile`, `PATCH /profile`, `DELETE /profile` | `auth` | 14.2 |
+| `DELETE /profile/stores/{store}` (`{store}` numeric) | `auth` | 8.6 |
+| `PUT /password` | `auth` | 19.5 |
+| `POST /logout` | `auth` | 19.3 |
+| `GET /members`, `GET /members/data` | `auth`, `throttle:admin`, `can:member-view` | 8.3 |
+| `POST /members/leave` | `auth`, `throttle:admin` | 8.6 |
+| `POST /members/invitations` | `auth`, `throttle:admin`, `can:member-invite`, `throttle:invitations` | 9.2 |
+| `POST /members/invitations/{invitation}/resend` | `auth`, `throttle:admin`, `can:member-invite`, `throttle:invitations` | 9.2 |
+| `DELETE /members/invitations/{invitation}` | `auth`, `throttle:admin`, `can:member-invite` | 9.2 |
+| `PUT /members/{user}` | `auth`, `throttle:admin`, `can:member-update` | 8.4 |
+| `DELETE /members/{user}` | `auth`, `throttle:admin`, `can:member-remove` | 8.5 |
+| `GET /settings/store` | `auth`, `throttle:admin`, `can:store-view` | 11.1 |
+| `PUT /settings/store` | `auth`, `throttle:admin`, `can:store-update` | 11.2 |
+| `POST /settings/store/open` | `auth`, `throttle:admin`, `can:store-store` | 10.2 |
+| `DELETE /settings/store` | `auth`, `throttle:admin`, `can:store-destroy` | 11.4 |
+| `GET /users`, `GET /users/data` | `auth`, `throttle:admin`, `can:global-tier`, `can:user-view` | 13.1 |
+| `DELETE /users/{user}` | `auth`, `throttle:admin`, `can:global-tier`, `can:user-destroy` | 13.2 |
+| `DELETE /users/{user}/platform-role` | `auth`, `throttle:admin`, `can:global-tier`, `can:super-admin-tier` | 13.3 |
+| `POST /users/{user}/impersonate` | `auth`, `throttle:admin`, `can:global-tier` (super admin checked in the controller) | 14.1 |
+| `GET /users/{user}/stores`, `POST /users/{user}/stores` | `auth`, `throttle:admin`, `can:global-tier`, `can:super-admin-tier` | 13.4 |
+| `PUT /users/{user}/stores/{store}/role` | `auth`, `throttle:admin`, `can:global-tier`, `can:super-admin-tier` | 13.4 |
+| `DELETE /users/{user}/stores/{store}` | `auth`, `throttle:admin`, `can:global-tier`, `can:super-admin-tier` | 13.4 |
+| `GET /users/invitations` | `auth`, `throttle:admin`, `can:global-tier`, `can:super-admin-tier` | 9.3 |
+| `POST /users/invitations`, `POST /users/invitations/{invitation}/resend` | as above + `throttle:invitations` | 9.3 |
+| `DELETE /users/invitations/{invitation}` | `auth`, `throttle:admin`, `can:global-tier`, `can:super-admin-tier` | 9.3 |
+| `POST /stores/switch` | `auth`, `throttle:admin` | 12.6 |
+| `GET /stores`, `GET /stores/data` | `auth`, `throttle:admin`, `can:global-tier`, `can:store-view` | 12.1 |
+| `POST /stores` | `auth`, `throttle:admin`, `can:global-tier`, `can:store-store` | 10.2 |
+| `PUT /stores/{store}` | `auth`, `throttle:admin`, `can:global-tier`, `can:store-update` | 12.3 |
+| `DELETE /stores/{store}` | `auth`, `throttle:admin`, `can:global-tier`, `can:store-destroy` | 12.4 |
+| `POST /stores/{store}/owner-invitation` | `auth`, `throttle:admin`, `can:global-tier`, `can:store-store` | 10.3 |
+| `GET /roles`, `GET /roles/data`, `GET /roles/assignable` (optional `?role=` / `?type=`, §7.9) | `auth`, `throttle:admin`, `can:role-view` | 7 |
+| `POST /roles` (on the platform with `type`, §7.4) / `PUT /roles/{role}` / `DELETE /roles/{role}` | `auth`, `throttle:admin`, `can:role-store` / `can:role-update` / `can:role-destroy` | 7 |
+| `GET /activity`, `GET /activity/data` | `auth`, `throttle:admin`, `can:activity-view` | 17.4 |
+| `GET /activity/partitions` | `auth`, `throttle:admin`, `can:global-tier`, `can:activity-view` | 17.5 |
+| `POST /activity/partitions/maintain` | `auth`, `throttle:admin`, `can:global-tier`, `can:activity-destroy` | 17.5 |
+| `GET /permissions`, `GET /permissions/data` | `auth`, `throttle:admin`, `can:super-admin-tier`, `can:permission-view` | 16 |
+| `POST /permissions` / `PUT /permissions/{permission}` / `DELETE /permissions/{permission}` | `auth`, `throttle:admin`, `can:super-admin-tier`, `can:permission-store` / `-update` / `-destroy` | 16 |
+| `POST /impersonate/stop` | `auth`, `throttle:admin` | 14.1 |
+
+Beyond the middleware, these endpoints **re-confirm the actor's password** inside the controller, all through one check with one shared wrong-password limit (§19.7): the big deletes `DELETE /members/{user}`, `DELETE /users/{user}/stores/{store}`, `DELETE /stores/{store}`, `DELETE /users/{user}`, `DELETE /users/{user}/platform-role`, `DELETE /roles/{role}` and `DELETE /permissions/{permission}` (and, among the signage routes, `DELETE /channels/{channel}` and `DELETE /campaigns/{campaign}`), and the HTML forms `DELETE /settings/store`, `DELETE /profile` and `PUT /password` (§11.4, §14.2, §19.5). (`POST /settings/store/transfer-ownership` no longer exists — 404, §11.3.)
 
 ---
 
 ## 4. Identity rules
 
-### 4.1 Super-Admin definition
-`isSuperAdmin()` = does ANY `store_user` row for this user join to a role **named exactly** `'Super-Admin'` (any store_id; in practice always the sentinel):
+### 4.1 Super-Admin
+**The authorization anchor is a name — `Role::SUPER_ADMIN = 'Super-Admin'` — and it is compared in application code, never in SQL.** *Reason (a real hole, now closed): MySQL's accent- and case-insensitive collation (`utf8mb4_0900_ai_ci`, the configured one) reads "Súper-Admin" as this very name, so a `WHERE name = 'Super-Admin'` let a look-alike custom role make every holder a super admin.*
 
-```sql
-SELECT EXISTS(SELECT 1 FROM store_user JOIN roles ON roles.id = store_user.role_id
-              WHERE store_user.user_id = ? AND roles.name = 'Super-Admin')
-```
-
-**The name is a locked system anchor.** Eight deliberate server-side literal name-check sites: `isSuperAdmin()`, `firstSuperAdminId()`, the super-admin exclusion subquery in user visibility (§6.1), `Role::isGlobal()`, the Super-Admin exclusion in the global-user branch of role visibility (§6.2), the users-listing lookup that computes each row's `is_super_admin` flag (§19.5), the rename-lock comparison (§10.4), and the reserved-name guard on role create/update (§10.1, case-insensitive). The client additionally checks the name in the assign/onboard modals (§19.2). Therefore:
-- Renaming the Super-Admin role → 422 **"The Super-Admin role is a system role and cannot be renamed."**
-- Deleting it is blocked while ANY user holds it — **including via the store-0 sentinel** (the check must read raw pivot rows; a stores-join would miss the sentinel).
-
-### 4.2 First super admin
-`firstSuperAdminId()` = `user_id` of the `store_user` row with the LOWEST pivot `id` among rows whose role is named Super-Admin (earliest assignment order, NOT lowest user id); **null when none exists**. Used for signup attribution (§9.1); when null, the self-registered owner gets `created_by = NULL` (belongs to nobody's visibility or cascade).
-
-### 4.3 Global role
-`globalRole()` = the Role on the pivot row `(user_id, store_id = 0)`, else null — a **raw pivot query** (store 0 has no stores row, so relationship joins can't see it). "Global user" below = `globalRole() != null`. A Super-Admin is also a global user; code distinguishing the two checks `isSuperAdmin()` first.
-
-### 4.4 Per-request memoization (performance contract)
-`isSuperAdmin()`, `globalRole()` (negative results too, via a separate "resolved" flag), and the per-context permission-name list are memoized **per user object per request**; an explicit refresh of the object clears all of them first. *Reason: one page render triggers dozens of checks. Tests assert bounded query counts for the users listing and dashboard regardless of row count — preserve "O(1) queries per repeated check".*
-
----
-
-## 5. Session store context
-- Selected store lives in the session as `current_store_id`, set ONLY by store-switch (§13) and cleared by impersonation start/stop (§14.1). NOTE: it is stored as the raw request value — from an HTML form that is the STRING "3"; comparisons downstream are loose, so a port must normalize or compare loosely.
-- `currentRole()` = role on the pivot row (user, current_store_id), resolved **through the stores relationship** — a soft-deleted or missing store yields null (→ zero permissions). Session value 0/unset also yields null.
-- A user removed from their current store loses its permissions **on the next request** (checks re-derive from the pivot every request, subject only to the per-request memo).
-
----
-
-## 6. Visibility rules
-
-Visibility is **one level deep by `created_by`** — you see what you created, not your grandchildren. It is both the read filter and the mandatory write guard (§6.4).
-
-### 6.1 Users — `visibleTo(viewer)`
-1. **Always excludes the viewer's own row** (self-service is Profile-only, §14.2).
-2. Non-super viewer → only rows with `created_by = viewer.id`. **No store condition — see the note below.**
-3. Super-admin viewer → **all users EXCEPT other super admins**, unless that super admin has `created_by = viewer.id`.
-
-```sql
--- super-admin branch
-WHERE id != :viewer AND (
-  id NOT IN (SELECT su.user_id FROM store_user su JOIN roles r ON r.id = su.role_id
-             WHERE r.name = 'Super-Admin')
-  OR created_by = :viewer)
-```
-
-*Reason for rule 3 (a real incident): a promoted super admin used to be able to see and edit the admin who promoted them. Now a promoted super cannot see or touch their promoter; a super still manages the supers they created.*
-
-**Users are NOT store-scoped, and that is a deliberate decision (rule 2).** Roles are locked to the store they were built in (§6.2), people are not: whoever you created stays visible to you in **every store you work in**, whatever store you happened to create them in. *Reason (owner's call, after weighing the alternative): a person who owns store A and manages store B must be able to staff B with their own people. If users were store-scoped, they would not even appear in B's list, so every cross-store placement would have to go through a super admin — pure friction, and no security gained: the actor already holds power in both stores. The wall that matters is the ROLE — inside B they can only hand out B's own roles (§8.1), so the powers a person receives there are exactly what B allows, never what A allowed.*
-- A port must NOT add a store filter here just because roles have one. The asymmetry is the design: **people move, powers don't.**
-- The `created_by` wall still does the privacy work: two owners sharing a store never see each other's people.
-
-Other consequences (all tested): a store user sees ONLY users they created — even people sharing their stores are invisible if created by someone else (cross-store privacy wall); each level lists only its direct children; nobody ever sees themselves in the list.
-
-### 6.2 Roles — three-tier matrix
-| viewer | SEES | ASSIGNS | MODIFIES/DELETES |
-|---|---|---|---|
-| Super admin | all roles | all roles | all (subject to §10 guards) |
-| Global user | all **non-global** roles, ANY creator | any visible role, in any store | ONLY own-created — others → 403 **"You can only modify roles you created."** (*seeing ≠ editing*) |
-| Store user | only roles **they created IN the current store** | same set (backend-enforced, §8.1) | same set |
-
-Global roles (Super-Admin included) are visible/assignable/editable by super admins only — **with one documented exception** (two paragraphs down). *Reason global users see all non-global roles: they onboard and assign across stores and need e.g. a super-admin-created "Store Owner" role in their dropdown; ownership still controls modification.*
-
-**Per-store role isolation (roles never travel):** `roles.store_id` (nullable FK → stores, null on delete) records the store a role was built in; it is stamped on create from `session.current_store_id` and is NULL for global roles and for roles created by super/global admins (who have no store context). A NULL `store_id` means store-less — usable in any store, which is what lets an admin-made "Owner"/"Manager" role serve every store. The store-user branch of the scope is therefore `created_by = viewer AND store_id = session.current_store_id`, and **with no store selected it returns nothing**. Consequences: a role built in store A is invisible from store B, so it cannot be listed, edited, deleted or assigned from there; two people working in the SAME store still cannot see each other's roles (the `created_by` wall holds inside a store too); and a user who spans two stores needs one role per store. `assignStore` adds the matching write-side guard (§8.1). *Reason (a real incident): a manager assigned a cashier role in store Alpha and then removed that assignment from inside store Beta — work done in one store must not be reachable from another, since permissions are themselves per-store.*
-
-**Edge (documented, deliberate simplicity):** the store-user branch applies no `is_global` exclusion — if a super admin later flips a store-user-created role to global, its creator still passes the modify guard: they can edit its name/permissions AND delete it once unassigned (§10.4 covers both). *Assigning* it stays super-only via §8.1. Note the flip also clears `store_id` to NULL (a global role must not stay pinned to one store), so the creator only keeps seeing it if they are a super/global user themselves — for a plain store user the role disappears from their list. This is the sole exception to the "supers only" sentence above and to §1's "create/edit/delete global roles" claim. 
-
-### 6.3 Stores
-Super admin OR global user → ALL stores. Store user → only assigned stores. Unassigned stores appear nowhere (dashboard, listing, dropdowns).
-
-### 6.4 Visibility as WRITE guard (non-negotiable)
-Route middleware alone is NOT enough. Every write endpoint re-scopes its target:
-- users/roles: fetch through the visibility scope, 404 outside it;
-- stores: accessibility check (member unless global/super) → 404.
-
-*Reason: IDOR — otherwise anyone with e.g. `user-update` could edit ANY user by id.* 404 (not 403) is deliberate: existence must not leak. **Deliberate read-only exceptions:** `GET /roles/{role}/permissions` (§10.5) and the impersonation target lookup (§14.1) are NOT visibility-scoped.
-
----
-
-## 7. Permission resolution (core algorithm)
+- `Role.isSuperAdmin()` = `role.name == 'Super-Admin'` — exact string equality.
+- `Role::superAdminId()` = the id of THE Super-Admin role: take the rows the database returns for `name = 'Super-Admin'` ordered by id (a folding collation may return look-alikes too) and keep the first whose name is exactly `Super-Admin`; null when there is none. Not memoized — one query per call.
+- `User.isSuperAdmin()` = the user's **platform role** (§4.3) exists AND `isSuperAdmin()` — **only the store-0 row counts** (Super-Admin is a platform role and the tiers are exclusive). Memoized per request.
 
 ```
-context_key = str(session.current_store_id) if set else 'global'   # memo key
-role  = currentRole()  if session.current_store_id  else globalRole()
-names = role ? {p.name for p in role.permissions} : {}
-allowed = permission_name in names
+user.isSuperAdmin() = user.globalRole() is not None and user.globalRole().name == 'Super-Admin'
 ```
 
-- A store user with NO store selected has **zero permissions** (must switch in first — which is why the switch endpoint itself carries no permission gate, §13).
-- A global user needs no store selected; their sentinel role answers in the `'global'` context.
-- The SAME user has different roles → different powers per store; switching flips capabilities instantly (browser-tested: Add-User button present in one store, absent in the other; `/roles` can be 200 in one and 403 in the other).
+Where the anchor is used: `Role::isSuperAdmin()` (exact name), `Role::superAdminId()` (exact name after the database narrows), `User::isSuperAdmin()` (through the platform role — and with it the before-hook that answers every permission check, §3.3), `User::primarySuperAdminId()`, `Role::scopeAvailableInStore`, `Role::scopeStoreRoles` and `Role::scopePlatform` (all four by that id, §4.2, §7.2), the users listing's per-row flag (exact compare on the platform row's role name, §13.1) and the seeder (by that id, §21). Consequences:
+- The Super-Admin role is **the one role built in**: it cannot be renamed, edited or deleted through HTTP, from any context (403 **"The Super-Admin role always holds every permission, and is never changed."**, §7.7). Its permission rows do not decide anything: its holders pass every permission check (§3.3).
+- No other role may take a name that folds to Super-Admin's — accents, case, spacing and punctuation folded away (§7.5: **"That name belongs to the Super-Admin role. Choose another."**) — so no look-alike can be created or renamed into.
+- A look-alike that exists anyway (written straight into the database) grants nothing (tested: an account holding a platform role named `super-admin` is not a super admin and gets 403 on `/permissions`, while `superAdminId()` and `primarySuperAdminId()` still point at the real role and person).
+- **No migration names the role at all any more** (§22): the squashed set inserts the catalogue and the four starter store roles, and the Super-Admin role is the seeder's alone (§21), which finds it by `Role::superAdminId()`. The upgrade migrations that once granted it permissions, or spared it a store-role translation, compared the exact name in PHP for the same reason; a port writing its own data migration must do likewise.
 
-### 7.1 `assignablePermissions()` + its endpoint
-- Super admin → ALL permissions. Anyone else → exactly their current-context role's permission set.
-- **`GET /roles/assignable`** (gated `role-view` — NOT role-store; capability-complete for the role form) returns the actor's assignable permissions as a plain (unpaginated) array `[{id, name, label, display_name}]` ordered by name. It feeds the role-form checklist and §10.2's subset rule.
+### 4.2 Primary super admin
+`primarySuperAdminId()` = with `role_id = superAdminId()` (§4.1): the `user_id` of the `store_user` row holding that role with the **lowest pivot `id`** (earliest membership, not lowest user id); **null when there is no Super-Admin role or nobody holds it**. `isPrimarySuperAdmin() = user.id == primarySuperAdminId()`. Not memoized. Used by account deletion (§13.2), platform-role removal (§13.3), platform invitations and the invite picker (§9.3, §13.1) and the users listing flags (§13.1). On a fresh install the primary is the seeded admin (§21).
 
----
+### 4.3 Platform role
+`globalRole()` = the Role on the pivot row `(user_id, store_id = 0)`, else null — a **raw pivot query** (store 0 has no `stores` row). "Platform account" = `globalRole() != null`. A super admin is also a platform account.
 
-## 8. Assignment rules
+### 4.4 Role helpers
+- `isOwner()` = `key == 'owner'` · `isSuperAdmin()` = `name == 'Super-Admin'` · `isGlobal()` = `is_global OR isSuperAdmin()` · `isStoreRole()` = `NOT isGlobal() AND store_id IS NULL` · `isCustomRole()` = `NOT isGlobal() AND store_id IS NOT NULL`. A role's **kind** (§7.1): `platform` when `isGlobal()`, else `store` when `isStoreRole()`, else `custom` — payloads call Super-Admin's kind `super_admin`.
+- `description()` — shown in pickers (Members, Users → Stores), on the Roles page and on the invitation page. It is computed from what the role allows, so it stays true whatever the role is called or has been changed to:
+  - the Super-Admin role → **"Full control of the platform: every store, every account and the permission catalogue."**;
+  - otherwise `labels` = the display names of the role's permissions in catalogue order (permission id), and `allows` = **"Allows nothing yet."** when there are none; **"Allows {labels}."** for one to three, joined with ", " and " and " before the last; **"Allows {first three labels joined with ', '} and {n − 3} more."** beyond three;
+  - the Owner role → **"Owns the store. {allows}"**; any other platform role → **"Platform team. {allows}"**; a store role or a custom role → `{allows}`.
 
-### 8.1 Assign — `POST /users/{user}/stores` (permission `user-store-assign`), guards in EXACT code order:
-1. Target scoped `visibleTo(actor)` → else **404**.
-2. Target `isSuperAdmin()` → **422 "Super Admin cannot be assigned to stores."** — first-class guard, BEFORE field validation, regardless of role type (even another global role).
-3. Field validation: `role_id` required + must exist in roles; `store_id` nullable + must exist in stores. NOTE: the store-exists rule does NOT exclude soft-deleted stores (such an id passes validation — the store-role branch re-checks liveness in step 5), and a literal `store_id = 0` FAILS this validation (0 is never a client-suppliable store).
-4. **If the role `isGlobal()`** (flag OR named Super-Admin):
-   - actor not super admin → **403 "Only a Super Admin can assign global roles."** (a global user on the sentinel cannot mint peers);
-   - target has any real-store rows ("real" = raw `store_user` rows with store_id > 0, regardless of the store's soft-delete state) → **422 "This user is assigned to stores and cannot take a global role. Remove their store assignments first."**;
-   - `store_id` is **forced to 0**; any store sent along is ignored (tested).
-5. **If it is a store role, in this exact order:**
-   - missing `store_id` → 422 field error on `store_id`: **"A store is required for this role."**;
-   - the store is soft-deleted → 422 field error on `store_id`: **"The selected store is not available."** (`exists:stores,id` in step 3 ignores soft-deletes, so liveness is re-checked here — otherwise a phantom assignment to a dead store is created);
-   - the role must be within `Role::visibleTo(actor)` → else **404** (same rule as onboarding; the dropdown filter is cosmetic, this is the enforcement — without it any assigner could hand out role ids they cannot see, i.e. permissions beyond their own). *With per-store role isolation (§6.2) this alone already blocks a store user from reusing another store's role — they cannot see it.*;
-   - target is a global user → **422 "This user holds a global role and cannot be assigned to stores. Remove the global role first."**;
-   - actor is not a global user AND the target store is not the actor's CURRENT store → **403 "You can only assign users within the store you are currently in."** *Reason: permissions are per-store — the `can:` gate authorised the CURRENT store's role, so the write must land in that same store. Belonging to the target store is not enough; the actor must be switched into it. Global users span every store.*;
-   - the role is store-scoped (`store_id` not NULL) and does not equal the target store → **422 "That role belongs to a different store."** — this one applies to EVERYONE, global users and super admins included.
-   *Order is deliberate: "may you act in this store at all?" (403) is answered before "is this role valid here?" (422).*
-6. **LAST:** a pivot row already exists for (target, resolved store) → **422 "User already assigned to this store."** (Because this runs last, e.g. "duplicate + non-member actor" yields the membership 403, not the duplicate 422.) Race note: two concurrent assigns can both pass this check; the DB's UNIQUE(store_id, user_id) then rejects the second attach as an UNHANDLED error (the original does not catch it — a port may catch the constraint violation and return the same 422).
-7. Attach `(store_id, role_id)`; log `user.assigned` (description: store branch → `Assigned {name} ({email}) to store #{id}`, global branch → `Assigned global role to {name} ({email})`). Success message: **"User assigned to store successfully."** — EXCEPT the global branch, which names the actual role: **`Global role "{role name}" assigned.`**
+  Tested: Staff changed to `screen-view`, `screen-store` and `media-view` reads exactly "Allows View Screens, Pair Screens and View Media Library."
+- `Role::starter(key)` = the role with that key, or 404 (`firstOrFail`) — while the installation still has it; `Role::owner()` = `Role::starter('owner')`. `Role::starterPermissions(key)` = the key's list in `Role::STARTERS` (§7.1), where a `null` list (Admin) means every **current** `Permission::STORE` permission, plus `store-view` (§26.11).
 
-**Status-code pattern (tested):** guards about WHO the actor is → 403; guards about the TARGET's state → 422; missing/invalid fields → 422 field errors.
-
-### 8.2 Unassign — `DELETE /users/{user}/stores/{store}` (permission `user-store-unassign`; the `{store}` URL segment must be numeric, `0` allowed — a non-numeric value never matches the route and yields **404 before any guard runs**), EXACT order:
-1. **If store == 0 (removing a global/Super-Admin assignment) — BEFORE any scoping:**
-   - actor not super admin → **403 "Only a Super Admin can remove Super-Admin access."**;
-   - target == actor → **422 "You cannot remove your own Super-Admin access."** (self-lockout prevention).
-   *Order is deliberate: `visibleTo` always excludes self, so scoping first would turn the friendly self-removal 422 into a confusing 404.*
-2. THEN target scoped `visibleTo(actor)` → else 404.
-3. For store != 0: actor not global AND that store is not the actor's CURRENT store → **403 "You can only remove users from the store you are currently in."** *Same per-store reasoning as §8.1: an assignment made in another store must be managed from THAT store's context — this is what stops a manager from undoing in store B what was done in store A.*
-4. Detach. **Idempotent:** removing a nonexistent assignment is a silent success — still returns the success message AND still logs `user.unassigned`. Success messages: store-0 → **"Super-Admin access removed."**; otherwise **"User removed from store successfully."**
-
-### 8.3 List assignments — `GET /users/{user}/stores` (permission `user-store-view`)
-Target must be `visibleTo`. Response: `{assignments: [{store_id, store_name, role_id, role_name}]}` ordered by store_id ascending (sentinel first when present). The sentinel renders `store_name` as the exact string **"Global (All Stores)"**; a missing/soft-deleted store renders **"—"**; an unresolvable role_id gives `role_name: null`.
+### 4.5 Per-request memoization (performance contract)
+`isSuperAdmin()`, `globalRole()` (negative results too, via a "resolved" flag) and the per-context permission-name list are memoized **per user object per request**; an explicit refresh of the object clears all three. (`Role::superAdminId()` is not memoized: every role scope that uses it runs one extra query.) Tests assert that the users listing runs the **same number of queries** whatever the number of rows, and that the store-selection page stays under 15 queries with 8 stores — preserve "O(1) queries per repeated check".
 
 ---
 
-## 9. The two onboarding doors (both create owner + store together, atomically)
+## 5. Session store context and permission resolution
 
-*Deliberately NO invite-email flow (owner rejected it; the password entered at onboarding is final) and no other owner-creating path.*
+### 5.1 `session.current_store_id`
+The store a store member is working in — always written as an **integer** store id.
+- **Written by:** `POST /stores/switch` (§12.6); accepting a store invitation — by link (including the already-a-member case) or by registering from it (§9.5); the dashboard's auto-select when the member has exactly one store (§18).
+- **Cleared by:** `POST /members/leave` (§8.6); `DELETE /profile/stores/{store}` when it is the store being left (§8.6); `DELETE /settings/store` (§11.4); accepting a platform invitation (§9.5); impersonation start and stop (§14.1); logout (the whole session is invalidated).
+- **Not cleared** when someone else removes the member (a colleague, or a super admin from Users → Stores) or deletes the store (the platform's Stores page, or a colleague from Settings → Stores): the stale id then resolves to no role (zero permissions, §5.3) and `currentStore()` answers 404 (§6.1).
 
-### 9.1 Public self-registration (`GET/POST /register`, guest-only; the **POST** is throttled 10/min keyed by client IP — the GET page is not)
-One form: user fields + store fields. The store half is exactly `name, street, suite, city, state, zip_code`, validated per §12.2; `is_active` is NOT accepted (DB default true) and `country` is absent (hardcoded below).
-- **Role selection:** ALWAYS the single role with `is_signup_default = true AND is_global = false AND store_id IS NULL` — **server-chosen; a submitted role id is ignored entirely** (tested). The last two conditions are defensive: a corrupted global-flagged or store-scoped default counts as "no default" and signup closes gracefully rather than handing out a role that belongs elsewhere. *Reason for `store_id IS NULL`: signup creates a BRAND-NEW store, and a role built inside an existing store must never govern it (§6.2); §10.3 already forces the flag off for such roles, so this is the second layer.* *No name-based conditions anywhere on the server ("Store Owner" is found by flag, never by name).*
-- **The default-role lookup runs BEFORE field validation.** If none exists: even a fully invalid submission gets the closed-signup response — a validation error on the **`email` field**, exact message **"Registration is not available right now. Please contact the administrator."**, with old input preserved; nothing is created. The GET page receives a `signupOpen` boolean (same query) so the form can be hidden.
-- All-or-nothing transaction: user + store + pivot attach. Invalid store half → nothing created.
-- Attribution: owner's `created_by = firstSuperAdminId()` (null when no super exists); store's `created_by =` the new owner (so deleting the owner cascades the store).
-- `country` is NOT on the form; hardcoded server-side to `'USA'` (**registration only** — see §9.2/§12.2).
-- On success: the user is logged in and the session id regenerated BEFORE the log line — so `user.registered`'s actor is **the new owner themself**. Redirect to dashboard.
+### 5.2 `currentRole()`
+Null when the session value is 0/unset; otherwise the role on the pivot row `(user, current_store_id)`, resolved **through the stores relationship** — a missing (deleted) store yields null.
 
-### 9.2 Admin onboarding (`POST /users/onboard`)
-Requires ALL THREE permissions as route middleware: `user-store` AND `store-store` AND `user-store-assign`. A global user holding all three can onboard too. Differences from §9.1:
-- The role comes from the request, validated in this order: outside `Role::visibleTo(actor)` → **404**; visible but global → **422 field error on `role_id`: "A global role cannot be used for a store owner."**; visible but **store-scoped** (`store_id` not NULL) → **422 field error on `role_id`: "That role belongs to another store and cannot be used for a new one."** *Reason: this call creates a BRAND-NEW store, so the owner's role must be one that works in any store — handing over a role built inside store A would put the new owner's powers under store A's control, the very thing §6.2 forbids. Consequence to accept: a store user whose only roles are store-scoped cannot onboard until a store-less role exists (super/global admins create those), which is correct — nobody should be able to spawn a store governed by another store's role.*
-- **`country` IS a required request field** (string, max 100; the UI pre-fills "USA" but it is editable) — unlike registration's hardcoding.
-- `is_active` is forced to `true` (not accepted from the request).
-- Owner's `created_by =` acting admin; store's `created_by =` the new owner. Same transaction guarantee. Logged `user.onboarded`.
-- UI convenience (client-only): the onboard modal loads `/users/assignable-roles`, filters out global roles **and store-scoped ones** client-side (mirroring both server guards above — the endpoint returns `store_id` for exactly this), and pre-selects the first role whose name matches `/owner/i` (else the first role) — a display nicety; the server validates the submitted id independently.
-
----
-
-## 9A. Plain user create / update (for completeness)
-- `POST /users` (`user-store`): creates an UNASSIGNED user — fields per §18.2, `created_by = actor`, no store/role attached (assignment is a separate §8.1 call); logs `user.created`. No guards beyond validation.
-- `PUT /users/{user}` (`user-update`): §14.2's self-check, then §6.4 scoping, then field edits only (blank password = unchanged); logs `user.updated`. No tier guards — see §24.2.
-
-## 10. Role management
-
-### 10.1 Create (`role-store`)
-- `name`: required, string, max 255 — **NOT unique** (no per-creator or system-wide uniqueness; `roles.name` has no DB unique index either). The role **id** is the sole identity; every assignment and permission link joins on the id. One owner may legitimately keep several roles all named "Cashier" — one per store — each with its own permission set (one store's Cashier fewer permissions, another's more). *Reason (owner): a role name recurs naturally across stores; forcing uniqueness blocks a real workflow.*
-- **Reserved name (the ONE exception):** the name `Super-Admin` is rejected for anyone, on create and rename-to — 422 field error on `name`: **"This role name is reserved."** The guard is deliberately **two-pronged**, and a port needs both: (a) `trim` + case-insensitive compare, which holds on every engine; **and** (b) a comparison run **by the database itself** (`SELECT ? = ?`), which folds exactly what the anchor lookup folds. *Reason: the authorization anchor matches this name with a DB query (§4.1), and a case/accent/pad-insensitive collation like MySQL's `utf8mb4_unicode_ci` / `utf8mb4_0900_ai_ci` treats `super-admin`, `Super-Ádmin` and `Super-Admin ` (trailing space or NBSP) as THE SAME STRING — so a look-alike would resolve as the real role and silently mint super admins. An ASCII-only check in application code cannot fold accents and misses this; the framework's input trimming strips spaces but not accents.* Only the genuine seeded Super-Admin role keeps the name (its own rename-to-itself is exempt).
-- **≥ 1 permission required**; `created_by = actor`; `store_id = session.current_store_id` for a store user, **NULL when the role is global** or when the actor has no store context (super/global admins) — see §2.3 and §6.2.
-
-### 10.2 Permission subset rule (create AND update)
-Every attached permission must be within the actor's `assignablePermissions()` (§7.1), enforced **server-side**; violation → 422 **field-style** error keyed `permissions`: **"You can only assign permissions that you hold yourself."** (the UI renders it as a red error message directly below the checklist — field-style, not a toast; the checkboxes themselves get no red border). The UI checklist only *displays* the allowed subset — cosmetic. *Reason: privilege escalation — otherwise a user could mint a stronger role and assign it to a puppet user.*
-
-### 10.3 Flags (super-admin-only) — exact semantics
-- **Precedence (create AND update):** `is_global` is computed FIRST, then the role's resulting `store_id` (§2.3), then `is_signup_default = (submitted boolean) AND actor-is-super AND NOT is_global AND store_id IS NULL` — a store-scoped role can never be the signup default, since signup creates a brand-new store (§9.1). So submitting both flags true, or setting signup-default on a global role, is NEVER an error — signup-default is **silently forced false** (belt-and-braces: §9.1's registration lookup also excludes global roles). Flipping the current signup-default role to global in one request silently clears its default flag the same way.
-- **Create, super actor:** each flag = boolean of the submitted field (absent = false); the single-holder swap runs on create exactly as on update.
-- **Create, non-super actor:** the request SUCCEEDS (200) and both flags are silently forced false — never an error for sending them. The role form doesn't even render the checkboxes for non-supers (client mirror).
-- **Update, super actor:** each flag becomes the boolean of the submitted field — **an ABSENT field UNSETS it.** Consequence: a super admin editing the signup-default role via raw API without re-sending the flag silently clears it, leaving ZERO signup-default roles (registration closes; the system never auto-elects a new holder). The UI avoids this by pre-filling checkbox state.
-- **Update, non-super actor:** both flags silently keep their stored values (submitted values ignored; still 200).
-- Setting `is_signup_default` on role X runs a **blanket clear** inside the transaction (`UPDATE roles SET is_signup_default = false` for every other role) before setting X — so even racing swaps converge on a single holder (last commit wins). The UI hides the signup-default checkbox while the global checkbox is ticked. (Recommended in a port: a partial unique index on the flag where the engine supports it; and if the reader ever finds >1 flagged, treat as "no default" — §9.1's closed-signup path.)
-- Flipping `is_global` (either direction) is blocked while the role is assigned to any user → 422 **"This role is assigned to one or more users; remove those assignments before changing where it applies."** The check fires only when the submitted value differs from the stored one. (The update path reads the raw `is_global` column here, not the `isGlobal()` name-helper.)
-- A role that ends up global has its `store_id` cleared to NULL in the same update (a role that spans every store must not stay pinned to the one it was born in). Turning a global role back into a store role leaves `store_id` NULL — store-less, usable anywhere — because the actor doing the flip is a super admin with no store context.
-
-### 10.4 Update / Delete
-- Modify guard (update AND delete): actor must be creator OR super admin → 403 **"You can only modify roles you created."**
-- Super-Admin rename lock (§4.1).
-- Delete while assigned → 422 **"This role is assigned to one or more users and cannot be deleted. Reassign or remove those users first."**; deletable once unassigned. The assigned-check (for delete AND for the §10.3 global-flip) reads the role's users through `store_user` **joined to users, not stores** — so sentinel (store-0) wearers COUNT for every role; §4.1's Super-Admin note is emphasis, not a different rule. The same is true of cascade step 4 (§15).
-- Role mutations run in transactions; their activity rows are written **after the transaction commits** (a rolled-back mutation logs nothing).
-
-### 10.5 Read a role's permissions — `GET /roles/{role}/permissions` (permission `role-view`)
-**Deliberately unscoped** (read-only exception to §6.4): any role-view holder can read ANY role id's permission list (global roles included). Response objects: `{id, name, label, display_name}`.
+### 5.3 Permission resolution (core algorithm)
+```
+platform_role = globalRole()
+memo_key      = 'platform' if platform_role else 'store:' + int(session.current_store_id)
+role          = platform_role if platform_role else (currentRole() if session.current_store_id else None)
+names         = {p.name for p in role.permissions} if role else {}
+allowed(permission) = permission in names
+```
+- **For a super admin this list is never consulted by a permission check:** the before-hook of §3.3 answers yes first. The resolution above decides for everyone else. (The store-scoped reads of `StoreTeam` — reach, pickers, the role checklist — read the membership in a real store, which a super admin never has.)
+- **A platform role always wins:** a store id left in a platform account's session never swaps the platform role for no role (tested). *Reason: the tiers are exclusive — the platform team never works inside a store.*
+- A store member with **no store selected has zero permissions** — which is why switching stores carries no permission gate.
+- The same person holds different roles in different stores → different powers per store; switching flips them (tested: one person, Staff in Alpha and Admin in Beta — the members list is 403 in Alpha and 200 in Beta, showing Beta's people only).
+- Losing a membership takes effect **on the next request** (checks re-derive from the pivot every request, subject only to the per-request memo).
 
 ---
 
-## 11. Permission management (`permission-*`)
-- Create/update: `name` required, unique (ignoring self on update), max 255; optional `label` (§2.4 regex).
-- **Delete is double-guarded:** attached to any role → 422 message-only **"This permission is assigned to one or more roles and cannot be deleted. Remove it from those roles first."**; then the actor must re-enter their CURRENT password in request field `password` — wrong → 422 **field-style** error keyed `password`: **"Password is wrong."** *Reason: deleting a permission silently rewrites what every role can do.*
+## 6. Visibility and scoping
+
+**The rule:** every write resolves its target **inside where the actor stands**, and an id outside it answers **404**. Route middleware alone is never enough. *Reason: IDOR — otherwise anyone holding e.g. `member-remove` in one store could act on any id.*
+
+### 6.1 `currentStore()` — the store a store page works in
+`store_id = int(session.current_store_id)`; the store = the store with that id when > 0; **404 unless the store exists AND the actor has a `store_user` row for it** (no store chosen, a deleted store, or one the person has left or been removed from). Used by every `/members` endpoint, every `/members/invitations` endpoint and every `/settings/store` endpoint (Create store included, §10.2) — and, for an actor with no platform role, by the store-scoped paths of the Channels and Activity Log pages (§6.6, §17.4). A platform account never has one (tested: a platform user holding `member-view` gets 404 from `GET /members/data`; one holding `store-view` and `store-update` gets 404 from `GET /settings/store`) — a super admin neither: passing every permission gate (§3.3) still leaves these store pages at 404.
+
+### 6.2 The members directory (store context)
+Every membership of the current store, **whoever brought them in**, the viewer included (marked `is_you`) — never anybody outside the store and never a platform account (they have no real-store rows). The store's own open invitations only. This is where a store's own people see each other: a store has no accounts page of its own (§6.3, §13). Target resolution: a member → `StoreTeam::roleOf(target, store)`, **404** when not a member (a member of another store simply does not exist here — tested); an invitation → `invitation.store_id == current store id`, else **404**.
+
+### 6.3 Accounts (§13)
+The accounts pages are the **platform's alone** (owner's rule, 2026-09-17: a store's people are its Members page, §6.2): the whole `/users` group carries `global-tier` (§3.4), so a store account gets **403** from every `/users` route whatever its role holds, and `user-view` / `user-destroy` never go on a store's role (§3.2, §7.6). On the platform a **super admin** sees every account (themselves included). Any other platform account holding `user-view` sees **store accounts only**: every account holding a store-0 row is excluded (so they do not see themselves or any super admin). Write guard on `DELETE /users/{user}`: a non-super actor targeting an account that holds a platform role → **404**.
+
+### 6.4 Stores
+The Stores page and its writes are the platform's (`global-tier`, §12): the listing shows every store and its writes take any store; a store account gets **403** from every `/stores` route but the switch, whatever its role holds (tested). A store member reaches their own stores through the header switcher, the selection page and the switch endpoint, which answers 403 for a non-member (§12.6), and sees every store they belong to under "Your stores" — on the Stores tab of Settings, or on the profile for whoever has no such tab (§11.1, §14.2). A store's own people change the store they work in — its details, deleting it, and opening another store from it — on the Stores tab of Settings, each by its own permission in that store (§11, §10.2); a store changes hands on its Members page (§11.3); no endpoint lets their role act on another of their stores (leaving one, §8.6, and switching to it, §12.6, need no permission).
+
+### 6.5 Roles
+Where the viewer stands — `RoleController::context()`, asked first by every Roles endpoint (the page, the list, create, update, delete and the checklist):
+1. the session store exists AND the actor is a member of it → **inside that store**;
+2. else the actor is not a super admin → 403 **"Roles are managed inside a store, or by a super admin."** (tested: a platform role holding `role-view` and `role-store` gets 403 on the list; a platform user holding `role-store` cannot create a role);
+3. else → **on the platform** (a super admin is never a member of a store, so a store left in their session changes nothing).
+
+No parameter moves the context (owner's rules, 2026-09-17: the old `store` parameter and its "Roles of" store picker are gone — the platform lists every store's custom roles with the rest, §7.3). Inside a store, another store's custom role and a platform role answer **404** on update and delete (§7.7–§7.8). What each context sees and edits is in §7.3–§7.9.
+
+**Role ids inside member and invitation payloads** are resolved differently: through `Role::availableInStore(current store)` (a store role, or this store's custom role) → otherwise **422** on `role_id` **"Choose a role that exists in this store."** (not 404) — the platform's Users → Stores likewise, against the store it adds the person to or names in its path (§13.4); for a platform invitation through `Role::platform()` → otherwise 422 **"Choose a platform role."**
+
+### 6.6 Store-scoped content (signage, summary)
+Media, screens (with their playlists) and dayparts are stamped with the store from the session on create, and every read and write lookup goes through `visibleTo(actor)`: `actor.isSuperAdmin() OR actor.globalRole()` — i.e. any platform account, since a super admin is one (§4.1) → **unscoped** (every store); otherwise no current store → an **empty** result (`0 = 1`); otherwise `store_id = current store`. A row of another store therefore answers 404. Membership of the current store is enforced by the permission gate itself (a non-member has no role there → 403 before the scope runs).
+
+**Channels** (owner's rules, 2026-09-16) — two kinds by `channels.store_id` (§2.9):
+- `Channel::visibleTo(actor)`: a platform account → **every** channel (the listing names each one's store, or none for the platform's); otherwise no current store → empty; otherwise `store_id = current store` — so inside a store the platform's channels and other stores' are not listed and answer **404** on every channel and ad endpoint (the channel form request answers it before validation; the ads controller in a controller middleware, before an upload is even validated) (tested: show, update and delete).
+- Create: above the stores the channel is the platform's (`store_id` NULL); inside a store `currentStore()` (404) and the channel is stamped with it (tested).
+- A screen's playlist may carry the platform's channels and **its own store's** only: `Channel::availableTo(screen)` feeds the picker (a store's own marked `is_store_channel`), and a save naming another store's channel → 422 on `items` **"One of those channels has been deleted, or is not offered to this store. Reload the page to see the current list."** (tested).
+- A name has to stand apart within what one store's list shows: a platform channel's name among the platform's channels (**"There is already a channel with this name. Every shop sees the name, so it has to be different."**), a store's channel's name among the platform's and that store's own (**"There is already a channel with this name in this store's list. Choose a different name."**) — so another store's names never matter, and a store's name never blocks the platform's (tested).
+- Deleting a store deletes its own channels (§15.4); a channel's entries in the activity log carry its store (§17.1).
+
+**Activity entries** carry the store they belong to (§17.1); inside a store the log reads that store's entries only (§17.4).
+
+### 6.7 Deliberate exceptions
+- The impersonation target is looked up by raw id, unscoped (§14.1).
+- The store endpoints (`PUT`/`DELETE /stores/{store}`, `POST /stores/{store}/owner-invitation`) are the platform's alone (`global-tier`) and take any store — the platform spans every store.
+- On the platform the Roles endpoints reach every role — every store's custom roles included (§7.3) — and Users → Stores takes any store: adding the person to it, or changing or ending a membership they hold there (§13.4).
+- `POST /invitations/{token}/decline` finds the invitation by token whatever its state (§9.5).
 
 ---
 
-## 12. Store management
+## 7. Roles
 
-### 12.1 Visibility — §6.3.
-### 12.2 Create (`store-store`) / Update (`store-update`) — identical rule set
-| field | rules |
-|---|---|
-| name | required, string, max 255 |
-| street | required, string, max 255 |
-| suite | nullable, string, max 100 |
-| city | required, string, max 100 |
-| state | required, exactly 2 chars, in the fixed list of the **50 US states — DC and territories are rejected** (a test asserts 'DC' fails; beware stock lists that include it) |
-| zip_code | required, string, max 10, digits-only regex — message **"Zip code can only contain numbers."** |
-| country | **required, string, max 100 — from the request** on create/update/onboarding; ONLY public registration hardcodes 'USA' (§9.1) |
-| is_active | optional boolean — **this toggle is the only way a store is deactivated/reactivated**; absent on create → DB default true; absent on update → unchanged. NOTE: is_active is purely informational (a dashboard/listing badge) — NO guard, visibility rule, or permission check reads it |
+*Owner's rules, 2026-09-17: no role is built in but Super-Admin. The super admin makes a role and says what it is for — a **store role**, offered in every store, or a **platform role** for the team above the stores — and renames it, changes what it allows and deletes it while nobody holds it; what a role is for is fixed once it exists. The Owner role is a store role like the others, except that it marks who owns a store and is never deleted. Stores make custom roles of their own, as before.*
 
-Slug auto-generated (§2.2); `created_by = actor` on create.
-### 12.3 Update/Delete scoping
-Both run the accessibility check: actor assigned to the store OR global/super → else **404**. Permissions alone never cross the store boundary.
-### 12.4 Delete semantics
-Soft-delete + detach ALL of its `store_user` rows, in one transaction. *Reason: no phantom memberships in a dead store; the store row stays recoverable (unlike users).*
+### 7.1 Role kinds and the starter store roles (`Role::STARTERS`)
+| kind (`kind` in payloads) | what it is | who makes and changes it |
+|---|---|---|
+| Super-Admin (`super_admin`) | the platform's top role, by its exact name (§4.1) | the seeder (§21); never renamed, edited or deleted through HTTP (§7.7) |
+| Store role (`store`) | not global, no store: offered in **every** store; what it allows reaches the member's own store | a super admin on the platform (`type: store`, §7.4); renamed and changed for every store at once (§7.7); deleted while nobody holds it (§7.8); read-only inside a store |
+| — the Owner role | the store role with `key = 'owner'` (`Role::owner()`, `Role::isOwner()` — never found by its name): whoever holds it owns that store | renamed and changed like any store role, its key kept; **never deleted** (§7.8) |
+| Platform role (`platform`) | global: held on the `store_id = 0` row; what it allows reaches every store | a super admin on the platform (`type: platform`, §7.4) |
+| Custom role (`custom`) | belongs to one store and is offered there alone | a member holding `role-store` inside that store (§7.4); changed and deleted by any member of that store holding `role-update` / `role-destroy` within reach, and by a super admin from the platform (§7.7, §7.8) |
+
+**The starter store roles** — where an installation begins; after that they are ordinary store roles:
+
+| key | name | permissions to start with |
+|---|---|---|
+| owner | Owner | every `STORE` permission, `store-view` and `store-destroy` |
+| admin | Admin | every `STORE` permission and `store-view` (a `null` list in the code) |
+| staff | Staff | `screen-view`, `screen-playlist`, `media-view`, `media-store`, `media-update`, `media-destroy`, `daypart-view` |
+| viewer | Viewer | `screen-view`, `media-view`, `daypart-view` |
+
+- **A starter key gives no permission.** `owner` marks the Owner role; `owner` and `admin` also pick a badge colour on the Members and Users pages (§20.6) — nothing else reads `admin`, `staff` or `viewer`. Admin, Staff and Viewer are renamed, changed and deleted like any store role, and nothing brings a deleted one back (§21).
+- **The starting permissions are written once**, when a starter role is created — by the starter-roles migration `2026_09_16_110200`, which creates all four on a fresh install with its own copy of the lists (§22), or by the seeder, which creates the Owner role alone when it is missing (§21) — and never re-applied afterwards: re-seeding keeps what the super admin changed (tested). The migration writes the lists above literally; `Role::starterPermissions` (read by the seeder and the tests) computes Admin's from a `null` list, meaning "every `Permission::STORE` permission, and `store-view`" at the moment it is asked. A permission added later reaches Owner and Admin only through a migration that grants it to them by key, or the super admin's edit (§26.11).
+- With the starting permissions, the difference between Owner and Admin is `store-destroy` (deleting the store, §11.4) — a permission, so the super admin may take it from the Owner role or give it to another role (owner's rules, 2026-09-16 and 2026-09-17: a role does not matter, its permissions do). Because Admin lacks it, the Owner role lies outside every Admin's reach: an Admin can neither give it (so no Admin hands a store over, §11.3) nor change or remove an Owner (§8.1). **Nothing is tied to the Owner role's key but ownership itself** — who counts as an Owner ("at least one Owner", §8.2) and the role signup, owner invitations and a newly opened store give (§10) — and no rename or permission edit moves that. What reach (§8.1) and the gated pages allow follows the permission rows actually held.
+
+### 7.2 Role sets
+- `availableInStore(store_id)`: `is_global = false AND id != superAdminId() (when a Super-Admin role exists) AND (store_id IS NULL OR store_id = store_id)` — every store role and that store's own custom roles: what a member of that store may hold. The Super-Admin role is excluded **by id**, never by a name comparison (§4.1).
+- `storeRoles()`: `is_global = false AND store_id IS NULL AND id != superAdminId()` (the last part only when a Super-Admin role exists) — the store roles, the Owner role among them.
+- `StoreTeam::rolesOf(store)` — picker order: the Owner role, then the other store roles, then the store's own custom roles, each group by lower-cased name; permissions loaded.
+- `Role::platform()`: `is_global = true OR id = superAdminId()` (the second part only when a Super-Admin role exists).
+
+### 7.3 `GET /roles/data` (`role-view`)
+After `context()` (§6.5), returns **one list** `{roles: [...]}` — **not paginated**:
+- **inside a store:** `availableInStore(store)` — the store roles and this store's own custom roles;
+- **on the platform:** every role — Super-Admin, the store roles, the platform roles and **every store's custom roles**.
+
+Order: by position — Super-Admin 0, the Owner role 1, the other store roles 2, platform roles 3, custom roles 4 — then by the lower-cased name of a custom role's store, then by the lower-cased role name.
+
+- Row shape: `{id, name, kind, is_owner_role, store_name, description, holders_count, invitations_count, permissions: [{id, name, label}], can_edit, can_delete}` — `kind` ∈ `super_admin` / `store` / `platform` / `custom` (§4.4); `is_owner_role` = `isOwner()`; `store_name` = a custom role's store name, null for every other kind; `description` per §4.4; permissions sorted by name, each `label` being its display name.
+- `holders_count` (integer, never null) = the number of `store_user` rows holding the role — **inside a store, that store's rows only** (a Staff member of another store is not counted — tested), on the platform every row (every store and the sentinel).
+- `invitations_count` (integer) = the open invitations to the role, expired ones included — on the platform over every store's invitations, inside a store over **this store's alone**, like `holders_count`. Tested: an invitation to Staff in Alpha and two in another store read 1 inside Alpha and 3 on the platform.
+- `can_edit` / `can_delete`:
+  - **on the platform** (the actor is a super admin, §6.5): `can_edit` = the role is not Super-Admin; `can_delete` = not Super-Admin AND not the Owner role — whatever the kind (a store's custom role included) and **whether or not anybody holds it**: a held role offers Delete too, and deleting it says it must be unassigned first (§7.8, owner's rule 2026-09-17);
+  - **inside a store:** a store role → both false (store roles are the super admin's, §7.7); this store's custom role → with `within_reach = roleIsWithinReach(actor's permissions in the store, role)` (§8.1), `can_edit = within_reach AND actor.can('role-update')` and `can_delete = within_reach AND actor.can('role-destroy')` — held or not.
+- Tested: in a store (a platform role and another store's custom role existing) the names read `Owner, Admin, Staff, Viewer, Cashier`, the four `store` rows carry no edit or delete, Owner's `is_owner_role` is true, Cashier is `custom`, Staff counts 0 and Admin 1 in this store; on the platform the first five names read `Super-Admin, Owner, Admin, Staff, Viewer`, Super-Admin can be neither edited nor deleted, Owner edited but not deleted, Viewer (held by nobody) edited and deleted, Admin (held in a store) offered Delete too — deleting it with the password answers 422 exactly "Please unassign Admin from everyone first: 1 person still holds it." and Admin stays; a custom role of Beta Deli reads `kind: "custom"`, `store_name: "Beta Deli"`, editable and deletable.
+- `GET /roles` renders the page with `store` = the store the viewer is inside (null on the platform); `context()`'s 403 applies to the page too (browser-tested: a platform team member who is not a super admin sees the 403 page, §20.8).
+
+### 7.4 Create — `POST /roles` (`role-store`), exact order
+1. `context()` → 403 (§6.5). The kind of the new role: **inside a store**, a custom role of that store (a `type` sent is not read); **on the platform**, the `type` sent — `store` or `platform`.
+2. Validation (§7.5) → 422 field errors — on the platform `type` included (while `type` is missing or invalid the name is compared with no list: only the Super-Admin rule applies to it).
+3. `permissionsFor(ids, kind, the store the actor works in)` (§7.6) → 422 on `permissions`.
+4. In one transaction: create `{name, key: NULL, store_id: the store (inside a store) or NULL (on the platform), is_global: (kind == platform), created_by: actor}` and set its permissions exactly.
+5. After commit: log `role.created` (subject = the role, so a custom role's entry carries its store, §17.1) — **"Created store role {name}, offered in every store"** / **"Created platform role {name}"** / "Created role {name} in {store}" (a custom role); **201** **"Role {name} created."**
+
+Tested: on the platform without `type` → 422 on `type` **"Choose what this role is for."**; "Floor Lead" as `store` with `screen-view` + `channel-view` → 201, not global, no store, offered in a brand-new store's `availableInStore`; "Support" as `platform` with `user-view` + `activity-destroy` → 201, global, not offered in a store; the two log lines exactly as quoted; "Auditor" as `store` with `activity-destroy`, or with `user-view`, → 422 on `permissions`; inside a store a supervisor creates "Helper" (its `store_id` = the store) but not "Uploader" with `media-store`, which they do not hold (422), and an Owner cannot create "Snoop" with `activity-view` (422). Browser-tested: the form opens with "Store role" chosen, and saving toasts "Role Shift Lead created." / "Role Support created.".
+
+### 7.5 Name, type and payload validation (create and update)
+- `type` — **create on the platform only**: required, one of `store`, `platform` → **"Choose what this role is for."** (both the required and the in message). Never read on update: what a role is for is fixed once it exists (*its holders are already on one side or the other*).
+- `name`: required, string, max 255 — **not unique in the database** — then, in this order:
+  1. `fold(name) == fold('Super-Admin')` (= `superadmin`) → 422 on `name`: **"That name belongs to the Super-Admin role. Choose another."** — for every kind, on create and on rename.
+  2. **The name must be new to every list the role is shown in** (skipped on a create whose `type` is missing or invalid — there is no list yet; tested: `Owner` with `type` = `everywhere` → 422 on `type` only). The first role of that list — the role being edited excluded — whose folded name equals `fold(name)` is a clash:
+     - a **platform** role is checked against `Role::platform()` (Super-Admin and the platform roles);
+     - a **store** role against every non-global role: every store role and **every store's custom roles** (a store role is listed in all of them);
+     - a **custom** role against `availableInStore(its store)`: the store roles and that store's own custom roles.
+
+     The message: saving a store role whose name a store's custom role has → **"{that custom role's store name} already has a custom role called {clash name}. Choose another name."**; saving a custom role whose name a store role has → **"There is already a store role called {clash name}, and every store has it. Choose another name."**; any other clash → **"There is already a role called {clash name}. Choose another name."**
+
+  `fold` = transliterate to ASCII (`Súper` → `Super`, `Ä` → `A`), lower-case, then remove every character outside `a-z0-9`. *Reasons: a name must mean one role in every picker it is shown in ("Súper Admin", "O-W-N-E-R" or " STAFF " cannot pose as another role), and the Super-Admin anchor must not be reachable by a look-alike (§4.1).* Consequences: stores' custom roles may share a name with each other, a platform role may share a name with a store role or a custom role, and a rename that only changes the capitals, spacing or punctuation of the role's own name is allowed.
+
+  Tested: inside a store `Owner`, `admin`, ` STAFF ` and `Viewer` are refused on create (the store roles are in every store's list); `cashier` beside a custom `Cashier` → exactly "There is already a role called Cashier. Choose another name."; another store creates its own `Cashier` (201); on the platform a store role `Cashier` → exactly "Alpha Mart already has a custom role called Cashier. Choose another name.", while a platform role `Cashier` is created (201); `Súper-Admin`, `SUPER ADMIN` and `super_admin` → exactly "That name belongs to the Super-Admin role. Choose another." on create, and 422 on renaming a custom role (the name unchanged); `Ówner`, `O-W-N-E-R` and `Ädmin` are refused on create; `Store Admin Assistant` is allowed.
+- `permissions`: required, array, min 1 → **"Choose at least one permission."** (both the required and the min message); each element integer, distinct.
+- An update validates `name` and `permissions` for every role it may change, whatever its kind (§7.7).
+
+### 7.6 `permissionsFor(ids, kind, memberStore)` — in this order, all 422 keyed `permissions`
+`kind` = the kind of the role being written (store / platform / custom); `memberStore` = the store the actor works in — set only for a member inside a store, none on the platform (a super admin changing a store's custom role from the platform included).
+1. any id that is not an existing permission → **"One of those permissions does not exist."**
+2. any `SUPER_ADMIN_ONLY` permission — **on every kind** → **"Permission management belongs to the Super-Admin role alone."** (tested exactly on a new platform role, a new store role and the Owner role; 422 on a custom role inside a store).
+3. **a store role or a custom role** (kind ≠ platform): the permissions that are not `belongsToStores` (§3.2) → **"A store role cannot hold {labels}: it works above the stores only."** — `{labels}` = their display names joined with ", " and " or " before the last — `user-view`, `user-destroy` and `activity-destroy` among them (tested exactly: "A store role cannot hold Delete Old Activity Logs: it works above the stores only." for `activity-destroy` on Owner and on Staff; "A store role cannot hold Delete Accounts: it works above the stores only." for `user-destroy` on the Owner role; "A store role cannot hold View Accounts: it works above the stores only." for `user-view` on a custom role an Owner creates inside a store — this step answers before step 4; a permission made on the Permissions page on Staff → 422).
+4. **inside a store** (`memberStore` set): any permission the actor does not hold in this store → **"You can only give a role permissions you hold yourself."** (tested exactly: an Owner giving `activity-view`, `channel-view` or `channel-store`, none of which the Owner role starts with; 422 for a supervisor giving `media-store`).
+
+Otherwise the set is accepted: a platform role takes store, platform and uncatalogued permissions alike; a store role — or a custom role changed from the platform — anything that passed step 3 (tested: the super admin gives the Owner role `store-view`, `store-store`, `channel-view`, `channel-store` and `activity-view` on top of its starting permissions; an Owner, who holds `store-destroy`, creates a custom role "Closer" with `store-destroy` and `store-update`).
+
+*Reason: privilege escalation — otherwise a member could mint a stronger role and hand it to a puppet.* The UI checklist (§7.9) only mirrors this.
+
+### 7.7 Update — `PUT /roles/{role}` (`role-update`), exact order
+1. `context()` → 403 (§6.5).
+2. `ensureManageable(role, context, deleting = false)` — shared with delete (§7.8); it also yields the role's kind:
+   - (a) the role is Super-Admin (`isSuperAdmin()`) → 403 **"The Super-Admin role always holds every permission, and is never changed."** — from any context, before anything else;
+   - (b) **on the platform:** when deleting, the Owner role → 403 (§7.8); otherwise every role is manageable — a store role (the Owner role included), a platform role, or any store's custom role;
+   - (c) **inside a store:** a store role → 403 **"Store roles are changed by the super admin, for every store at once."**; not this store's custom role (a platform role, another store's custom role) → **404**; not within the actor's reach (§8.1) → 403 **"You cannot change a role that has access you do not have."**
+3. A custom role's store is looked up → 404 when it is missing (which cannot happen: a custom role goes with its store — the purge of §15.4 deletes it, and `roles.store_id` cascades, §2.3).
+4. Validation (§7.5): `name` — clash-checked against the lists the role is shown in, itself excluded — and `permissions`; a `type` sent is not read.
+5. `permissionsFor(ids, kind, the store the actor works in — none on the platform)` (§7.6) → 422 on `permissions`.
+6. In one transaction: update the name, and set the permissions exactly.
+7. After commit: log `role.updated` (subject = the role, so a custom role's entry carries its store), where `{was}` = " (was {old name})" when the name changed, else empty:
+   - a store role → **"Updated store role {name}{was}, in every store"**;
+   - a platform role → **"Updated platform role {name}{was}"**;
+   - a custom role changed on the platform → **"Updated role {name}{was} in {store}, from the platform"**;
+   - a custom role changed inside its store → "Updated role {name}{was}".
+8. 200 **"Role {name} updated in every store."** for a store role (the Owner role included), else **"Role {name} updated."**
+
+Tested: the super admin renames Staff to "Cashier" with `screen-view`, `screen-store`, `media-view` → 200 exactly "Role Cashier updated in every store.", the name Cashier, exactly those three permissions, the description "Allows View Screens, Pair Screens and View Media Library." (§4.4) and the log line exactly "Updated store role Cashier (was Staff), in every store"; `activity-destroy` on it → 422 (§7.6); the Owner role given `store-view`, `store-store`, `channel-view`, `channel-store`, `activity-view` → 200, but `activity-destroy`, `user-destroy` or `permission-view` → 422 (§7.6); the Owner role renamed "Proprietor" → 200, still the Owner role, its holder still an Owner; Super-Admin → 403; Beta Deli's custom role "Cashier" renamed "Till" from the platform → log exactly "Updated role Till (was Cashier) in Beta Deli, from the platform"; inside a store an Admin renames a custom role the Owner made (logged), a supervisor lacking one of a role's permissions → 403, and a store role → 403 (Viewer keeps its name). Browser-tested: editing Staff shows its name editable and no type choice, and renaming it "Crew" with `screen-store` added toasts "Role Crew updated in every store." and shows the new name in its row.
+
+Any member holding `role-update` manages a custom role of their store **whoever created it**, and a super admin manages every role but Super-Admin from the platform; a role survives its creator. Changing a role's permissions changes its holders' powers on their next request — a store role's holders in every store at once. *(The role form keeps ticked, when its checklist loads, only the permissions the checklist lists — a permission the role cannot hold never stays ticked out of sight, §20.8.)*
+
+### 7.8 Delete — `DELETE /roles/{role}` (`role-destroy`), exact order
+1. `context()` → 403 (§6.5).
+2. `ensureManageable(role, context, deleting = true)` (§7.7 step 2): Super-Admin → 403 "The Super-Admin role always holds every permission, and is never changed."; on the platform the Owner role → 403 **"The Owner role is never deleted: it is how a store has an owner. Rename it or change what it allows instead."**; inside a store a store role → 403 "Store roles are changed by the super admin, for every store at once."; then the 404 / reach checks. **Neither Super-Admin nor the Owner role is ever deleted**, whatever the password (tested: both from the platform, the Owner role with that exact message) — every other role may be, the other starter roles included (tested: the super admin deletes Viewer, held by nobody; inside a store Staff → 403 with exactly the store-role message).
+3. `holders` = number of `store_user` rows holding the role (any store, sentinel included) > 0 → 422 message-only **"Please unassign {name} from everyone first: {n} {person|people} still {holds|hold} it."** — e.g. "Please unassign Cashier from everyone first: 1 person still holds it." / "Please unassign Cashier from everyone first: 3 people still hold it." — answered **whatever the password** (tested: exactly "Please unassign Held from everyone first: 1 person still holds it." inside a store with no password sent, and "Please unassign Admin from everyone first: 1 person still holds it." on the platform with the password). *The page offers Delete on a held role anyway and shows these same words at once, before any password is typed (§20.8).*
+4. **Password re-confirmation** (§19.7) → 422 on `password` / 429.
+5. In one transaction: delete every open invitation to the role (`n` = how many, expired ones included), then delete the role (its permission links cascade). *Reason: the foreign key would take those invitations anyway — revoking them in the open lets the log and the person deleting both say what happened to them.*
+6. `note` = when `n > 0`: " {n} pending invitation[s] to it {was|were} revoked." (else empty). Log `role.deleted` (subject NULL; store = the role's `store_id` — a custom role's store, none for a store role or a platform role) with **"Deleted role {name}.{note}"**, from any context; 200 **"Role {name} deleted.{note}"** — tested exactly: "Role Cashier deleted. 2 pending invitations to it were revoked." and the log line "Deleted role Cashier. 2 pending invitations to it were revoked."; a store's custom role deleted from the platform → the entry carries that store (tested). Browser-tested: a platform role deleted through its password dialog toasts "Role Support deleted.".
+
+*(An earlier build also served `GET /roles/{role}/permissions`, scoped the same way. It is **gone**, with `RoleController::permissions` — the route answers 404 — because the roles payload of §7.3 already carries every role's permissions and nothing ever called it.)*
+
+### 7.9 `GET /roles/assignable` (`role-view`)
+*Owner's rule, 2026-09-17: the checklist lists only what the role in the form can hold — never a greyed-out checkbox.* After `context()` (§6.5), the kind the list is for:
+- **inside a store** → a custom role of that store (`role` and `type` are not read);
+- **on the platform** → the kind of the role named by `role` (the id of the role being edited, looked up with no scoping; a missing or unknown id counts as none); otherwise `type=platform` → a platform role, and anything else (`type=store`, or no `type`) → a store role.
+
+What is listed:
+- for a **platform role** → every permission row except `SUPER_ADMIN_ONLY` — uncatalogued ones included;
+- for a **store role, or a custom role edited on the platform** → every permission row that `belongsToStores` (§3.2);
+- **inside a store** → the permissions the member holds in this store that `belongsToStores`.
+
+A plain array ordered by name of `{id, name, label}` (`label` = the display name) — there is no `unavailable` field: a permission the role cannot hold is simply not listed. It feeds the role-form checklist; the form sends `role` when it opens for an existing role and `type` for a new role on the platform, and loads the list again when that type changes (§20.8).
+
+Tested: editing Staff → exactly the `belongsToStores` rows, with no `unavailable` key; editing Owner → `store-destroy`, `channel-store`, `activity-view` and `media-view` listed, `user-view`, `user-destroy`, `activity-destroy` and `permission-view` not; `type=platform` → every row but the four catalogue ones (`activity-destroy`, `activity-view`, `channel-view`, `member-invite`, `user-view` and a permission made on the Permissions page listed; `permission-update` and `permission-view` not); `type=store` → `channel-view` listed, `user-view` and `activity-destroy` not; a permission made on the Permissions page is not listed for Staff; inside a store the Owner is offered `store-destroy` but not `channel-view`, `user-view` or `activity-destroy`, and a supervisor holding `role-view`, `screen-view` and `media-view` exactly those three.
 
 ---
 
-## 13. Store switching — `POST /stores/switch`
-- **No `can:` permission middleware — deliberately** (auth + throttle only): a store user has ZERO permissions before selecting a store, so any permission gate would deadlock them out of ever switching in.
-- Guard order: (1) validate `store_id` required + exists in stores — 0 or unknown id → 422 BEFORE any other guard, even for supers; the exists rule passes soft-deleted ids (the membership guard is the backstop). (2) actor `isSuperAdmin()` → **403 "Super Admins cannot switch into a store directly. Use \"Log in as\" to access a store as one of its assigned users."** — unconditional: even a super who somehow HAS a pivot row for the store is refused (*reason: a super has no role in the store; context would be undefined; the supported path is impersonation*). (3) no pivot row for (actor, store) → **403 "You do not belong to this store."**
-- Effect: sets `session.current_store_id` (raw value — see §5), logs `store.switched`, responds redirect-back with flash **"Store switched."**
+## 8. Team hierarchy (`StoreTeam`)
+
+### 8.1 Primitives
+- `roleOf(user, store)` — the role on the `(store, user)` pivot row, or null. `isMember(user, store)` — that row exists.
+- `permissionsOf(user, store)` — the permission names of `roleOf`, empty when not a member.
+- `isOwner(user, store)` — `roleOf(...).key == 'owner'`. `ownerCount(store)` — rows in the store whose role key is `owner`.
+- `roleIsWithinReach(actor_permissions, role)`: **every permission of the role is in `actor_permissions`** — whatever the role; the Owner role gets no special case (owner's rule, 2026-09-17: a role does not matter, its permissions do).
+- `mayAssign(actor, store, role)` (may give this role here — invite or change role): the role is in `availableInStore(store)` AND `roleIsWithinReach(permissionsOf(actor, store), role)`.
+- `mayManage(actor, store, member)` (may change or remove this member): `actor != member` AND `roleOf(member, store)` exists AND `roleIsWithinReach(permissionsOf(actor, store), roleOf(member, store))`. The Owner count is not read here: the Members page asks it on its own (§8.2, §8.4, §8.5).
+- `storesSolelyOwnedBy(user)` — the stores where the user holds Owner and exactly one Owner row exists; ordered by name.
+- `membershipsOf(user)` — the stores the person belongs to, ordered by name, each as `{store, role (null when unresolvable), is_sole_owner}` (`is_sole_owner` = the store is among `storesSolelyOwnedBy(user)`) — what "Your stores" lists (§11.1, §14.2).
+- `changeTeam(store, change)` — run `change` in a transaction after `SELECT id FROM stores WHERE id = ? FOR UPDATE`, and return its result. *Reason: two co-owners demoting, removing or leaving at the same moment would otherwise both pass the "at least one Owner" test on what they read before either wrote, and the store would be left with none — so the facts a change depends on must be read INSIDE `change`.*
+- `lockStoresOwnedBy(user)` — inside a transaction: `SELECT … FOR UPDATE` (ordered by id) every store where the user holds the Owner role, before deciding whether they may go.
+- `mayLeave(user, store)` = NOT (`isOwner(user, store)` AND `ownerCount(store) == 1`).
+- `leave(user, store)` → bool: inside `changeTeam(store)`: `mayLeave` false → return false and change nothing; else delete the membership row and return true.
+
+Consequences, with the starter roles holding their starting permissions (§7.1): an **Admin** (every store permission and `store-view`) may give Admin, Staff, Viewer and any other role of the store holding only permissions Admin holds, and may manage the members holding those roles — never the Owner role or an Owner, because the Owner role carries `store-destroy`, nor a role carrying another permission Admin lacks (tested for giving Owner, touching an Owner and managing Staff). An **Owner** may do everything within the permissions the Owner role holds — so a role carrying a platform permission the Owner role lacks (say `channel-store` — a store role the super admin made, or a custom role the super admin changed from the platform, §7.4, §7.7) is beyond every Owner's reach in that store: they can neither give it, nor edit or delete it (a custom role), nor change or remove its holders (§26.13). Reach always compares the permission rows actually held, so a super admin's change to a store role — the Owner role included — changes these outcomes in every store (§26.11). A **custom role** reaches only roles inside its own permission set (tested: a supervisor holding `member-update`, `screen-view`, `media-view`, `daypart-view` cannot give Staff — 422, Staff can upload — nor change a Staff member — 403 — but can move a Viewer to a "Helper" role holding only `screen-view`). **Reach reads permissions alone:** a member who is not an Owner but whose role holds every permission the Owner role holds — Admin given `store-destroy` by the super admin, or a custom role an Owner made with all of the Owner role's permissions — may give the Owner role, and change or remove Owners — never a store's only Owner (§8.2; tested with a custom "Deputy" role holding all of the Owner role's permissions, §8.4). Giving the Owner role is how a store changes hands (§11.3).
+
+### 8.2 At least one Owner, always
+- **Change role / remove on the Members page** (§8.4, §8.5): the store's only Owner is refused — **"{name} is the only Owner of {store}. Make someone else an Owner first."** — asked on its own, apart from reach: *reach reads permissions alone (§8.1), so a member who is not an Owner but whose role holds every permission of the Owner role reaches an Owner, and only the Owner count keeps the last one.* Removing asks it before the password and again inside `changeTeam`; changing a role asks it inside `changeTeam`; and the members list never offers that row (`can_manage` false, §8.3).
+- **Leave:** refused for the last Owner, inside `changeTeam` (§8.6). **Self-delete:** refused while the sole Owner of any store, with those stores locked (§14.2). **A store changing hands** is ordinary Members-page work — the new Owner is given the Owner role first, and only then is the old one's role changed, or the old one removed or leaving (§11.3) — so these same refusals keep an Owner in between.
+- **The platform's Users → Stores** (§13.4) refuses to take the Owner role from a store's last Owner — by changing their role or by taking them out of the store — re-checked inside `changeTeam`.
+- Each of these paths locks the store row(s) first and reads the owners under the lock — concurrent requests are serialized per store.
+- **By design, a store can still be ownerless:** when the platform deletes its only Owner's account (§13.2 — the response's `ownerless_stores` and the log line name those stores), and a store created from the platform has no member at all until its Owner invitation is accepted (§10.2). The platform's "Invite owner" — offered for exactly such a store, one with no Owner (§10.3) — or Users → Stores putting somebody in with the Owner role (§13.4), is the repair.
+
+### 8.3 `GET /members/data` (`member-view`)
+After `currentStore()` (404):
+```
+{
+  members:     [{id, name, email, role, joined_at, is_you, can_manage}],   // ordered by first_name, last_name
+  invitations: [{id, email, role, invited_by, expires_at, is_expired, can_manage}],  // newest first
+  assignable_roles: [role, ...],                                          // picker order (§7.2)
+  owner_count: int
+}
+role = {id, name, key, description} or null
+```
+- `members`: every `store_user` row of the store joined to its user; `joined_at` = the membership's `created_at` as ISO-8601 (or null); `role` = the payload of the membership's role if it is in `rolesOf(store)`, else null.
+- `can_manage` (member) = the row is not the viewer AND the row's role (from `rolesOf`) is within the viewer's reach AND NOT (that role is the Owner role AND `owner_count == 1`) — the client mirror of `mayManage` and of the last-Owner refusal (§8.2), so the store's only Owner is never offered to anybody (tested: the viewer's own row false; an Owner's row false for an Admin; a Staff row true for an Admin; an Admin's row true for an Owner; the only Owner's row false for a "Deputy" whose custom role holds every permission of the Owner role, and true once a second Owner exists).
+- `owner_count` = `ownerCount(store)` — the same count `can_manage` reads.
+- `invitations`: this store's open invitations (expired ones included); `invited_by` = the inviter's name or null; `expires_at` ISO-8601; `can_manage` = the invitation's role is within the viewer's reach (an Owner invitation is not manageable by an Admin — tested).
+- `assignable_roles` = `rolesOf(store)` filtered by the viewer's reach (tested: an Admin gets `[admin, staff, viewer]`, an Owner `[owner, admin, staff, viewer]`, plus this store's custom roles within reach; another store's custom roles never).
+
+### 8.4 Change a member's role — `PUT /members/{user}` (`member-update`), exact order
+1. `currentStore()` → 404.
+2. `roleOf(target, store)` → **404** when the target is not a member of this store (pre-check, kept outside the lock for the status order).
+3. Validate `role_id`: required, integer → 422.
+4. `role = availableInStore(store).find(role_id)` → null → 422 on `role_id` **"Choose a role that exists in this store."**
+5. Target is the actor → 403 **"You cannot change your own role."**
+6. Inside `changeTeam(store)` — decided under the store's lock, so a co-owner changing roles at this very moment is seen:
+   1. `current = roleOf(target, store)` → 404 when the target has meanwhile left;
+   2. `NOT mayManage(actor, store, target)` → 403 **"You cannot change the role of someone who has access you do not have."** — an Owner's row included (no message of its own);
+   3. `NOT mayAssign(actor, store, role)` → 422 on `role_id` **"You can only give a role whose access you have yourself."** — the Owner role included;
+   4. `current` is the Owner role AND the new role is not AND `ownerCount(store) == 1` → 422 on `role_id` **"{name} is the only Owner of {store}. Make someone else an Owner first."** (§8.2);
+   5. if the role differs from `current`: update the pivot row's `role_id`.
+7. After commit, when the role changed: log `member.role_changed` (subject = the member; store = this store, §17.1). An unchanged role writes nothing and logs nothing.
+8. 200 **"{name} is now {role}."** (returned in both cases).
+
+*Status pattern: who the actor is relative to the target → 403; the requested role, or the last Owner it would take away → 422.* Note the order: an invalid or foreign role id answers 422 even when the actor targets themselves.
+
+Tested: a "Deputy" — a custom role holding every permission of the Owner role — changing the store's only Owner to Admin → 422 on `role_id` with exactly "{name} is the only Owner of Alpha Mart. Make someone else an Owner first.", the Owner kept; once a partner Owner exists, the same change → 200, the first Owner now Admin and the partner still Owner. This endpoint is also how a store changes hands (§11.3).
+
+### 8.5 Remove a member — `DELETE /members/{user}` (`member-remove`), exact order
+1. `currentStore()` → 404. 2. `roleOf(target, store)` → 404 when not a member (pre-check).
+3. Target is the actor → **422** message-only **"To leave this store, use Leave store."**
+4. `NOT mayManage(actor, store, target)` → 403 **"You cannot remove someone who has access you do not have."** — an Owner included.
+5. The target holds the Owner role AND `ownerCount(store) == 1` → **422** message-only **"{name} is the only Owner of {store}. Make someone else an Owner first."** (§8.2). Steps 4 and 5 are pre-checks, so nobody types a password for a refused removal.
+6. **Password re-confirmation** (§19.7) → 422 on `password` / 429.
+7. Inside `changeTeam(store)`: `roleOf(target, store)` again → 404; `NOT mayManage` again → 403 with the same message; the last-Owner refusal of step 5 again → 422 with the same message; delete the membership row only (§15.2).
+8. After commit: log `member.removed` (subject = the member; store = this store); 200 **"{name} was removed from {store}."**
+
+Tested: the "Deputy" of §8.4 removing the store's only Owner, the password sent → 422 with exactly "{name} is the only Owner of Alpha Mart. Make someone else an Owner first.", the Owner kept.
+
+### 8.6 Leave a store
+Any member may leave any store they belong to, whatever their role — except its last Owner. Two entry points share `StoreTeam::leave` (§8.1):
+
+**`POST /members/leave`** (the current store; auth + `throttle:admin`, no permission gate):
+1. `currentStore()` → 404.
+2. `leave(actor, store)` returns false (the actor is its only Owner) → 422 **"You are the only Owner of {store}. Make someone else an Owner before you leave."** (tested exactly).
+3. Clear `session.current_store_id`; log `member.left` (subject = the store); 200 `{message: "You left {store}.", redirect: <dashboard URL>}`.
+
+**`DELETE /profile/stores/{store}`** ("Your stores" — on the Stores tab of Settings, or on the profile for whoever has no such tab, §11.1, §14.2; auth only, not throttled; *reason: Staff and Viewers hold no `member-view`, so they have no Members page to find the button on*):
+1. Route-model binding: a missing store (a deleted one included) → 404.
+2. The actor is not a member of that store → 404.
+3. `leave(actor, store)` returns false → redirect **back** (to the page the form was sent from) with an error in bag `storeMembership`, key `store`: **"You are the only Owner of {store}. Make someone else an Owner before you leave."**
+4. `left_current` = `session.current_store_id` is that store — if so, clear it. Log `member.left` (subject = the store, "Left {store}"). Redirect with status **"You left {store}."** — to the profile when `left_current` (*the Stores tab went with the store, so the profile lists what remains*), otherwise back to the page it was sent from. Tested: from the Stores tab, leaving another store returns to `/settings/store` with exactly "You left Beta Deli.", and leaving the store being worked in lands on the profile with the session store cleared.
 
 ---
 
-## 14. Impersonation & self-service
+## 9. Invitations
+
+### 9.1 The token and the row
+- **Open** `(store or null, email, role, inviter)`: `token` = 64 random characters from `[A-Za-z0-9]`; insert `{store_id, email: lower(trim(email)), role_id, token_hash: sha256_hex(token), invited_by: inviter.id, expires_at: now + 7 days}`; return the row and the plain token, which goes into the email **and nowhere else**. *Reason: a leaked database row cannot be turned into an accepted invitation.*
+- **Find by token**: the row whose `token_hash = sha256_hex(token)`, whatever its state.
+- **Renew** (Resend): a new token, its hash and `expires_at = now + 7 days`; the old link stops working at once.
+- `isExpired` = `expires_at` is in the past · `isForPlatform` = `store_id IS NULL` · `isFor(user)` = `lower(trim(user.email)) == invitation.email`.
+- **Send the link** — `sendLink(token)` → bool: send the email (§9.4); on ANY exception, report it to the error log and return false — never throw. *Reason: the invitation already stands and can be sent again, while a 500 would leave the person inviting unsure whether anything had happened at all.* Every endpoint that sends one answers `email_sent: true|false` with a message saying which (§9.2, §9.3, §10.2, §10.3); the page shows a false as an error toast (§20.7). The activity row is written either way.
+- Lifetime constant: **7 days** (`LIFETIME_DAYS`).
+
+### 9.2 Store invitations (store context)
+**Create — `POST /members/invitations`** (`member-invite`, `throttle:invitations`), exact order:
+1. `currentStore()` → 404.
+2. Validate: `email` required, string, email, max 255; `role_id` required, integer → 422 field errors.
+3. Normalize the email (lower + trim).
+4. `role = availableInStore(store).find(role_id)` → null → 422 on `role_id` **"Choose a role that exists in this store."**
+5. `NOT mayAssign(actor, store, role)` → 422 on `role_id` **"You can only invite people to a role whose access you have yourself."** — the Owner role included (no message of its own).
+6. `account` = the user whose `lower(email)` equals the address (or none).
+7. `account` holds a platform role → 422 on `email` **"This email belongs to a platform account and cannot join a store."**
+8. `account` is already a member of this store → 422 on `email` **"{email} is already a member of this store."**
+9. An invitation of this store for this email already exists — **expired ones included** → 422 on `email` **"An invitation is already waiting for this email — resend it instead."**
+10. Open the invitation (§9.1); `sent = sendLink(token)`; log `member.invited` (subject = the store); **201** `{message, email_sent: sent}` with message **"Invitation sent to {email}."** when sent, else **"The invitation for {email} was created, but the email could not be sent. Use Resend to try again."** (tested with a refusing mail server: 201, the invitation stands, the exception is reported).
+
+An account with no memberships, or one that belongs to other stores, may be invited.
+
+**Resend — `POST /members/invitations/{invitation}/resend`** (`member-invite`, `throttle:invitations`): (1) `currentStore()` → 404; (2) `invitation.store_id != store.id` → 404; (3) `NOT mayAssign(actor, store, invitation.role)` → 403 **"You cannot manage an invitation to a role whose access you do not have."**; (4) renew (§9.1), `sent = sendLink(new token)`, log `invitation.resent` (subject = the store); 200 `{message, email_sent: sent}` with **"Invitation sent again to {email}."** when sent, else **"A new link for {email} was made, but the email could not be sent. Try again in a moment."**
+
+**Revoke — `DELETE /members/invitations/{invitation}`** (`member-invite`): the same three guards; delete the row; log `invitation.revoked` (subject = the store); 200 **"Invitation for {email} revoked."**
+
+### 9.3 Platform invitations (super admins only)
+**List — `GET /users/invitations`**: `{invitations: [{id, email, role, invited_by, expires_at, is_expired}]}` — every open platform invitation, newest first; `role` = the role's name (or null), `invited_by` = the inviter's name (or null), `expires_at` ISO-8601. Not paginated.
+
+**Create — `POST /users/invitations`** (`throttle:invitations`), exact order:
+1. Validate: `email` required, string, email, max 255; `role_id` required, integer.
+2. Normalize the email.
+3. `role = Role::platform().find(role_id)` → null → 422 on `role_id` **"Choose a platform role."** (a store role or a custom role is refused — tested for the Admin store role).
+4. The role is Super-Admin AND the actor is not the primary super admin → 422 on `role_id` **"Only the primary super admin can invite a super admin."** *Reason: making a super admin is kept with whoever can undo it — only the primary takes Super-Admin away (§13.3).* (The Users page offers Super-Admin in the picker to the primary alone, §13.1.)
+5. `account` (by lower-cased email) holds a platform role → 422 on `email` **"{email} is already on the platform team."**
+6. `account` has any real-store membership → 422 on `email` **"This email belongs to a store account, which cannot join the platform team."**
+7. An open platform invitation for this email exists (expired included) → 422 on `email` **"An invitation is already waiting for this email — resend it instead."**
+8. Open with `store = null`; `sent = sendLink(token)`; log `platform.invited` (subject NULL); **201** `{message, email_sent}` — the same two messages as a store invitation (§9.2).
+
+**Resend / revoke — `POST /users/invitations/{invitation}/resend`, `DELETE /users/invitations/{invitation}`**: not a platform invitation → 404; then renew + `sendLink` + log `invitation.resent` (subject NULL) → 200 `{message, email_sent}` with the same two messages as a store resend (§9.2), or delete + log `invitation.revoked` (subject NULL) → 200 **"Invitation for {email} revoked."**
+
+### 9.4 The email
+Sent synchronously through `sendLink` (§9.1), on demand, to the invited address (no account needed); mail channel only. `{place}` = the store's name, or **"the {app name} team"** for a platform invitation.
+- Subject: **"You're invited to join {place}"** · greeting "Hello!"
+- Line: **"{inviter name} has invited you to join {place} as {role}."** — or, when the inviter no longer exists, "You have been invited to join {place} as {role}."
+- Button **"Accept invitation"** → `/invitations/{token}`.
+- "This invitation expires on {date}." with the date formatted like `Wed, Sep 23, 2026`.
+- "If you weren't expecting it, you can safely ignore this email."
+
+### 9.5 The public link
+`openInvitation(token)` = the row found by hash, with its store, role and inviter — **null** when there is no row, it is expired, its role is gone, or it is a store invitation whose store is gone (a backstop: deleting a store deletes its invitations, §15.4, and the foreign key cascades too, §2.7). *Reason: an invitation to a deleted store is as dead as an expired one* (tested: the link of a deleted store's invitation shows the invalid page).
+
+**`GET /invitations/{token}`** (open to guests):
+- `openInvitation` null → the invalid page: **"This invitation is no longer valid"** / "It may have expired, already been used, or been cancelled. Ask the person who invited you to send a new one." with a button "Go to dashboard" (signed in) or "Go to sign in". The page is identical in every case, so a guessed link learns nothing.
+- Otherwise the page shows **"Join {place}"**, "{inviter} invited {email} to join as {role}." (or "You were invited …"), the role's description and "Expires {date}.", then one of four **states** (exposed as `data-state`):
+
+| state | when | shows |
+|---|---|---|
+| `accept` | signed in AND `isFor(user)` | "You're signed in as {email}." + **Accept invitation** (POST accept) |
+| `mismatch` | signed in with another email | "You're signed in as {email}, but this invitation is for {invited email}. Sign out, then open the link again." + **Sign out** |
+| `login` | signed out AND an account with that email exists | "An account already exists for {email}. Sign in with it and you'll come straight back here to accept." + **Sign in to accept**; the link is stored as the session's intended URL, so a successful login returns here |
+| `register` | signed out AND no account | "Create your account to accept…" — first name, last name, phone, password + confirmation (email shown, fixed; checked in the browser first, §20.5) → **Create account and join** |
+
+  Every state except `mismatch` also offers **Decline invitation**. A flashed `error` (from accept) is shown in a red alert on this page.
+
+**`POST /invitations/{token}/accept`** (`auth`; a guest is redirected to login), exact order:
+1. `openInvitation` null → redirect to the link (which renders the invalid page).
+2. `NOT isFor(actor)` → 403 **"This invitation is for a different email address."**
+3. A **store** invitation AND the actor is already a member → delete the invitation, set `session.current_store_id` to that store, log `invitation.accepted` (subject = the store, explicit actor = the user, "{name} ({email}) used an invitation to {store}, where they were already a member"), redirect to the dashboard with status **"You are already a member of {store}."** — the existing role is kept (tested).
+4. `whyCannotJoin` (§9.6) returns a reason → redirect to the link with flash `error` = the reason.
+5. **Join** — one transaction: take the invitation row with `SELECT … FOR UPDATE`; when it is gone (used a moment ago — a double submit, or another tab) → nothing changes and the request redirects to the link, which now renders the invalid page. Otherwise insert the `store_user` row `(actor, store_id or 0, role_id)` and delete the invitation.
+6. After commit: set `session.current_store_id` to the store (store invitation) or clear it (platform invitation); log `invitation.accepted` (subject = the store, or the user for a platform invitation; explicit actor = the user; "{name} ({email}) joined {place} as {role}"); redirect to the dashboard with status **"Welcome to {place}!"**
+
+**`POST /invitations/{token}/register`** (`guest`; a signed-in user is redirected to the dashboard), exact order:
+1. `openInvitation` null OR an account with that email exists → redirect to the link (which explains what to do — tested: no second account is created).
+2. Validate: `first_name`, `last_name` required string max 255; `phone` required numeric digits:10; `password` required, confirmed, min 8 → HTML errors (§19.1).
+3. ONE transaction under the invitation's lock: take the invitation row `FOR UPDATE`; when it is gone OR an account with that email now exists → nothing is created and the request redirects to the link. Otherwise create the user with the invitation's email and hashed password, set `email_verified_at = now` (*reason: opening the link proved the inbox*), insert the membership and delete the invitation. *Reason: a double submit or a second tab can neither make a second account for this email nor use the link twice.*
+4. Log in; regenerate the session id; log `user.registered` (subject and explicit actor = the new user).
+5. Session store and `invitation.accepted` exactly as accept step 6 (the tier check is unnecessary for a brand-new account).
+6. Redirect to the dashboard with status **"Welcome to {place}!"**
+
+**`POST /invitations/{token}/decline`** (open to guests):
+1. Find by token — **expired invitations included**.
+2. If found: signed in AND `NOT isFor(actor)` → 403 **"This invitation is for a different email address."**; else delete it and log `invitation.declined` (subject = the store, or NULL for a platform invitation). The actor is the signed-in user; for a guest, the account whose lower-cased email is the invitation's (*a guest holding the emailed link speaks for that inbox, like a password-reset link* — tested); `'System'` only when no such account exists.
+3. Always redirect — to the dashboard when signed in, else to login — with status **"Invitation declined."** (an unknown token does nothing but the redirect).
+
+**The link alone never logs anybody in**: an existing account always signs in with its own password first.
+
+### 9.6 Tier rules at acceptance (`whyCannotJoin`)
+| invitation | actor | reason (flashed as `error`) |
+|---|---|---|
+| platform | already holds a platform role | **"You are already on the platform team."** |
+| platform | has any real-store membership | **"Your account is a member of one or more stores. A store account cannot join the platform team."** |
+| store | holds a platform role | **"Platform accounts cannot join a store."** |
+
+### 9.7 Throttles
+`throttle:invitations` — **60 per hour per user** — on creating and resending store and platform invitations. `throttle:invitation-response` — **20 per minute per IP** — one shared bucket for opening, accepting, registering and declining (tested: the 21st `GET` in a minute answers 429). Revoking is not throttled beyond `throttle:admin`.
+
+---
+
+## 10. Ways in
+
+Nobody creates an account for somebody else. There are exactly these doors — and, for an existing account that holds no platform role, two more ways into a store: opening a new one of their own from Settings → Stores when their role there carries `store-store` (§10.2), or being put in one by a super admin from the platform (§13.4).
+
+### 10.1 Public signup — `GET /register`, `POST /register` (`guest`; the POST `throttle:signup`: 10/min per IP)
+- `GET` passes `signupOpen` = "a role with key `owner` exists" (the Owner role, whatever it is called). When closed, the page shows **"Registration is not available right now. Please contact the administrator."** and disables the submit button.
+- `POST`, exact order:
+  1. **The Owner role lookup runs BEFORE validation.** No role with key `owner` → redirect back with old input and an error on **`email`**: **"Registration is not available right now. Please contact the administrator."** — nothing is created, even for an invalid submission.
+  2. **Lower-case the submitted email** (when it is a string) — *one address is one account whatever its capitals, kept lowercased the way invitations and the profile keep it, so "Sana@" and "sana@" can never become two people on any database* (tested: a second signup as `SANA@example.com` fails on `email`).
+  3. Validate (§19.2): `first_name`, `last_name` required string max 255; `phone` required numeric digits:10; `email` required, email, regex `^\S+$` (**"Email cannot contain spaces."**), unique in users; `password` required, confirmed, min 8; `store_name` required string max 255; `street` required string max 255; `suite` nullable string max 100; `city` required string max 100; `state` required, string, exactly 2, one of the 50 US state codes (DC and territories rejected); `zip_code` required, string, max 10, digits only (**"Zip code can only contain numbers."**). `country`, `is_active` and any role id are **not read** (a submitted `role_id` is ignored — tested).
+  4. One transaction: create the user; create the store `{name: store_name, street, suite, city, state, zip_code, country: 'USA', is_active: true, created_by: the new user}`; insert the membership `(user, store, Owner)`. An invalid store half creates nothing.
+  5. Log in; regenerate the session id; log `user.registered` (subject = the user; actor = the new owner themself; store = the new store, §17.1).
+  6. Redirect to the dashboard (which auto-selects the single store, §18).
+- *Reason: a customer creates their account and their store in one form and becomes its Owner — server-chosen, never client input.*
+
+### 10.2 A new store — `POST /stores` (the platform) and `POST /settings/store/open` (inside a store), both `store-store`
+Two routes, one per tier (owner's rule, 2026-09-17: the Stores page is the platform's; a store's own people open a store from the Stores tab of Settings).
+
+**From the platform — `POST /stores`** (`global-tier` + `store-store`) — a store for a customer:
+1. Validate the store details (§12.3 rules, `is_active` optional boolean) plus `owner_email` required, string, email, max 255 → 422 (tested: every required field including `owner_email`).
+2. Normalize the owner email; an account with that email holding a platform role → 422 on `owner_email` **"This email belongs to a platform account and cannot own a store."**
+3. One transaction: create the store (`created_by` = actor; `is_active` from the request or the DB default) and open an **Owner** invitation to the email (inviter = actor).
+4. `sent = sendLink(token)` (§9.1); log `store.created` (subject = the store) "Created store {name} and invited {email} to own it"; **201** `{message, email_sent: sent, store}` with message **"Store created. An invitation to own it was sent to {email}."** when sent, else **"Store created, but the invitation email to {email} could not be sent. Use Invite owner to send it again."**
+
+The store has **no member at all** until the invitation is accepted (tested; browser-tested: its row on the Stores page counts 0 members and offers "Invite owner", and once the invited owner has registered from the link it counts 1 and offers "Invite owner" no more — §10.3).
+
+**From inside a store — `POST /settings/store/open`** (`store-store` in the current store — none of the starter roles starts with it; the super admin decides who holds it) — **Create store** on the Stores tab (§11.1), a plain HTML form (§19.1): a new store the member owns.
+1. `currentStore()` → 404.
+2. Validate in bag `newStore` the store details under **`store_`-prefixed names**: `store_name` required, string, max 255; `store_street` required, string, max 255; `store_suite` nullable, string, max 100; `store_city` required, string, max 100; `store_state` required, string, size 2, one of the 50 US codes; `store_zip_code` required, string, max 10, digits only (**"Zip code can only contain numbers."**); `store_country` required, string, max 100 — the framework's messages naming them "store name", "street", "suite", "city", "state", "zip code" and "country" (e.g. **"The store name field is required."**). Neither `is_active` nor any owner email is read (tested: `is_active: false` and an `owner_email` are ignored). A failure redirects back with the errors in `newStore` and the old input, and the page reopens its dialog. *Reason for the prefix: the details form of the store being worked in sits on the same page and repopulates from old input, so a new store's details must never read back as its own* (tested: a refused submit leaves no `name` or `zip_code` error).
+3. One transaction: create the store `{…details without the prefix, is_active: true, created_by: actor}` and insert the membership `(actor, store, Owner)`. **Nobody is invited.**
+4. Log `store.created` (subject = the new store, so the entry carries it) "Opened store {name}, owned by {actor name}"; redirect to the settings page (`/settings/store`) with status **"{name} is open, and you are its Owner. Switch to it from the store menu."** (a success toast, §20.7). The session's current store does not change.
+
+Tested: with `store-store` on the Owner role, "Alpha Mart East" → a redirect to the settings page with exactly that status, the store active although `is_active: false` was sent, its street saved, the person its Owner, the session still in Alpha Mart, no invitation, and the `store.created` entry carrying the new store; the Owner role without `store-store` → 403; `store_name` empty and `store_zip_code` `7A` → back to `/settings/store` with exactly "The store name field is required." and "Zip code can only contain numbers." in `newStore`, and no store created.
+
+*Reason (owner, 2026-09-16): opening a store is off by default — the super admin decides who may, so free screens are not opened for everybody; whether a store is active stays the platform's switch.*
+
+### 10.3 Giving a store an Owner — `POST /stores/{store}/owner-invitation` (`global-tier` + `store-store`)
+*Owner's rule, 2026-09-17 (third round): for a store with **no Owner** — one left without an Owner, or made for a customer who never accepted. A store that has an Owner is not offered this: more Owners — partners — come from its own Members page (§8.4, §11.3) or from the platform's Users → Stores (§13.4).* `replaced` below = every **Owner** invitation of this store addressed to any *other* email; invitations to other roles are always left alone. *Reason: a store with nobody in charge has one way in as its Owner at a time — a mistyped address stops working the moment the right person is invited or made Owner.* Exact order:
+1. Validate `email`: required, string, email, max 255; normalize (lower + trim).
+2. The store has an Owner (`StoreTeam::ownerCount(store) > 0`) → 422 on `email` **"{store} already has an Owner."** — nothing is changed, replaced or sent. The count is read without a lock (§26.4).
+3. If an account with that email (compared lower-cased) **is a member of the store**: in one transaction its membership becomes **Owner at once** (no consent step) and `replaced` is deleted; log `store.owner_assigned` (subject = the store) "Made {name} ({email}) an Owner of {store}" followed by ", replacing the invitation for {emails}" when any were replaced; **200** **"{name} is now an Owner of {store}."** followed, when any were replaced, by **" The earlier invitation for {emails} no longer works."** No email is sent and the response carries no `email_sent`.
+4. Otherwise: the email belongs to a platform account → 422 on `email` **"This email belongs to a platform account and cannot own a store."**
+5. One transaction:
+   - **replace** — delete `replaced`;
+   - **renew** — when this store already has an invitation for this email (any role; open or expired): set its role to Owner and `invited_by` to the actor, and renew it (new token, new week — §9.1);
+   - **open** — otherwise open a new Owner invitation (inviter = actor).
+6. `sent = sendLink(token)`.
+7. Log `store.owner_invited` (subject = the store): "Invited {email} to own {store}" — or, when renewed, "Sent the invitation to own {store} to {email} again" — followed by ", replacing the invitation for {emails}" when any were replaced.
+8. Respond `{message, email_sent: sent}` with status **201** for a new invitation, **200** for a renewed one. Message: **"An invitation to own {store} was sent to {email}."** when sent, else **"The invitation to own {store} is ready, but the email to {email} could not be sent. Try again in a moment."** — followed, when any were replaced, by **" The earlier invitation for {emails} no longer works."**
+
+The listing offers the button only where this can succeed: `can.invite_owner` = `store-store` AND the store's `owners_count` is 0 (§12.1). The page's dialog is headed **"Give {store} an owner"** and, after a success, reloads the list — so a store that has just been given an Owner loses its button.
+
+Tested: Orphan Mart (a Staff member, no Owner) — `partner@example.com` → 201, an Owner invitation; the Staff member's email in capitals → 200 with exactly "{name} is now an Owner of Orphan Mart. The earlier invitation for partner@example.com no longer works.", the member an Owner, no invitation left, and the log line exactly "Made {name} ({email}) an Owner of Orphan Mart, replacing the invitation for partner@example.com"; then that member's email or another address → 422 on `email` with exactly "Orphan Mart already has an Owner.", no invitation created. The same address again, even after the first link expired and in other capitals → 200 with `email_sent: true`, the same row with a new token hash and a fresh expiry, a second email sent; a different address → 201 with exactly "An invitation to own Typo Treats was sent to gina@example.com. The earlier invitation for gina@exmaple.com no longer works.", the mistyped link now invalid, while a Staff invitation to a third address survives; an address the store had invited as Staff → 200, the same row now an Owner invitation. A store that has an Owner (Busy Bakery) → 422 with exactly "Busy Bakery already has an Owner.", the co-owner invitation its Owner sent kept, and no email sent.
+
+### 10.4 Platform staff
+Super admins invite by email with a platform role (§9.3); accepting creates the `store_id = 0` membership (§9.5).
+
+### 10.5 What does not exist
+No admin-created accounts, no editing of another person's name / email / phone / password, no store assignment or unassignment endpoint beyond the super admin's Users → Stores (§13.4 — which moves an existing account holding no platform role into or out of a store and never creates an account), no onboarding endpoint, no signup-default role flag, no invitation list with Accept buttons on the dashboard (§18), no API (tested: `PUT /users/{id}` answers 405).
+
+---
+
+## 11. Settings → Stores (the current store, and the person's stores)
+
+Plain HTML forms (redirects, named error bags — §19.1). *Owner's rules, 2026-09-17: a store's own people work on the store they are in — and see every store they belong to — on the **Stores** tab of Settings, beside Profile (§20.3); the sidebar has no link of its own, and the Stores page is the platform's (§12). A role does not matter, its permissions do:* the tab opens with `store-view` in the current store, and each card and form asks its own permission there — the details `store-update` (read-only without it), Create store `store-store` (§10.2), Delete Store `store-destroy`. There is no handover here: a store changes hands on its Members page (§11.3). (The routes keep the names `store-settings.*` under `/settings/store`.)
+
+### 11.1 `GET /settings/store` (`store-view`)
+`currentStore()` → 404. Renders the page headed "Settings", on its Stores tab (§20.3), with these cards:
+- **Store Details** — the form (`store-details-form`) prefilled with the store when the actor holds `store-update`; otherwise the details read-only (`store-details-readonly`: the name, and the address with its country), with **"Your role here does not let you change the store's details."**
+- **Your stores** (`your-stores`) — always: every store the person belongs to, with their role in each and a way out — the same card the profile shows to whoever has no Stores tab (§14.2; `membershipsOf`, §8.1) — plus **Create store** (`open-store-button`, opening the dialog of §10.2) for holders of `store-store`.
+- **Delete Store** (`delete-store`) — for holders of `store-destroy` only, laid out like Delete Account on the Profile tab, saying what goes with the store: "Permanently deletes {store} and everything in it: {n} screen(s) (they stop playing at once), {m} media file(s), playlists, dayparts, **the roles made in it**, the store's own channels, open invitations, and the access of all {k} member(s). **The people's accounts are not deleted.**" Its dialog (`delete-store-form`) asks "Are you sure you want to delete {store}?" — "The store and everything in it are removed for good, and its screens stop playing immediately. It cannot be undone." — then the typed name and the password (§11.4).
+
+There is no "danger zone" grouping and no handover card (§11.3). Tested: Staff and a Viewer (no `store-view`) get 403 — the Viewer's "Your stores" staying on their profile; an Admin opens the page with both Settings tabs (`settings-tab-profile`, `settings-tab-store`); out of the box an Owner sees "Delete Store" and an Admin does not; a role holding only `store-view` sees exactly that read-only text, no details form, `your-stores`, and no delete or Create store — its `PUT /settings/store` is 403, and its profile carries the Stores tab and no "Your stores"; a role holding `store-view`, `store-destroy` and `store-store` sees `delete-store` and `open-store-button`, whatever the role is called; the Owner role without `store-view` → 403, and no tab; an Owner whose role lost `store-destroy` sees no "Delete Store"; an Admin given `store-destroy` sees "Delete Store"; "Your stores" lists the person's stores (Alpha Mart, and Gamma Grill as Staff) and no other; a platform user holding `store-view` and `store-update` gets 404; the page shows no "Transfer Ownership" (`transfer-ownership`).
+
+### 11.2 Update details — `PUT /settings/store` (`store-update`)
+1. `currentStore()` → 404.
+2. Validate in bag `storeDetails`: `name` required string max 255; `street` required string max 255; `suite` nullable string max 100; `city` required string max 100; `state` required, string, size 2, one of the 50 US codes; `zip_code` required, string, max 10, digits only (**"Zip code can only contain numbers."**); `country` required string max 100.
+3. Update **only those fields** — `is_active`, `accepts_network_ads` and `created_by` are never read (tested).
+4. Log `store.updated` (logged on every successful submit, changed or not); redirect to the settings page with status `store-updated` (the page shows "Saved.").
+
+Each action reads the role of the store being worked in (tested: an Owner of Alpha who is Staff in Beta gets 403 on `PUT` and `DELETE /settings/store` while working in Beta, and changes Alpha's details — never `is_active` — while working in Alpha).
+
+### 11.3 A store changes hands on the Members page
+*Owner's rule, 2026-09-17 (third round): making somebody an Owner is changing their role. There is no Transfer Ownership card, no `POST /settings/store/transfer-ownership` route (it answers 404) and no `store-transfer` permission any more — it is not in the catalogue the migrations insert, and the upgrade that deleted it with every grant of it has since been squashed away (§3.1, §22).* A store changes hands with the endpoints of §8, under their usual rules:
+1. Whoever may give the Owner role in the store — `mayAssign` (§8.1): their role there holds every permission the Owner role holds, and the route asks `member-update`; out of the box an Owner — changes another member's role to the Owner role with `PUT /members/{user}` (§8.4). The store now has one more Owner; somebody who is not yet a member is invited to the Owner role first (§9.2).
+2. The new Owner now reaches the first one (`mayManage`, §8.1) and may change their role with `PUT /members/{user}` or remove them (§8.5); or the first Owner leaves (§8.6) — or simply stays, and the two own the store together.
+3. The last-Owner refusals (§8.2) keep the store from being left without an Owner at any point in between.
+
+Nothing else hands a store over from inside it; from above the stores, a super admin's Users → Stores gives any role the store has, the Owner role included (§13.4), and "Invite owner" serves a store with no Owner (§10.3). `store.ownership_transferred` is no longer logged — entries written before stay in the log (§17.2). What this makes possible is in §26.16.
+
+Tested: the Owner makes a Staff member Owner (`PUT /members/{user}` → 200), the new Owner makes the first one Admin (200) — the Staff member now the Owner, the first Owner an Admin —, the new Owner's Stores tab shows no "Transfer Ownership", `POST /settings/store/transfer-ownership` → 404, and no `store-transfer` permission row exists. Browser-tested: the seller (an Owner), whose Stores tab shows "Delete Store" and no "Transfer Ownership", makes the buyer (an Admin) Owner on the Members page ("{name} is now Owner."); the buyer, signed in, makes the seller Admin ("{name} is now Admin.") and then deletes the store from the Stores tab, landing on the dashboard's empty state (`dashboard-empty`) with the store row and its custom role gone and both accounts kept.
+
+### 11.4 Delete the store — `DELETE /settings/store` (`store-destroy`), exact order
+*Deleting the store is a permission — `store-destroy`, which the Owner role starts with; the super admin may take it from the Owner role or give it to another role (owner's rule, 2026-09-16). Without it in the current store the route's gate answers 403 before anything below (tested: an Owner whose role lost it → 403; an Admin with its starting permissions → 403; an Admin given it deletes the store).*
+1. `currentStore()` → 404.
+2. Validate in bag `storeDeletion`: `confirm_name` required (**"Type the store name to confirm."**), string, **exactly equal** to the store's current name, case-sensitive (**"Type the store name exactly as it is shown."**). *The field is `confirm_name`, not `name`, because the details form on the same page repopulates from old `name` input — a mistyped confirmation must never reappear there as the store's new name.*
+3. **Password re-confirmation** (§19.7) in bag `storeDeletion`, field `password`: **"Password is required."** / **"The password is incorrect."** / the limiter's message — each a redirect back with the error in the bag (the name is reported first, the password on the next submit; the page's own check shows both at once).
+4. Count the store's screens and media; in one transaction delete the store — its purge runs first, then the row goes for good (§15.4).
+5. Clear `session.current_store_id`; log `store.deleted` (subject NULL; store = the deleted store, §17.1 — tested); redirect to the dashboard with status **"{name} was deleted."** (tested: the store row is gone and the session store cleared).
+
+---
+
+## 12. Stores (the platform)
+
+*Owner's rule, 2026-09-17: the Stores page and its writes are the platform's.* Every route under `/stores` but the switch (§12.6) carries `global-tier` on top of its permission (§3.4), and a platform account works on every store. A store account gets **403** from all of them whatever its role holds — its own people change the store they work in from the Stores tab of Settings (§11) (tested: an Owner whose role holds `store-view`, `store-store`, `store-update` and `store-destroy` gets 403 on the page, the data, create, update, delete and "Invite owner", and nothing changes; a member holding `store-view` and `store-update` gets 403 from the data and the update and changes the store from Settings → Stores instead).
+
+### 12.1 `GET /stores/data` (`global-tier` + `store-view`)
+Every store, ordered by name, searchable by `name` and `city` (§20.6). Row = every store column plus:
+- `members_count` — number of `store_user` rows of the store (the page's Members column, `store-members-{id}`);
+- `owners_count` — number of `store_user` rows of the store holding the Owner role (found by its key; the listing answers 404 while the installation has no Owner role);
+- for super admins only (`campaign-manage`): `screens_count` and `ad_screens_count`;
+- `can` — what the viewer may do to the row: `{update: actor.can('store-update'), destroy: actor.can('store-destroy'), invite_owner: actor.can('store-store') AND owners_count == 0}` — "Invite owner" is offered only for a store with no Owner (owner's rule, 2026-09-17, §10.3).
+
+**No owners on the list** (owner's rule, 2026-09-17): a store may have several Owners — partners — so the rows carry neither the owners nor a pending owner invitation (only how many Owners there are), and the page has no Owner column. Tested: Alpha Mart (an Owner and a Staff member) reads `members_count` 2, no `owners` or `owner_invitation` key, `can` exactly `{update: true, destroy: true, invite_owner: false}`; Beta Deli (a Staff member, no Owner) and Gamma Grill (no members) `invite_owner` true; a platform user holding only `store-view` gets `invite_owner` false on every row.
+
+`GET /stores` (`global-tier` + `store-view`) renders "All Stores" with **Add Store** for holders of `store-store` (§20.1).
+
+### 12.2 Create
+§10.2 — `POST /stores` makes a store for a customer, with an Owner invitation. A store's own people open a store of their own from Settings → Stores (`POST /settings/store/open`, §10.2), never here.
+
+### 12.3 Update — `PUT /stores/{store}` (`global-tier` + `store-update`)
+1. Validate: `name` required string max 255; `street` required string max 255; `suite` nullable string max 100; `city` required string max 100; `state` required, string, size 2, one of the 50 US codes (the same rules as create, where `Texas` and `DC` are tested as rejected); `zip_code` required, string, max 10, digits only (**"Zip code can only contain numbers."**); `country` required string max 100; `is_active` optional boolean (absent → unchanged; tested: `is_active: false` deactivates the store).
+2. Update; log `store.updated` "Updated store {name}"; 200 `{message: "Store {name} updated.", store}`. **This form is the only way a store is deactivated or reactivated** — the Stores tab never reads `is_active` (§11.2).
+
+### 12.4 Delete — `DELETE /stores/{store}` (`global-tier` + `store-destroy`)
+1. Validate `confirm_name`: required (**"Type the store name to confirm."**), string, exactly the store's name (**"Type the store name exactly as it is shown."**) → 422 field error (tested: `doomed deli` for "Doomed Deli" is refused). A failure here answers before the password is looked at.
+2. **Password re-confirmation** (§19.7) → 422 on `password` / 429.
+3. Count screens and media; transaction: delete — the purge first, then the row, for good (§15.4).
+4. Log `store.deleted` (subject NULL; store = the deleted store).
+5. 200 `{message: "{name} was deleted."}` — the session is not touched (a platform account works in no store, §6.1). (Tested: a member whose custom role holds `store-destroy` gets 403 deleting a rival store — the tier lock answers before anything.)
+
+The typed name AND the password confirm it (tested: without a password, or with a wrong one, the store stays; after five wrong passwords even the right one answers 429 until the window passes). Tested: the store row, its screen, its custom role and its Owner's membership are gone, the Owner's account stays, and the `store.deleted` entry carries the store.
+
+### 12.5 Owner invitation
+§10.3.
+
+### 12.6 Switch the current store — `POST /stores/switch` (no permission gate)
+*Reason for no gate: a store member has zero permissions before selecting a store, so any permission gate would lock them out of ever switching in.* Exact order:
+1. Validate `store_id`: required, integer → an HTML validation error (redirect back).
+2. The actor holds a platform role → 403 **'The platform team works above the stores. Use "Log in as" to see a store as one of its members.'** — unconditional.
+3. No store with that id, OR the actor is not a member → 403 **"You are not a member of this store."** (`0`, unknown and deleted ids land here).
+4. `session.current_store_id = store.id`; log `store.switched` (subject = the store); redirect to the dashboard with status **"Switched to {name}."**
+
+---
+
+## 13. Accounts (the platform's alone)
+
+*Owner's rule, 2026-09-17 (third round): the accounts pages are the platform's — a store's people are its Members page (§6.2, §8.3).* The whole `/users` group carries `global-tier` on top of each route's own lock (§3.4, §3.7), so every actor here holds a platform role and a store account gets **403** from every `/users` route whatever its role holds (tested: an Owner whose role was given `user-view` and `user-destroy` straight in the database gets 403 from `GET /users`, `GET /users/data` and `DELETE /users/{user}`, and the Staff member it targeted stays; a store Owner gets 403 from `GET /users` and `GET /users/data`). `user-view` and `user-destroy` never go on a store's role (§3.2, §7.6). A store once had an Accounts page answering these routes for its own people; it is gone, with its "Role here" column, its disabled Delete and `delete_note`, and the upgrade of that day took the two permissions off every store role and custom role (§3.1, §22).
+
+### 13.1 `GET /users/data` (`global-tier` + `user-view`)
+Scope per §6.3; ordered by first then last name; searchable by first name, last name, email; paginated (§20.6). Selected columns `id, first_name, last_name, email, phone, created_at`, plus:
+- `name`; `is_you`; `is_primary` (the row is the primary super admin);
+- `platform_role` — the name of the row's store-0 role, or null;
+- `memberships` — `[{store_id, store_name, role_name, role_key}]` for the stores the account belongs to (never the store-0 row), ordered by store name (tested exact shape);
+- `sole_owner_of` — names of the stores where this account is the only Owner (tested);
+- `can` — what the viewer may do to the row (tested exact shape `{impersonate, manage_stores, remove_platform_role, delete}`):
+  - `impersonate` = viewer is a super admin AND not the row AND the row is not a super admin;
+  - `manage_stores` = viewer is a super admin AND the row has no platform role — Users → Stores (§13.4), offered for every account outside the platform team, one in no store included (tested: true for a store Owner, false for platform staff);
+  - `remove_platform_role` = viewer is a super admin AND the row has a platform role AND not the row AND the row is not the primary AND (the row is not a super admin OR the viewer is the primary);
+  - `delete` = viewer holds `user-destroy` AND not the row AND the row is not the primary AND (the row has no platform role OR the viewer is a super admin) AND (the row is not a super admin OR the viewer is the primary).
+  - "Row is a super admin" here = the row's store-0 role is named exactly `Super-Admin`.
+
+`GET /users` (`global-tier` + `user-view`) renders the page headed "Users", titled **"All accounts"** ("People join a store by invitation from that store, and manage their own name, email and password."), with the table "Accounts": columns Account (initials, name with "You" / "Primary" badges, email), **Access** ("Platform · {role}" for a platform role, a "{role} · {store}" badge per membership coloured by the role's key, or "No access"), Joined and Actions. Super admins also get **Invite to platform team**, the platform invitations card, and the platform roles (`Role::platform()` by name, `{id, name}`) for the invite picker — **without the Super-Admin role unless the viewer is the primary super admin** (tested), matching §9.3 step 4. A constant number of queries serves any page size (tested).
+
+### 13.2 Delete an account — `DELETE /users/{user}` (`global-tier` + `user-destroy`), exact order
+1. Reach: the actor is not a super admin AND the target holds a platform role → **404** (tested: support holding `user-destroy` gets 404 for platform staff and for the primary).
+2. Target is the actor → 422 message-only **"You cannot delete your own account here."**
+3. Target is the primary super admin → 403 **"The primary super admin cannot be deleted."**
+4. Target is a super admin AND the actor is not the primary → 403 **"Only the primary super admin can delete a super admin."**
+5. **Password re-confirmation** (§19.7) → 422 on `password` / 429.
+6. `ownerless` = names of the stores this account solely owns (§8.1).
+7. Delete the account (§15.3) — allowed even when it leaves stores without an Owner.
+8. Log `user.deleted` (subject NULL); 200 `{message: "{name}'s account was deleted.", ownerless_stores: [names]}`.
+
+The page's dialog (`confirm-account-deletion`) asks "Delete {name}'s account?" and says **"The account, its access to every store and its sign-ins everywhere are deleted. What they added to stores stays with those stores."** "This cannot be undone."; when the row's `sole_owner_of` is not empty it adds "They are the only Owner of {stores}. That store / Those stores will have no owner until you give it one — Invite owner on Stores, or Stores here on Users."; then the password (§20.8). The success toast appends " Now without an owner: {A, B}." to the message when `ownerless_stores` is not empty. Tested: deleting a store's only Owner answers `ownerless_stores` ["Alpha Mart"], the store and its Staff member stay, and the log line contains "left without an Owner: Alpha Mart"; browser-tested through the dialog ("{name}'s account was deleted.").
+
+### 13.3 Remove a platform role — `DELETE /users/{user}/platform-role` (`global-tier` + `super-admin-tier`), exact order
+1. The target has no store-0 row → 404.
+2. Target is the actor → 422 **"You cannot remove your own platform role."**
+3. Target is the primary → 403 **"The primary super admin keeps their role."**
+4. Target is a super admin AND the actor is not the primary → 403 **"Only the primary super admin can remove Super-Admin from someone."**
+5. **Password re-confirmation** (§19.7) → 422 on `password` / 429.
+6. Delete the store-0 row (the account stays, with no access); log `platform.role_removed` (subject = the user); 200 **"{name} is no longer on the platform team."**
+
+There is no endpoint that changes a platform member's role in place: remove it, then invite again.
+
+### 13.4 Users → Stores: a person's place in the stores, from the platform (super admins)
+*Owner's rules, 2026-09-16 and 2026-09-17: the super admin gives any one person the access they need — a store role made for it on the Roles page (§7.4), then this — and puts anybody in any store with a role, changes that role or takes them out: straight in, nobody invited.* All four routes carry `global-tier` + `super-admin-tier`; `{user}` and `{store}` are numeric, and a missing account or store (a deleted one included) answers 404 at binding.
+
+**`GET /users/{user}/stores`** →
+```
+{
+  memberships:  [{store_id, store_name, role_id}],          // the stores the person belongs to, by store name; role_id = the role held there
+  stores:       [{id, name, city}],                          // the stores they are not in, by name
+  store_roles:  [{id, name, is_owner_role, description}],    // Role::storeRoles(): the Owner role first, then by lower-cased name
+  custom_roles: {<store_id>: [{id, name, is_owner_role, description}]}   // every store's custom roles by name, keyed by store id (an empty object `{}` when there are none — tested)
+}
+```
+`description` per §4.4. The roles a store offers are `store_roles` followed by `custom_roles[store id]`. The platform row is not a store, so a platform account gets no memberships and every store in `stores` — its row offers no Stores button, and adding it is refused (below). Tested: Staff in Alpha, with Beta and Gamma existing → memberships exactly `[{store_id: Alpha's id, store_name: "Alpha Mart", role_id: Staff's id}]`, stores `Beta Deli, Gamma Grill`, store roles `Owner, Admin, Staff, Viewer` (the first `is_owner_role`), custom roles Alpha → `Cashier`, Beta → `Baker`.
+
+**`POST /users/{user}/stores`** — add the person to a store, exact order:
+1. Validate: `store_id` required (**"Choose a store."**), integer; `role_id` required (**"Choose a role."**), integer → 422.
+2. The person holds a platform role → 422 on `store_id` **"{name} is on the platform team, which works above the stores. Remove their platform role first."** (tested).
+3. No store with that id → 422 on `store_id` **"Choose a store that exists."**
+4. `role = availableInStore(store).find(role_id)` → null → 422 on `role_id` **"Choose a role that exists in this store."** (tested exactly for another store's custom role; 422 for a platform role).
+5. Inside `changeTeam(store)` (§8.1): the person is already a member → 422 on `store_id` **"{name} is already in {store}. Change their role there instead."** (tested exactly); otherwise insert the membership `(user, store, role)`.
+6. After commit: log `member.assigned` (subject = the person; store = that store) **"Added {name} ({email}) to {store} as {role}, from the platform"**; **201** **"{name} is now {role} in {store}."**
+
+Tested: Nadia, in no store, added to Beta Deli as Beta's custom role Baker → 201 exactly "Nadia New is now Baker in Beta Deli.", the membership exists, no invitation is created, and the entry carries Beta with exactly "Added Nadia New ({email}) to Beta Deli as Baker, from the platform"; added to Alpha Mart with the Owner role — making someone an Owner is giving them the Owner role, beside any Owner the store already has — she holds the Owner role there.
+
+**`PUT /users/{user}/stores/{store}/role`** — change the role held there, exact order:
+1. `roleOf(user, store)` → **404** when the person is not a member of that store.
+2. Validate `role_id`: required (**"Choose a role."**), integer → 422.
+3. `role = availableInStore(store).find(role_id)` → null → 422 on `role_id` **"Choose a role that exists in this store."**
+4. Inside `changeTeam(store)`: `current = roleOf(user, store)` → 404 when they have meanwhile left; `current` is the Owner role AND the new role is not AND `ownerCount(store) == 1` → 422 on `role_id` **"{name} is the only Owner of {store}. Make someone else an Owner first."**; if the role differs from `current`, update the membership row.
+5. After commit, when the role changed: log `member.role_changed` (subject = the person; store = that store) "Changed the role of {name} in {store} from {old} to {new}, from the platform".
+6. 200 **"{name} is now {role} in {store}."**
+
+Tested: Staff in Alpha and Viewer in Beta, moved to Alpha's custom role Area Manager → 200 exactly "{name} is now Area Manager in Alpha Mart.", the Beta role untouched, the entry carrying Alpha with exactly "Changed the role of {name} in Alpha Mart from Staff to Area Manager, from the platform"; the only Owner moved to Staff → 422 with exactly that message, and once a second Owner exists they become Admin (200).
+
+**`DELETE /users/{user}/stores/{store}`** — take the person out of that store, exact order:
+1. `roleOf(user, store)` → **404** when the person is not a member of that store.
+2. The person holds the Owner role there AND `ownerCount(store) == 1` → 422 message-only **"{name} is the only Owner of {store}. Make someone else an Owner first."** — before the password, so nobody types one for a refused removal.
+3. **Password re-confirmation** (§19.7) → 422 on `password` / 429.
+4. Inside `changeTeam(store)`: steps 1 and 2 again under the lock, then delete the membership row only (§15.2).
+5. After commit: log `member.removed` (subject = the person; store = that store) "Removed {name} ({email}) from {store}, from the platform"; 200 **"{name} was removed from {store}."**
+
+Tested: without a password → 422 "Password is required."; with it → 200 exactly "{name} was removed from Alpha Mart.", their Beta membership and their account kept, the entry carrying Alpha; again → 404; the only Owner → 422 with exactly the message above (the password sent).
+
+No hierarchy check applies (`mayAssign` / `mayManage` are a member's rules): the super admin gives any role the store has, the Owner role included; the one rule kept is at least one Owner. The person's roles in their other stores are untouched and no invitation is created (tested). Support holding `user-view`, `member-update` and `member-remove`, and a store Owner, get 403 on all four routes (tested).
+
+---
+
+## 14. Impersonation and self-service
 
 ### 14.1 Impersonation ("Log in as")
-- Start `POST /users/{user}/impersonate`: guards in order — actor not super → **403 "Only Super Admins can impersonate."**; target is super → **403 "Cannot impersonate another Super Admin."** The target is fetched by raw id (missing → 404) with **NO visibility scoping** — a deliberate exception to §6.4 (equivalent in effect: the only users invisible to a super are other supers, who are blocked anyway).
-- Session mechanics: `impersonate.started` is logged BEFORE the identity switch (actor = the admin, subject = target). The original admin's id is remembered in the session; auth switches to the target; `current_store_id` is cleared; the session id is **regenerated** (regenerate keeps session data — full invalidation would destroy the remembered admin id and break stop).
-- Stop `POST /impersonate/stop`: if the remembered admin still exists AND is still a super admin → log `impersonate.stopped` while still authenticated as the impersonated user (actor = impersonated user, subject null, description "Returned to {admin} from impersonating {user}"), clear store context, switch back, regenerate id. If the admin was deleted or demoted → full logout + session invalidation, **no log row**. Stopping while not impersonating = harmless no-op (redirect, no log).
-- The users listing flags super-admin rows so the UI hides the button for them; the backend enforces regardless.
+**Start — `POST /users/{user}/impersonate`** (the `global-tier` lock runs first, so a store account gets 403 from the middleware). Guards in order: actor is not a super admin → 403 **"Only Super Admins can impersonate."**; target is a super admin → 403 **"Cannot impersonate another Super Admin."** The target is fetched by raw id (missing → 404) with **no scoping**. Platform staff who are not super admins **can** be impersonated.
+- **Two session keys** make an impersonation: `impersonating_original_id` (whom to return to) and `impersonating_user_id` (whom the admin is viewing as).
+- Mechanics, in order: log `impersonate.started` **before** the identity switch (actor = the admin, subject = the target); clear `current_store_id`; authenticate as the target; **regenerate** the session id (regeneration keeps session data); THEN write both keys (original = the admin's id, user = the target's id). Redirect to the dashboard.
+- **Every sign-in clears both keys** — a listener on the framework's `Login` event (password login, signup, registering from an invitation, remember-me re-authentication, and the impersonation's own logins). That is why `start` writes its keys after its own login. *Reason (a real hole, now closed): when the impersonated account was deleted mid-way, the session kept the super admin's id through the NEXT person's login on that browser (regeneration keeps session data), and "stop" then signed that person in as the super admin.*
 
-### 14.2 Profile (self-service; admin endpoints refuse self)
-- Admin `PUT /users/{self}` → **403 "You cannot edit your own account here."**; admin `DELETE /users/{self}` → **403 "You cannot delete your own account."** Both self-checks run BEFORE visibility scoping (deliberate: `visibleTo` excludes self, so scoping first would produce a 404; the tests pin 403).
-- Profile update: own first/last name, phone, email. Email change resets `email_verified_at` to null. Logged `profile.updated` **only when something actually changed**. NOTE: profile email validation differs from every other door — see §18.2.
-- Own password change: request fields `current_password`, `password`, `password_confirmation`; wrong current password → redirect-back with a field error on `current_password` (framework-default text "The password is incorrect.") in the error bag named `updatePassword`. Logged `password.changed`.
-- Self-delete: requires the current password in field `password` (wrong → field error, bag `userDeletion`); logs `account.deleted` BEFORE logout (correct actor snapshot); then logout; then the full cascade (§15) in a transaction; session invalidated. *Owner rule: self-deletion is not a loophole around the cascade.*
+**Stop — `POST /impersonate/stop`** (no permission gate — the impersonated person is not a super admin), exact order:
+1. No `impersonating_original_id` → redirect to the dashboard (harmless no-op, no log).
+2. `impersonating_user_id` is not the authenticated user → forget both keys and redirect to the dashboard — no logout, no log. *The way back belongs to the account being viewed as, and to nobody else* (tested).
+3. The remembered admin no longer exists or is no longer a super admin → forget both keys, log out, invalidate the session, redirect to login — **no log row**.
+4. Otherwise: log `impersonate.stopped` with **explicit actor = the returning admin** (subject NULL; description names both — tested: the row's actor is the admin, not the impersonated user); forget both keys and `current_store_id`; authenticate as the admin; regenerate the session id; redirect to the dashboard.
+
+While `impersonating_original_id` is in the session, the app layout shows a banner "You are viewing as **{name}** ({email})." with a **Return to Super Admin** button. The `network-ads-toggle` gate (§3.4) is true only in a live impersonation (both keys, matching user, original still a super admin).
+
+### 14.2 Profile (self-service)
+- **Update — `PATCH /profile`**: `first_name`, `last_name` required string max 255; `phone` required numeric digits:10; `email` required, string, **lowercase** (uppercase input is rejected, not normalized), email, max 255, unique ignoring the own row. A changed email resets `email_verified_at` to null. Logged `profile.updated` **only when something changed**. Redirect to the profile with status `profile-updated`.
+- **Password — `PUT /password`**: §19.5 — the current password goes through the same limited re-confirmation (§19.7).
+- **Your stores** — `GET /profile` is the **Profile** tab of Settings (heading "Settings", §20.3) and also renders, for accounts WITHOUT a platform role **and without a Stores tab** (§20.3 — no `store-view` in the store they work in, or no store chosen), a "Your stores" section; whoever has the tab finds the same card there instead (§11.1). *Reason (owner's rule, 2026-09-17): leaving is open to every member whatever their role, so the card is always somewhere.* It lists `membershipsOf(actor)` (§8.1): every membership ordered by store name (`store-membership-{store id}`), each with the role name (or "No role") and "city, state". A store where the person is the only Owner shows **"You are its only Owner — make someone else an Owner before you leave."**; every other row has a **Leave** button (`leave-store-{store id}`) opening a confirmation ("Leave {store}?", confirm `leave-store-{store id}-confirm`) that submits `DELETE /profile/stores/{store}` (§8.6). No memberships → "You are not a member of any store yet." An error in bag `storeMembership` is shown in a red alert at the top of the card. Platform accounts get no such section (tested); a role holding `store-view` shows the Stores tab and no "Your stores" on the profile, a Viewer "Your stores" and no tab (tested).
+- **Self-delete — `DELETE /profile`**, exact order:
+  1. The actor is a super admin → 403 **"Super Admins cannot delete their own account."** (the page hides the section for them). Platform staff who are not super admins may self-delete.
+  2. **Sole-Owner refusal** — `storesSolelyOwnedBy(actor)` not empty → redirect back with an error on `password` in bag `userDeletion`: **"You are the only Owner of {stores}. Make someone else an Owner of it, or delete that store, first."** — `{stores}` joined as "A", "A and B", "A, B and C"; with several stores the end reads "Make someone else an Owner of them, or delete those stores, first." (tested verbatim for one store). The Delete Account section says beforehand: "If you are the only Owner of a store, make someone else an Owner of it first." Asked **before** the password, so nobody types one for a refused delete and a refusal never counts toward the limit.
+  3. **Password re-confirmation** (§19.7) in bag `userDeletion`, field `password`: **"Password is required."** / **"The password is incorrect."** / the limiter's message.
+  4. ONE transaction:
+     1. `lockStoresOwnedBy(actor)` (§8.1) — *so a co-owner leaving at the same moment is seen*;
+     2. the sole-Owner refusal of step 2 again, under the lock — same error; the transaction rolls back;
+     3. log `account.deleted` (subject NULL) **while still authenticated** (correct actor snapshot) — so a refused or failed delete leaves no such row;
+     4. log out — BEFORE the row goes: *logging out writes a fresh remember token onto the user, and saving a deleted model would insert it again*;
+     5. delete the account (§15.3).
+  5. Invalidate the session and regenerate the CSRF token; redirect to `/`.
 
 ---
 
-## 15. Cascade delete (owner's rule — hard deletes)
+## 15. Deletion semantics (owner's rules — nothing cascades through people)
 
-Deleting a user (admin `user-destroy`, or self-delete) hard-deletes everything they created, recursively — in ONE transaction:
+### 15.1 Principle
+No deletion ever follows who created or invited whom. `created_by` everywhere is history and goes NULL when its account is deleted.
 
+### 15.2 Remove a member / leave a store
+Deletes the one `store_user` row — from the Members page (§8.5), by leaving (§8.6), or from the platform's Users → Stores (§13.4). The person's account, their uploads, paired screens, playlists and the custom roles they made **stay with the store** (tested: the media row keeps its `created_by`, the screen stays).
+
+### 15.3 Delete an account (Profile §14.2, or the platform §13.2)
+*Owner's rule, 2026-09-17: a deleted account leaves nothing pointing at it — and takes nothing anybody else holds.* One `DELETE FROM users WHERE id = ?` — inside the self-delete transaction (§14.2), or on its own from the platform (§13.2) — followed by the model's **`deleted` hook** (in the same transaction when there is one). There is no other application cascade. Database effects:
+- `store_user` rows → deleted (FK cascade): every membership, the platform row included;
+- `invitations.invited_by` → NULL: invitations the person **sent** stay with their stores (those **addressed to** the email go — see the hook below);
+- `created_by` on stores, roles, media, screens, dayparts, campaigns, channels, channel ads, and `screens.paired_by` → NULL (tested for media, screens, channels) — what the person made stays with its stores;
+- `activity_logs` keep the `actor_name` snapshot; `actor_id` → NULL on drivers with the FK; on partitioned MySQL it keeps a stale id (§17.5).
+
+The `deleted` hook then removes what no foreign key reaches:
+- the account's `sessions` rows (`user_id` = the account) — its sign-ins on every device — **only when the session driver is `database`** (the configured default; other drivers have no table to clear, and a session whose account is gone is unauthenticated anyway, §24);
+- the `password_reset_tokens` row for its email — an emailed reset link stops working;
+- every invitation **addressed to** its email (`User::invitationsToEmail()`: `invitations.email` = the account's email lower-cased and trimmed, §9.1) — to any store or to the platform team, expired ones included (owner's rule, 2026-09-17: "account delete hote hi uske email ki pending invitations bhi hat jayein"). The deletion's log line counts them (§17.2).
+
+Stores whose only Owner was deleted become ownerless (§8.2). Nothing else is touched (tested: colleagues, stores and their content remain; a person who invited others is deleted alone). *(The hook also cleared the account's API tokens until Sanctum was deleted, §26.8 — there is no token table left to clear.)* Tested (from the platform, on the `database` session driver): the account's memberships in two stores, its two `sessions` rows and its reset token are gone, another person's session stays, and its screen's `created_by` is NULL. Tested (invitations): deleting "Sam.Person@Example.com" from the platform removes Beta's invitation to "sam.person@example.com" and a platform invitation to the same address, keeps another address's invitation and the one Sam sent (its `invited_by` now NULL), and logs exactly "Deleted the account of {name} (Sam.Person@Example.com) and the 2 pending invitations to that email"; a self-deletion removes the invitation waiting for the person's email and logs "Deleted their own account ({email}) and the 1 pending invitation to that email".
+
+### 15.4 Delete a store (Settings → Stores §11.4, or the platform's Stores page §12.4)
+*Owner's rule, 2026-09-17: "A to Z" — a deleted store goes for good, with everything it owns but the people's accounts.* A model hook on the **deleting** event runs `purgeContents()` inside the caller's transaction, **before** the store row is deleted — *the foreign keys would otherwise take the media and channel-ad rows with the row and leave their files on disk with no row to name them* — in this order:
+1. every `store_user` row of the store (memberships);
+2. every invitation of the store;
+3. every screen of the store — their playlists, schedule rules, campaign links and pairing requests go through foreign keys, and each device is locked out on its next request (401, tested);
+4. every daypart of the store;
+5. every role with `store_id` = the store (its custom roles; their permission links cascade);
+6. the store's own channels (`purgeChannels()`, `channels.store_id` = the store): the rows — which take their ads and every playlist line carrying them through foreign keys — and, **only after the transaction commits**, the files those ads name (original and thumbnail), only those paths;
+7. the media library: all media rows of the store, **whoever uploaded them**, deleted in slices of 500 (which takes each file off every playlist and clears any screen's holding picture through foreign keys); the files (original and thumbnail) are unlinked **only after the transaction commits**, and only the paths those rows name — never a whole folder.
+
+Then the **store row itself is deleted** — a real delete; there is no `deleted_at` (§2.2). Whatever a foreign key still ties to the row would go with it — `screens`, `dayparts`, `media`, `invitations`, `channels` and `roles.store_id` all cascade (§2.3, §2.7, §2.9) — a backstop the purge leaves nothing for (tested: deleting a store row straight in the database takes its custom role).
+
+*Reasons (owner): hung on the model event rather than written into each delete path, so a third path could never forget part of it; files after commit, so a rolled-back delete never leaves rows pointing at files that are already gone (tested); only named paths, because a folder can hold something no row accounts for and deleting on a guess is how real uploads were once lost.* Accounts stay — a member who worked under the store's custom role included; the platform's channels and other stores' channels stay (tested — a platform ad's file too); other stores are untouched, a shared member's role in them included (tested). The store's activity entries stay too — `activity_logs` has no foreign key to stores (§2.8), and the entries keep the store's id and, in their words, its name. *A path that bypasses the model's delete event would skip the purge: the foreign keys would take most rows, but not the memberships (`store_user.store_id` has no foreign key, §2.6) and not the files.*
+
+Tested (from Settings → Stores): the store row is gone with its memberships, its invitation, its custom role, its screen and that screen's playlist lines (the device then answers 401), its daypart, its media row and both files, and its own channel with its ad and both ad files; the platform's channel, the accounts and a neighbouring store stay; the store's `screen.paired` entry stays, and `store.deleted` names the store with "1 screen" and "1 media file". From the platform: the whole library of three files (whoever uploaded them) with their files, the screen and its playlist lines, the store row, and exactly "Deleted store Alpha Mart with its 0 screens and 2 media files" for a store with two files; a neighbour's library untouched; a delete rolled back inside its transaction keeps the store, the media row and both files.
+
+### 15.5 Delete a role
+§7.8 — refused while held; its open invitations are revoked explicitly in the same transaction, and the response and the log say how many.
+
+### 15.6 Invitations
+Accepting, declining and revoking delete the row; so does the platform's "Invite owner" on a store that has no Owner, for its Owner invitations to any other address — whether it invites somebody or makes a member Owner (§10.3); so do deleting the invitation's role (§7.8) and deleting its store (§15.4). Revoking asks for no password (§19.7). Expired rows stay until resent (renewed), revoked, declined or replaced — nothing prunes them.
+
+---
+
+## 16. Permission management (`permission-*`, super admins only)
+
+All routes carry `super-admin-tier` AND the action's permission (tested: a platform user or a store user who somehow holds `permission-*` gets 403 everywhere, including the rename-escalation attempt; a platform user holding **every** permission row still gets 403 on `/permissions`). For a super admin both always pass (§3.3) — tested: a super admin whose role holds no rows lists and creates permissions.
+- `GET /permissions/data`: paginated listing (§20.6), searchable by `name`, no explicit order.
+- **Create** `POST /permissions`: `name` required, string, max 255, unique; `label` nullable, string, max 255, regex (§2.4). Log `permission.created`; 200 `{message: "Permission created successfully", permission}`. **The new row gates nothing** (no route names it); a check on its name answers yes for super admins at once (§3.3) and no for everybody else until a role carries it. It is attached to the Super-Admin role only when the seeder runs — which no longer changes anybody's access (§26.6).
+- **Update** `PUT /permissions/{permission}`: the same rules, uniqueness ignoring itself. Log `permission.updated`; 200 `{message: "Permission updated successfully", permission}`.
+- **Delete** `DELETE /permissions/{permission}`, double-guarded in this order: attached to any role → 422 message-only **"This permission is assigned to one or more roles and cannot be deleted. Remove it from those roles first."**; then **password re-confirmation** (§19.7) → 422 on `password` (**"Password is required."** / **"The password is incorrect."**) or 429. Log `permission.deleted` (subject NULL); 200 "Permission deleted successfully". *Reason: deleting a permission silently rewrites what every role can do.*
+
+---
+
+## 17. Activity logging (audit trail)
+
+### 17.1 Write rule
+Every state-changing endpoint writes one row: `record(action, subject?, description, actor?, storeId?)`.
+- `actor_id` + snapshot `actor_name` (display always uses the snapshot, which survives the actor's deletion — tested). The actor defaults to the authenticated user; flows whose actor is not (or not yet) the authenticated user pass it **explicitly** — password reset via email link, invitation registration and acceptance, and impersonation stop (attributed to the returning admin); a write with neither falls back to `actor_name = 'System'`.
+- `subject_type` = the subject's short class name; deletions and subject-less events log subject NULL.
+- **`store_id` — which store the entry belongs to** (owner's rules, 2026-09-16; it decides who may read it, §17.4): the explicit `storeId` when given — passed wherever the subject is gone (a delete: `store.deleted`, `role.deleted` and the signage deletes) or is a person (`member.role_changed`, `member.removed`, `member.assigned`), and by signup for its new store (`user.registered`); otherwise the subject's — a Store is its own id, any other subject its `store_id` attribute (a screen, a media file, a daypart, a store's custom role, a store's channel); otherwise NULL. A User subject carries none, so an account's own sign-in, profile and password, impersonation, and the platform's own work (permissions, platform invitations, store roles and platform roles, campaigns, maintenance) belong to no store; entries logged before the column existed have none either. Tested: `media.updated` of Beta's file → Beta; `store.updated` → that store; `member.removed` with an explicit store → it; `password.changed` and `campaign.created` → none. *A new mutation endpoint inside a store makes sure its entry carries the store.*
+- Rows for transactional mutations are written after the transaction commits (e.g. every `changeTeam` change, joins, role changes). Deliberate exceptions: `account.deleted` is written INSIDE the self-delete transaction, before logout and the delete, so it is rolled back with a refused or failed delete (§14.2); `impersonate.started` is written before the identity switch.
+- Invitation rows (`member.invited`, `platform.invited`, `invitation.resent`, `store.created`, `store.owner_invited`) are written whether or not the email went out; the response's `email_sent` says which (§9.1).
+
+### 17.2 Action catalog (people, access and platform)
+"store" = the entry's `store_id` (§17.1): "explicit" when passed as `storeId`, else from the subject.
+
+| action | subject | store | actor | description written | by |
+|---|---|---|---|---|---|
+| `auth.login` | — | — | the user | "Signed in" | successful `POST /login` |
+| `auth.logout` | — | — | the user | "Signed out" | `POST /logout`, only when authenticated |
+| `password.changed` | user | — | the user | "Changed their own password" | `PUT /password` |
+| `password.reset` | user | — | explicit: the user | "Reset their password via email link" | successful `POST /reset-password` |
+| `profile.updated` | user | — | the user | "Updated their own profile" | `PATCH /profile`, only when something changed |
+| `account.deleted` | — | — | the user | "Deleted their own account ({email})" + " and the {n} pending invitation(s) to that email" when any | `DELETE /profile` |
+| `user.registered` | user | explicit: the new store | the new user | "Self-registered: {name} ({email}) with store {store}" | `POST /register` |
+| `user.registered` | user | — | explicit: the new user | "Created an account from an invitation: {name} ({email})" | `POST /invitations/{token}/register` |
+| `user.deleted` | — | — | actor | "Deleted the account of {name} ({email})" + " and the {n} pending invitation(s) to that email" when any + " — left without an Owner: {A, B}" when any | `DELETE /users/{user}` |
+| `platform.invited` | — | — | actor | "Invited {email} to the platform team as {role}" | `POST /users/invitations` |
+| `platform.role_removed` | user | — | actor | "Removed the platform role {role} from {name} ({email})" | `DELETE /users/{user}/platform-role` |
+| `member.invited` | store | the store | actor | "Invited {email} to {store} as {role}" | `POST /members/invitations` |
+| `invitation.resent` | store / — | the store / — | actor | "Resent the invitation for {email} to {store}" / "Resent the platform invitation for {email}" | resend endpoints |
+| `invitation.revoked` | store / — | the store / — | actor | "Revoked the invitation for {email} to {store}" / "Revoked the platform invitation for {email}" | revoke endpoints |
+| `invitation.accepted` | store / user (platform) | the store / — | explicit: the joining user | "{name} ({email}) joined {place} as {role}" — or, when already a member, "{name} ({email}) used an invitation to {store}, where they were already a member" | accept and register |
+| `invitation.declined` | store / — | the store / — | the signed-in user, else the account holding that email, else 'System' | "{email} declined the invitation to {place}" | decline of an existing invitation |
+| `member.assigned` | member | explicit: the store | actor | "Added {name} ({email}) to {store} as {role}, from the platform" | `POST /users/{user}/stores` |
+| `member.role_changed` | member | explicit: the store | actor | "Changed the role of {name} in {store} from {old} to {new}" — from the platform + ", from the platform" | `PUT /members/{user}`, `PUT /users/{user}/stores/{store}/role` — when the role changes |
+| `member.removed` | member | explicit: the store | actor | "Removed {name} ({email}) from {store}" — from the platform + ", from the platform" | `DELETE /members/{user}`, `DELETE /users/{user}/stores/{store}` |
+| `member.left` | store | the store | actor | "Left {store}" | `POST /members/leave`, `DELETE /profile/stores/{store}` |
+| `store.created` | store | the store | actor | "Created store {name} and invited {email} to own it" (platform) / "Opened store {name}, owned by {actor}" (Create store on Settings → Stores) | `POST /stores`, `POST /settings/store/open` |
+| `store.updated` | store | the store | actor | "Updated store {name}" (Stores page) / "Updated the details of store {name}" (Settings → Stores) | `PUT /stores/{store}`, `PUT /settings/store` |
+| `store.deleted` | — | explicit: the deleted store | actor | "Deleted store {name} with its {n} screen[s] and {m} media file[s]" | both delete paths |
+| `store.switched` | store | the store | actor | "Switched into store {name}" | `POST /stores/switch` |
+| `store.owner_invited` | store | the store | actor | "Invited {email} to own {store}" — or, renewed, "Sent the invitation to own {store} to {email} again" — + ", replacing the invitation for {emails}" when any were replaced | `POST /stores/{store}/owner-invitation` |
+| `store.owner_assigned` | store | the store | actor | "Made {name} ({email}) an Owner of {store}" + ", replacing the invitation for {emails}" when any were replaced | same, member made Owner |
+| `role.created` | role | a custom role's store / — | actor | "Created store role {name}, offered in every store" / "Created platform role {name}" / "Created role {name} in {store}" (a custom role) | `POST /roles` |
+| `role.updated` | role | a custom role's store / — | actor | "Updated store role {name}{was}, in every store" / "Updated platform role {name}{was}" / "Updated role {name}{was} in {store}, from the platform" (a custom role, on the platform) / "Updated role {name}{was}" (a custom role, inside its store) — `{was}` = " (was {old name})" when renamed | `PUT /roles/{role}` |
+| `role.deleted` | — | explicit: a custom role's store / — | actor | "Deleted role {name}." + " {n} pending invitation[s] to it {was/were} revoked." when any | `DELETE /roles/{role}` |
+| `permission.created` / `permission.updated` | permission | — | actor | "Created permission {name}" / "Updated permission {name}" | permissions |
+| `permission.deleted` | — | — | actor | "Deleted permission {name}" | permissions |
+| `impersonate.started` | target user | — | the admin | "Logged in as {name} ({email})" | impersonation start |
+| `impersonate.stopped` | — | — | explicit: the returning admin | "Returned to {admin} from impersonating {user}" | impersonation stop |
+| `activity.maintenance` | — | — | actor / 'System' | "Activity log maintenance — partitions created: {years}; dropped (with data): {years}" / "Scheduled maintenance — partitions created: …; dropped (with data): …" | §17.5 |
+
+Pinned by tests: the `store.deleted` wording (e.g. exactly "Deleted store Alpha Mart with its 0 screens and 2 media files"), the `role.deleted` wording (exactly "Deleted role Cashier. 2 pending invitations to it were revoked."), the `role.created` wordings (exactly "Created store role Floor Lead, offered in every store" and "Created platform role Support"), the `role.updated` wordings (exactly "Updated store role Cashier (was Staff), in every store" and "Updated role Till (was Cashier) in Beta Deli, from the platform"), the `member.assigned` wording (exactly "Added Nadia New ({email}) to Beta Deli as Baker, from the platform"), the from-the-platform `member.role_changed` wording (exactly "Changed the role of {name} in Alpha Mart from Staff to Area Manager, from the platform"), the `store.owner_assigned` wording (exactly "Made {name} ({email}) an Owner of Orphan Mart, replacing the invitation for partner@example.com"), the `member.role_changed` fragment "from Staff to Admin", and the `user.deleted` fragment "left without an Owner: Alpha Mart"; and the store carried by `store.deleted`, `store.created` (Create store on Settings → Stores), `member.assigned`, `member.role_changed` and `member.removed` (from the platform) and `role.deleted` (a custom role deleted from the platform). Other descriptions and success messages not quoted in bold are human text.
+
+Signage actions (outside this document): `media.uploaded`, `media.updated`, `media.deleted`, `screen.paired`, `screen.repaired`, `screen.updated`, `screen.deleted`, `screen.playlist_updated`, `screen.playlist_copied`, `daypart.created`, `daypart.updated`, `daypart.deleted`, `channel.created`, `channel.updated`, `channel.deleted`, `channel.ad_added`, `channel.ad_updated`, `channel.ad_removed`, `channel.ads_reordered`, `campaign.created`, `campaign.updated`, `campaign.deleted`, `store.network_ads_updated`, `screen.network_ads_updated`. Each carries the store of its screen, file, daypart or channel (the deletes name it explicitly; tested for `channel.created` and `channel.deleted` of a store's own channel); a platform channel's entries, the campaigns' and a many-store network-advertising switch carry none.
+
+**Removed with the old model:** `user.created`, `user.updated`, `user.assigned`, `user.unassigned`, `user.onboarded`. **No longer written since the third round of 2026-09-17:** `store.ownership_transferred` (the Stores tab's handover, "Transferred ownership of {store} to {name} ({email}), and became {role}" / "…, and stayed {role}" — §11.3) and the in-store `user.deleted` "Deleted the account of {name} ({email}) from {store}" (the Accounts page a store once had — §13); entries written before stay in the log, the latter with its store.
+
+### 17.3 Deliberate exclusions (owner-accepted; do NOT log)
+Failed login attempts (flood risk; the throttle handles abuse), forgot-password link requests (guest noise; the actual reset IS logged), a request refused at its password re-confirmation — missing, wrong or rate-limited (§19.7; the limiter counts the wrong ones), profile submits that change nothing, a role "change" to the same role, scheduled maintenance that did nothing, the impersonation stop no-op and failure paths, a decline of an unknown token, an accept whose link was used a moment ago (§9.5 step 5), a stop request from an account that is not the one being viewed as, and session-only store context changes other than an explicit switch (dashboard auto-select, the session switch that comes with accepting). Invitations removed as part of a larger change get no row of their own: those revoked by a role deletion are counted in `role.deleted`, and Owner invitations replaced by "Invite owner" are named in `store.owner_invited` or `store.owner_assigned`.
+
+### 17.4 Reading — `GET /activity`, `GET /activity/data` (`activity-view`)
+- **Who, and what (owner's rules, 2026-09-16):**
+  - **above the stores** — the super admin, and any platform account whose role carries `activity-view` — **every** entry, the platform's own and every store's;
+  - **inside a store** — a store's role carrying `activity-view` — `currentStore()` (404), then only the entries whose `store_id` is that store: never another store's, and never one without a store (personal, platform, or logged before the column existed). Tested: an Owner given `activity-view` reads exactly "Paired screen Alpha Window" out of four entries (Beta's screen, a permission the super admin created and the Owner's own profile update are not shown) while the super admin reads all four; the page reads "Activity in Alpha Mart" without the storage panel; the Activity Log link is offered.
+  - The page is titled "All Activity" above the stores and "Activity in {store}" inside one, with the note "What happened in {store} — by its people, and by the platform on its behalf."
+- Newest first (id DESC). LIKE search across `action`, `description`, `actor_name`. Paginated per §20.6 (50 rows).
+- **Date-range bounding (timezone-correct):** optional `from` / `to`, each either a full ISO-8601 instant (what the UI sends) or a plain `Y-m-d` date; validated as a date (malformed → 422, never silently ignored — tested). `created_at` is stored in UTC and each bound is normalized to a UTC datetime: a date-only value covers the whole day (`from` → 00:00:00, `to` → 23:59:59 of that date, UTC); a full instant is used as-is. `from` → `created_at >= from`; `to` → `created_at <= to`. *Reason: partition pruning — MySQL scans only the years in range.*
+- UI presets: the date inputs hold the viewer's LOCAL date (YYYY-MM-DD). Today = today..today; Last 7 days = today−7..today; **Last 30 days = today−30..today (default)**; This year = Jan 1..today; Custom = keep the dates for direct editing (any manual date edit switches to Custom). Every change resets to page 1 and refetches. There is deliberately no "All time" preset (owner removed it).
+- **Local-day boundaries are sent as UTC instants:** `from` → local 00:00:00 of that date `.toISOString()`, `to` → local 23:59:59.999 `.toISOString()` — correct in every timezone, and a freshly written log (stamped in server UTC) is never hidden, because local end-of-today in UTC is always ≥ now (tested with a UTC−5 viewer). Timestamps are rendered with the browser's `toLocaleString()`.
+
+### 17.5 Retention and yearly partitions (MySQL; other drivers emulate)
+- RANGE partitioned by `YEAR(created_at)`. MySQL constraints that shaped it: the partition key must be in every unique key → **PK (id, created_at)**; `YEAR()` over TIMESTAMP is rejected → `created_at` is **DATETIME**; partitioned tables cannot hold foreign keys → the `actor_id` FK is dropped. Non-MySQL drivers skip partitioning.
+- Layout: `p{YYYY}` per named year + a **`pmax` MAXVALUE catch-all** (if maintenance never runs, new years land in pmax instead of failing INSERTs — and every action writes a log, so a failing INSERT would take the whole app down). Initial partitioning opens the same window maintenance enforces: p{Y}, p{Y+1}, p{Y+2} + pmax.
+- **Maintenance (idempotent):** (1) FIRST drop every named partition with year < currentYear−1 — partition AND data, instantly (retention = current + previous year); (2) THEN reorganize pmax to open whichever of current, +1, +2 are missing, re-homing rows that accumulated there. Drop-before-create is an owner decision. Non-MySQL: `DELETE WHERE created_at < Jan 1 of (currentYear−1)`; `created` is always `[]` and `dropped` lists `{year, rows}` per calendar year that had rows (counted before the delete). MySQL retention is per whole year; the emulation cuts at the exact date — both keep "current + previous year".
+- **Manual run — `POST /activity/partitions/maintain`** (`global-tier` + `activity-destroy`; delegable to a platform role — tested — and never to a store's role, §7.6: it drops a whole year of every store's history at once; a store user whose role somehow holds it still gets 403 from the tier lock — tested): logs on EVERY run, `Activity log maintenance — partitions created: {years}; dropped (with data): {years}` (comma-joined, empty → `none`); response `{message: "Maintenance complete", created: [year…], dropped: [{year, rows}…]}`. The UI toasts "Maintenance complete — opened: …; deleted: … (N rows)" or "Maintenance complete — nothing to do", then refetches the status and the listing. The storage panel and its **Run Yearly Maintenance** button render only above the stores — the page has no current store — for holders of `global-tier` AND `activity-destroy` (tested: a platform reader holding only `activity-view` and a store role holding both do not see it; a platform keeper does).
+- **Scheduled run** — monthly on the 1st at 00:30 (needs the scheduler's cron entry): logs ONLY when something was created or dropped, prefix `Scheduled maintenance — …`, actor 'System'.
+- **Status — `GET /activity/partitions`** (`global-tier` + `activity-view`): `{driver, partitions: [{name, year, rows}], cutoffYear}` with `cutoffYear = currentYear − 1`; `year` null for pmax; a named partition's rows = the count for that calendar year; pmax's rows = the count with `created_at ≥ Jan 1 of (max named year + 1)`. Non-MySQL synthesizes one `p{year}` entry per calendar year present in the data. The status counts every store's rows, which is why it keeps the tier lock (tested: 403 for a store role holding `activity-view`, 200 for a platform reader). The UI fetches it only when the storage panel renders.
+
+---
+
+## 18. Dashboard and store selection
+
+`GET /dashboard` (auth only, outside the admin throttle):
+- **Platform account** (`globalRole() != null`) → the global view: one stat card **"Total Stores"** = the number of stores. It is the only figure. A platform account never gets the store views, even with a stray store row (tested).
+- **Store account with no memberships** → the empty state: heading **"You're not a member of any store yet"**, text "Invitations arrive by email. Ask a store's owner to invite {their email}, then open the link in that email." *Reason (design record): deliberately NO list of pending invitations with Accept buttons — public signup does not verify an email, so anyone could register somebody else's address and accept that person's invitations from a list. Only the emailed link, which proves the inbox, accepts.*
+- **Store account with memberships** — resolve the current store: the session's store if it is one of the account's stores; else, with exactly **one** store, select it and remember it in the session (no log); else redirect to `GET /select-store`. The store view's body is intentionally empty (the header switcher names the store).
+
+`GET /select-store` (auth only): a platform account, or a store account with ≤ 1 store, is redirected to the dashboard. Otherwise the page **"Select a Store"** — "You belong to more than one store. Choose the one you want to work in." — shows one card per store: name, "city, state", Active/Inactive, slug, **"Your Role"** = the role name in that store (one batched query; unresolvable → **"No role"**), and **Manage Store**, which posts to `POST /stores/switch` (the whole card is the click target).
+
+---
+
+## 19. Validation and authentication catalog
+
+### 19.1 Error shapes (the UI depends on all of them)
+- **JSON field errors:** 422 `{message, errors: {field: [messages…]}}` — painted under the matching inputs.
+- **JSON guard errors:** 403 / 404 / 422 `{message: "…"}` — surfaced as a toast (or inline in a delete dialog), never swallowed.
+- **Password limiter:** for JSON, **429** with the field-error shape `{message, errors: {password: ["Too many wrong passwords. Try again in {n} seconds."]}}` (§19.7) — the dialogs show it as a toast. (The route throttles' 429 is the framework's plain "Too Many Attempts." response.)
+- **HTML forms** (auth pages, Profile, Settings → Stores, the invitation page): a validation failure is a **302 redirect back** with the errors in a named **error bag** (`default`, `updatePassword`, `userDeletion`, `storeDetails`, `newStore`, `storeDeletion`; leaving a store refused puts its error in `storeMembership`, §8.6) and the old input flashed (never the password fields); success is a 302 with a flashed `status`; a guard 403 renders the error page. **The password limiter's refusal takes this shape too** — a 302 back with its message on the password field in the form's bag; its 429 status reaches JSON clients only.
+
+### 19.2 Field rules by door
+| field | door | rules |
+|---|---|---|
+| first_name, last_name | signup, invitation register, profile | required, string, max 255 |
+| phone | signup, invitation register, profile | required, numeric, exactly 10 digits |
+| email | signup | **lower-cased before validation**; then required, `email` validator + regex `^\S+$` (**"Email cannot contain spaces."**), unique in users; no max |
+| email | profile | required, string, **lowercase** (rejected, not normalized), email, max 255, unique ignoring own row |
+| email / owner_email | store invitation, platform invitation, owner invitation, store creation on the platform | required, string, email, max 255; then normalized `lower(trim)` |
+| password | signup, invitation register, password reset, password change (the new password) | required, confirmed, min 8 |
+| password (re-confirmation, §19.7) | JSON: remove a member; take a person out of a store from the platform (Users → Stores); delete a store (the platform's Stores page), an account (the platform), a platform role, a role, a permission (and a channel, a campaign). Forms: delete store on Settings → Stores (bag `storeDeletion`), Profile self-delete (bag `userDeletion`) | required (**"Password is required."**), string, current password (**"The password is incorrect."**); wrong ones limited — one counter per person for all of them |
+| current_password (re-confirmation, §19.7) | password change (bag `updatePassword`) | the same rules, messages and counter, on this field |
+| store_name | signup | required, string, max 255 |
+| name | the platform's Stores page create/update, Settings → Stores details | required, string, max 255 |
+| street / suite / city | every store form | street required max 255; suite nullable max 100; city required max 100 |
+| store_name, store_street, store_suite, store_city, store_state, store_zip_code, store_country | Create store on Settings → Stores (bag `newStore`, §10.2) | the rules of `name`, `street`, `suite`, `city`, `state`, `zip_code` and `country` in this table, under these names; the framework's messages name them "store name", "street", "suite", "city", "state", "zip code", "country" |
+| state | every store form | required, exactly 2 chars, one of the **50 US states — DC and territories rejected** (tested) |
+| zip_code | every store form | required, string, max 10, digits only — **"Zip code can only contain numbers."** |
+| country | the platform's Stores page create/update, Settings → Stores details | required, string, max 100 (signup hardcodes `'USA'`) |
+| is_active | the platform's Stores page create/update only | optional boolean — never read by Settings → Stores (§10.2, §11.2) |
+| confirm_name | delete store (Settings → Stores, the platform's Stores page) | required (**"Type the store name to confirm."**), string, exactly the store name (**"Type the store name exactly as it is shown."**) |
+| role_id | change role, store invitation, platform invitation, the platform's Users → Stores add and change (required message **"Choose a role."**) | required, integer — then resolved per §6.5 |
+| store_id | switch | required, integer |
+| store_id | the platform's Users → Stores add | required (**"Choose a store."**), integer — then an existing store (**"Choose a store that exists."**, §13.4) |
+| type | roles, create on the platform | required, one of `store`, `platform` (**"Choose what this role is for."**, §7.5) — not read inside a store or on update |
+| role name / permissions | roles | §7.5 |
+| permission name / label | permissions | §16 |
+| from / to | activity data | nullable, date |
+
+The request pipeline trims every input string and turns empty strings into null before validation.
+
+### 19.3 Login and logout
+- `GET/POST /login` are guest-only (an authenticated user is redirected to the dashboard — likewise register, forgot-password and reset-password).
+- `email` required, string, email; `password` required, string; optional boolean `remember` issues a persistent cookie backed by `users.remember_token`.
+- Throttle: **5 failed attempts** inside a 60-second window that starts at the first counted failure (the same fixed-window counter as §24's `RateLimiter`), keyed `transliterate(lower(email) + '|' + client IP)`, checked BEFORE the credential attempt and **cleared on success**. Failure → error on `email` ("These credentials do not match our records."); locked → error on `email` from the framework template ("Too many login attempts. Please try again in :seconds seconds.") — framework texts, non-contractual.
+- Success: regenerate the session id, log `auth.login`, redirect to the intended URL (e.g. an invitation link, §9.5) or the dashboard. Every successful sign-in also clears any impersonation keys left in the session (§14.1).
+- `POST /logout`: log `auth.logout` if authenticated; log out (rotates the remember token when one is set); invalidate the session; regenerate the CSRF token; redirect to `/`.
+
+### 19.4 Password reset
+- Link request (`POST /forgot-password`, `email` required + email): no route throttle, but the broker refuses a new link within **60 s** of the last one for that user. Unknown emails get an error (a deliberate user-enumeration trade-off). All texts are framework translations — non-contractual.
+- Token: random, stored **hashed (bcrypt)** in `password_reset_tokens` (one row per email; a new request overwrites), plaintext only in the emailed link; tokens expire after **60 minutes**.
+- `POST /reset-password`: `token` required; `email` required + email; `password` required, confirmed, min 8. Success: new password hash, `remember_token` rotated to a random 60-char value (kills every remember-me cookie), log `password.reset` with explicit actor, redirect to **login** with the status — **no auto-login**. Failures surface on `email`.
+
+### 19.5 Password change — `PUT /password` (auth only), exact order
+1. Validate in bag `updatePassword`: `password` (the new one) required, min 8, confirmed — framework messages.
+2. **Password re-confirmation** (§19.7) in bag `updatePassword`, field **`current_password`**: **"Password is required."** / **"The password is incorrect."** / the limiter's message — so a wrong current password counts toward the same per-person limit as the big deletes (tested). *Reason: an open session must not be a way to guess the password here either.* An invalid new password is reported without the current one being checked or counted.
+3. Update the hash, log `password.changed`, redirect back with status `password-updated`. It does not rotate the remember token or end other sessions.
+
+### 19.6 Rate limits (every limiter is NAMED and keyed explicitly)
+| limiter | limit | key | applied to |
+|---|---|---|---|
+| `admin` | 240 / minute | the user id (IP when none) | every route in the authenticated admin group (§3.7) |
+| `invitations` | 60 / hour | the user id (IP when none) | creating and resending store and platform invitations |
+| `invitation-response` | 20 / minute | the IP | `GET /invitations/{token}` and its accept / register / decline POSTs, one shared bucket |
+| `signup` | 10 / minute | the IP | `POST /register` |
+| login | 5 failed attempts / 60 s | lower(email) + IP | `POST /login` (§19.3) |
+| `confirm-password:{user id}` (not a route limiter) | 5 wrong passwords / 60 s | the user id | every password re-confirmation, shared: the JSON big deletes, the Stores tab's store delete, Profile self-delete, the password change (§19.7) |
+| `device-register`, `device-pair`, `device-api` | per device / per IP | — | the screens' device API (out of scope) |
+
+Those seven named route limiters (`admin`, `invitations`, `invitation-response`, `signup` and the three device ones, all in `AppServiceProvider::registerRateLimiters`) are **all** there are; the scaffolded `email-verification` limiter went with the verification routes it guarded (§2.1).
+
+*Reason for named limiters (a real incident): the bare `throttle:n,1` form keys a guest request on domain + IP only — the route is not part of the key — so every such route shared one counter per visitor; a shop's TVs behind the owner's router exhausted the signup form's budget (tested: forty device requests from one IP leave `POST /register` reachable).* Dashboard, store selection, profile (including leaving a store from it), password change and logout are auth-only and carry no route throttle; the wrong passwords of Profile self-delete and the password change still count in the shared `confirm-password` limiter.
+
+### 19.7 Re-confirming the password — big deletes, changing your password (owner's rule, 2026-09-16)
+*Reason: a session left open on a shared computer must not be able to destroy anything with two clicks — a store, an account, a member's place in a store, a role — and must not become a way to guess the password either.*
+
+`confirmPassword(request, bag = 'default', field = 'password')` — ONE check for every endpoint below, each calling it **after its other up-front refusals** (so nobody types a password for something that would be refused anyway) and before changing anything:
 ```
-1. Collect the target's entire created_by subtree breadth-first:
-     ids=[target]; frontier=[target]
-     while frontier: frontier = users where created_by IN frontier; ids += frontier
-2. createdRoleIds  = roles where created_by IN ids
-   createdStoreIds = LIVE stores where created_by IN ids AND deleted_at IS NULL
-   (a store the subtree created that was ALREADY soft-deleted is never touched
-    again — not detached, not re-deleted — and is excluded from the counts)
-3. Bulk-DELETE all users in ids  (no per-row model events; store_user rows die via FK
-   cascade; other users' created_by → NULL via SET NULL; activity_logs keep the
-   actor_name snapshot — on MySQL actor_id keeps a stale value because partitioning
-   dropped that FK (§16.5); on other drivers it nulls)
-4. Of createdRoleIds delete ONLY those with no remaining assignments (a role still
-   worn by a survivor is spared); their role_has_permissions rows are deleted first.
-5. Every store in createdStoreIds: detach all users, then SOFT-delete.
-6. Return counts {users, roles, stores} — users counts DESCENDANTS ONLY (excludes the
-   target: deleting a user with no subtree reports users: 0). The user.deleted log
-   line includes these counts.
+key = 'confirm-password:' + actor.id            # ONE counter per person: every endpoint below, every session and device
+if counter(key) >= 5 and window(key) is open:
+    refuse: error on `field`, bag `bag`: "Too many wrong passwords. Try again in {seconds left} seconds."
+            # status 429; not counted; even the right password waits
+validate `field` in bag `bag`: required -> "Password is required."
+                              string
+                              verifies against the actor's hash -> "The password is incorrect."
+on a validation failure: if `field` is non-empty: counter(key) += 1   # window = 60 s from the FIRST counted failure (fixed, not sliding)
+on success: delete the counter and its window
 ```
+- **JSON request:** a failure is 422 `{message, errors: {field: [...]}}`, the limiter's 429 with the same shape (bags mean nothing to JSON).
+- **Plain HTML form:** every failure — the limiter's included — is a **302 redirect back** with the message on `field` in the named bag (the framework ignores the 429 status for a redirect); password fields are never flashed back.
+- An empty password is never counted. A password accepted here clears the counter even when a later check of the same request still refuses (e.g. a locked re-check).
 
-*Reasons: no soft-delete graveyard for users (owner); roles spared while worn so survivors don't break; stores soft-deleted for recoverability; users-first order so step 4's "still assigned" checks see the post-delete world.*
+**Where, and after what:**
+| endpoint | bag · field | asked after |
+|---|---|---|
+| `DELETE /members/{user}` | JSON · `password` | 404 not a member · 422 yourself · 403 out of reach · 422 the store's only Owner (§8.5) — before the locked re-check |
+| `DELETE /users/{user}/stores/{store}` | JSON · `password` | 404 not a member of that store · 422 its only Owner (§13.4) — before the locked re-check |
+| `DELETE /stores/{store}` | JSON · `password` | `confirm_name` validation (§12.4) |
+| `DELETE /users/{user}` | JSON · `password` | 404 reach · 422 yourself · 403 the primary · 403 a super admin unless primary (§13.2) |
+| `DELETE /users/{user}/platform-role` | JSON · `password` | 404 no platform row · 422 yourself · 403 the primary · 403 a super admin unless primary (§13.3) |
+| `DELETE /roles/{role}` | JSON · `password` | 403 `context()` · 403/404 `ensureManageable` · 422 still held (§7.8) |
+| `DELETE /permissions/{permission}` | JSON · `password` | 422 still assigned to a role (§16) |
+| `DELETE /channels/{channel}` (signage) | JSON · `password` | 404 out of reach (`Channel::visibleTo`, §6.6) |
+| `DELETE /campaigns/{campaign}` (signage, super admins) | JSON · `password` | nothing — first thing in the controller |
+| `DELETE /settings/store` | `storeDeletion` · `password` | 403 no `store-destroy` (the route's gate) · 404 no current store · `confirm_name` validation (§11.4) |
+| `DELETE /profile` | `userDeletion` · `password` | 403 super admin · the sole-Owner refusal (§14.2) — before the locked re-check |
+| `PUT /password` | `updatePassword` · `current_password` | the new password's validation (§19.5) |
 
----
+**Not asked** — everyday deletes stay one confirmation away: a media file, a screen, a daypart, a channel ad, an invitation revoke (tested for a store invitation).
 
-## 16. Activity logging (audit trail)
+**The table above is now the whole of it.** The scaffolded `POST /confirm-password` (the framework's "confirm your password" screen, §2.1) was the one place a password was checked *outside* this counter — unthrottled, and logged nowhere (§17.3) — and it is deleted with its route, its controller and its view. Every password check in the application now runs through `confirmPassword`, so the per-person limit has no hole left to walk around: a port must not add a second password check of its own.
 
-### 16.1 Write rule
-Every mutation endpoint writes exactly one row: `record(action, subject?, description, actor?)`.
-- `actor_id` + snapshot `actor_name` (display always uses the snapshot; survives actor deletion). Unauthenticated flows pass the acting user EXPLICITLY (password reset via email link); truly actor-less writes fall back to `actor_name = 'System'`.
-- Logs for transactional mutations are written after the transaction commits (§10.4) — with ONE exception: `account.deleted` is deliberately logged BEFORE the cascade transaction (while the actor is still authenticated, §14.2), so a rolled-back self-delete would leave that log row behind.
-
-### 16.2 Action catalog (complete, with subject + description conventions)
-Subject = the acted-on record; **deletions and no-subject events log subject NULL** (`user.deleted`, `store.deleted`, `role.deleted`, `permission.deleted`, `account.deleted`, `auth.login` "Signed in", `auth.logout` "Signed out" — logged just before logout and only if authenticated, `impersonate.stopped`, `activity.maintenance`). Description templates are short human strings, e.g. "Created user {name} ({email})", "Onboarded store owner {name} ({email}) with store {store}", "Updated their own profile", "Deleted their own account ({email})", "Switched into store {name}".
-
-**Contract note:** only strings this doc quotes verbatim are contractual; other descriptions (and all mutation success messages except those quoted in §8/§13) are free-form human text. Subject for `user.assigned`/`user.unassigned` is the target USER (not the store).
-
-Actions: `user.created`, `user.updated`, `user.deleted` (cascade counts in description), `user.assigned`, `user.unassigned`, `user.onboarded`, `user.registered` (actor = the new owner, §9.1), `store.created`, `store.updated`, `store.deleted`, `store.switched`, `role.created`, `role.updated`, `role.deleted`, `permission.created`, `permission.updated`, `permission.deleted`, `auth.login`, `auth.logout`, `password.changed`, `password.reset` (explicit actor), `profile.updated` (only when dirty), `account.deleted`, `impersonate.started`, `impersonate.stopped`, `activity.maintenance` (§16.5 for which runs log).
-
-### 16.3 Deliberate exclusions (owner-accepted; do NOT log)
-Failed login attempts (flood risk; the throttle handles abuse), forgot-password link requests (guest noise; the actual reset IS logged), password-confirmation checks (session-only), email-verification resend (unused feature), impersonation stop-failure/no-op paths (§14.1), scheduled maintenance runs that did nothing (§16.5), and profile submits that change nothing (§14.2's dirty-check).
-
-### 16.4 Reading (`GET /activity`, `GET /activity/data` — permission `activity-view`)
-- Newest first (id DESC). LIKE search across `action`, `description`, `actor_name`. Pagination per §19.6 (UI requests 25/page).
-- **Date-range bounding (timezone-correct):** optional `from`/`to`, accepted as either a full **ISO-8601 instant** (what the UI sends) or a plain `Y-m-d` date (raw/API callers); validated as a date (malformed → 422, never silently ignored). Since `created_at` is stored in UTC, each bound is normalized to a UTC datetime: a date-only value covers the whole day (`from` → 00:00:00, `to` → 23:59:59 of that date in UTC); a full instant is compared as-is. `from` → `created_at >= fromUTC`; `to` → `created_at <= toUTC`. *Reason: partition pruning — the DB only scans the matching year partitions.*
-- UI presets: the date `<input>`s hold the viewer's LOCAL date (YYYY-MM-DD) — Today = today..today; Last 7 days = today−7..today; **Last 30 days = today−30..today (default)**; This year = Jan 1..today; Custom = keeps current dates for direct editing (any manual date edit flips the preset to Custom). Every change resets to page 1 and refetches. There is deliberately NO "All time" preset (owner removed it); full history needs an explicit old Custom `from`.
-- **Local-day boundaries are sent as UTC instants.** When fetching, the client converts each local date to a real instant — `from` → local 00:00:00 of that date `.toISOString()`, `to` → local 23:59:59.999 `.toISOString()` — so the window is correct in EVERY timezone (Pakistan, US, Canada…) and, crucially, a freshly-created log (stamped in server-UTC) is never hidden: local-end-of-today expressed in UTC is always ≥ "now". (Timestamps in the table are rendered with the browser's `toLocaleString()`, i.e. the viewer's own local time, from the UTC ISO value the API returns.)
-
-### 16.5 Retention & yearly partitions (MySQL; other drivers emulate)
-- RANGE partitioned by `YEAR(created_at)`. MySQL constraints that shaped it: partition key must be in every unique key → **PK (id, created_at)**; `YEAR()` over TIMESTAMP rejected → created_at is **DATETIME**; partitioned tables can't hold FKs → actor_id FK dropped.
-- Layout: `p{YYYY}` per named year + **`pmax` MAXVALUE catch-all** (safety net: if maintenance never runs, new years land in pmax instead of failing INSERTs — and every action writes a log, so an INSERT failure would down the whole app). **Initial partitioning already opens the same three-named-years window maintenance enforces** (current + next two: p{Y}, p{Y+1}, p{Y+2}, plus pmax).
-- **Maintenance (idempotent):** (1) FIRST drop every partition with year < currentYear−1 — partition AND data, instantly (retention = current + previous year); (2) THEN reorganize pmax to open current + next two years, re-homing rows that accumulated in pmax. Drop-before-create is an owner decision (lighten before rebuild). Non-MySQL: plain `DELETE WHERE created_at < Jan 1 of (currentYear−1)`; `created` is always `[]` and `dropped` = one `{year, rows}` entry per calendar year that had rows (counted BEFORE the delete) — so the scheduled run's "something changed" criterion there is simply "dropped non-empty".
-- **Triggers & logging:** UI button (panel and button rendered for super admins only; endpoint checks `isSuperAdmin()` → else 403 **"Only a Super Admin can run activity log maintenance."**) — logs on EVERY run, description `Activity log maintenance — partitions created: {years}; dropped (with data): {years}` (lists comma-joined, empty → the word `none`). Monthly scheduler (1st, 00:30; needs a cron entry in deployment) — logs ONLY when something changed, prefix `Scheduled maintenance — …`, actor 'System'.
-- Maintain response: `{message, created: [year…], dropped: [{year, rows}…]}` — the UI toasts "opened: …; deleted: … (N rows)" or "nothing to do", then refetches status + listing.
-- Status endpoint (`activity-view`): `{driver, partitions: [{name, year, rows}], cutoffYear}` where cutoffYear = currentYear−1, `year` is null for pmax; a named partition's rows = COUNT for that calendar year; pmax's rows = COUNT of created_at ≥ Jan 1 of (max named year + 1). Non-MySQL synthesizes one `p{year}` row per distinct calendar year present in the data (no pmax row). The UI only fetches this panel for super admins.
+Tested: each of the eight JSON big deletes (a store, an account, a platform role, a member, a role, a channel, a campaign, a permission) answers 422 "Password is required." and then "The password is incorrect." and deletes nothing; taking a person out of a store from the platform answers 422 "Password is required." without one (§13.4); a role still held answers its own 422 without a password; five wrong passwords on a store delete make the right one answer 429 with a message starting "Too many wrong passwords. Try again in", and the same request succeeds 61 s later; revoking an invitation needs no password; **the limit is shared across forms** — five wrong current passwords on `PUT /password` (each "The password is incorrect." on `current_password` in bag `updatePassword`) make the right password on `DELETE /settings/store` redirect back with a `storeDeletion` error on `password` starting "Too many wrong passwords. Try again in", the store intact; the plain forms answer a wrong password in their bags (`storeDeletion`, `userDeletion`, `updatePassword`). Browser-tested on the platform: the store dialog shows "Password is required." then "The password is incorrect." and deletes with the right password, then an account and a platform role are deleted through their dialogs.
 
 ---
 
-## 17. Dashboard
-- Super admin / global user → the global "statistics": the payload is exactly `{isGlobalUser, totalStores, myStores}` where `totalStores` counts live stores (computed ONLY for global users — null otherwise) — **totalStores is the only global figure; there are no other stats**.
-- Store user → one card per assigned store: name, city/state, `is_active`, **their role name in that store** (single batched query for all cards; an unresolvable role shows the literal fallback **"No role"**), plus the switch button.
-- Empty state (store users only — a global user with zero stores just sees stats): exact text **"You are not assigned to any store yet."**
-- Route is auth-only: no permission gate, and OUTSIDE the admin throttle group (§18.5). Query count is bounded regardless of store count (tested).
+## 20. Frontend contract (part of the system, not cosmetics)
+
+### 20.1 The UI hides; the backend enforces
+Every action element is wrapped in the permission check matching its route (and, on a tier-locked route, the tier); what may be done to ONE row comes from the server with the row; gates ship in the same change as the button.
+
+| page | element | shown when |
+|---|---|---|
+| Members | Invite member; "Invite someone" (empty invitations tab) | `member-invite` |
+| Members | Change role / Remove on a row | `member-update` / `member-remove` AND `row.can_manage` (otherwise "—"; never on the store's only Owner, §8.3) |
+| Members | Resend / Revoke on an invitation | `member-invite` AND `invitation.can_manage` |
+| Members | Leave store | always (the route has no gate); for the sole Owner (own row is Owner and `owner_count == 1`) the button toasts "You are the only Owner of {store}. Make someone else an Owner before you leave." instead of opening the dialog |
+| Settings | the Stores tab | `User::hasStoresTab()`: an account with no platform role, a current store AND `store-view` there (§20.3) |
+| Settings → Stores | the Store Details form / the details read-only | `store-update` / otherwise (§11.1) |
+| Settings → Stores | the Delete Store card | `store-destroy` (there is no handover card, §11.3) |
+| Settings → Stores | "Your stores" (`your-stores`) / its Create store button (`open-store-button`) | always on the tab / `store-store` (§10.2) |
+| Stores (platform) | Add Store | `store-store` |
+| Stores (platform) | Invite owner / Edit / Delete on a row | `row.can.invite_owner` / `row.can.update` / `row.can.destroy` (§12.1) — Invite owner only on a store with no Owner (browser-tested: offered on a new store with no members, gone once its Owner registers from the invitation or is put in from Users → Stores) |
+| Stores (platform) | advertising column, row checkboxes, bulk switch | `campaign-manage` |
+| Users | Invite to platform team; platform invitations card | super admin; the invite picker lists Super-Admin to the primary super admin only |
+| Users | Log in as / Stores / Remove platform role / Delete on a row | `row.can.impersonate` / `row.can.manage_stores` / `row.can.remove_platform_role` / `row.can.delete` (the page itself is `global-tier` + `user-view`, §13.1) |
+| Roles | Create custom role (inside a store) / Create role (platform) | `role-store` |
+| Roles | the "What is this role for?" choice in the form | a new role on the platform (§20.8) |
+| Roles | the "Custom roles made in stores" card | the platform, once any store has a custom role (§20.8) |
+| Roles | Edit / Delete on a row; View | `row.can_edit` / `row.can_delete` — the server's flags already include `role-update` / `role-destroy` (§7.3), so the row buttons carry no page-level check of their own — a held role's Delete only toasts why it cannot go yet; View always (§20.8) |
+| Permissions | Add / Edit / Delete | `permission-store` / `permission-update` / `permission-destroy` |
+| Activity Log | storage panel + maintenance | no current store on the page AND `global-tier` AND `activity-destroy` (§17.5) |
+| Channels | Add Channel | `channel-store` (inside a store the channel is the store's own, §6.6) |
+| Profile | "Your stores" section / its Leave button per store (here and on the Stores tab) | no platform role AND no Stores tab / the person is not that store's only Owner (§14.2) |
+| Profile | Delete Account section | not a super admin |
+| Register | closed banner + disabled submit | signup closed (§10.1) |
+
+### 20.2 Sidebar
+In order, each link gated as stated (a permission check reads the role where the person stands, §5.3 — inside a store, their role there):
+1. **Dashboard** — always.
+2. Platform accounts only (`globalRole() != null`): **Stores** (`store-view`) — every store (§12). A store member sees their stores under Settings → Stores or on the profile (§11.1, §14.2), never here.
+3. Platform accounts only (`globalRole() != null`): the **Users** group, shown when `user-view` OR super admin — its header links to Users when `user-view`, else to Roles — with sub-links **Roles** (super admin) and **Permissions** (super admin AND `permission-view`).
+4. Both tiers: **Screens** (`screen-view`), **Dayparts** (`daypart-view`), **Media Library** (`media-view`).
+5. Store accounts only: the **Team** group, shown when `member-view` OR `role-view` — its header links to Members when `member-view`, else to Roles — with sub-links **Members** (`member-view`) and **Roles** (`role-view`). There is no Accounts link: the accounts are the platform's (§13).
+6. Both tiers: **Advertising** (`campaign-manage`); **Channels** (`channel-view`); **Activity Log** (`activity-view`).
+
+At the foot of the bar, for everyone: the person's initial and name with "Settings" beneath (`sidebar-settings`, title "Settings"), linking to Settings — `GET /profile` — and highlighted on the Profile tab and the Stores tab. **The sidebar has no link to the Stores tab** (owner's rule, 2026-09-17): the store being worked in is a tab of Settings (§11, §20.3). Tested: an Owner's dashboard carries `sidebar-settings` and no link to `/settings/store`.
+
+A nav link takes the same locks as its routes: Channels and the Activity Log carry no tier lock, so a store's role carrying their permission is offered the link — for its own store — while Stores and the Users group keep the platform's tier (tested: an Owner is offered none of Stores, Users, Channels and Activity Log; once the Owner role holds `store-view`, `user-view`, `channel-view` and `activity-view` — `user-view` written straight into the database — they are offered Channels and Activity Log, never Stores or Users, and `GET /stores` answers them 403; a store role holding `activity-view` is offered the Activity Log) — and a platform user holding `permission-view` is not offered Permissions (tested). Every permission check being true for a super admin (§3.3), a super admin is offered every link of the platform side: Dashboard, Stores, the Users group with Roles and Permissions, Screens, Dayparts, Media Library, Advertising, Channels and Activity Log.
+
+### 20.3 Header, Settings and banners
+- **Store switcher** — store accounts with at least one store: shows the current store's name (or "Select store"); the menu "Switch store" lists their stores by name (current one marked), each posting to `POST /stores/switch`. Platform accounts never get it.
+- **User menu** (`user-menu`) — **Settings** (`user-menu-settings`, → `/profile`) and signing out; the store-selection page's focused layout carries the same menu.
+- **Settings** (owner's rule, 2026-09-17) — tabs (`settings-tabs`), each a page of its own so every plain form on it returns to where it was sent from, both headed "Settings": **Profile** (`settings-tab-profile`, `/profile`, always, §14.2) and **Stores** (`settings-tab-store`, `/settings/store`, §11), shown only when `User::hasStoresTab()` — an account with no platform role, a current store, and `store-view` there (owner's rule, 2026-09-17: turning View Stores off hides it). A settings page added later joins these tabs, not the sidebar. Tested: an Owner's Profile tab links to the Stores tab, a Staff member's does not, and a platform user holding `store-view` gets none; browser-tested: a new Owner reaches the tab — labelled "Stores" — through `sidebar-settings`, and finds "Store Details", "Delete Store", no "Transfer Ownership", and their store under "Your stores"; a member moved from Staff to a store role holding `store-view` reaches it the same way; a platform team member sees the Profile tab alone.
+- **Impersonation banner** — §14.1.
+
+### 20.4 Double-submit protection
+Every AJAX action has an in-flight flag (`saving`, `deleting`, `inviting`, `changingRole`, `removing`, `revoking`, `leaving`, `busyInvitationId`, `removingRole`, `impersonating`, `loadingAccess`, `assigning`, `removingBusy`, a Users → Stores line's own `busy`, `invitingOwner`, `maintaining`, `openingForm`; the role form also refuses to save while `loadingAssignable`) that disables its button until the request settles (browser-tested: a double click creates exactly one record). Plain forms: one global guard lets the FIRST natural submit through, marks the form, blocks further submits, disables submit buttons only on the NEXT tick (synchronous disabling would drop the clicked button's name/value from the POST), ignores submits already prevented by an AJAX handler, and re-arms on back/forward-cache restore (`pageshow`).
+
+### 20.5 Client-side validation mirrors the backend
+The same rules run before sending; a client failure sends NO request; the backend stays the source of truth. Two visual tracks: **AJAX modals** (errors in a shared `formErrors` object, the field wrapper paints a red border, the message sits below) and **plain forms** (a shared helper reads the named fields, adds a red border and `data-client-invalid="1"` to each invalid input, inserts the message below and scrolls to the first). Required labels carry a red `*`.
+
+Exact client messages: `required` → "{Label} is required." · `maxLen` → "{Label} may not be longer than {n} characters." · `minLen` → "{Label} must be at least {n} characters." · `emailFormat` (`^\S+@\S+\.\S+$`) → "{Label} must be a valid email address." · `digitsExactly` → "{Label} must be exactly {n} digits." · `digitsOnly` → "{Label} can only contain numbers." · `lettersNumbersSpaces` → "{Label} can only contain letters, numbers, and spaces." · password mismatch → "Password confirmation does not match." · empty permission checklist → "Choose at least one permission." · a store delete's typed-name mismatch (the Stores page and the Stores tab) → "Type the store name exactly as it is shown." · any big-delete dialog with an empty password → "Password is required." (§20.8)
+
+Forms covered: invite member / platform staff (Email required + format + max 255, Role required); change role (Role); the platform's Users → Stores add (Store required, Role required) and its remove form (password required); stores on the platform (Name, Street, Suite, City, State, Zip code, Country; Owner email on create only; the owner-invite dialog's Email required + format); roles (Name required + max 255, the checklist); permissions (Name, Label); the big-delete dialogs (password required; the Stores page's store dialog checks the typed name and the password together); registration (every field; password min 8 + confirmation); profile (first/last name, phone 10 digits, email); password change (current, new min 8 + match, confirmation); account deletion (password); Settings → Stores (details; Create store: the same details — Store name, Street, Suite / Unit, City, State, Zip code, Country — under their `store_` names; delete: typed name exact + password); the invitation link's register form (First name and Last name required + max 255, Phone required + 10 digits, Password required + min 8 + confirmation match — the email comes from the invitation). Input hardening: store zip codes accept digits only, max 10; permission labels accept letters, digits and spaces only.
+
+### 20.6 Listings
+- **Shared paginated listings** (stores, users, permissions, activity; the signage tables alike): params `search`, `page`, `per_page`; **one page size everywhere, 50** — the client always sends 50 and the server defaults to 50 when none is sent, clamped to 1–100 (tested: `per_page=999999` → 100, `per_page=0` → 1). Response `{<itemsKey>, total, currentPage, lastPage, perPage}` with itemsKey `stores` / `users` / `permissions` / `logs`. Search = `LIKE %term%` across the listed columns, OR-grouped, wildcards unescaped; case-insensitivity comes from the database collation (use ILIKE/LOWER elsewhere). Order: stores by name; users by first then last name; activity id DESC; permissions none (pick a stable order in a port). Client: 400 ms search debounce resetting to page 1; a request token discards stale out-of-order responses; after a delete empties the page it steps back one page and refetches.
+- **Members** (`/members/data`) and **Roles** (`/roles/data`) are single unpaginated fetches; the members search filters client-side by name or email (case-insensitive substring). Platform invitations are unpaginated.
+- Dates: `formatDate` renders `toLocaleDateString` (year, short month, day); invitation status → "Expired", "Expires today" (≤ 1 day left) or "Expires in {n} days". Role badges on the Members and Users pages go by the role's key, so a renamed starter keeps its colour: `owner` amber (warning), `admin` blue (info), every other role neutral. The Roles page's Type badges are in §20.8.
+
+### 20.7 Toasts and flash
+One global top-center toast container on the app layout; success green / error red (`window.toast(message, type = 'error')`); auto-dismiss after 5 s with a manual ✕. Message-only 403/404/422 responses MUST reach a toast (a real bug once hid the Super-Admin rename error). A response carrying `email_sent: false` (store and platform invitations and their resends, store creation, "Invite owner") shows its message as an **error** toast; otherwise the success toast. A success carrying `redirect` (leaving the current store from Members, §8.6) sends the browser there instead of toasting. A flashed `status` string becomes a success toast on the next app-layout page ("Switched to …", "Welcome to …!", "You are already a member of …", "{name} was deleted.", "You left {store}.", "{name} is open, and you are its Owner. Switch to it from the store menu." after Create store, §10.2) — except the keys `profile-updated`, `password-updated` and `store-updated`, which their own pages render inline (the scaffolded `verification-link-sent` key went with the verification routes, §2.1). The guest layout has no toast container: the login page shows `status` inline ("Invitation declined."), the invitation page shows `error` inline.
+
+### 20.8 The Roles page, Users → Stores and the big-delete dialogs
+**Roles page** (`GET /roles`) — heading **"All roles"** on the platform, **"Roles in {store}"** inside a store, each with an explanation: on the platform "Make a role and say what it is for: a store role is offered in every store, a platform role is for your team above the stores. The Owner role marks who owns a store — rename it or change what it allows, but it always stays."; inside a store, that a role decides what a member can do in this store, that store roles come from the platform and are the same in every store, and that custom roles belong to this store alone. There is no store picker, and no permission checkbox is ever shown greyed out. One `/roles/data` fetch (§7.3) feeds:
+- **Roles** table (`roles-table`) — inside a store every row; on the platform every row but the custom roles. A row per role (`role-row-{id}`):
+  - **Role** — the name (`role-name-{id}`), an **Owner** badge (`owner-role-badge`) when `is_owner_role`, and the description beneath;
+  - **Type** — a badge by `kind`: `super_admin` "Super admin" (red), `store` "Store role" (amber), `platform` "Platform role" (blue), `custom` "Custom role" (neutral);
+  - **Permissions** — "Every permission, always" for Super-Admin; otherwise the number of permissions;
+  - **Members** (inside a store) / **Holders** (platform) — `holders_count`;
+  - **Actions** — View (`view-role-{id}`) always; Edit (`edit-role-{id}`) when `can_edit`; Delete (`delete-role-{id}`) when `can_delete`.
+- **Custom roles made in stores** (`store-custom-roles`) — the platform only, shown once loaded when any store has a custom role: "Each belongs to its own store and is offered there alone."; columns Role (name and description), Store (`store_name`), Permissions (the number), Members (`holders_count`) and Actions — the same three buttons and selectors.
+
+**Create** — "Create custom role" (inside a store) / "Create role" (platform), `create-role`, needs `role-store`; disabled while the form opens.
+- **Form** (`role-form`; headed "Edit {name}" or with the create label):
+  - a hint by the role in the form — the Owner role: "This is the Owner role: whoever holds it owns their store. You can rename it and change what it allows; it is never deleted."; a store role: "A store role is offered in every store. What you save here applies in all of them at once."; a platform role: "A platform role works above the stores: what it allows reaches every store. The permission catalogue stays with Super-Admin."; a custom role on the platform: "A custom role of {store}: it is offered there alone."; inside a store: "A custom role of {store}. You can only give it permissions you hold yourself.";
+  - **Role name** * (`role-name`) — editable for every role the form opens for (Super-Admin never opens: it has no Edit);
+  - **What is this role for?** * — for a new role on the platform only: radios **Store role** (`role-type-store`, "Offered in every store. Its permissions reach the member's own store.") and **Platform role** (`role-type-platform`, "For your team above the stores. Its permissions reach every store."), Store role chosen when the form opens; the server's `type` error shows beneath. Choosing the other one clears the form's errors and loads the checklist again for that kind;
+  - **Permissions** * — opening the form fetches `/roles/assignable` (§7.9) with `role` = the role's id when editing, `type` for a new role on the platform and nothing inside a store ("Loading permissions..." meanwhile), and keeps ticked only those of the role's permissions the list offers — the same whenever the list is loaded again, so a permission the kind cannot hold never stays ticked out of sight. The list is grouped by the prefix of the permission's name (`permission-group-{key}`) in the order Stores, Members, Roles, Screens, Dayparts, Media library, Channels, Accounts, Activity log (any other prefix after, titled by the capitalised prefix), each group headed by a select-all checkbox (indeterminate when only some are ticked), with a checkbox per permission (`permission-{name}`). Unless the role is a platform role, the Stores, Channels and Activity log groups carry the hint **"This store only"** (the Accounts group is listed for a platform role alone — a store's role is never offered `user-*`, §7.9). An empty list reads "You hold no permissions you could give to a role.";
+  - **Save role** (`role-save`) — refused while the list loads; client validation first (§20.5); `POST /roles` with `{name, permissions}` plus `type` on the platform, or `PUT /roles/{id}` with `{name, permissions}`; a 422 with field errors paints them under the fields, anything else is an error toast; success closes the form, toasts the message and refetches.
+
+  Browser-tested on the platform: the Owner row offers Edit but no Delete, Super-Admin no Edit, and Staff (held by somebody) a Delete — which toasts exactly "Please unassign Staff from everyone first: 1 person still holds it." without opening the password dialog; a new role opens with "Store role" chosen, `activity-destroy` and `permission-view` not in the list and "This store only" on the Channels and Activity log groups ("Role Shift Lead created.", "Role Area Manager created."); choosing "Platform role" lists `activity-destroy` but not `permission-view` ("Role Support created."); editing Staff shows its name editable and no type choice, and renaming it "Crew" with `screen-store` added toasts "Role Crew updated in every store." and shows the new name in its row.
+- **View** — the name, the kind (with " · {store}" for a custom role) and the grouped permissions; for Super-Admin also "A super admin passes every permission check, whatever this list says — a permission added later included."
+- **Delete** — a role somebody holds (`holders_count > 0`) opens nothing: the button toasts, as an error, **"Please unassign {name} from everyone first: 1 person still holds it."** / **"Please unassign {name} from everyone first: {n} people still hold it."** — the server's own words (§7.8), said before any password is typed. Otherwise the dialog `confirm-role-deletion`: "Delete {name}?", "Nobody holds this role, so no one loses access.", plus "Its pending invitation will be revoked too." / "Its {n} pending invitations will be revoked too." when `invitations_count > 0`; then the password (`delete-role-password`) and `confirm-role-deletion-confirm` ("Delete role").
+
+**Stores** (Users page, super admins; "Stores" = `manage-stores-{id}` on a row with `can.manage_stores`, disabled while it loads) — opening it fetches `GET /users/{user}/stores` (§13.4) and opens the dialog `manage-stores`, headed "{name}'s stores" with "Add them to any store with a role, change the role they hold, or take them out. The change is immediate — nobody is invited.":
+- **Member of** — "Not in any store yet." when empty; otherwise a line per store (`membership-{store id}`): the store's name; a role select (`membership-role-{store id}`: the store roles, then that store's custom roles, starting at the role held) with the chosen role's description beneath; **Save** (`membership-save-{store id}`, disabled until another role is chosen) sending `PUT /users/{user}/stores/{store}/role` with `{role_id}` — its refusal (the `role_id` error, else the message) shows on that line; and **Remove** (`membership-remove-{store id}`), which opens a form beneath the list (`remove-membership-form`): "Take {name} out of {store}? What they made there stays with the store.", the password (`remove-membership-password`) and **Remove from store** (`remove-membership-confirm`) sending `DELETE /users/{user}/stores/{store}` with `{password}` — a password error under the field, anything else (the only-Owner refusal included) an error toast.
+- **Add to a store** — "They are already in every store." when no store is left; otherwise a form (`assign-store-form`): **Store** (`assign-store`, options "{name} — {city}"; changing it clears the role), **Role** (`assign-role`, disabled until a store is chosen: the store roles, then that store's custom roles, the chosen one's description beneath) and **Add** (`assign-store-save`) sending `POST /users/{user}/stores` with `{store_id, role_id}`; field errors under the fields, anything else an error toast.
+- Every success toasts the message and reloads both the dialog's lists and the accounts table; **Close** closes it.
+
+Browser-tested: Sam's Alpha Mart role changed to Area Manager → "{name} is now Area Manager in Alpha Mart."; Casey, in no store ("Not in any store yet."), added to Beta Deli with the Owner role → "Casey Keeper is now Owner in Beta Deli.", the new line showing Owner selected, and the Stores list counting Beta Deli's members 0, then 1; removing Casey with the password → the toast "Casey Keeper is the only Owner of Beta Deli. Make someone else an Owner first." and Casey stays.
+
+**Big-delete dialogs** (§19.7) — each is a real `<form>` holding one shared password field: label "Your password *", helper "This cannot be undone, so confirm it is you.", `type="password"`, `autocomplete="current-password"`. *Reason for the form: without a form boundary Chrome treats the field as an "unowned" password and autofills the page's search box as its username.* Behavior: an empty field shows "Password is required." and sends nothing; the password travels in the DELETE body (`{password}`; the Stores page's store dialog sends `{confirm_name, password}` and checks both first); a 422 carrying a `password` error shows it under the field (the store dialog shows each field's error under that field); anything else — a guard's 403 / 422 message, the 429 — is an error toast. Password inputs: `remove-member-password` (Members), `delete-store-password` (the platform's Stores page), `delete-account-password` (Users), `remove-platform-role-password` and `remove-membership-password` (Users; the latter in the Stores dialog's remove form), `delete-role-password` (Roles), `delete-permission-password` (Permissions), and on the signage pages `confirm-channel-deletion-password`, `confirm-campaign-deletion-password`. The generic delete dialog takes a `password` flag and the shared table helper a `deleteNeedsPassword` option (Permissions, Channels, Campaigns); the Members, Stores, Users and Roles pages handle the password in their own delete code, the same way.
+
+**Plain password forms** (§19.7) — the Stores tab's delete dialog (`delete-store-password`) and Profile's delete dialog reopen by themselves when their bag (`storeDeletion`, `userDeletion`) holds errors (the Create store dialog likewise for `newStore`, §10.2, though it asks no password); the password-change form is inline (bag `updatePassword`). Each shows the server's message under its field — the limiter's "Too many wrong passwords. Try again in {n} seconds." included — and checks in the browser first, with its label: "Password is required." (store delete, account delete) or "Current password is required." (password change).
 
 ---
 
-## 18. Validation & auth catalog
+## 21. Seeding / bootstrap (idempotent; model events suppressed; safe to re-run)
 
-### 18.1 Error shapes (the UI depends on both)
-- **Field errors:** 422 with `{errors: {field: [messages…]}}` — painted under the matching inputs.
-- **Guard errors:** 403/422 with `{message: "…"}` only — surfaced as a toast, never swallowed.
+1. For each of the 37 names in `Permission::LABELS`: upsert by `name`, setting `label` (labels repaired on every run).
+2. The Super-Admin role = the role with id `Role::superAdminId()` (exact name, §4.1), or a new role named `Super-Admin` when there is none; **force `is_global = true` and save it on every run**; **sync every permission row that exists** onto it (uncatalogued ones included).
+3. **The Owner role only:** the role with key `owner`; only when there is none, create `{key: 'owner', name: 'Owner', is_global: false, store_id: NULL, created_by: NULL}` (the name from `Role::STARTERS`) and set its permissions exactly to its starting list (`Role::starterPermissions('owner')`, §7.1). An existing Owner role is never touched — its name and permissions are the super admin's to change, and a re-seed must never undo that. **The seeder touches no other store role:** all four starters come with the migrations (§22), so a re-seed neither resets what they allow nor brings back one the super admin deleted (tested: Staff changed to `screen-view` + `screen-store` keeps exactly those after re-seeding). *Reason: public signup needs the Owner role (§10.1).*
+4. The first admin: find or build by email **admin@gmail.com**; set first_name "Admin", last_name "Momin", phone "0000000000", `email_verified_at` = now (every run). The password is set **only when the account is new OR `SEED_ADMIN_PASSWORD` is set** — from the env value, else a random 16-char alphanumeric printed once: `SEED_ADMIN_PASSWORD is not set — generated admin password: {password}`. A re-run without `SEED_ADMIN_PASSWORD` never touches a working password; with it, the password is reset to that value.
+5. Attach the admin to the sentinel `(store_id 0, role_id = the Super-Admin role's id)` without detaching anything (upsert of the pair) — by role object, never a hardcoded id.
+6. Running twice must not error or duplicate (tested: 37 permissions, as many as `LABELS`; one Super-Admin role; four roles carrying a key; one admin).
 
-### 18.2 Field rules
-| field | rules |
+No store and no store member are seeded. **`migrate` alone already leaves the whole 37-permission catalogue with its labels and the four starter store roles with their starting permissions** (§22), so public signup is open before the seeder ever runs, and step 1 finds every label already right and step 3 finds the Owner role there and leaves it alone. What the seeder adds is only the Super-Admin role and the first admin, who becomes the primary super admin. Tested (after seeding): each starter role carries its `Role::STARTERS` name, is not global, has no store and holds exactly its starting permissions — Owner `STORE` + `store-view` + `store-destroy`, Admin `STORE` + `store-view`; and tested again **before** any seeder runs, straight off the migrations (§22).
+
+---
+
+## 22. Migrations — the squashed set (and the upgrade path that is gone)
+
+**The migration history has been squashed: `database/migrations` now holds 21 files, and they build the schema of this document directly.** Every upgrade and conversion migration of the 2026-09-10 → 2026-09-17 rebuild has been **deleted**, and its effect folded into the create-table migration it used to patch. Read this section as "what a fresh database looks like after `migrate`", not as a sequence to replay: **migrations from before this cleanup no longer exist**, and nothing in the repository can replay the old model.
+
+*The owner's local MySQL is the only database that ever ran the old migrations, and it is being reconciled with the squashed schema by hand. Every other installation — and every port — starts from the set below.*
+
+### 22.1 What `migrate` creates (the 21 files)
+Each one now writes its final shape, with no later patch:
+
+| migration | what it produces |
 |---|---|
-| user.first_name / last_name | required, string, max 255 |
-| user.phone | required, numeric AND exactly 10 digits |
-| user.email (create/update/onboard/signup) | required, `email` validator + regex `^\S+$` (no whitespace anywhere — rejects even RFC-valid quoted local parts; exact message **"Email cannot contain spaces."**), unique in users; **no max length, no lowercase rule** |
-| profile.email (self-update — DIFFERENT) | required, string, **lowercase (uppercase input is rejected, not normalized)**, `email`, max 255, unique ignoring own row; the whitespace regex does NOT apply here |
-| user.password | required on create, min 8, confirmed; optional on admin update (blank = unchanged) |
-| store.* | see §12.2 (street 255 / suite 100 / city 100 / country 100 / zip 10 digits-only / state 50-states / is_active bool) |
-| role.name | required, string, max 255, **NOT unique** (§10.1 — the id is the identity); only exception: never `Super-Admin` case-insensitively (reserved) |
-| role.permissions | required array, min 1, ids must exist, subset rule §10.2 |
-| permission.name / label | §11 / §2.4 |
-| activity from/to | nullable, format `Y-m-d` |
+| `0001_01_01_000000_create_users_table` | `users` (§2.1 — **no `created_by`**), `password_reset_tokens`, `sessions`. There is **no `personal_access_tokens` migration at all** (§26.8) |
+| `0001_01_01_000001_create_cache_table`, `0001_01_01_000002_create_jobs_table` | framework tables, outside this document |
+| `0001_01_01_000005_stores` | `stores` (§2.2) with `accepts_network_ads` and **no `deleted_at`** |
+| `0001_01_01_000006_create_roles_table` | `roles` (§2.3) with `key` string(32) unique, **no `is_signup_default`**, and `store_id` **ON DELETE CASCADE** |
+| `0001_01_01_000007_create_permissions_table`, `0001_01_01_000008_create_role_has_permissions_table` | §2.4, §2.5 |
+| `0001_01_01_000009_store_user` | `store_user` (§2.6) — `store_id` unsigned bigint, **no FK**, default 0 (the sentinel) |
+| `2026_09_03_100000_create_activity_logs_table` | `activity_logs` (§2.8) **with `store_id` and the `(store_id, created_at)` index** |
+| `2026_09_03_130000_partition_activity_logs_by_year` | MySQL only: `created_at` → DATETIME, PK → `(id, created_at)`, the `actor_id` FK dropped, partitions `p{Y}`…`pmax` (§17.5); every step guarded so a partial run can be retried, and other drivers return at once |
+| `2026_09_06_120000_create_media_table` | `media` (§2.9, §6.6) |
+| `2026_09_07_100000_create_screens_table` | `screens`, with `timezone`, `default_media_id` and `accepts_network_ads` |
+| `2026_09_07_140000_create_playlist_items_table` | `playlist_items` with **`media_id` and `duration_seconds` nullable** — a line may carry a channel instead of a file |
+| `2026_09_10_100000_create_dayparts_table`, `2026_09_10_100100_create_daypart_exceptions_table`, `2026_09_10_120000_create_schedule_rules_table` | signage scheduling |
+| `2026_09_10_140000_create_campaigns_table`, `2026_09_10_140100_create_campaign_screen_table` | `campaigns`, with `start_time` / `end_time` and **no `daypart_id`** |
+| `2026_09_15_100000_create_channels_tables` | `channels` (with `store_id`; `name` **not** unique) and `channel_ads`, plus `playlist_items.channel_id` — added here rather than with `playlist_items` because the table it points at exists only from this migration on (§2.9, §6.6) |
+| `2026_09_16_110100_create_invitations_table` | `invitations` (§2.7) |
+| `2026_09_16_110200_insert_permissions_and_starter_roles` | **the one data migration** — §22.2 |
 
-### 18.3 Login
-- Guest-only route (an authenticated user requesting it is redirected to the DASHBOARD — likewise register / forgot-password / reset-password).
-- Optional boolean `remember`: when true a persistent remember-me cookie is issued, backed by `users.remember_token`.
-- Throttle: 5 failed attempts, each hit expiring after 60 s, keyed `transliterate(lowercase(email)) + '|' + client IP` (transliterate = ASCII-fold, é→e; any stable normalization putting equivalent inputs in one bucket is acceptable), checked BEFORE the credential attempt and **cleared on success**. Failure → validation error on the `email` field ("These credentials do not match our records."); while locked → error on `email` from the framework's throttle template ("Too many login attempts. Please try again in :seconds seconds." — framework-default text, non-contractual).
+### 22.2 `2026_09_16_110200_insert_permissions_and_starter_roles`
+*Formerly `110200_convert_people_to_store_memberships`: it no longer converts anything, it writes the starting state.* In one transaction:
+1. Insert the **whole 37-permission catalogue with its labels** — exactly the table of §3.1.
+2. Insert the **four starter store roles** (`key` set, `is_global = false`, `store_id` NULL, `created_by` NULL) and give each exactly its starting permissions (§7.1): **Owner** = the 22 `STORE` permissions + `store-view` + `store-destroy` (24); **Admin** = the 22 + `store-view` (23); **Staff** = `screen-view`, `screen-playlist`, `media-view`, `media-store`, `media-update`, `media-destroy`, `daypart-view` (7); **Viewer** = `screen-view`, `media-view`, `daypart-view` (3).
 
-### 18.4 Password reset
-- Link request: no explicit route throttle, but the reset-link service refuses a new link within 60 s of the last for that user. The response distinguishes unknown emails (accepted, deliberate user-enumeration trade-off). All reset-flow message texts are framework-default translations — non-contractual.
-- Token handling: a random token is generated, stored **HASHED (bcrypt)** in `password_reset_tokens` (one row per email — a new request overwrites the old), and only the emailed link carries the plaintext; the reset compares by hash. Tokens expire after 60 minutes.
-- Reset form validates token + email + new password (min 8, with matching `password_confirmation`). Success: `password.reset` logged (explicit actor = the user), `remember_token` rotated to a fresh random 60-char value (kills every outstanding remember-me cookie), redirect to the LOGIN page — **no auto-login**. Failures surface on the `email` field.
+**Self-contained on purpose:** it keeps its own copies of the catalogue, the 22 store permissions and the four starter lists and reads no model, so a later change to `Permission::LABELS` or `Role::STARTERS` cannot change what it did. `down()` deletes the four roles by key (their grants cascade) and then the 37 permission rows.
 
-### 18.5 Rate limits
-- Register: 10/min. Login: §18.3.
-- **The entire authenticated admin surface** (users/, stores/, roles/, permissions/, activity/, impersonation) sits behind a shared per-user throttle of **240 requests/minute** (429 beyond) — added deliberately as a security-audit fix. Dashboard and profile routes are auth-only, unthrottled.
+Consequences to keep in a port:
+- **After `migrate` alone — no seeder — a fresh install already has all 37 permissions and all four starter roles**, so public signup works before anything is seeded (§10.1, §21). The seeder then only repairs the labels, creates the Super-Admin role and the first admin, and puts the Owner role back should it be missing (§21).
+- **A permission added later still ships its own migration** that inserts it with its label and grants it to Super-Admin — and, for a store permission the Owner role (and Admin, while the installation has it) should hold, to those roles by key, because neither this migration nor the seeder ever touches an existing role (§7.1, §26.11).
 
----
+### 22.3 Tested — `tests/Feature/DatabaseSchemaTest.php` (before any seeder runs)
+The rules that live in the schema and the starting data rather than in code: a fresh install's `permissions` table equals `Permission::LABELS` **exactly** — the same names with the same labels, and nothing else; each of the four starter roles carries its `Role::STARTERS` name, is not global, has no store and holds exactly `Role::starterPermissions(key)`, and the table holds **exactly those four roles**; `channels.store_id` exists with **no** unique index on `channels.name`, and `activity_logs.store_id` has its `(store_id, created_at)` index; `stores.deleted_at` is absent, the `roles.store_id` foreign key is `cascade`, and deleting a store row straight in the database takes its custom role; `users.created_by`, `roles.is_signup_default` and the `personal_access_tokens` table are all absent.
 
-## 19. Frontend contract (part of the system, not cosmetics)
+### 22.4 The upgrade path (history — these files no longer exist)
+So that the shape of the schema stays explicable, these migrations did exist and have been deleted: `2026_09_10_110000`, `130000`, `140200`, `140300` and `2026_09_15_100100`, `100200` (signage and channel-permission patches), `2026_09_16_100000` (`activity-destroy`), `110000` (`roles.key`), `110300` (dropping `users.created_by` and `roles.is_signup_default`), `120000` (store roles may hold platform permissions; the Owner's `store-destroy`; the "View All Accounts" / "View All Stores" relabels), `120100` (`channels.store_id`, the unique name index dropped), `120200` (`activity_logs.store_id` and its index), `2026_09_17_100000` (merging same-named store copies into one store role), `110000` (`store-transfer`, and `store-view` for every role that could open the old Store settings page), `120000` (deleting `store-transfer` with every grant, and taking `user-view` / `user-destroy` off every store role and custom role), `120100` (deleting the stores an older build had only hidden, and dropping `stores.deleted_at`) — and `0001_01_01_000003_create_personal_access_tokens_table`. Their feature tests went with them.
 
-### 19.1 UI hides, backend enforces
-Every action element (buttons, nav links) is wrapped in a permission check MATCHING its route's middleware exactly; gates ship in the same change as the button. Sidebar composite rule: the "Users" nav group appears when the viewer holds ANY of user-view / role-view / permission-view, its header linking to the first permitted page in the fixed order users → roles → permissions, each sub-link individually gated; Stores and Activity Log links are gated by store-view / activity-view.
-
-### 19.2 Assign modal mechanics
-- `/users/assignable-stores` (gated `user-store-assign`) is **target-agnostic**: global/super actor → ALL live stores; store actor → only their own stores; `{id, name}` ordered by name. Filtering out the target's already-assigned stores happens **client-side** (the duplicate guard §8.1.6 is the real enforcement).
-- `/users/assignable-roles` (gated `user-store-assign`) returns `Role::visibleTo(actor)` (§6.2) ordered by name as `{id, name, is_global, store_id}` — **both flags are load-bearing**: the client detects a global-role selection (`is_global` OR name == 'Super-Admin') to hide the store field and show "This role is global — no store needed."; the onboard modal drops global AND store-scoped roles (`store_id` not null) because it creates a new store (§9.2). Since the scope already limits a store user to their current store's roles, the list a store user sees is exactly what they may hand out there.
-- The store dropdown is rendered only for global/super actors; a **store actor always assigns into the CURRENT store** (the client forces `store_id = current_store_id`; the UI path into another store is switching into it first). NOTE the backend nuance a port must preserve: the `can:user-store-assign` gate is evaluated in the actor's CURRENT session store context, and §8.1.5 then requires only MEMBERSHIP of the posted target store — so a raw POST with `store_id = B` from an actor whose session is store A (where they hold assign rights) succeeds if they are merely a member of B; assign rights IN B itself are not required.
-- For targets flagged `is_global_user` the assign form is hidden (the global row + its Remove button remain). The Remove button on the global row renders for ANY viewer holding `user-store-unassign` — the supers-only rule for store-0 removal is enforced purely server-side (§8.2.1's 403); a non-super who sees the button gets that 403 on click.
-
-### 19.3 Double-submit protection
-Every AJAX action has an in-flight flag disabling its button until the request settles (double-click creates exactly ONE record — browser-tested). Plain full-page forms: one global guard that lets the FIRST natural submit through, flags the form, blocks further submits, disables submit buttons only on the NEXT tick (synchronous disabling would drop the clicked button's name/value from the serialized POST), leaves already-prevented (AJAX) submits alone, and re-arms everything on back/forward-cache restore (pageshow).
-
-### 19.4 Client-side validation mirrors the backend
-Same rules client-side before sending (round-trip saver); the backend stays the source of truth (stripping client validation changes no outcomes). A client-side failure sends NO request. Invalid fields get a red border and a message directly below; required labels carry a red `*`. The `data-client-invalid` attribute exists ONLY on the public registration form's track (its standalone validator sets it; a browser test asserts it) — the AJAX modal track instead drives the red border via its error-wrapper class from the shared `formErrors` state, with no such attribute. Exact client messages the browser suite asserts: required → "<Label> is required."; phone → "Phone must be exactly 10 digits."; password mismatch → "Password confirmation does not match."; empty role checklist → "Please select at least one permission.". Input hardening on the user form: the phone field filters keystrokes to digits and caps at 10; the email field blocks the space key and strips whitespace on input.
-
-### 19.5 Listing payloads
-- Users rows: selected columns id, first_name, last_name, email, phone, created_by + computed `is_super_admin`, `is_global_user`, and `roles` — the de-duplicated role NAMES across ALL the user's assignments (sentinel included), from batched queries (one roles pluck + one pivot query per page), rendered as badges ("—" when empty).
-- Roles rows must include `created_by`, `is_global`, `is_signup_default`; the page also receives the viewer's id + isSuperAdmin, and shows Edit/Delete only when `isSuperAdmin || row.created_by == viewer.id` (client mirror of §10.4's 403). Flag checkboxes render for supers only; signup-default hides while global is ticked.
-
-### 19.6 Shared listing behavior
-Params `search`, `page`, `per_page` (server default 10, clamped 1–100). LIKE search columns (**case-insensitive** — the original relies on MySQL's default collation; use ILIKE/LOWER() elsewhere): users → first_name, last_name, email (grouped OR); stores → name, city; roles → name; permissions → name. Response `{<itemsKey>, total, currentPage, lastPage, perPage}` with itemsKey `users` / `stores` / `roles` / `permissions` / `logs`. Ordering: activity is id DESC; the other four listings have NO explicit ORDER BY (the original leans on DB natural order — a port should pick a stable order, e.g. id ASC). Client behavior: 400 ms search debounce resetting to page 1; a request token discards stale out-of-order responses; client page sizes 100 (users), 25 (activity), 10 (others); after a delete empties the current page the UI steps back one page and refetches.
-
-### 19.7 Toasts
-One global top-center toast container; success green / error red; auto-dismiss 5 s with manual ✕. Message-only 422/403 responses MUST reach it (a real bug once hid the Super-Admin rename error).
+Three things a port should carry forward:
+- **The old model's data mapping**, should an old database ever have to be converted by hand. On the stores' side of a role each held permission was translated — `user-view` → `member-view`; `user-store` → `member-invite`; `user-store-view` → `member-view`; `user-store-assign` → `member-invite` + `member-update`; `user-destroy` → `member-remove`; `user-store-unassign` → `member-remove`; `user-update` → nothing; anything else → itself — and only the 22 store permissions were kept. Platform roles lost the five removed rows and nothing else. The old signup role (`is_signup_default`) became the Owner role **in place**, so its holders became their stores' Owners through the same role id; a role shared across stores was split into one copy per store, and same-named copies were later merged back into **one** store role, grouped by folded name (§7.5's `fold`, computed in PHP — never a SQL comparison, whose collation folds differently), the oldest of a name winning and the copies' store permissions gathered onto it. A store's creator who was still a member became its Owner; a store left without one stayed **ownerless** (§8.2) until the platform gave it an Owner (§10.3, §13.4). *"No owner" on the old Stores page came from people holding a store's own copy named "Owner" rather than the Owner role itself — which is what the merge fixed.*
+- **The Super-Admin rule inside a data migration.** Every one of them narrowed by name in SQL and then compared the **exact** name in PHP (§4.1), so a look-alike under MySQL's accent-insensitive collation was never granted the catalogue nor spared a translation. One difference from the application: they acted on **every** role whose name is exactly `Super-Admin` (ids, plural), where `Role::superAdminId()` keeps only the lowest id (§26.1). A port writing its own data migration must keep both halves of that.
+- **What a `down()` can honestly undo.** None of them restored role-permission links, un-split roles, undid Owner appointments or brought a deleted store back: which old permission a role held, which copy a person held, and what each copy allowed are recoverable from nothing once the change is made — and each said so rather than guessing. The one data migration left (§22.2) has the same property in reverse: its `down()` removes the starting state wholesale, it does not reconstruct whatever the super admin had made of it.
 
 ---
 
-## 20. Seeding / bootstrap (idempotent; model events suppressed; safe to re-run)
-1. Upsert the 20 permissions (§3) — labels repaired on every run.
-2. `firstOrCreate` the `Super-Admin` role on (name = 'Super-Admin' AND created_by IS NULL); sync ALL permissions onto it.
-3. `updateOrCreate` the first admin user — exact seeded identity: email **admin@gmail.com**, first_name "Admin", last_name "Momin", phone "0000000000", email_verified_at = now. Password from `SEED_ADMIN_PASSWORD` env; if unset, a random 16-char alphanumeric is generated and printed once: `SEED_ADMIN_PASSWORD is not set — generated admin password: {password}`. **Every re-run resets the password and profile fields.**
-4. Sentinel attach via syncWithoutDetaching of `(store_id 0, role_id 1)` — role id **hardcoded 1** (assumes a fresh DB where Super-Admin is the first role; a re-run forces an existing store-0 row's role back to 1).
-5. Seed a `Store Owner` role flagged `is_signup_default` — **guarded: only if NO role currently holds the flag** (never steal an owner-chosen default). Its permission set is exactly these **7**: user-view, user-store, user-store-view, user-store-assign, role-view, role-store, store-view (deliberately NO update/destroy/unassign, NO store-store, NO permission-*, NO activity-view — this defines what every self-registered owner can do on day one). Matched by name via firstOrCreate: an existing unflagged "Store Owner" role keeps its flag state but still receives the 7 permissions (merge without detaching extras).
-6. **All seeded rows have `created_by = NULL`** (admin user, both roles). Consequences: seeded rows sit outside every visibility chain and every cascade delete; store users never see the seeded Store Owner role in their role lists (global users and supers do).
-7. Running the seeder twice must not error or duplicate anything.
+## 23. Invariants checklist (assert in the port's tests)
+1. An account's `store_user` rows are store_id = 0 XOR store_id > 0 — never both kinds; every membership-creating door refuses the other tier.
+2. UNIQUE(store_id, user_id) — one role per person per store.
+3. Role kinds hold: store role (not global, no store; the Owner role is the one with key `owner`), custom (no key, not global, its store), platform (no key, global, no store); what a role is for never changes once it exists. A store role may be held in any real store; a custom role only in its own store; a platform role only on store 0; Super-Admin never in a real store.
+4. A super admin is exactly an account whose store-0 row holds the role named exactly `Super-Admin`, compared in application code; no role created or renamed through HTTP can carry a name that folds to `superadmin`, nor one that folds like another role's in any list the role is shown in (§7.5). Every permission check answers yes for a super admin, except `network-ads-toggle`; for anybody else a check answers yes only when the role in context carries the permission (or a hand-written gate says so).
+5. No endpoint sets another person's name, email, phone or password.
+6. No role gains a permission that does not fit it: every store role and custom role ⊆ `STORE` ∪ `STORE_SCOPED` (never `user-view`, `user-destroy`, `activity-destroy`, an uncatalogued permission or `SUPER_ADMIN_ONLY`); a custom role written by a member inside a store ⊆ also that member's permissions there, while a super admin may write any role but Super-Admin from the platform; store roles and platform roles are made and changed only by a super admin (a store role for every store at once); platform roles ∌ `SUPER_ADMIN_ONLY`; Super-Admin is never edited through HTTP; neither Super-Admin nor the Owner role is ever deleted, and no role is deleted while somebody holds it.
+7. Nobody hands out a role outside their reach, manages a member outside their reach, or manages themselves — reach being the permissions alone, the Owner role no exception (§8.1). One exception: a super admin's Users → Stores from the platform, which puts anybody outside the platform team in any store with any role that store has, changes it or takes them out, while keeping at least one Owner (§13.4). There is no separate handover: inside a store, a store changes hands by giving (or inviting to) the Owner role under these same rules (§11.3).
+8. The last Owner of a store cannot be demoted or removed (from the Members page — whoever reaches them — or from the platform's Users → Stores), leave or self-delete — each decided under a lock on the store row, so concurrent requests cannot both pass; only a platform account deletion (or platform store creation) leaves a store ownerless, and the platform's "Invite owner" acts only on a store with no Owner (§10.3).
+9. Every write resolves its target inside where the actor stands (404 outside), except the documented platform and impersonation cases (§6.7).
+10. Invitation tokens never touch the database in plaintext; accepting, declining, revoking and replacing delete the row; one link creates at most one membership and at most one account (row lock); an existing account never joins by the link alone.
+11. The primary super admin cannot be deleted or lose Super-Admin; super admins cannot self-delete; only the primary deletes a super admin, removes Super-Admin, or invites a new super admin.
+12. An impersonation can only be ended by the account being viewed as, and every sign-in clears any impersonation left in the session.
+13. A store member with no store selected has zero permissions; a platform role always answers for a platform account; revocation takes effect on the next request.
+14. Deleting an account removes the account with its memberships, its sessions (database driver), its password-reset token and the invitations addressed to its email — nothing anybody else holds; only the platform or the person themself deletes an account. Deleting a store leaves no memberships, invitations, custom roles, screens, dayparts, own channels or media rows for it, unlinks files only after commit, and deletes the store row for good — no custom role can outlive its store; the accounts and the activity log stay. Deleting a role takes its open invitations with it and says how many.
+15. Every state-changing endpoint writes one activity row, except the §17.3 exclusions; a refused email never fails the request (`email_sent: false`).
+16. Status-code discipline: who the actor is → 403; the target's state or a requested value → 422; invisible targets → 404; throttles → 429.
+17. Every password re-confirmation (§19.7) — the big deletes, self-deleting, changing the password — changes nothing without the actor's current password and asks for it only after that endpoint's up-front refusals; all of them share one counter per person, so five wrong passwords on any of them refuse all of them — even with the right password — for the rest of the 60-second window (429 for JSON, the message in the form's bag for a plain form).
+18. Re-running the seeder never renames, changes or brings back a store role or a platform role — it creates the Owner role only when none exists (and re-syncs Super-Admin with every permission row, which grants nothing new, §3.3).
+19. A permission reaches where its role sits: on a platform role every store; on a store's role only the store the member works in — no endpoint lets a store's role act on another store; inside a store the channels found are that store's own and the activity entries read carry that store's id. What only works above the stores — the Stores page and its writes, the accounts pages, activity partitions and maintenance, giving a store an owner, "Log in as", the platform team, the platform's Users → Stores, the catalogue — keeps its tier lock whatever permission rows a store's role holds.
+20. A role does not matter, its permissions do: deleting a store is the permission `store-destroy`, opening the Stores tab `store-view` (the Owner role starts with both); giving the Owner role — which is how a store changes hands, §11.3 — or managing an Owner is reach like any other role's. The Owner role's key marks only who owns a store — no rename or permission edit moves it — and grants nothing by itself.
+21. Nothing answers 500. A parameter may arrive in ANY shape — `?search[]=x`, `?device_uuid[]=x`, `name[]=x` — and must be refused (422) or read as nothing sent, never cast: an array reaching a `like` clause, a `trim()` or a cache key is an "Array to string conversion". Two places make this easy to get wrong: a rate limiter runs BEFORE the endpoint's validation (so it has to survive anything an open endpoint is sent), and a custom validation closure still runs after `string` has failed unless the rule list starts with `bail`. Asserted by the nine adversarial files in `tests/Feature/Security/`, including a sweep of every route as a guest, a store member, an Owner, platform support and a super admin: every one answers a page, a redirect or a 4xx, and a guest is offered only the public doors (sign in, register, forgot/reset, an invitation link, the player, the device endpoints and the health check).
 
 ---
 
-## 21. Invariants checklist (assert in the port's tests)
-1. ≤ 1 role has `is_signup_default`; never a global one. (A super CAN clear it via update — registration then closes gracefully, §10.3/§9.1.)
-2. A user's `store_user` rows are store_id=0 XOR store_id>0 — never both kinds.
-3. UNIQUE(store_id, user_id) — one role per store per user.
-4. App-created users/roles/stores always set `created_by` (seeds are NULL; signup owner may be NULL only when no super admin exists).
-5. The role named `Super-Admin` always exists, cannot be renamed, cannot be deleted while held (sentinel included).
-6. No endpoint that MUTATES a target record acts outside the actor's visibility (404) — exceptions: the two documented read-side/impersonation cases (§6.4), and store-switch (which mutates only session state and deliberately 403s non-members with a message, §13).
-7. No role ever gains a permission its EDITOR (the actor performing that create/update) couldn't assign at that moment (§10.2 — a super admin editing someone else's role may legally attach anything), and no assignment hands out a store role the actor cannot see (§8.1.5).
-8. Every state-CHANGING mutation writes exactly one activity row (§16.2); the §16.3 exclusions (no-op profile submits and quiet scheduled maintenance included) write none; guest-flow rows carry an explicit actor.
-9. Users are hard-deleted only via the cascade; stores only soft-deleted; roles never deleted while assigned.
-10. A store user with no selected store has zero permissions; revocation takes effect next request.
-11. The users list never contains the viewer; admin endpoints never act on the actor — the 403-with-message form applies to the two §14.2 endpoints; self as an assign/real-store-unassign target surfaces as 404 (visibility excludes self), and store-0 self-unassign is the §8.2.1 422.
-12. Status-code discipline: actor-identity guards → 403; target-state guards → 422; invisible targets → 404 (§8.1).
-
-## 22. Laravel → Python translation notes (framework mechanics made explicit)
-- **Authentication transport:** session-cookie based. The cookie holds a session id; the server-side session record holds the authenticated user id. "Log in" = store that id + regenerate the session id; "log out" = remove it / invalidate the session; impersonation swaps WHICH id is stored (remembering the original).
-- **Remember-me:** the optional persistent cookie stores the user id + the `remember_token` value, long-lived (~5 years). On a request with NO live session, the server silently re-authenticates when the cookie's token matches `users.remember_token` — which is exactly why rotating the token invalidates every outstanding cookie. Rotation happens on password reset (§18.4) AND on logout.
-- **CSRF (never optional):** every state-changing request carries a per-session CSRF token — hidden input on HTML forms, request header on the AJAX/JSON admin surface. A missing/stale token is rejected (the original uses HTTP 419; any 4xx works in a port as long as ALL mutating routes are covered).
-- **`confirmed` validation rule:** the request must include a second field named exactly `password_confirmation` equal to `password`; mismatch → error keyed `password`.
-- **Flash / redirect-back / "old input preserved":** flash = write-once session data consumed by exactly the next request. HTML-form validation FAILURE is not a 422 status — it is a 302 redirect back with the field errors AND the submitted input flashed, so the re-rendered form shows errors and repopulates. HTML success = 302 with a flashed status. The JSON admin surface instead uses §18.1's literal shapes, and JSON mutation SUCCESS = 200 `{message: "…", …extras}`.
-- **"Pivot":** the many-to-many join table (`store_user`); "pivot row" = one row of it; "raw pivot query" = querying it directly instead of joining through `stores` (how sentinel rows stay reachable).
-- **attach / detach / sync / syncWithoutDetaching** (SQL semantics): attach = INSERT a join row (with extra columns); detach = DELETE the join row(s); sync(ids) = make the related set EXACTLY ids (insert missing, DELETE extras — load-bearing for seeder idempotency); syncWithoutDetaching = upsert the pair, deleting nothing (a matched row gets its extra columns — e.g. role_id — updated).
-- **firstOrCreate(match, extra)** = SELECT by match; INSERT match+extra only if absent; NEVER updates a found row (why an existing "Store Owner" keeps its flag state, §20.5). **updateOrCreate(match, values)** = same lookup but UPDATEs the found row (why every seeder re-run resets the admin password, §20.3).
-- **"Model events suppressed" / "no per-row events":** the original registers NO ORM lifecycle observers; the phrases only mean seeding and the bulk cascade run as plain SQL with no per-row side effects. A port without ORM hooks can ignore them.
-- **`email` validator:** RFC-style validation of `user@domain`, with the `^\S+$` regex as the tightening layer (§18.2) — calibrate any library so whitespace anywhere (quoted local parts included) is rejected with the pinned message.
-- **`can:` middleware / Gate** → decorator/dependency `require_permission('user-view')` running §7 with per-request caching. Register nothing at boot.
-- **Scopes** (`visibleTo`) → reusable query filters applied on reads AND write-target lookups.
-- **`findOrFail`** → fetch-or-404. Validation errors → 422 `{errors:{field:[…]}}`; guard errors → `{message}` (§18.1).
-- **Session** holds `current_store_id` (normalize its type! §5) and the impersonation "original admin id".
-- **Soft delete** = `deleted_at` + default filter (stores only). **hashed cast** = bcrypt-on-write.
-- **Timezone:** the server stores and compares `created_at` in UTC (framework default). The activity filter is timezone-correct end to end (§16.4): the client turns the viewer's local day boundaries into UTC instants before sending, and timestamps display via `toLocaleString()` in the viewer's own zone — so there is no client-local-vs-UTC skew, in any timezone or at any time of day.
-- **Transactions**: signup, onboarding, cascade, role mutations, store destroy, signup-default swap.
-- **Scheduler** = cron running the monthly maintenance (1st, 00:30).
-- Routes shown are semantic, not sacred — keep the behavior, adapt shapes. HTML-form flows (auth pages, profile) speak redirects + flash; the admin panel speaks JSON.
-
-## 23. Acceptance scenarios (behavioral test suite in prose — all must pass)
-1. Signup: atomic owner+store; role always the flagged default (request role ignored); no default → graceful closed-signup error on `email` before field validation; invalid store half → nothing created; new owner logged in; `user.registered` actor = the owner.
-2. Onboard: 3 permissions required; invisible role → 404, global role → 422 on `role_id`; country required; atomic; global-user actor allowed.
-3. Visibility: supers see everyone except unrelated supers; a promoted super cannot see/edit/demote their promoter; others see only direct children; nobody sees themselves; B never sees A's users even sharing both stores.
-4. Assign: exact guard order §8.1 incl. super-target 422 first, forced sentinel, ignored store id, duplicate-last; **an invisible store role posted by raw id → 404, while a global user assigning a super-created store role still succeeds**; status-code discipline holds.
-5. Unassign: store-0 rules run before scoping (own-removal → 422, non-super → 403); membership rule for real stores; nonexistent assignment removal = silent success but still logged.
-6. Context: one user, two stores, two roles → different powers per store; switch flips the UI; supers can't switch (even if assigned); non-members can't switch; revoked store → no permissions next request.
-7. Roles: name NOT unique (one owner can hold several "Cashier" roles with different permission sets, keyed by id); `Super-Admin` reserved case-insensitively on create/rename → 422; subset rule unbreakable via create or update (message on `permissions`); creator-or-super guard 403; rename lock 422; delete-while-assigned 422 (sentinel-aware); ≥1 permission; flags per §10.3 exactly (non-super create silently drops flags with 200; super update absent-field unsets; single-holder swap atomic).
-8. Permissions: delete blocked while attached; wrong password → "Password is wrong."
-9. Stores: tier visibility; non-member update/delete → 404 despite permissions; delete soft-deletes + detaches; 50-states (DC rejected), zip digits, country required, is_active toggle.
-10. Impersonation: super-only, never super→super, unscoped target, store context cleared both ways, demoted/deleted-admin stop → logout without log, listing flags supers.
-11. Cascade: whole subtree + unworn roles + soft-deleted stores, counts exclude the target; self-delete cascades identically.
-12. Activity: every §16.2 action logs; §16.3 excluded ones don't; actor_name survives actor deletion; range filter bounds and 422s on bad dates; maintenance retention/3-ahead per §16.5, super-only, manual always-logs vs scheduled only-on-change.
-13. Listings: bounded query counts; per_page clamp; search columns; stale-response discard.
-14. Double-click on any submit = exactly one mutation; client validation blocks bad input with zero requests.
-
-## 24. Known sharp edges (documented REALITY — port them as-is, do not silently "fix"; each is an owner-level decision to revisit)
-1. **The last super admin can self-delete.** §8.2's self-lockout guard covers only store-0 unassign; self-delete (§14.2) has no last-super check. Consequences: every self-registered owner has `created_by = firstSuperAdminId()`, so deleting the FIRST super admin cascades away ALL signup-created owners and their subtrees; and a zero-super system has nobody who can assign global roles, set flags, impersonate, or run maintenance. **Sanctioned recovery: re-run the seeder** (idempotent — recreates/repairs the admin, role, permissions).
-2. **A creator keeps full power over a child later promoted to Super-Admin/global.** The non-super visibility branch is purely `created_by`, and user-update/user-destroy have no tier guard on the target — so a store-tier creator can still reset the password of, or cascade-delete, a user who has since become a super admin. Deliberate one-level-ownership behavior; only assign (§8.1.2) and store-0 unassign (§8.2.1) special-case super targets.
-3. **A lingering `current_store_id` starves a newly promoted global user.** §7 prefers the store context whenever the session key is set; a promoted global user whose session still holds an old store id resolves to zero permissions (they no longer have that pivot row) until they LOG OUT and back in (logout invalidates the session; a fresh login starts with no store selected). Rare in practice: promotion requires zero store rows, so the stale id survives only across an unassign→promote sequence in one session.
-4. **Soft-deleted stores can acquire phantom assignments.** Assign validation passes soft-deleted store ids (§8.1.3) and global/super actors skip the membership guard — creating a membership in a dead store; the member can even switch INTO it (a legal zero-permission context; §13's membership guard is the backstop only for actors without such a row). There is NO store-restore endpoint (recoverability is DB-level only), and restoring a row does not revive memberships detached at delete time (§12.4).
-5. **The 20 permission names are de-facto system anchors with no rename lock.** Route gates hardwire the names; renaming e.g. `user-view` via permission-update makes every route gated on it deny EVERYONE (supers included — no implicit bypass) until renamed back. Deleting is incidentally blocked while attached to Super-Admin (§11). Likewise the Super-Admin ROLE's permission SET is editable by supers (only its name/deletion are locked) — super powers derive entirely from that set; the seeder re-run restores it.
-6. **Duplicate-assign race** → the second attach dies on the DB unique constraint as an unhandled server error (§8.1.6). A port may catch it and return the friendly 422.
-7. **Impersonated target deleted mid-session:** the session now references a missing user → the next request is unauthenticated (redirect to login); the remembered admin id dies with the session; nothing is logged. Same net effect as the deleted-admin stop branch.
+## 24. Laravel → Python translation notes (framework mechanics made explicit)
+- **Authentication transport:** session-cookie based. The cookie holds a session id; the server-side session record holds the authenticated user id. "Log in" = store that id + regenerate the session id (**data kept**); "log out" = remove it and invalidate the session (data flushed); impersonation swaps WHICH id is stored, remembering the original and the impersonated ids under two session keys. A session whose user no longer exists is simply unauthenticated — the session itself is not flushed, which is why every sign-in clears the impersonation keys (§14.1). (On the `database` session driver, deleting an account also deletes the session rows whose user id is that account's, §15.3 — so such a session starts over empty.)
+- **Events:** the framework fires a `Login` event on every authentication (password login, `Auth::login`, remember-me re-authentication); one listener clears the impersonation keys. A port must hook the equivalent of "a session became authenticated".
+- **Row locks:** `lockForUpdate()` = `SELECT … FOR UPDATE` inside a transaction — used on the store row for team changes (`changeTeam`: change role and remove — from the store or the platform —, adding a person to a store from the platform, leave), on every store a person owns before self-deletion, and on the invitation row when accepting or registering. SQLite ignores it (its writers are serialized anyway); a port on MySQL or PostgreSQL must keep the lock.
+- **`Str::ascii`** (the role-name fold, §7.5, and the merge migration, §22) = transliteration to ASCII (`unidecode` in Python), then lower-case, then strip every non `a-z0-9`. **`report($e)`** = send an exception to the error log without failing the request (§9.1).
+- **Remember-me:** an optional long-lived cookie holding the user id + `remember_token`; with no live session the server re-authenticates when it matches — which is why rotating the token (password reset, logout) invalidates every outstanding cookie.
+- **CSRF (never optional):** every state-changing request carries a per-session token — a hidden input on HTML forms, a header on the AJAX surface. A missing or stale token is rejected (HTTP 419 in the original).
+- **Guest / auth middleware:** `auth` → a JSON request gets 401, a browser request a redirect to `/login` (remembering the intended URL); `guest` → an authenticated user is redirected to the dashboard.
+- **Middleware order:** §3.3 — authenticate → throttle → bind route models (404) → gates (403) → controller.
+- **`confirmed` rule:** the request must include `password_confirmation` equal to `password`; a mismatch is an error on `password`. **`current_password` rule:** the value must verify against the authenticated user's hash. **`Password::defaults()`** here = min 8.
+- **Flash / redirect-back / named error bags:** flash = write-once session data consumed by the next request. An HTML validation failure is a 302 back with field errors (in the named bag) and the old input; success is a 302 with a flashed status. The JSON surface uses §19.1's shapes and JSON success = 200/201 `{message, …extras}`. `abort(403, msg)` renders an error page for HTML and `{message}` for JSON.
+- **Route-model binding:** a `{store}`/`{user}`/`{role}`/`{invitation}`/`{permission}` segment is fetched by id before gates; missing → 404 (a deleted store is simply missing — nothing is soft-deleted).
+- **"Pivot":** the join table `store_user`; "raw pivot query" = querying it directly instead of joining through `stores` (how sentinel rows stay reachable). **attach** = INSERT a join row; **detach** = DELETE; **sync(ids)** = make the set EXACTLY ids (insert missing, delete extras — load-bearing for the seeder); **syncWithoutDetaching** = upsert pairs, delete nothing.
+- **firstOrCreate(match, extra)** = select by match, insert match+extra only if absent, never update; **updateOrCreate(match, values)** = the same lookup but update the found row.
+- **Model events:** two are load-bearing — a Store's **deleting** event runs `purgeContents()` before the row is deleted (§15.4), and a User's **deleted** event removes the account's sessions (database driver), password-reset token and the invitations addressed to its email (§15.3). A port without ORM hooks must call both from every store-delete and account-delete path. Bulk deletes and the seeder run without per-row events.
+- **`DB::afterCommit(fn)`** = run `fn` after the outermost transaction commits (immediately when there is none) and never on rollback — used to unlink media files and a store's channel ad files.
+- **Token hashing:** invitation tokens are SHA-256 hex (deterministic, so the row is found by hashing the presented token); password-reset tokens are bcrypt (compared per email). Passwords: bcrypt, hash-on-write.
+- **Notifications:** "on-demand" mail = a mail sent to a raw address with no user row; not queued here — sent inside the request, with every failure caught by `sendLink` (§9.1).
+- **Collation:** MySQL `utf8mb4_0900_ai_ci` makes `=`, `!=`, LIKE, unique indexes and ORDER BY case- AND accent-insensitive; SQLite (the test suite) is binary. That is why the Super-Admin anchor is compared in application code (§4.1) and signup lower-cases emails (§10.1); a port must not reintroduce a collation-dependent name or email comparison (§26.1, §26.7).
+- **`can:` middleware / Gate** → a decorator or dependency `require_permission('member-view')` running §5.3 with per-request caching; the four hand-written gates (§3.4) are plain predicates. **`Gate::before`** = a hook consulted before ANY ability — defined or not, route middleware, template checks and `can()` in code alike: a non-null answer is final, null falls through to the ability's own check (§3.3). A port must put the super-admin rule in that single choke point, not in each decorator's permission lookup — otherwise an undefined or renamed permission would deny a super admin.
+- **`RateLimiter`** (the password limiter, §19.7) = a cache counter with a fixed window: `hit(key, 60)` creates the counter and a 60-second timer on the first hit (later hits do not extend it) and increments; `tooManyAttempts(key, 5)` = counter ≥ 5 while the timer lives; `availableIn(key)` = seconds left on the timer; `clear(key)` deletes both. **`ValidationException::withMessages([...])->errorBag(bag)->status(429)`** = for a JSON request the usual field-error JSON (`{message, errors}`) sent with status 429; for a plain form the framework ignores the status and redirects back with the errors in that bag (a request may name another bag with an `_error_bag` input). **`validateWithBag(bag, rules)`** = validate, putting any failure in the named bag.
+- **Scopes** (`visibleTo`, `availableInStore`, `storeRoles`, `platform`, `Channel::availableTo`) → reusable query filters applied on reads AND write-target lookups.
+- **Controller middleware** (`HasMiddleware`, `ChannelAdController`) = a closure the framework runs for every action of that controller after route-model binding and the route's gates but BEFORE the action's form-request validation — which is why a channel out of reach answers 404 before an uploaded file is validated (§6.6). A **FormRequest's `authorize()`** likewise runs before its rules.
+- **Soft delete** (`deleted_at` + a default filter) — **none**: users never were (owner decision), and stores were in an older build whose column is no longer in the schema (§2.2, §22). Every delete in this document is a real `DELETE`.
+- **Timezone:** the server stores and compares `created_at` in UTC; the activity filter is timezone-correct end to end (§17.4).
+- **Transactions:** signup; store creation + owner invitation; Create store on Settings → Stores (store + Owner membership); "Invite owner" (a member made Owner with the invitations it replaces; or replace / renew / open); invitation join; invitation registration (account + membership, under the invitation lock); every `changeTeam` change (change role and remove — from the store or the platform —, adding a person to a store from the platform, leave); self-delete (owned stores locked; the account's `deleted` hook inside); role create/update (the name and the permission sync together); role delete (with its invitations); both store delete paths (purge inside); the conversion and merge migrations.
+- **Scheduler** = cron running the monthly maintenance (1st, 00:30). **Non-MySQL partition emulation** uses SQLite's `strftime('%Y', …)` — re-implement for PostgreSQL.
+- Routes shown are semantic, not sacred — keep the behavior, adapt shapes. HTML-form flows (auth pages, Profile, Settings → Stores, the invitation page) speak redirects + flash; the panel's lists and modals speak JSON.
 
 ---
-*End of specification. Verified three times against the original codebase before delivery: pass 1 completeness (101 gaps folded in), pass 2 adversarial correctness (11 corrections), pass 3 standalone portability (59 clarifications, including this §24).*
+
+## 25. Acceptance scenarios (behavioral test suite in prose — all must pass)
+1. **Signup:** one form creates the account, the store (country "USA", `created_by` = the person) and an Owner membership; a submitted role id is ignored; without the Owner role the page shows the closed banner and a POST errors on `email` before validation, creating nothing; an invalid store half creates nothing; `user.registered` is logged with the owner as actor; `Sana@Example.COM` is stored as `sana@example.com`, and a later signup as `SANA@example.com` fails on `email` (still one account).
+2. **Members directory:** every member of the store is listed whoever brought them in, and nobody else (not another store's member, not platform staff); `is_you`, `can_manage` per §8.3; Admin pickers offer `[admin, staff, viewer]` + in-reach custom roles, Owner pickers add `owner`; another store's custom roles are never offered; invitations are listed with `is_expired` and `can_manage` (an Owner invitation is not manageable by an Admin); no `member-view` → 403; a platform user holding `member-view` → 404; a removed member gets 403 on the next request; a member of another store is 404 to change or remove; one person with Staff in Alpha and Admin in Beta sees the list only in Beta.
+3. **Change role / remove / leave:** an Owner changes a role and it is logged "from Staff to Admin"; an Admin giving Owner → 422 `role_id`, touching an Owner → 403 (change and remove) — the Owner role carries `store-destroy`, which Admin lacks; nobody changes their own role (403); another store's role → 422 `role_id`; a custom role gives and manages only within its reach (422 for giving Staff, 403 for changing a Staff member, 200 within reach); an Owner may demote another Owner, after which the last Owner cannot leave (422 with the exact message) and cannot be removed by the demoted one (403); a "Deputy" whose custom role holds every permission of the Owner role reaches an Owner, yet the store's only Owner always stays — `can_manage` false on that row, changing their role → 422 on `role_id` and removing them (the password sent) → 422, both with exactly "{name} is the only Owner of Alpha Mart. Make someone else an Owner first." — and once a partner Owner exists the row is manageable and the Deputy makes the first Owner an Admin (200); removing — with the actor's password (§19.7) — takes only the membership (account, media `created_by`, screens stay; logged); removing yourself → 422, leaving works, clears the session store and returns the dashboard redirect; Staff get 403 on change and remove.
+   **From "Your stores":** the profile of a person without a Stores tab lists every store of the person with their role in each ("Your stores"); a Viewer leaves one with `DELETE /profile/stores/{id}` → redirect to the profile with status "You left Joe's Diner.", the membership gone, the other store kept, the session store cleared (it was that store), `member.left` logged — and the flash, apostrophe included, renders safely on the next page; the last Owner is refused with exactly "You are the only Owner of Alpha Mart. Make someone else an Owner before you leave." in bag `storeMembership`, back on the page they came from, and the page says "You are its only Owner — make someone else an Owner before you leave."; once a co-owner exists, the Owner may leave; a store the person is not in → 404; a guest → redirect to login; a platform account has no "Your stores" section; from the Stores tab, leaving another store comes back to the tab ("You left Beta Deli."), and leaving the store being worked in lands on the profile with the session store cleared; in the browser, a Staff member leaves a store from the profile and a store's only Owner, on the Stores tab, is told "You are its only Owner" with no Leave button.
+4. **Store invitations:** an Owner invites `'  New.Person@Example.com '` → stored `new.person@example.com`, `invited_by` = the Owner, expiry ≈ 7 days, only the SHA-256 of the mailed token stored; the link opens in `register` state; the mail's subject and "Olive Owner has invited you to join Alpha Mart as Staff." read properly; refused (422 `email`) for an existing member (case-insensitive), a second invitation, or a platform account; an Admin inviting an Owner and a foreign role → 422 `role_id`; resending issues a new token and kills the old link; revoking closes the link; another store's invitation → 404; an Owner invitation revoked by an Admin → 403; with a mail server that refuses, inviting still answers 201 with `email_sent: false` and exactly "The invitation for new.hire@example.com was created, but the email could not be sent. Use Resend to try again.", the invitation exists, the exception is reported, and resending answers 200 with `email_sent: false`.
+5. **Responding:** a new person registers from the link → logged in, verified, Staff in the store, session switched, invitation gone, `invitation.accepted` logged; an existing account (email in another case) sees `login` state with the intended URL stored, cannot register a second account (redirect back to the link), then sees `accept` and joins; a stranger sees `mismatch` and gets 403 on accept and decline; expired and unknown links show the invalid page and register does nothing; declining deletes and logs, redirecting a guest to login; a guest declining an invitation whose email has an account is logged under that account (actor id and name), not System; a platform account accepting a store invitation is refused with "Platform accounts cannot join a store."; a store Owner accepting a platform invitation is refused; accepting while already a member keeps the old role, deletes the invitation and logs `invitation.accepted` with the member as actor; an invitation to a deleted store is dead; the 21st link request in a minute is 429.
+6. **Settings → Stores:** an Admin (holding `store-view` and `store-update`) opens the Stores tab of Settings (both tabs shown) and edits the details there; Staff get 403 on the page and the update, and their Settings has no Stores tab; the Owner's sidebar has the Settings link at its foot and no link to `/settings/store`, while their Profile tab links to the Stores tab; the details form cannot change `accepts_network_ads`, `is_active` or `created_by`; out of the box the Owner sees "Delete Store" and an Admin does not; a store changes hands on the Members page — the Owner makes a Staff member Owner (200) and the new Owner makes the first one Admin (200) — while the Stores tab shows no "Transfer Ownership", `POST /settings/store/transfer-ownership` answers 404 and no `store-transfer` permission exists; deleting needs `store-destroy` (an Admin with its starting permissions → 403), the exact name (`alpha mart` refused) and the password (a wrong one → error in `storeDeletion`); a successful delete removes the store row for good with its memberships, invitation, custom role (the member who worked under it keeps their account), screen (+ playlist items; the device gets 401), daypart and media rows and both files — and its own channel with its ad and the ad's two files —, clears the session store and keeps accounts, the platform channel, the store's activity entries and a neighbouring store (including a shared member's Viewer role there) untouched; the log contains "1 screen" and "1 media file"; a platform user gets 404.
+7. **Account deletion:** self-deletion removes the account and its memberships only (stores, co-owners, colleagues stay; media and screen `created_by` → NULL; logged); the sole Owner of a store is refused with the exact message naming it (a refusal decided before the password is checked); a wrong password → error in `userDeletion`; a person who invited others is deleted alone; super admins get 403; deleting a channel's creator keeps the channel with `created_by` NULL; a platform deletion also removes, on the `database` session driver, the account's sessions on every device (another person's session stays) and its password-reset token, and empties its screen's `created_by`.
+8. **Platform stores:** the listing shows `members_count` and `can` exactly (`{update: true, destroy: true, invite_owner: false}` for a store that has an Owner; `invite_owner` true for a store with none, members or not; false on every row for a platform user without `store-store`) and no `owners` or `owner_invitation`; an Owner whose role holds `store-view`, `store-store`, `store-update` and `store-destroy` gets 403 on the page, the data, creating, updating and deleting a store and "Invite owner", nothing changing; a store member holding `store-view` and `store-update` gets 403 from the data and from `PUT /stores/{id}`, and changes the store's details from Settings → Stores instead (the active switch unchanged); creating a store sends an Owner invitation (lowercased email) and creates no membership, logged; a platform account's email as owner → 422 `owner_email`; "Invite owner" on a store with no Owner invites anybody as Owner (201) and makes a member Owner at once (email case-insensitive; 200 with exactly "{name} is now an Owner of Orphan Mart. The earlier invitation for partner@example.com no longer works.", the earlier Owner invitation deleted and logged "…, replacing the invitation for partner@example.com"), while on a store that has an Owner it refuses every address with 422 "{store} already has an Owner." — keeping the co-owner invitation the store's Owner sent, and sending nothing; inviting the same owner again — even after the first link expired, and in other capitals — answers 200 with `email_sent: true`, keeps the same invitation row with a new token hash and a fresh expiry, and sends a second email; a different address answers 201 with exactly "An invitation to own Typo Treats was sent to gina@example.com. The earlier invitation for gina@exmaple.com no longer works.", deletes the mistyped Owner invitation (its link now shows the invalid page) and leaves a Staff invitation to another address alone; an address the store had already invited as Staff answers 200 and that same row becomes the Owner invitation; deleting requires the exact typed name and the actor's password, and removes the store row, its screens, its custom role and its memberships, keeping accounts; support with only `store-view` reads but gets 403 on create and delete; switching works into your own stores, 403 into a stranger's store, 403 for a super admin; required fields incl. `owner_email`, the 50-state list (`Texas`, `DC` refused), digits-only zip, and `is_active` edits hold; guests get 401 everywhere.
+9. **Platform users:** a super admin sees memberships, `sole_owner_of`, `platform_role`, `is_you`, `is_primary` and `can` exactly (`manage_stores` true for a store Owner, false for platform staff); support sees store accounts only; a store Owner gets 403 from the accounts page and data (the `global-tier` lock); deleting (with the actor's password, as removing a platform role) reports `ownerless_stores` and logs "left without an Owner: …"; nobody deletes themselves (422), the primary (403), or — unless primary — another super admin (403); support with `user-destroy` gets 404 on platform accounts; removing a platform role: a non-primary super admin removes plain staff (200) but not another super admin or the primary (403), the primary cannot remove their own (422) but removes another super admin's; support gets 403; a super admin invites staff with a platform role (201, mailed), refused for a store account's email and for a store role (Admin); registering from a platform link creates a store-0 membership; support gets 403 on platform invitations; the listing's query count is constant; a stale session store never takes a super admin's powers; a second (non-primary) super admin inviting to Super-Admin gets 422 on `role_id` "Only the primary super admin can invite a super admin." and is not offered Super-Admin in the page's picker, while the primary is offered it and the same invitation succeeds (201).
+10. **Roles:** in a store, one list — the store roles Owner, Admin, Staff, Viewer (`kind` store, the Owner role marked `is_owner_role`, no edit or delete) then the store's own custom roles only (a platform role and another store's custom role absent) — with holders counted in this store alone; a member creates a custom role only from permissions they hold there (422 otherwise; `activity-view` refused for an Owner, whose role does not start with it); inside a store `Owner`, `admin`, ` STAFF ` and `Viewer` are refused names (the store roles are in its list) and `cashier` beside a custom `Cashier` reads "There is already a role called Cashier. Choose another name.", while another store creates its own `Cashier`; `Súper-Admin`, `SUPER ADMIN` and `super_admin` read "That name belongs to the Super-Admin role. Choose another." on create and are refused on rename (the name unchanged), `Ówner`, `O-W-N-E-R` and `Ädmin` are refused, `Store Admin Assistant` is allowed; only the exact Super-Admin role on the platform row makes a super admin (an account holding a global role named `super-admin` is not one, gets 403 on `/permissions`, and `superAdminId()` / `primarySuperAdminId()` still name the real role and person); any member holding `role-update` edits a custom role whoever made it (logged); another store's role → 404 on delete; a role above your reach → 403 on update and delete; a held role → 422 on delete; in a store the store roles → 403 on update (Viewer keeps its name) and on delete ("Store roles are changed by the super admin, for every store at once."); a custom role with two pending invitations is listed with `invitations_count` 2, and deleting it with the password answers exactly "Role Cashier deleted. 2 pending invitations to it were revoked.", removes both invitations and logs "Deleted role Cashier. 2 pending invitations to it were revoked."; on the platform the list starts `Super-Admin, Owner, Admin, Staff, Viewer` — Super-Admin neither editable nor deletable, the Owner role editable but not deletable, Viewer (held by nobody) editable and deletable, Admin (held) offered Delete too, deleting it answering 422 "Please unassign Admin from everyone first: 1 person still holds it."; a new role on the platform needs `type` ("Choose what this role is for."): "Floor Lead" as a store role (not global, no store, offered in every store; logged "Created store role Floor Lead, offered in every store") and "Support" as a platform role (global; logged "Created platform role Support"), while a store role holding `activity-destroy` or `user-view` is refused; on the platform a store role named like a store's custom role → "Alpha Mart already has a custom role called Cashier. Choose another name.", a platform role of that name is created; `/roles/assignable?role={Staff}` lists exactly what a store role can carry, with no `unavailable` field, `?type=store` lists `channel-view` but neither `user-view` nor `activity-destroy`, `?type=platform` lists `activity-destroy` and `user-view` but not `permission-view`; `PUT` Staff renamed "Cashier" with three permissions answers "Role Cashier updated in every store.", sets exactly those permissions, reads "Allows View Screens, Pair Screens and View Media Library." and logs "Updated store role Cashier (was Staff), in every store"; `activity-destroy` on it → 422 "A store role cannot hold Delete Old Activity Logs: it works above the stores only."; the Owner role renamed "Proprietor" stays the Owner role with its holders still Owners, and deleting it with the password → 403 "The Owner role is never deleted: it is how a store has an owner. Rename it or change what it allows instead.", while Viewer (held by nobody) is deleted; editing Super-Admin → 403; a super admin creates platform roles with store and platform permissions but never `permission-*` (422); on the platform Beta Deli's custom role "Cashier" is listed with `store_name` "Beta Deli", editable and deletable, renamed "Till" (logged "Updated role Till (was Cashier) in Beta Deli, from the platform") and deleted with the password, its `role.deleted` entry carrying Beta; a platform role that is not Super-Admin gets 403 on the roles data; `/roles/{id}/permissions` answers 200 for a store role and 404 for a foreign custom role or a platform role from a store; `/roles/assignable` inside a store returns exactly the permissions the actor holds there (`media-view`, `role-view`, `screen-view` for a supervisor holding those), and for a platform role on the platform everything but the catalogue.
+11. **Platform tiers:** a super admin gives `activity-view` / `activity-destroy` and `channel-*` to a platform role; `activity-destroy` goes on no store's role — not even from the super admin on a store role (422 "A store role cannot hold Delete Old Activity Logs: it works above the stores only.") — and an Owner cannot give `activity-view` or `channel-view` to a custom role (not held, 422); a store role holding `activity-view` and `activity-destroy` reads its own store's log and is offered the link, but gets 403 on the partition status and on maintenance and sees no storage panel; a platform reader reads but cannot run maintenance and does not see the button; a platform keeper runs it (logged); the catalogue goes on no role but Super-Admin; anybody else holding `permission-*` opens nothing (403, including renaming); a super admin runs the catalogue even when the Super-Admin role holds no rows; a platform user who is not a super admin cannot create roles (403).
+12. **Loophole suite with the seeded roles:** the seeded Owner runs their shop (screens, media, dayparts, members, roles, the Stores tab of Settings, playlist save); every platform page is 403 to the seeded Owner — channels (the data, creating one, removing an ad), campaigns, activity, permissions, users and deleting an account, platform invitations and impersonation, none of which the Owner role holds, and the stores data, behind the tier lock although the Owner role holds `store-view`; the Owner may carry the platform's channel on a playlist but gets 403 adding an ad to it; network advertising cannot be switched on by the Owner or smuggled through the screen or settings forms; another shop's screens, files, dayparts, people, invitations and roles are 404 and its media cannot be put on the Owner's playlist (422); switching into it is 403; the Owner cannot give a custom role `activity-view` or `channel-store` (not held — "You can only give a role permissions you hold yourself."), nor `user-destroy`, `activity-destroy` or `permission-update` (never on a store's role), nor name it "Owner"; the Owner may give `store-destroy`, and a member holding that custom role gets 403 deleting a rival store (the Stores page is the platform's); nobody is invited or moved into Super-Admin or a rival store's role (422, and only the seeded store-0 row exists); platform accounts are absent from the members list and cannot be invited; `PUT /users/{id}` is 405 and `PUT /members/{id}` for a non-member is 404; an Admin cannot touch Owners, take ownership, delete the store or make themselves Owner; Staff can neither see nor change the team or open settings; the only Owner can neither leave nor self-delete; device endpoints ignore a logged-in session and no screen payload leaks a token; with no shop selected the Owner reaches nothing (403).
+13. **Impersonation:** guests get 401; a super admin logs in as a user (the session remembers the admin in `impersonating_original_id` and the user in `impersonating_user_id`) and the store context is cleared; signing in through `/login` with a way back left in the session clears both keys, and a following stop leaves the person signed in as themselves; a stop from an account that is not the one being viewed as redirects to the dashboard, clears the keys and changes nobody's identity; stopping logs `impersonate.stopped` with the admin as actor, clears the store context and returns to the admin; a non-super gets 403; super → super is 403; a deleted or demoted admin → stop logs out to login; stopping while not impersonating is a no-op; the users listing offers "Log in as" for everyone but super admins and yourself.
+14. **Activity:** mutations log the actor snapshot (e.g. `store.created`); the page and data need `activity-view` (a store user without it → 403); login, permission creation and self-deletion are logged; password reset via link logs the user as actor; switching logs `store.switched` with the store as subject; the date range bounds by day or by ISO instant and rejects malformed dates; a log just past UTC midnight stays visible to a UTC−5 viewer; maintenance deletes years older than the previous one and logs; partition status needs `activity-view`, maintenance `activity-destroy` (checked with a platform reader — a super admin would pass both); entries are newest first and keep the actor's name after the account is deleted.
+15. **The catalogue, the migrations and the seeder:** the three lists cover `LABELS` exactly once, and `STORE_SCOPED` is all of `PLATFORM` but `user-view`, `user-destroy` and `activity-destroy`. **Straight off `migrate`, before any seeder** (§22.3): `permissions` equals `Permission::LABELS` exactly — the same 37 names with the same labels and nothing else — and the roles table holds exactly the four starter store roles, each with its `Role::STARTERS` name, not global, no store, holding exactly `Role::starterPermissions(key)` (Owner = `STORE` + `store-view` + `store-destroy`, Admin = `STORE` + `store-view`, Staff 7, Viewer 3); `channels.store_id` exists with no unique index on `channels.name` and `activity_logs.store_id` has its `(store_id, created_at)` index; `stores.deleted_at`, `users.created_by`, `roles.is_signup_default` and the `personal_access_tokens` table are all absent, the `roles.store_id` foreign key cascades, and deleting a store row straight in the database takes its custom role. **After seeding:** the same 37 permissions with labels, Super-Admin holding all of them, the four starter roles untouched, and a super-admin admin; running the seeder twice duplicates nothing (four roles carrying a key); re-seeding keeps what the super admin changed on a starter role and never brings back one they deleted.
+16. **Dashboard:** guests are redirected to login; super admins see the store count; a custom platform role sees the global view (even with a stray store row); a single-store member is auto-selected into the store view; a multi-store member without a selection is redirected to the selection page, which lists their stores; the selection page redirects single-store and platform accounts away and stays within a bounded query count.
+17. **Guest access:** every people endpoint answers 401 (JSON) or redirects to login (pages) for guests; the invitation link opens for guests, accepting redirects to login.
+18. **Listings & limits:** 50 rows by default, the last page holds the remainder, `per_page` clamped to 1–100; named limiters keep device traffic from spending the signup budget.
+19. **Double submit & client validation:** a double click on any submit creates exactly one record; client validation blocks bad input with zero requests (e.g. "First name is required.").
+20. **A super admin holds every permission:** a super admin whose Super-Admin role holds no rows reads the channels, activity and stores data, lists and creates permissions, and `can('report-export')` is true for a permission created afterwards; the rules that are not permissions still stand — `PUT /network-ads/store` from a store session without impersonation → 403, deleting the Super-Admin role or the Owner role (password given) → 403, `DELETE /profile` → 403; a platform account holding every permission row still gets 403 on `/permissions`.
+21. **Big deletes re-confirm the password:** removing a member, deleting a store (platform), an account (platform), a platform role, a role, a permission, a channel and a campaign each answer 422 "Password is required." without a password and "The password is incorrect." with a wrong one, deleting nothing; the refusals that come first still come first (a role held by one person → "Please unassign Held from everyone first: 1 person still holds it." with no password sent); after five wrong passwords the right one answers 429 ("Too many wrong passwords. Try again in …") and 61 seconds later succeeds; revoking an invitation needs no password; the limit is shared by the plain forms too — after five wrong current passwords on the password change (each "The password is incorrect." on `current_password` in `updatePassword`), deleting the store from Settings → Stores with the right password redirects back with "Too many wrong passwords. Try again in …" on `password` in `storeDeletion`, and the store stays. In the browser, the platform store dialog shows "Password is required." and then "The password is incorrect." before deleting with the right password, and an account and a platform role are deleted through their own password dialogs.
+22. **Platform permissions on a store's role, for that store alone:**
+    - *Checklist and refusals:* the checklist for the Owner role lists exactly what a store role can carry — `store-destroy`, `channel-store`, `activity-view`, `media-view` listed, `user-view`, `user-destroy`, `activity-destroy` and `permission-view` not, no `unavailable` field; a new platform role's checklist lists every permission but the four catalogue ones; a permission made on the Permissions page is not listed for Staff (and refused there, 422) but listed for a platform role; the super admin gives the Owner role `store-view`, `store-store`, `channel-view`, `channel-store` and `activity-view` (200) but not `activity-destroy`, `user-destroy` or `permission-view` (422, exact messages — "A store role cannot hold Delete Old Activity Logs: it works above the stores only.", "A store role cannot hold Delete Accounts: it works above the stores only.", "Permission management belongs to the Super-Admin role alone."); inside a store the Owner is offered `store-destroy` but not `channel-view`, `user-view` or `activity-destroy`, creates "Closer" with `store-destroy` + `store-update`, and is refused `channel-view` (422 "You can only give a role permissions you hold yourself.") and `user-view` (422 "A store role cannot hold View Accounts: it works above the stores only.").
+    - *Settings → Stores:* the tab opens with `store-view` — a Viewer gets 403 and keeps "Your stores" on the profile; a role holding `store-view` alone reads the details ("Your role here does not let you change the store's details.", no details form), lists its stores (`your-stores`) and is offered nothing else — its details update is 403, and "Your stores" leaves its profile for the tab; a role holding `store-view`, `store-destroy` and `store-store` is offered Delete Store and Create store, whatever it is called; the Owner role without `store-view` → 403 and no tab; the Owner role starts with `store-destroy`; an Owner whose role lost it sees no "Delete Store" and gets 403; an Admin given it sees "Delete Store" and deletes the store (redirect to the dashboard, the store row gone, the `store.deleted` entry carrying the store); "Your stores" lists every store the person belongs to (Alpha as Owner, Gamma Grill as Staff) and no other.
+    - *Create store and the Stores page:* with `store-store` on the Owner role, Create store opens "Alpha Mart East" (a redirect with exactly "Alpha Mart East is open, and you are its Owner. Switch to it from the store menu."), active although `is_active: false` was sent, owned by them, no invitation, the session still in Alpha, the `store.created` entry carrying the new store; without `store-store` → 403, and a refused submit keeps exactly "The store name field is required." and "Zip code can only contain numbers." in `newStore`, none on the details form's fields; working in Beta, where they are Staff, `PUT` / `DELETE /settings/store` → 403, while in Alpha the details change but never `is_active`; deleting the store they work in redirects to the dashboard, clears the session store and removes the store row; "Invite owner" → 403 even with `store-view` and `store-store` on the Owner role, and the Stores page is 403.
+    - *Accounts are the platform's:* an Owner whose role was given `user-view` and `user-destroy` straight in the database still gets 403 from `GET /users`, `GET /users/data` and `DELETE /users/{user}` (password sent), and the Staff member stays.
+    - *The walls stand:* an Owner holding `user-view`, `user-destroy`, `store-view` and `activity-view` still gets 403 on "Log in as", `GET /users/{id}/stores`, `PUT /users/{id}/stores/{store}/role`, platform invitations, the partition status and maintenance.
+    - *Activity:* with `activity-view` on Owner, the log of Alpha shows only "Paired screen Alpha Window" of four entries (Beta's screen, the super admin's permission, the Owner's profile update left out), titled "Activity in Alpha Mart", without maintenance, while the super admin reads all four; `media.updated` of Beta's file carries Beta, `store.updated` its store, `member.removed` the store passed, `password.changed` and `campaign.created` none.
+    - *Sidebar:* the Owner is offered none of Stores, Users, Channels and Activity Log; once the Owner role holds `store-view`, `user-view`, `channel-view` and `activity-view`, Channels and Activity Log — never Stores or Users (`GET /stores` → 403).
+23. **A store's own channels:** a channel made inside a store belongs to it (`store_id`, `created_by`, and the `channel.created` entry carrying the store); inside a store only its own channels are listed ("Channels of Alpha Mart") and opened, while the platform's and another store's answer 404 on show, update and delete and stay unchanged; with no store selected the data is 403; above the stores every channel is listed with `store_name` (null for the platform's), and a channel made there is the platform's; a screen's channel box offers the platform's channels and its own store's (`is_store_channel` true for the latter), never another store's; a playlist naming another store's channel → 422 "One of those channels has been deleted, or is not offered to this store. Reload the page to see the current list.", while its own and the platform's channel save in the order sent; inside a store the platform's name and the store's own name are refused ("There is already a channel with this name in this store's list. Choose a different name.") and another store's name is allowed; the platform may reuse a store's name but not a platform channel's ("There is already a channel with this name. Every shop sees the name, so it has to be different."); deleting the store removes its own channel, its ad and both ad files, keeps the platform's and another store's channels and the platform ad's file; a store channel's `channel.deleted` entry carries the store.
+24. **Users → Stores — people put in stores from the platform:** `GET /users/{id}/stores` lists the person's memberships (`{store_id, store_name, role_id}`), the stores they are not in (by name), the store roles (`Owner, Admin, Staff, Viewer`, the first `is_owner_role`) and each store's custom roles keyed by store (Alpha → `Cashier`, Beta → `Baker`); `POST /users/{id}/stores` adds Nadia, in no store, to Beta Deli with Beta's custom role Baker → 201 "Nadia New is now Baker in Beta Deli.", no invitation, logged "Added Nadia New ({email}) to Beta Deli as Baker, from the platform" with Beta; added to Alpha Mart with the Owner role, she holds the Owner role there; another store's custom role → 422 "Choose a role that exists in this store.", a platform role → 422 on `role_id`, a store the person is already in → 422 "{name} is already in Alpha Mart. Change their role there instead.", a platform account → 422 on `store_id`; `PUT /users/{id}/stores/{Alpha}/role` → 200 "{name} is now Area Manager in Alpha Mart.", the Beta role untouched, logged "Changed the role of {name} in Alpha Mart from Staff to Area Manager, from the platform" with Alpha; the only Owner can be neither moved to Staff (422 on `role_id` "{name} is the only Owner of Alpha Mart. Make someone else an Owner first.") nor taken out (422, the same message) until a second Owner exists, after which they become Admin; `DELETE /users/{id}/stores/{Alpha}` asks for the password (422 "Password is required."), then → 200 "{name} was removed from Alpha Mart.", their Beta membership and account kept, logged with Alpha, and again → 404; support holding `user-view`, `member-update` and `member-remove`, and a store Owner, get 403 on all four routes; the Users data offers `manage_stores` for a store account and never for platform staff. **In the browser:** Roles → Create role → Store role (`activity-destroy` and `permission-view` not listed, "This store only" on the Activity log group) "Area Manager" with `screen-view`, `store-view`, `channel-view`, `channel-store`, `activity-view` → "Role Area Manager created." (a store role: no store, not global); Users → Stores → Sam's Alpha Mart role set to Area Manager → "{name} is now Area Manager in Alpha Mart."; Sam then sees the Channels and Activity Log links (not Stores, not Users) and the Settings link, creates a channel under "Channels of Alpha Mart" that is Alpha's while the platform's and Beta's channels stay out of sight, reaches the Stores tab of Settings through `sidebar-settings` — "Your stores" listing Alpha Mart and not Beta Deli, the details read-only, no Create store —, reads "Activity in Alpha Mart" with "Created channel Alpha Lunch Deals" and "from Staff to Area Manager" and no maintenance button, and gets 403 on `/stores`. Also in the browser: Casey, in no store, is added to Beta Deli with the Owner role ("Casey Keeper is now Owner in Beta Deli.") and the Stores list counts Beta Deli's members 0 with "Invite owner", then 1 without it, while taking Casey out is refused with "Casey Keeper is the only Owner of Beta Deli. Make someone else an Owner first."; a store created on the platform counts 0 members and offers "Invite owner" until its invited owner registers from the email, who then finds no Stores link in the sidebar, reaches the Stores tab (labelled "Stores") through `sidebar-settings` with "Store Details", "Delete Store", no "Transfer Ownership" and the store under "Your stores", while the platform's row counts 1 member and no longer offers "Invite owner"; a store changes hands on its Members page — the seller makes the buyer Owner, the buyer makes the seller Admin and deletes the store from the Stores tab, the store row and its custom role gone and both accounts kept (§11.3); on the Roles page Staff, held by somebody, offers Delete, which toasts "Please unassign Staff from everyone first: 1 person still holds it." without asking a password; the Owner row offers Edit but no Delete, a platform role "Support" and a store role "Shift Lead" are created with only what each kind can hold listed, and Staff renamed "Crew" with `screen-store` reads "Role Crew updated in every store."
+
+---
+
+## 26. Known sharp edges (documented REALITY — port them consciously; each is an owner-level decision to revisit)
+
+1. **The Super-Admin anchor is still a name.** Comparing it exactly in application code closed the collation hole (§4.1), but ANY role whose name is exactly `Super-Admin` makes its holders super admins (`Role::isSuperAdmin()` is by name). HTTP cannot create or rename a role into that name (§7.5); a duplicate written straight into the database would count as well — and, a super admin passing every permission check (§3.3), its holders would hold everything — while `superAdminId()` — and with it the role scopes and `primarySuperAdminId()` — follows only the lowest id.
+2. **"Invite owner" is blunt — for a store with no Owner.** It acts only while the store has no Owner (§10.3: a store that has one gets 422, and its next Owner comes from its own Members page or from Users → Stores), but there it promotes an existing member to Owner at once, without their consent; inviting a new address or making a member Owner deletes the store's Owner invitations to any other address; and sending to an address the store had invited to another role turns that invitation into an Owner invitation with the platform user as its inviter.
+3. **Expired invitations are never pruned.** They stay until resent, revoked, declined, replaced (the Owner invitations of a store that has no Owner, §10.3) or deleted with their role or store, and an expired invitation still blocks a new one to the same address in the same place ("resend it instead").
+4. **Races that remain.** "One open invitation per email per place" is check-then-write with no unique index, so two simultaneous invites can create two rows; accepting both at the same moment would then hit the `store_user` unique index as an unhandled error. Two *different* invitations to the same new address registered at the same moment both pass the account check (each holds only its own invitation's lock) and one fails on the `users` unique index. The already-a-member accept path (§9.5 step 3) takes no lock, so a double submit there can write two `invitation.accepted` rows. Platform account deletion takes no store lock — by design it may leave a store ownerless. "Invite owner" reads the store's Owner count without a lock (§10.3), so an Owner arriving at that moment (from Users → Stores, or an accepted invitation) is not seen: the request still makes its member an Owner, or sends its Owner invitation. A role's name is checked against its lists and then written with no lock and no unique index (§2.3, §7.5), so two saves at the same moment can still leave two roles of one folded name in a list. (The last-Owner and one-link-one-use races are closed by row locks, §8.1 and §9.5; SQLite ignores those locks because its writers are serialized, so a port on another database must keep real `FOR UPDATE` locks.)
+5. **Every email failure looks the same.** `sendLink` catches any exception — a refusing mail server, but also a bug while building the message — reports it and answers "the email could not be sent"; the activity row still reads "Invited …" and says nothing about the failure.
+6. **Permission names are de-facto anchors with no rename lock.** Routes hardwire the names: renaming a permission makes every route gated on it deny everyone **but super admins** until renamed back — the before-hook (§3.3) lets them through, so the super admin who renamed it sees nothing wrong while every store and platform user loses the feature. Membership of `STORE` and `STORE_SCOPED` is by name, so renaming a store (or store-scoped) permission also makes it platform-only — store roles and custom roles holding it are no longer offered it in the checklist and can no longer be saved with it. A permission created on the Permissions page gates nothing, can only go on platform roles, and is attached to the Super-Admin role only when the seeder runs (which no longer matters for access). Deleting a permission held by any role is refused — every seeded permission is held by Super-Admin, so in practice only a permission made on the page, given to no role and not yet attached to Super-Admin by a seeder run, can be deleted.
+7. **Email case at login.** Signup lower-cases and invitations normalize, but login and the password-reset link look the email up as typed: on a case-sensitive database (SQLite, PostgreSQL) a differently-capitalized address does not match, while MySQL's collation does. Accounts created before signup lower-cased emails may still hold capitals (the invitation lookups use `lower(email)` and still find them). A port should normalize emails at every door.
+8. **The session cookie is the only way a person authenticates — there is no second door left, and that is now literal.** The API scaffold is **gone**: the `laravel/sanctum` dependency, `config/sanctum.php`, the `HasApiTokens` trait, the `personal_access_tokens` migration and table, the `$user->tokens()->delete()` line in the account-deletion hook and the framework's `/sanctum/csrf-cookie` route (§2.1, §15.3, §22). So are Breeze's email-verification screens and its `password.confirm` screen, with their routes, controllers, views, tests and the `email-verification` limiter (§2.1, §19.6) — and the unthrottled `POST /confirm-password` they took with them was **the one password check in the application outside the shared wrong-password counter** (§19.7). `config/filesystems.php` sets `'serve' => false` on the `local` disk, so even the framework's `GET|PUT /storage/{path}` routes are not registered. What this costs: any future machine client needs a deliberate design rather than a scaffold to switch on — the only non-session door in the app is the screens' device API (`routes/device.php`, registered outside the `web` group with its own token-hash authentication and per-device limiters), and the owner's no-API rule (§3.7) means a port should not re-add a token surface without being asked.
+9. **Route-model binding runs before the gates (§3.3)**, so on permission- or tier-locked routes the status code tells an outsider whether an id exists: e.g. a store Owner gets 403 from `DELETE /users/{id}` for an existing account and 404 for a missing one. The 404 discipline of §6 holds only once the gates have passed.
+10. **Impersonated account deleted mid-session:** the admin's next request is unauthenticated (redirect to login) and nothing is logged; the two impersonation keys stay in that session until the next sign-in clears them (§14.1) — except on the `database` session driver, where the deletion removes the session rows naming the deleted account (§15.3), the admin's viewing-as session among them, keys included. The layout's banner reads `impersonating_original_id` alone, but no page showing it can be reached without signing in, which clears it.
+11. **Adjusting a store role can bend the hierarchy, in every store at once.** Reach compares the permission rows actually held (§8.1), and there is no per-store override of a store role. When the super admin takes a permission away from the Owner role, or gives Admin (or any other store role) one the Owner role lacks, Owners can no longer invite anybody to that role, give it, or change or remove the members holding it (422 / 403 with the usual reach messages, §8.4, §8.5, §9.2); taking `store-update` from the Owner role turns the store details read-only for every Owner; taking `store-view` from it closes the Stores tab of Settings to every Owner, whose "Your stores" then shows on the profile (tested); taking `store-destroy` from it stops every Owner deleting their store, and giving it to Admin lets every Admin do so — and brings the Owner role, and every Owner but a store's only one, within every Admin's reach (§8.1, §8.2), so every Admin may then make anybody an Owner, which is how a store changes hands (§11.3, §26.16); giving the Owner role `store-store` lets every Owner open stores (§26.14); taking `member-view` or `role-view` hides the Members or Roles page. Nothing but ownership itself stays tied to the Owner role's key, whatever it is renamed to (§7.1). `Role::STARTERS` is only the starting point (§7.1): nothing re-applies it — not the starter-roles migration, which runs once on a fresh database, and not the seeder — so a store permission added to `STORE` later reaches Owner and Admin only through a migration that grants it to them by key, or the super admin's edit, and an installation whose code is updated before that migration runs has Owners who cannot yet use the feature. A role may also still carry a **stale** permission row the rules would refuse today — `store-transfer`, `user-view`, `user-destroy` on a store role, left by an older build or written straight into the database: it opens nothing (no route names `store-transfer`, and the `/users` group keeps `global-tier`, §13), the role form's checklist does not list it, and the form drops it on the role's next save (§7.9, §20.8). A description always tells what a role allows now (§4.4). Deleting a store role the super admin no longer wants — Admin, Staff and Viewer included — is possible only while nobody holds it.
+12. **One wrong-password counter per person.** Every password re-confirmation — the JSON big deletes, the Stores tab's store delete, Profile self-delete and the password change — counts into the same `confirm-password:{user id}` counter (§19.7), not one per form, dialog, session or device: five wrong passwords anywhere pause all of them for that person, everywhere, for the rest of the minute — and whoever uses an open session can cause that pause. The counter is separate from the login throttle (keyed by email and IP, §19.3), and a password accepted by the check clears it even when a later locked re-check of the same request refuses.
+13. **A role carrying what the Owner role lacks is the super admin's alone to manage.** Reach inside a store compares the permission rows actually held (§8.1), and a store role the super admin made — or a store's custom role the super admin changed from the platform — may carry store-scoped platform permissions the Owner role does not start with (`store-store`, `channel-store`, `activity-view`, …). No member of the store — not even an Owner — can then invite anybody to that role, give it, or change or remove its holders, nor edit or delete it when it is a custom role (403 / 422 with the usual reach messages); the holders can still leave, and the super admin manages them from the platform (§7.7, §13.4) — or gives the Owner role those permissions, for every store at once.
+14. **Opening stores has no limit.** A store's role carrying `store-store` opens as many stores as its holder asks for — no cap, no confirmation, no throttle beyond `throttle:admin` — each owned by that person through the Owner role (§10.2). Once the super admin gives `store-store` to the **Owner** role, every Owner can open stores, and each store opened makes its opener an Owner with the same permission again. *Owner's rule, 2026-09-16: off by default; the super admin decides who holds it.*
+15. **Users → Stores is straight in.** A super admin puts any account outside the platform team — one in no store included — into any store with any role that store has, the Owner role too, with no consent step, no email and no hierarchy check (§13.4); the person simply finds the store in their switcher. The one guard kept is at least one Owner. Adding somebody as Owner does not ask whether the store already has one.
+16. **Making somebody an Owner is handing the store over.** There is no separate handover and no consent step (§11.3): whoever reaches the Owner role in a store — out of the box every Owner; anybody whose role holds every permission the Owner role holds (§8.1, §26.11) — makes any member an Owner with Change role, and every Owner then reaches every other Owner, so a new co-owner may at once demote or remove the others, leaving only themselves (the last-Owner rule, §8.2, keeps one Owner — it does not say which). A partner made Owner in good faith can take the store. (The removed `store-transfer` permission, §3.1, once made Owners from the Stores tab even beyond the actor's reach; that door is gone.)
+
+---
+*Rewritten for the store-as-organization people model (2026-09-16), updated for the owner's later rules of the same day — a super admin holds every permission, big deletes re-confirm the password, a permission reaches where its role sits (stores, accounts, channels and reading the activity log on a store's role, for that store alone), deleting a store is the permission `store-destroy` — and for the owner's rules of 2026-09-17: no role built in but Super-Admin (store roles and platform roles made by the super admin, the Owner role marked by its key and never deleted, Owner / Admin / Staff / Viewer only the starter roles, a name new to every list it is shown in, a checklist listing only what the role can hold, every store's custom roles managed from the platform, same-named store copies merged into one store role), the super admin putting anybody in any store from Users → Stores, and the store's settings as a tab of Settings with the person handing it over choosing the role they keep — and for the second round of the 2026-09-17 rules, "a role does not matter, its permissions do": reach with no special case for the Owner role (a store's only Owner kept by the Owner count instead), handing a store over as the new permission `store-transfer`, the **Stores** tab of Settings opening with `store-view` and carrying "Your stores" and Create store, the Stores page the platform's alone with no owners on its list, and a held role offering Delete that says it must be unassigned first — and for the third round of the 2026-09-17 rules: no Transfer Ownership and no `store-transfer` (a store changes hands on its Members page), no Accounts inside a store (`user-view` and `user-destroy` the platform's alone, the whole `/users` group behind `global-tier`), "Invite owner" only for a store with no Owner, a deleted account leaving nothing pointing at it (its sessions, reset token and the invitations to its email go too), and stores deleted for good ("A to Z": no `deleted_at`, and a custom role cascading with its store).*
+
+*Brought back in line with the code after the cleanup of 2026-09-17 (evening): the **migrations squashed to 21 files** that build the final schema directly, with every upgrade migration deleted and the one data migration now `2026_09_16_110200_insert_permissions_and_starter_roles` — so `migrate` alone leaves the whole 37-permission catalogue and the four starter store roles (§21, §22); **Sanctum and the API token scaffold deleted** (no `personal_access_tokens`, no `HasApiTokens`, nothing to clear on account deletion, §2.1, §15.3, §26.8); **Breeze's email-verification and confirm-password screens deleted** with their routes, controllers, views and the `email-verification` limiter — `users.email_verified_at` kept, because an invitation link proves the inbox (§2.1, §19.6, §19.7); `GET /roles/{role}/permissions` removed, so the Roles endpoints are the page, the list, create, update, delete and the checklist (§3.7, §7.9); and the `local` disk no longer served over HTTP (§26.8).*
+
+*Checked against the code section by section — routes, controllers, models, the StoreTeam service, migrations, seeder, views, scripts and the feature and browser tests. Where the design record (`docs/STORE-ORGANIZATION-SPEC.md`) and the code differ, this document follows the code.*

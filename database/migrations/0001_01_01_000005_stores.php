@@ -8,11 +8,13 @@ return new class extends Migration
 {
     /**
      * Run the migrations.
+     *
+     * A store is the organization: it owns its members, custom roles, invitations, screens, media, dayparts and
+     * its own channels. Deleting one takes all of that with it, for good (Store::purgeContents) — never the
+     * people's accounts.
      */
     public function up(): void
     {
-
-        //
         Schema::create('stores', function (Blueprint $table) {
             $table->id();
             $table->string('name');
@@ -26,10 +28,12 @@ return new class extends Migration
             $table->string('country');
 
             $table->boolean('is_active')->default(true);
-            // Creator, so the cascade-delete rule can include the stores a user made.
+            // Whether this shop carries network advertising at all. Off until the platform owner makes the deal:
+            // a shop that has not been asked has not agreed. Each screen then says whether IT carries them.
+            $table->boolean('accepts_network_ads')->default(false);
+            // Who created the store — history only; nothing is ever deleted through it.
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
-            $table->softDeletes();
         });
     }
 
@@ -38,7 +42,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        //
         Schema::dropIfExists('stores');
     }
 };

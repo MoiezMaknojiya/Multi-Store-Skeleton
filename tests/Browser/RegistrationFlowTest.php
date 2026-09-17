@@ -14,11 +14,6 @@ class RegistrationFlowTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    /**
-     * A brand-new customer signs themselves up: their details + their store in one
-     * public form, gets the default owner role, and lands on their dashboard with
-     * the store card showing.
-     */
     /** Client-side validation catches an empty form before any request leaves —
      *  fields go red with messages, and the page never navigates. */
     public function test_client_side_validation_blocks_an_empty_signup_before_any_request(): void
@@ -39,9 +34,14 @@ class RegistrationFlowTest extends DuskTestCase
         });
     }
 
+    /**
+     * A brand-new customer signs themselves up: their details + their store in one
+     * public form, becomes that store's Owner, and lands on their dashboard with the
+     * store showing.
+     */
     public function test_a_customer_signs_up_with_their_store_and_lands_on_their_dashboard(): void
     {
-        $this->seedSuperAdmin(); // also seeds the "Store Owner" signup-default role
+        $this->seedSuperAdmin(); // the Owner role every signup receives is put back if it is missing
 
         $this->browse(function (Browser $browser) {
             $this->freshSession($browser);
@@ -72,7 +72,7 @@ class RegistrationFlowTest extends DuskTestCase
 
             $owner = User::where('email', 'zara@example.com')->firstOrFail();
             $store = Store::where('name', 'Zara Mart')->firstOrFail();
-            $roleId = Role::where('is_signup_default', true)->value('id');
+            $roleId = Role::starter(Role::OWNER)->id;
 
             $this->assertTrue(DB::table('store_user')->where([
                 'user_id' => $owner->id,

@@ -5,7 +5,7 @@
         <a href="{{ route('register') }}" class="text-blue-600 hover:underline font-medium">Create one</a>
     </p>
 
-    <x-auth-session-status class="mb-4" :status="session('status')" />
+    <x-auth.session-status class="mb-4" :status="session('status')" />
 
     <form method="POST" action="{{ route('login') }}" class="space-y-5">
         @csrf
@@ -34,7 +34,7 @@
             @endif
         </div>
 
-        <button type="submit" class="btn-primary-auth">
+        <button type="submit" class="btn-primary-auth" dusk="login-submit">
             Sign In
         </button>
     </form>

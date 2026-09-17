@@ -2,12 +2,9 @@
 
 namespace Tests\Browser;
 
-use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Store;
-use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
-use Illuminate\Support\Facades\DB;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
 
@@ -16,26 +13,18 @@ class MultiStoreUserTest extends DuskTestCase
     use DatabaseMigrations;
 
     /**
-     * One user assigned to two stores with a different role in each: both stores
-     * show on their dashboard, and switching stores switches their powers —
-     * Manager in Store A (can add users), Viewer in Store B (cannot).
+     * One person in two stores with a different role in each: both stores show on the
+     * selection page, and switching stores switches their powers — Admin in Alpha (the team
+     * page, with its Invite button), Staff in Beta (no team page at all).
      */
-    public function test_one_user_in_two_stores_gets_a_different_role_per_store(): void
+    public function test_one_person_in_two_stores_gets_a_different_role_in_each(): void
     {
-        $admin = $this->seedSuperAdmin();
+        $this->seedSuperAdmin();
 
         $storeA = Store::factory()->create(['name' => 'Alpha Store']);
         $storeB = Store::factory()->create(['name' => 'Beta Store']);
-
-        $managerRole = Role::create(['name' => 'Manager', 'created_by' => $admin->id]);
-        $managerRole->permissions()->sync(Permission::whereIn('name', ['user-view', 'user-store'])->pluck('id'));
-
-        $viewerRole = Role::create(['name' => 'Viewer', 'created_by' => $admin->id]);
-        $viewerRole->permissions()->sync(Permission::whereIn('name', ['user-view'])->pluck('id'));
-
-        $worker = User::factory()->create(['email' => 'multi-store@example.com', 'created_by' => $admin->id]);
-        $worker->stores()->attach($storeA->id, ['role_id' => $managerRole->id]);
-        $worker->stores()->attach($storeB->id, ['role_id' => $viewerRole->id]);
+        $worker = $this->storeMember($storeA, Role::ADMIN, 'multi-store@example.com');
+        $worker->stores()->attach($storeB->id, ['role_id' => Role::starter(Role::STAFF)->id]);
 
         $this->browse(function (Browser $browser) use ($worker, $storeA, $storeB) {
             $this->freshSession($browser);
@@ -44,22 +33,19 @@ class MultiStoreUserTest extends DuskTestCase
             $browser->loginAs($worker)->visit('/select-store');
             $browser->waitForText('Alpha Store')
                 ->assertSee('Beta Store')
-                ->assertSee('Manager')
-                ->assertSee('Viewer');
+                ->assertSee('Admin')
+                ->assertSee('Staff');
 
-            // -- In Store A they are a Manager: the Add User button exists -------
+            // -- In Alpha they are an Admin: the team page, with Invite ----------
             $this->switchToStore($browser, $storeA);
-            $browser->visit('/users');
+            $browser->visit('/members');
             $this->waitForAlpine($browser);
-            $browser->waitForText('No users found.')
-                ->assertPresent('@add-user');
+            $browser->waitForText('multi-store@example.com')
+                ->assertPresent('@invite-member');
 
-            // -- Switch to Store B: same user, now only a Viewer — no Add User ---
+            // -- In Beta, only Staff: the team page is not theirs ----------------
             $this->switchToStore($browser, $storeB);
-            $browser->visit('/users');
-            $this->waitForAlpine($browser);
-            $browser->waitForText('No users found.')
-                ->assertMissing('@add-user');
+            $browser->visit('/members')->assertSee('403')->assertMissing('@invite-member');
         });
     }
 
@@ -69,18 +55,12 @@ class MultiStoreUserTest extends DuskTestCase
      */
     public function test_the_selection_page_has_no_sidebar_and_the_header_switcher_changes_stores(): void
     {
-        $admin = $this->seedSuperAdmin();
+        $this->seedSuperAdmin();
 
         $storeA = Store::factory()->create(['name' => 'Alpha Store']);
         $storeB = Store::factory()->create(['name' => 'Beta Store']);
-        $managerRole = Role::create(['name' => 'Manager', 'created_by' => $admin->id]);
-        $managerRole->permissions()->sync(Permission::whereIn('name', ['user-view', 'user-store'])->pluck('id'));
-        $viewerRole = Role::create(['name' => 'Viewer', 'created_by' => $admin->id]);
-        $viewerRole->permissions()->sync(Permission::whereIn('name', ['user-view'])->pluck('id'));
-
-        $worker = User::factory()->create(['email' => 'switcher@example.com', 'created_by' => $admin->id]);
-        $worker->stores()->attach($storeA->id, ['role_id' => $managerRole->id]);
-        $worker->stores()->attach($storeB->id, ['role_id' => $viewerRole->id]);
+        $worker = $this->storeMember($storeA, Role::ADMIN, 'switcher@example.com');
+        $worker->stores()->attach($storeB->id, ['role_id' => Role::starter(Role::STAFF)->id]);
 
         $this->browse(function (Browser $browser) use ($worker, $storeA, $storeB) {
             $this->freshSession($browser);
@@ -92,65 +72,66 @@ class MultiStoreUserTest extends DuskTestCase
                 ->assertSee('Alpha Store')
                 ->assertSee('Beta Store');
 
-            // Pick Store A (Manager) → the full app shell with its sidebar is back.
+            // -- The WHOLE card picks the store, not just the words at the bottom.
+            //    Asking the browser what it would hit is the only honest check —
+            //    the overlay that does this is invisible, so nothing about the
+            //    rendered text would reveal it had stopped working.
+            $corners = $browser->script(<<<JS
+                const button = document.querySelector('[dusk="switch-store-{$storeA->id}"]');
+                const card = button.closest('.relative');
+                const r = card.getBoundingClientRect();
+
+                return [
+                    [r.x + 4, r.y + 4],                          // top-left
+                    [r.x + r.width - 4, r.y + 4],                // top-right
+                    [r.x + r.width / 2, r.y + r.height / 2],     // dead centre
+                    [r.x + 4, r.y + r.height - 4],               // bottom-left
+                ].map(([x, y]) => document.elementFromPoint(x, y) === button);
+            JS)[0];
+
+            $this->assertSame([true, true, true, true], $corners,
+                'part of the store card is not clickable');
+
+            // Pick Alpha (Admin) → the full app shell with its sidebar is back.
             $this->switchToStore($browser, $storeA);
-            $browser->visit('/users');
+            $browser->visit('/members');
             $this->waitForAlpine($browser);
             $browser->assertPresent('#main-sidebar')
                 ->assertPresent('@store-switcher')
-                ->assertPresent('@add-user');
+                ->assertPresent('@invite-member');
 
-            // -- Switch to Store B from the HEADER dropdown (Viewer: no Add User) -
+            // -- Switch to Beta from the HEADER dropdown (Staff: no team page) ---
             $this->jsClick($browser, '@store-switcher');
             $browser->waitForReload(fn (Browser $b) => $this->jsClick($b, '@store-switch-'.$storeB->id));
-            $browser->visit('/users');
-            $this->waitForAlpine($browser);
-            $browser->assertMissing('@add-user');
+            $browser->visit('/members')->assertMissing('@invite-member');
         });
     }
 
-    /**
-     * The admin's assignment modal shows both stores for a multi-store user, and
-     * removing one store keeps the other intact.
-     */
-    public function test_the_assignments_modal_lists_both_stores_and_can_remove_just_one(): void
+    /** The team page shows the people of the store being worked in, never the other one. */
+    public function test_the_members_page_lists_only_the_current_store_s_team(): void
     {
-        $admin = $this->seedSuperAdmin();
+        $this->seedSuperAdmin();
 
         $storeA = Store::factory()->create(['name' => 'Alpha Store']);
         $storeB = Store::factory()->create(['name' => 'Beta Store']);
-        $role = Role::create(['name' => 'Manager', 'created_by' => $admin->id]);
-        $role->permissions()->sync(Permission::whereIn('name', ['user-view'])->pluck('id'));
+        $owner = $this->storeMember($storeA, Role::OWNER, 'owner@example.com');
+        $owner->stores()->attach($storeB->id, ['role_id' => Role::starter(Role::OWNER)->id]);
+        $this->storeMember($storeA, Role::STAFF, 'alpha.staff@example.com');
+        $this->storeMember($storeB, Role::STAFF, 'beta.staff@example.com');
 
-        $worker = User::factory()->create(['email' => 'multi-store@example.com', 'created_by' => $admin->id]);
-        $worker->stores()->attach($storeA->id, ['role_id' => $role->id]);
-        $worker->stores()->attach($storeB->id, ['role_id' => $role->id]);
-
-        $this->browse(function (Browser $browser) use ($admin, $worker, $storeA, $storeB) {
+        $this->browse(function (Browser $browser) use ($owner, $storeA, $storeB) {
             $this->freshSession($browser);
+            $browser->loginAs($owner);
 
-            $browser->loginAs($admin)->visit('/users');
+            $this->switchToStore($browser, $storeA);
+            $browser->visit('/members');
             $this->waitForAlpine($browser);
-            $browser->waitForText('multi-store@example.com');
+            $browser->waitForText('alpha.staff@example.com')->assertDontSee('beta.staff@example.com');
 
-            // Both assignments visible in the modal.
-            $this->clickAndAwait($browser, '@stores-user-'.$worker->id, fn (Browser $b) => $b->waitFor('@assign-role', 3));
-            $browser->waitForText('Alpha Store')
-                ->assertSee('Beta Store');
-
-            // Remove only Store A; Store B must survive.
-            $browser->script(
-                "for (const btn of document.querySelectorAll('button')) {"
-                ." if (btn.textContent.trim() === 'Remove' && btn.closest('tr') && btn.closest('tr').textContent.includes('Alpha Store')) { btn.click(); break; }"
-                .'}'
-            );
-            $browser->waitForText('Are you sure you want to delete');
-            $this->jsClick($browser, '@confirm-store-removal-confirm');
-
-            $browser->waitUsing(10, 150, fn () => ! DB::table('store_user')
-                ->where(['user_id' => $worker->id, 'store_id' => $storeA->id])->exists());
-
-            $this->assertDatabaseHas('store_user', ['user_id' => $worker->id, 'store_id' => $storeB->id]);
+            $this->switchToStore($browser, $storeB);
+            $browser->visit('/members');
+            $this->waitForAlpine($browser);
+            $browser->waitForText('beta.staff@example.com')->assertDontSee('alpha.staff@example.com');
         });
     }
 }

@@ -22,7 +22,7 @@ class DashboardController extends Controller
         $user = auth()->user();
 
         if ($user->globalRole() !== null) {
-            return view('dashboard.dashboard', [
+            return view('dashboard.index', [
                 'view' => 'global',
                 'totalStores' => Store::count(),
             ]);
@@ -31,17 +31,17 @@ class DashboardController extends Controller
         $stores = $user->stores()->get();
 
         if ($stores->isEmpty()) {
-            return view('dashboard.dashboard', ['view' => 'empty']);
+            return view('dashboard.index', ['view' => 'empty']);
         }
 
         // Smart default: auto-select a single store; several stores need a pick.
-        if ($this->resolveCurrentStore($user, $stores) === null) {
+        if ($this->resolveCurrentStore($stores) === null) {
             return redirect()->route('stores.select');
         }
 
         // The active store is shown by the header switcher; the dashboard body is a
         // clean slate for future store-specific content.
-        return view('dashboard.dashboard', ['view' => 'store']);
+        return view('dashboard.index', ['view' => 'store']);
     }
 
     /**
@@ -83,7 +83,7 @@ class DashboardController extends Controller
      * store is auto-selected (and remembered) so the user never has to pick.
      * Returns null only when several stores exist and none is chosen yet.
      */
-    private function resolveCurrentStore($user, $stores): ?Store
+    private function resolveCurrentStore($stores): ?Store
     {
         $currentId = session('current_store_id');
 

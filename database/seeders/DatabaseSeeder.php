@@ -15,75 +15,47 @@ class DatabaseSeeder extends Seeder
     use WithoutModelEvents;
 
     /**
-     * Seed the application's database.
+     * Seed the application's database. Safe to run again: everything is matched, never duplicated.
      */
     public function run(): void
     {
-        // 1. Create permissions
-        $permissions = [
-            'user-view' => 'View Users',
-            'user-store' => 'Create Users',
-            'user-update' => 'Update Users',
-            'user-destroy' => 'Delete Users',
-            'user-store-view' => 'View User Store Assignments',
-            'user-store-assign' => 'Assign User to Store',
-            'user-store-unassign' => 'Remove User from Store',
-            'store-view' => 'View Stores',
-            'store-store' => 'Create Stores',
-            'store-update' => 'Update Stores',
-            'store-destroy' => 'Delete Stores',
-            'role-view' => 'View Roles',
-            'role-store' => 'Create Roles',
-            'role-update' => 'Update Roles',
-            'role-destroy' => 'Delete Roles',
-            'permission-view' => 'View Permissions',
-            'permission-store' => 'Create Permissions',
-            'permission-update' => 'Update Permissions',
-            'permission-destroy' => 'Delete Permissions',
-            'activity-view' => 'View Activity Log',
-        ];
-
-        foreach ($permissions as $name => $label) {
+        // 1. The permission catalogue (the migrations already insert the one this release ships with), labels
+        //    repaired on every run.
+        foreach (Permission::LABELS as $name => $label) {
             Permission::updateOrCreate(['name' => $name], ['label' => $label]);
         }
 
-        // 2. Create roles
-        $superAdminRole = Role::firstOrCreate(['name' => 'Super-Admin', 'created_by' => null], ['is_global' => true]);
+        // 2. The Super-Admin role — found by its exact name (Role::SUPER_ADMIN) — holds the whole catalogue.
+        $superAdminRole = Role::find(Role::superAdminId()) ?? new Role(['name' => Role::SUPER_ADMIN]);
+        $superAdminRole->fill(['is_global' => true])->save();
+        $superAdminRole->permissions()->sync(Permission::pluck('id'));
 
-        // Public signup needs exactly one default role. Seed a sensible "Store Owner"
-        // only when none is marked yet — an existing choice is never overridden.
-        if (! Role::where('is_signup_default', true)->exists()) {
-            $storeOwnerRole = Role::firstOrCreate(
-                // created_by is part of the match: role names are only unique per
-                // creator now, so a user-created "Store Owner" must never be picked.
-                ['name' => 'Store Owner', 'created_by' => null],
-                ['is_signup_default' => true]
-            );
-            $storeOwnerRole->permissions()->syncWithoutDetaching(
-                Permission::whereIn('name', [
-                    'user-view', 'user-store', 'user-store-view', 'user-store-assign',
-                    'role-view', 'role-store', 'store-view',
-                ])->pluck('id')
-            );
+        // 3. The Owner role — the store role whose holders own their store; public signup needs it. The
+        //    migrations create all four starter roles (2026_09_16_110200_insert_permissions_and_starter_roles); this only puts the Owner role back
+        //    should it be missing, because its name and permissions are the super admin's to change (Roles
+        //    page) and a re-seed must never undo that. The other starters are ordinary store roles, so a
+        //    re-seed never brings back one the super admin deleted.
+        $owner = Role::firstOrCreate(
+            ['key' => Role::OWNER],
+            ['name' => Role::STARTERS[Role::OWNER]['name'], 'is_global' => false, 'store_id' => null, 'created_by' => null]
+        );
+
+        if ($owner->wasRecentlyCreated) {
+            $owner->permissions()->sync(Permission::whereIn('name', Role::starterPermissions(Role::OWNER))->pluck('id'));
         }
 
-        // 3. Assign permissions to roles
-        $superAdminRole->permissions()->sync(Permission::all());
-
-        // 4. Create the Super Admin user.
+        // 4. The Super Admin account.
         $superAdmin = User::firstOrNew(['email' => 'admin@gmail.com']);
         $superAdmin->fill([
             'first_name' => 'Admin',
             'last_name' => 'Momin',
             'phone' => '0000000000',
-            'created_by' => null,
             'email_verified_at' => now(),
         ]);
 
-        // Set/rotate the password only when creating the admin, or when an explicit
-        // SEED_ADMIN_PASSWORD is provided — a routine re-seed must NOT silently
-        // rotate an existing admin's working password. When creating without the
-        // env key a random one is generated and printed ONCE.
+        // Set the password only when creating the admin, or when SEED_ADMIN_PASSWORD is given —
+        // a routine re-seed must never silently rotate a working password. Without the env key
+        // a random one is generated and printed ONCE.
         $envPassword = env('SEED_ADMIN_PASSWORD');
         if (! $superAdmin->exists || $envPassword) {
             $password = $envPassword ?: Str::random(16);
@@ -94,8 +66,7 @@ class DatabaseSeeder extends Seeder
         }
         $superAdmin->save();
 
-        // Attach on the global sentinel (store_id = 0) with the Super-Admin role —
-        // resolved by object, never a hardcoded id, so a recreated role still works.
+        // Held on the platform row (store_id = 0), by role object — never a hardcoded id.
         $superAdmin->stores()->syncWithoutDetaching([
             0 => ['role_id' => $superAdminRole->id],
         ]);

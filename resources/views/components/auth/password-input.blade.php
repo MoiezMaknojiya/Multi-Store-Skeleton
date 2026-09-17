@@ -2,15 +2,15 @@
      The input starts with type="password" as a static fallback so the password
      is hidden even before Alpine binds. Once Alpine binds, :type takes over
      and toggles between 'password' and 'text' based on the `show` flag. --}}
-@props(['name' => 'password', 'placeholder' => 'Enter your password', 'autocomplete' => 'current-password', 'alpine' => 'passwordToggle()'])
+@props(['name' => 'password', 'placeholder' => 'Enter your password', 'autocomplete' => 'current-password'])
 
-<div class="relative" x-data="{{ $alpine }}">
+<div class="relative" x-data="passwordToggle()">
     <input id="{{ $name }}" type="password" :type="show ? 'text' : 'password'" name="{{ $name }}"
         autocomplete="{{ $autocomplete }}"
         placeholder="{{ $placeholder }}"
         class="form-input-auth pr-11 @error($name) border-red-500 @enderror">
 
-    <button type="button" @click="toggle ? toggle() : (show = !show)"
+    <button type="button" @click="toggle()"
         class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600">
         {{-- Eye open icon (password hidden) --}}
         <svg x-show="!show" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

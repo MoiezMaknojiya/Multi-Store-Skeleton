@@ -29,7 +29,7 @@
                             <p x-show="item.label" class="text-xs text-gray-400 dark:text-gray-500" x-text="item.name"></p>
                         </td>
                         <td class="px-5 py-4">
-                            <x-crud.table-actions editClick="openFormModal(item)" deleteClick="confirmDelete(item)" editCan="permission-update" deleteCan="permission-destroy" />
+                            <x-crud.table-actions editClick="openFormModal(item)" deleteClick="confirmDelete(item)" editCan="permission-update" deleteCan="permission-destroy" dusk="permission" />
                         </td>
                     </tr>
                 </template>
@@ -50,26 +50,15 @@
                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
                     Are you sure you want to delete
                     <span x-text="selectedItem?.name" class="font-semibold"></span>?
-                    This action cannot be undone.
                 </p>
 
-                <div class="mt-4">
-                    <x-input-label for="delete-permission-password" value="Confirm your password" />
-                    <x-text-input
-                        id="delete-permission-password"
-                        type="password"
-                        class="mt-1 block w-full"
-                        x-model="deletePassword"
-                        autocomplete="current-password"
-                    />
-                    <p x-show="deleteError" x-text="deleteError" class="mt-2 text-sm text-red-600 dark:text-red-400"></p>
-                </div>
+                <x-crud.password-confirm id="delete-permission-password" />
 
                 <div class="mt-6 flex justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-permission-deletion')">
                         Cancel
                     </x-secondary-button>
-                    <x-danger-button x-bind:disabled="deleting">
+                    <x-danger-button x-bind:disabled="deleting" dusk="confirm-permission-deletion-confirm">
                         Delete Permission
                     </x-danger-button>
                 </div>

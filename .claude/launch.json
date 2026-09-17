@@ -12,6 +12,13 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173
+    },
+    {
+      "name": "dusk-serve",
+      "runtimeExecutable": "php",
+      "runtimeArgs": ["artisan", "serve", "--env=dusk", "--host=localhost", "--port=8001", "--no-reload"],
+      "port": 8001,
+      "url": "http://localhost:8001"
     }
   ]
 }

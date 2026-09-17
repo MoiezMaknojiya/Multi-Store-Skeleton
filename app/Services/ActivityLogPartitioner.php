@@ -5,9 +5,10 @@ namespace App\Services;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Lifecycle of the yearly activity_logs partitions, driven from the Activity
- * Log page. Retention rule (owner's decision): keep the current and previous
- * year; anything older than 2 years is dropped WITH its data.
+ * Lifecycle of the yearly activity_logs partitions — run by the monthly schedule
+ * (routes/console.php) and by the button on the Activity Log page. Retention rule
+ * (owner's decision): keep the current and previous year; anything older than 2
+ * years is dropped WITH its data.
  *
  * On MySQL this uses real RANGE partitions (instant DROP PARTITION / a
  * REORGANIZE of pmax to open the next year), so retention is at YEARLY granularity

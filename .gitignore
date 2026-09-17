@@ -4,6 +4,8 @@
 /public/build
 /public/hot
 /public/storage
+/public/dusk-storage
+/storage/app/dusk-public
 
 # ── Environment & secrets — NEVER commit these ───────────────────────
 # .env.example IS tracked, so a fresh clone knows which keys to set.
@@ -32,6 +34,7 @@ npm-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 /.phpunit.cache
+repomix-output*
 .phpunit.result.cache
 .pint.cache
 .php-cs-fixer.cache

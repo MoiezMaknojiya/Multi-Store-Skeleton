@@ -3,6 +3,17 @@
 use App\Models\Role;
 use App\Models\Store;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
+
+/*
+|--------------------------------------------------------------------------
+| Public signup (docs/STORE-ORGANIZATION-SPEC.md rule 17)
+|--------------------------------------------------------------------------
+|
+| One form: the account, the store, and the person's membership of it as its Owner. The role
+| is never read from the request.
+|
+*/
 
 function validSignupPayload(): array
 {
@@ -23,86 +34,62 @@ function validSignupPayload(): array
 }
 
 test('the registration screen renders with the store fields', function () {
-    Role::create(['name' => 'Store Owner', 'is_signup_default' => true]);
-
-    $response = $this->get('/register');
-
-    $response->assertOk();
-    $response->assertSee('Your Store');
-    $response->assertSee('Store Name');
+    $this->get('/register')->assertOk()->assertSee('Your Store')->assertSee('Store Name');
 });
 
-test('signing up creates the owner, their store, and the default-role assignment', function () {
-    $admin = createSuperAdmin([]);
-    $ownerRole = Role::create(['name' => 'Store Owner', 'is_signup_default' => true]);
-
-    $response = $this->post('/register', validSignupPayload());
-
-    $response->assertRedirect(route('dashboard'));
+test('signing up creates the account, the store, and makes the person its Owner', function () {
+    $this->post('/register', validSignupPayload())->assertRedirect(route('dashboard'));
     $this->assertAuthenticated();
 
     $user = User::where('email', 'sana@example.com')->firstOrFail();
     $store = Store::where('name', 'Sana Superstore')->firstOrFail();
 
-    // Attributed to the super admin so they appear in the admin's listing.
-    expect($user->created_by)->toBe($admin->id);
-    // The store belongs to the new owner (cascade-delete attribution).
-    expect($store->created_by)->toBe($user->id);
-    // Country isn't asked on the form — it defaults to USA.
-    expect($store->country)->toBe('USA');
+    expect($store->created_by)->toBe($user->id)
+        ->and($store->country)->toBe('USA')   // not asked on the form
+        ->and(roleKeyIn($user, $store))->toBe(Role::OWNER);
 
-    $this->assertDatabaseHas('store_user', [
-        'user_id' => $user->id,
-        'store_id' => $store->id,
-        'role_id' => $ownerRole->id,
-    ]);
     $this->assertDatabaseHas('activity_logs', ['action' => 'user.registered']);
 });
 
-test('signup never takes a role from the request — the server default always wins', function () {
-    createSuperAdmin([]);
-    $ownerRole = Role::create(['name' => 'Store Owner', 'is_signup_default' => true]);
+test('signup never takes a role from the request', function () {
+    createSuperAdmin();
     $superAdminRole = Role::where('name', 'Super-Admin')->first();
 
-    // A malicious payload trying to smuggle a role_id in.
     $this->post('/register', [...validSignupPayload(), 'role_id' => $superAdminRole->id]);
 
     $user = User::where('email', 'sana@example.com')->firstOrFail();
-    $this->assertDatabaseHas('store_user', ['user_id' => $user->id, 'role_id' => $ownerRole->id]);
-    expect($user->isSuperAdmin())->toBeFalse();
+    expect($user->isSuperAdmin())->toBeFalse()
+        ->and(DB::table('store_user')->where('user_id', $user->id)->pluck('role_id')->all())
+        ->toBe([Role::starter(Role::OWNER)->id]);
 });
 
-test('signup is rejected gracefully when no default role is configured', function () {
-    createSuperAdmin([]);
-
-    $response = $this->post('/register', validSignupPayload());
-
-    $response->assertSessionHasErrors(['email']);
-    $this->assertDatabaseMissing('users', ['email' => 'sana@example.com']);
-    $this->assertDatabaseMissing('stores', ['name' => 'Sana Superstore']);
-});
-
-test('a store-scoped role never serves as the signup default — signup closes instead', function () {
-    createSuperAdmin([]);
-    $store = Store::factory()->create();
-    // Signup builds a BRAND-NEW store, so a role tied to an existing one must not
-    // govern it. A mis-flagged role counts as "no default" — the safe failure.
-    Role::create(['name' => 'Store Owner', 'is_signup_default' => true, 'store_id' => $store->id]);
+test('without the Owner role, signup closes instead of guessing', function () {
+    Role::where('key', Role::OWNER)->delete();
 
     $this->get('/register')->assertOk()->assertSee('Registration is not available right now.');
-
     $this->post('/register', validSignupPayload())->assertSessionHasErrors(['email']);
+
     $this->assertDatabaseMissing('users', ['email' => 'sana@example.com']);
     $this->assertDatabaseMissing('stores', ['name' => 'Sana Superstore']);
 });
 
 test('an invalid store half creates nothing — no half-registered state', function () {
-    createSuperAdmin([]);
-    Role::create(['name' => 'Store Owner', 'is_signup_default' => true]);
-
     $payload = validSignupPayload();
     $payload['store_name'] = '';
 
     $this->post('/register', $payload)->assertSessionHasErrors(['store_name']);
+
     $this->assertDatabaseMissing('users', ['email' => 'sana@example.com']);
+});
+
+test('the email is kept lowercased, so capitals can never make a second account', function () {
+    $this->post('/register', [...validSignupPayload(), 'email' => 'Sana@Example.COM'])->assertRedirect(route('dashboard'));
+
+    expect(User::sole()->email)->toBe('sana@example.com');
+
+    auth()->logout();
+    $this->post('/register', [...validSignupPayload(), 'email' => 'SANA@example.com', 'store_name' => 'Second Shop'])
+        ->assertSessionHasErrors('email');
+
+    expect(User::count())->toBe(1);
 });

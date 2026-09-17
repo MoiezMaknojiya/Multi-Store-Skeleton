@@ -1,13 +1,18 @@
-@props(['name', 'show' => false, 'maxWidth' => '2xl', 'title' => null])
+@props(['name', 'show' => false, 'maxWidth' => '2xl'])
 
 @php
+// Falls back rather than exploding: an unknown key used to be a fatal
+// "Undefined array key" that took the whole PAGE down, not just the modal — a
+// typo in one attribute is not worth a white screen.
 $maxWidth = [
     'sm' => 'sm:max-w-sm',
     'md' => 'sm:max-w-md',
     'lg' => 'sm:max-w-lg',
     'xl' => 'sm:max-w-xl',
     '2xl' => 'sm:max-w-2xl',
-][$maxWidth];
+    '3xl' => 'sm:max-w-3xl',
+    '4xl' => 'sm:max-w-4xl',
+][$maxWidth] ?? 'sm:max-w-2xl';
 @endphp
 
 <div
@@ -34,18 +39,8 @@ $maxWidth = [
         x-on:click.stop
         class="relative z-10 bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-[calc(100%-1rem)] sm:w-full {{ $maxWidth }} sm:mx-auto"
     >
-        @if($title)
-            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-                <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ $title }}</h3>
-            </div>
-        @endif
         <div class="p-6">
             {{ $slot }}
         </div>
-        @isset($footer)
-            <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 rounded-b-lg">
-                {{ $footer }}
-            </div>
-        @endisset
     </div>
 </div>

@@ -7,12 +7,12 @@ use App\Models\ActivityLog;
 use App\Models\Role;
 use App\Models\Store;
 use App\Models\User;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules;
 use Illuminate\View\View;
@@ -24,23 +24,29 @@ class RegisteredUserController extends Controller
     {
         return view('auth.register', [
             'states' => Store::US_STATES,
-            'signupOpen' => self::signupRole()->exists(),
+            'signupOpen' => Role::where('key', Role::OWNER)->exists(),
         ]);
     }
 
     /**
-     * Handle the sign-up: one transaction creates the user, their store, and the
-     * assignment. The role is ALWAYS the server-side signup default — never taken
-     * from the request, so nobody can sign themselves up into a powerful role.
+     * Handle the sign-up: one transaction creates the account, the store, and the person's
+     * membership of it as its Owner (docs/STORE-ORGANIZATION-SPEC.md rule 17). The role is
+     * never taken from the request.
      */
     public function store(Request $request): RedirectResponse
     {
-        $role = self::signupRole()->first();
+        $role = Role::where('key', Role::OWNER)->first();
 
         if (! $role) {
             return back()->withInput()->withErrors([
                 'email' => 'Registration is not available right now. Please contact the administrator.',
             ]);
+        }
+
+        // One address is one account whatever its capitals: kept lowercased, the way invitations and
+        // the profile keep it, so "Sana@" and "sana@" can never become two people on any database.
+        if (is_string($request->input('email'))) {
+            $request->merge(['email' => Str::lower($request->input('email'))]);
         }
 
         $validated = $request->validate([
@@ -67,9 +73,6 @@ class RegisteredUserController extends Controller
                 'phone' => $validated['phone'],
                 'email' => $validated['email'],
                 'password' => Hash::make($validated['password']),
-                // Self-registered owners are attributed to the super admin, so they
-                // show up in (and are manageable from) the admin's user listing.
-                'created_by' => User::firstSuperAdminId(),
             ]);
 
             $store = Store::create([
@@ -82,7 +85,6 @@ class RegisteredUserController extends Controller
                 // Signup doesn't ask for a country — everything is US-based.
                 'country' => 'USA',
                 'is_active' => true,
-                // The store is the owner's creation: deleting them cascades it away.
                 'created_by' => $user->id,
             ]);
 
@@ -95,20 +97,8 @@ class RegisteredUserController extends Controller
         $request->session()->regenerate();
 
         ActivityLog::record('user.registered', $user,
-            "Self-registered: {$user->name} ({$user->email}) with store {$store->name}");
+            "Self-registered: {$user->name} ({$user->email}) with store {$store->name}", storeId: $store->id);
 
         return redirect()->route('dashboard');
-    }
-
-    /** The one role public signup may hand out. Every condition is defensive: the
-     *  flag is the intent, while `is_global = false` and a NULL `store_id` make a
-     *  mis-flagged role count as "no default" rather than as a security hole —
-     *  signup creates a brand-new store, so the role must belong to no store and
-     *  span none. A closed signup is the safe failure. */
-    private static function signupRole(): Builder
-    {
-        return Role::where('is_signup_default', true)
-            ->where('is_global', false)
-            ->whereNull('store_id');
     }
 }

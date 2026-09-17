@@ -1,8 +1,19 @@
-{{-- Store card displayed on the user dashboard. Shows store name, location, role,
-     slug, active status, and a "Manage Store" button that switches the session store. --}}
+{{-- Store card on the store-selection page. Shows store name, location, role,
+     slug and active status, and switches the session store when picked.
+
+     The WHOLE card is the click target, not just the "Manage Store" words: the
+     card is what a person reads as one thing, so it is what they aim at. That is
+     done with the stretch-to-box utility on the button — an overlay that covers
+     this box — rather than by wrapping everything in a <button>, which would put
+     block elements inside a button and is not valid HTML.
+
+     Consequence to respect: nothing else in this card may become clickable. The
+     overlay sits above the content and would swallow the click. --}}
 @props(['store'])
 
-<div class="bg-white dark:bg-gray-800 rounded-xs border border-gray-100 dark:border-gray-700 overflow-hidden">
+<div class="relative bg-white dark:bg-gray-800 rounded-xs border border-gray-100 dark:border-gray-700 overflow-hidden
+            transition hover:border-blue-500 hover:shadow-md
+            focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/40">
     <div class="p-5">
         {{-- Header: icon, name, location, status badge --}}
         <div class="flex items-start justify-between">
@@ -44,12 +55,15 @@
             </div>
         </div>
 
-        {{-- Manage Store action --}}
+        {{-- Manage Store action. Still a real button inside a real form — keyboard
+             and screen readers get an ordinary control; stretch-to-box only widens
+             where a mouse may land. --}}
         <div class="mt-4">
             <form method="POST" action="{{ route('store.switch') }}">
                 @csrf
                 <input type="hidden" name="store_id" value="{{ $store['id'] }}">
-                <button type="submit" dusk="switch-store-{{ $store['id'] }}" class="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 inline-flex items-center gap-1">
+                <button type="submit" dusk="switch-store-{{ $store['id'] }}"
+                    class="stretch-to-box cursor-pointer text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 inline-flex items-center gap-1 focus:outline-none">
                     Manage Store
                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />

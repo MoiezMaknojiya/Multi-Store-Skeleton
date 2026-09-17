@@ -7,39 +7,41 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
-use Laravel\Sanctum\HasApiTokens;
 
+/**
+ * An account: a login and nothing more (docs/STORE-ORGANIZATION-SPEC.md rule 1). Nobody owns it,
+ * and it gives no power by itself — power comes from memberships (`store_user`): a role in a
+ * store, or a platform role on the store_id = 0 row.
+ */
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasFactory, Notifiable;
 
     protected $fillable = [
-        'first_name', 'last_name', 'phone', 'email', 'password', 'created_by',
+        'first_name', 'last_name', 'phone', 'email', 'password',
     ];
 
-    public function scopeVisibleTo(Builder $query, User $viewer): Builder
+    /**
+     * A deleted account leaves nothing pointing at it (owner's rules, 2026-09-17): its memberships go through their
+     * foreign key, what it made stays with its stores (`created_by` empties the same way) — and here its sign-ins on
+     * every device, its password-reset link and every invitation waiting for its email go too.
+     */
+    protected static function booted(): void
     {
-        $query->where('id', '!=', $viewer->id);
+        static::deleted(function (User $user) {
+            if (config('session.driver') === 'database') {
+                DB::table(config('session.table', 'sessions'))->where('user_id', $user->id)->delete();
+            }
 
-        // People are NOT store-scoped, and that is deliberate (owner's decision):
-        // whoever you created stays yours in every store you work in, so you can
-        // staff another of your own stores without going to an admin. The ROLE is
-        // the part that never travels — see Role::visibleTo.
-        if (! $viewer->isSuperAdmin()) {
-            return $query->where('created_by', $viewer->id);
-        }
+            DB::table(config('auth.passwords.users.table', 'password_reset_tokens'))->where('email', $user->email)->delete();
+            $user->invitationsToEmail()->delete();
+        });
+    }
 
-        // A super admin sees every regular user, but other super admins stay hidden
-        // unless the viewer is the one who created them — so a promoted super admin
-        // cannot see (or act on) the admin who promoted them.
-        $superAdminIds = DB::table('store_user')
-            ->join('roles', 'store_user.role_id', '=', 'roles.id')
-            ->where('roles.name', 'Super-Admin')
-            ->select('store_user.user_id');
-
-        return $query->where(fn (Builder $q) => $q
-            ->whereNotIn('id', $superAdminIds)
-            ->orWhere('created_by', $viewer->id));
+    /** The invitations addressed to this account's email — to any store or to the platform team, expired ones included. */
+    public function invitationsToEmail(): Builder
+    {
+        return Invitation::where('email', Invitation::normalizeEmail($this->email));
     }
 
     public function getNameAttribute(): string
@@ -72,27 +74,32 @@ class User extends Authenticatable
         return parent::refresh();
     }
 
+    /** Super-Admin is a platform role, so it is held on the store_id = 0 row (the tiers are exclusive). */
     public function isSuperAdmin(): bool
     {
-        // Check if any store assignment has a role named "Super-Admin"
-        return $this->isSuperAdminMemo ??= DB::table('store_user')
-            ->join('roles', 'store_user.role_id', '=', 'roles.id')
-            ->where('store_user.user_id', $this->id)
-            ->where('roles.name', 'Super-Admin')
-            ->exists();
+        return $this->isSuperAdminMemo ??= ($this->globalRole()?->isSuperAdmin() ?? false);
     }
 
     /**
-     * The id of the (first) user holding the Super-Admin role — used to attribute
-     * self-registered owners so they appear in the admin's user listing.
+     * The primary super admin: the first person ever given the Super-Admin role. Nobody else
+     * may delete them or take their role, and only they may do either to another super admin
+     * (docs/STORE-ORGANIZATION-SPEC.md rule 24).
      */
-    public static function firstSuperAdminId(): ?int
+    public static function primarySuperAdminId(): ?int
     {
-        return DB::table('store_user')
-            ->join('roles', 'store_user.role_id', '=', 'roles.id')
-            ->where('roles.name', 'Super-Admin')
-            ->orderBy('store_user.id')
-            ->value('store_user.user_id');
+        $roleId = Role::superAdminId();
+
+        $userId = $roleId === null ? null : DB::table('store_user')
+            ->where('role_id', $roleId)
+            ->orderBy('id')
+            ->value('user_id');
+
+        return $userId === null ? null : (int) $userId;
+    }
+
+    public function isPrimarySuperAdmin(): bool
+    {
+        return $this->id === self::primarySuperAdminId();
     }
 
     protected $hidden = ['password', 'remember_token'];
@@ -105,7 +112,7 @@ class User extends Authenticatable
         ];
     }
 
-    // Relationships
+    /** The stores this person is a member of (the platform row, store_id = 0, has no store and is not among them). */
     public function stores()
     {
         return $this->belongsToMany(Store::class, 'store_user')
@@ -114,7 +121,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Get the user's role in the currently selected store.
+     * The role this person holds in the currently selected store.
      */
     public function currentRole(): ?Role
     {
@@ -132,8 +139,18 @@ class User extends Authenticatable
     }
 
     /**
-     * The role held on the global sentinel row (store_id = 0), if any:
-     * Super-Admin, or any custom role marked is_global.
+     * Whether Settings has a Stores tab for this person (owner's rule, 2026-09-17): a store member working in
+     * a store whose role there holds View Stores. Without it "Your stores" stays on the profile, so anybody
+     * can still leave a store.
+     */
+    public function hasStoresTab(): bool
+    {
+        return $this->globalRole() === null && (bool) session('current_store_id') && $this->can('store-view');
+    }
+
+    /**
+     * The platform role, held on the store_id = 0 row, if any: Super-Admin, or any role the
+     * super admin made for the platform team.
      */
     public function globalRole(): ?Role
     {
@@ -151,9 +168,8 @@ class User extends Authenticatable
     }
 
     /**
-     * Check if the user has a specific permission in the current store context.
-     * With no store selected, the user's global role (the store_id = 0 sentinel
-     * row) applies — Super-Admin, or any custom global role.
+     * Whether this person holds a permission where they stand: their role in the selected store,
+     * or — with no store selected — their platform role.
      */
     public function hasPermissionInCurrentStore(string $permissionName): bool
     {
@@ -162,17 +178,20 @@ class User extends Authenticatable
 
     /**
      * Every permission name the user holds in the current context (the session's
-     * store role, or their global role). Loaded ONCE per request per context —
+     * store role, or their platform role). Loaded ONCE per request per context —
      * a page render fires a dozen @can checks and they all share this list.
      *
      * @return array<int, string>
      */
     public function contextPermissionNames(): array
     {
-        $key = (string) (session('current_store_id') ?? 'global');
+        // The platform team never works inside a store (the tiers are exclusive), so a store left
+        // in a platform account's session can never swap its platform role for no role at all.
+        $platformRole = $this->globalRole();
+        $key = $platformRole !== null ? 'platform' : 'store:'.(int) session('current_store_id');
 
         if (! array_key_exists($key, $this->permissionNamesMemo)) {
-            $role = session('current_store_id') ? $this->currentRole() : $this->globalRole();
+            $role = $platformRole ?? (session('current_store_id') ? $this->currentRole() : null);
 
             $this->permissionNamesMemo[$key] = $role
                 ? $role->permissions()->pluck('name')->all()
@@ -180,67 +199,5 @@ class User extends Authenticatable
         }
 
         return $this->permissionNamesMemo[$key];
-    }
-
-    /**
-     * The owner's rule: deleting a user deletes EVERYTHING they created,
-     * recursively — their users (the whole subtree), the roles they created
-     * (unless still assigned to a surviving user), and the stores they created.
-     * Hard delete for users, by explicit decision. Returns counts for the log.
-     *
-     * @return array{users: int, roles: int, stores: int}
-     */
-    public function deleteCascade(): array
-    {
-        // Collect the whole created_by subtree, level by level.
-        $subtreeIds = [];
-        $queue = [$this->id];
-        while ($queue !== []) {
-            $queue = User::whereIn('created_by', $queue)->pluck('id')->all();
-            $subtreeIds = array_merge($subtreeIds, $queue);
-        }
-        $allIds = array_merge($subtreeIds, [$this->id]);
-
-        $createdRoleIds = Role::whereIn('created_by', $allIds)->pluck('id');
-        $createdStoreIds = Store::whereIn('created_by', $allIds)->pluck('id');
-
-        // Users first: their store_user rows cascade away at the DB level.
-        User::whereIn('id', $allIds)->delete();
-
-        // Their roles — but a role still assigned to a SURVIVING user stays alive
-        // (its created_by just went null via the FK); deleting it would strip them.
-        $deletableRoleIds = Role::whereIn('id', $createdRoleIds)->whereDoesntHave('users')->pluck('id');
-        DB::table('role_has_permissions')->whereIn('role_id', $deletableRoleIds)->delete();
-        Role::whereIn('id', $deletableRoleIds)->delete();
-
-        // Their stores: soft-deleted (matching store behavior) with users detached.
-        $stores = Store::whereIn('id', $createdStoreIds)->get();
-        foreach ($stores as $store) {
-            $store->users()->detach();
-            $store->delete();
-        }
-
-        return [
-            'users' => count($subtreeIds),
-            'roles' => $deletableRoleIds->count(),
-            'stores' => $stores->count(),
-        ];
-    }
-
-    public function assignablePermissions(): Builder
-    {
-        if ($this->isSuperAdmin()) {
-            return Permission::query();
-        }
-
-        $role = session('current_store_id') ? $this->currentRole() : $this->globalRole();
-        if (! $role) {
-            return Permission::query()->whereRaw('0 = 1');
-        }
-
-        return Permission::query()->whereIn(
-            'id',
-            $role->permissions()->select('permissions.id')
-        );
     }
 }

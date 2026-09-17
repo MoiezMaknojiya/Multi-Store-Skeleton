@@ -10,7 +10,7 @@ return new class extends Migration
      *
      * Partitions activity_logs by YEAR(created_at) so a whole year of audit data
      * can be dropped in one instant DROP PARTITION (the "older than 2 years"
-     * lifecycle, driven from the Activity Log page).
+     * lifecycle, run by the monthly schedule and the Activity Log page's button).
      *
      * MySQL-only by nature: SQLite (the test databases) has no partitioning, and
      * the feature is transparent to queries, so other drivers simply skip this.

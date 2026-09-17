@@ -41,11 +41,11 @@
                 {{-- Theme Toggle --}}
                 <button @click="toggleDark()"
                     class="p-2 rounded-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
-                    <svg :class="darkMode ? 'block' : 'hidden'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg data-theme-icon="dark" :class="darkMode ? 'block' : 'hidden'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
                     </svg>
-                    <svg :class="darkMode ? 'hidden' : 'block'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg data-theme-icon="light" :class="darkMode ? 'hidden' : 'block'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                     </svg>
@@ -62,8 +62,8 @@
 
                     <div x-show="userMenu" @click.outside="close()" x-cloak
                         class="absolute right-0 mt-2 w-48 rounded-xs shadow-lg z-50 py-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
-                        <a href="{{ route('profile.edit') }}"
-                            class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Profile</a>
+                        <a href="{{ route('profile.edit') }}" dusk="user-menu-settings"
+                            class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Settings</a>
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf
                             <button type="submit" dusk="logout-button"

@@ -94,8 +94,8 @@
             
             <div x-show="userMenu" @click.outside="close()" x-cloak
                 class="absolute right-0 mt-2 w-48 rounded-xs shadow-lg z-50 py-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
-                <a href="{{ route('profile.edit') }}"
-                    class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Profile</a>
+                <a href="{{ route('profile.edit') }}" dusk="user-menu-settings"
+                    class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Settings</a>
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
                     <button type="submit" dusk="logout-button"

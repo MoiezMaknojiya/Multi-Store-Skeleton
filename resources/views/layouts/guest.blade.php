@@ -32,20 +32,6 @@
                 </div>
                 <h1 class="text-3xl font-bold text-white mb-4">{{ config('app.name', 'Laravel') }}</h1>
                 <p class="text-gray-400 text-sm max-w-xs mx-auto">Sign in to access your dashboard and manage everything from one place.</p>
-                <div class="mt-12 flex gap-10 justify-center">
-                    <div class="text-center">
-                        <div class="text-2xl font-bold text-white">10K+</div>
-                        <div class="text-gray-500 text-xs mt-1">Users</div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-2xl font-bold text-white">99.9%</div>
-                        <div class="text-gray-500 text-xs mt-1">Uptime</div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-2xl font-bold text-white">24/7</div>
-                        <div class="text-gray-500 text-xs mt-1">Support</div>
-                    </div>
-                </div>
             </div>
         </div>
     </div>

@@ -4,7 +4,7 @@
             {{ __('Delete Account') }}
         </h2>
         <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            {{ __('Once your account is deleted, all of its resources and data will be permanently deleted.') }}
+            {{ __('Deleting your account removes you from every store you belong to and withdraws any invitation waiting for your email. What you added to those stores — media, screens, playlists — stays with them. If you are the only Owner of a store, make someone else an Owner of it first.') }}
         </p>
     </header>
 
@@ -23,7 +23,7 @@
             </h2>
 
             <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                {{ __('Once your account is deleted, all of its resources and data will be permanently deleted. Please enter your password to confirm you would like to permanently delete your account.') }}
+                {{ __('Your account and your access to every store will be removed for good. Please enter your password to confirm.') }}
             </p>
 
             <div class="mt-6">

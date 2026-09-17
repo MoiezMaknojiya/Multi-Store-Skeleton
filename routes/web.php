@@ -1,13 +1,26 @@
 <?php
 
 use App\Http\Controllers\ActivityLogController;
+use App\Http\Controllers\Advertising\CampaignController;
+use App\Http\Controllers\Advertising\NetworkAdsController;
 use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\ImpersonateController;
-use App\Http\Controllers\PermissionController;
+use App\Http\Controllers\InvitationResponseController;
+use App\Http\Controllers\Platform\ImpersonateController;
+use App\Http\Controllers\Platform\PermissionController;
+use App\Http\Controllers\Platform\PlatformInvitationController;
+use App\Http\Controllers\Platform\StoreController;
+use App\Http\Controllers\Platform\UserController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoleController;
-use App\Http\Controllers\StoreController;
-use App\Http\Controllers\UserController;
+use App\Http\Controllers\Signage\ChannelAdController;
+use App\Http\Controllers\Signage\ChannelController;
+use App\Http\Controllers\Signage\DaypartController;
+use App\Http\Controllers\Signage\MediaController;
+use App\Http\Controllers\Signage\PlaylistController;
+use App\Http\Controllers\Signage\ScreenController;
+use App\Http\Controllers\Store\InvitationController;
+use App\Http\Controllers\Store\MemberController;
+use App\Http\Controllers\Store\StoreSettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -15,10 +28,32 @@ Route::get('/', function () {
 });
 
 // -----------------------------------------------------------------------
+// Player  (the page a TV loads - open on purpose: a screen cannot log in.
+// It is an empty shell; every byte of real content is fetched from
+// routes/device.php with the token this page was handed at pairing.)
+// -----------------------------------------------------------------------
+Route::view('/player', 'player.index')->name('player');
+
+// -----------------------------------------------------------------------
+// Invitations  (the link in the email — open to guests on purpose: the
+// person may not have an account yet. The token is the only key; the
+// database holds just its hash. See InvitationResponseController.)
+// -----------------------------------------------------------------------
+Route::prefix('invitations/{token}')
+    ->where(['token' => '[A-Za-z0-9]{64}'])
+    ->middleware('throttle:invitation-response')
+    ->group(function () {
+        Route::get('/', [InvitationResponseController::class, 'show'])->name('invitations.show');
+        Route::post('/accept', [InvitationResponseController::class, 'accept'])->middleware('auth')->name('invitations.accept');
+        Route::post('/register', [InvitationResponseController::class, 'register'])->middleware('guest')->name('invitations.register');
+        Route::post('/decline', [InvitationResponseController::class, 'decline'])->name('invitations.decline');
+    });
+
+// -----------------------------------------------------------------------
 // Dashboard
 // -----------------------------------------------------------------------
 Route::get('/dashboard', [DashboardController::class, 'index'])->middleware('auth')->name('dashboard');
-// Store selection page (auth only — it lists the user's OWN assignments, not the
+// Store selection page (auth only — it lists the person's OWN memberships, not the
 // stores module, so it is not gated by store-view).
 Route::get('/select-store', [DashboardController::class, 'selectStore'])->middleware('auth')->name('stores.select');
 
@@ -32,68 +67,232 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     // Delete User Account
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    // Leave one of your stores — any member, whatever their role (rule 10)
+    Route::delete('/profile/stores/{store}', [ProfileController::class, 'leaveStore'])->whereNumber('store')->name('profile.stores.leave');
 });
 
 // -----------------------------------------------------------------------
 // Admin Routes  (auth required on every group below; throttled per user)
 // -----------------------------------------------------------------------
-Route::middleware(['auth', 'throttle:240,1'])->group(function () {
+Route::middleware(['auth', 'throttle:admin'])->group(function () {
 
     // -------------------------------------------------------------------
-    // Users
+    // Members  (the current store's team — docs/STORE-ORGANIZATION-SPEC.md)
+    // Whether an action is allowed ON a particular member (hierarchy, the
+    // last Owner) is decided by StoreTeam; the gates here say only that the
+    // person may do this kind of thing in this store at all.
     // -------------------------------------------------------------------
-    Route::prefix('users')->group(function () {
+    Route::prefix('members')->group(function () {
+        Route::get('/', [MemberController::class, 'index'])->middleware('can:member-view')->name('members.view');
+        Route::get('/data', [MemberController::class, 'data'])->middleware('can:member-view')->name('members.data');
+        // Anyone may leave a store they are in — except its last Owner.
+        Route::post('/leave', [MemberController::class, 'leave'])->name('members.leave');
+        Route::post('/invitations', [InvitationController::class, 'store'])->middleware(['can:member-invite', 'throttle:invitations'])->name('members.invitations.store');
+        Route::post('/invitations/{invitation}/resend', [InvitationController::class, 'resend'])->whereNumber('invitation')->middleware(['can:member-invite', 'throttle:invitations'])->name('members.invitations.resend');
+        Route::delete('/invitations/{invitation}', [InvitationController::class, 'destroy'])->whereNumber('invitation')->middleware('can:member-invite')->name('members.invitations.destroy');
+        Route::put('/{user}', [MemberController::class, 'update'])->whereNumber('user')->middleware('can:member-update')->name('members.update');
+        Route::delete('/{user}', [MemberController::class, 'destroy'])->whereNumber('user')->middleware('can:member-remove')->name('members.destroy');
+    });
 
-        // Show Users List Page
+    // -------------------------------------------------------------------
+    // Settings → Stores  (owner's rules, 2026-09-17): the store the person
+    // works in, and the stores they belong to. Plain forms, like Profile.
+    // A role does not matter, its permissions do: the tab opens with
+    // store-view, and every action asks its own permission.
+    // -------------------------------------------------------------------
+    Route::prefix('settings/store')->group(function () {
+        Route::get('/', [StoreSettingsController::class, 'edit'])->middleware('can:store-view')->name('store-settings.edit');
+        Route::put('/', [StoreSettingsController::class, 'update'])->middleware('can:store-update')->name('store-settings.update');
+
+        Route::post('/open', [StoreSettingsController::class, 'openStore'])->middleware('can:store-store')->name('store-settings.open');
+        Route::delete('/', [StoreSettingsController::class, 'destroy'])->middleware('can:store-destroy')->name('store-settings.destroy');
+    });
+
+    // -------------------------------------------------------------------
+    // Users  (every account, from the platform's side — owner's rule,
+    // 2026-09-17: a store's people are its Members page)
+    // -------------------------------------------------------------------
+    // Nobody is created or edited here — people join by invitation and manage
+    // their own details. The whole page sits behind the `global-tier` lock; the
+    // platform team itself is super-admin business.
+    Route::prefix('users')->middleware('can:global-tier')->group(function () {
         Route::get('/', [UserController::class, 'index'])->middleware('can:user-view')->name('users.view');
-        // Get Paginated Users Data (AJAX)
         Route::get('/data', [UserController::class, 'data'])->middleware('can:user-view')->name('users.data');
-        // Option lists for the assign modal — gated by the assign permission alone,
-        // so user-store-assign is self-sufficient (no store-view/role-view needed)
-        Route::get('/assignable-stores', [UserController::class, 'assignableStores'])->middleware('can:user-store-assign')->name('users.assignable-stores');
-        Route::get('/assignable-roles', [UserController::class, 'assignableRoles'])->middleware('can:user-store-assign')->name('users.assignable-roles');
-        // Onboard a new store owner: user + store + role assignment in one step —
-        // needs all three capabilities together
-        Route::post('/onboard', [UserController::class, 'onboardOwner'])->middleware(['can:user-store', 'can:store-store', 'can:user-store-assign'])->name('users.onboard');
-        // Create New User
-        Route::post('/', [UserController::class, 'store'])->middleware('can:user-store')->name('users.store');
-        // Update Existing User
-        Route::put('/{user}', [UserController::class, 'update'])->middleware('can:user-update')->name('users.update');
-        // Delete User
-        Route::delete('/{user}', [UserController::class, 'destroy'])->middleware('can:user-destroy')->name('users.destroy');
-        // ---------------------------------------------------------------
-        // User-Store Assignments
-        // ---------------------------------------------------------------
-        Route::prefix('/{user}/stores')->group(function () {
-            // Get All Store Assignments For A User
-            Route::get('/', [UserController::class, 'getStoreAssignments'])->middleware('can:user-store-view')->name('users.stores.view');
-            // Assign User To A Store With A Role
-            Route::post('/', [UserController::class, 'assignStore'])->middleware('can:user-store-assign')->name('users.stores.assign');
-            // Remove User From A Store
-            Route::delete('/{store}', [UserController::class, 'unassignStore'])->whereNumber('store')->middleware('can:user-store-unassign')->name('users.stores.unassign');
+        Route::delete('/{user}', [UserController::class, 'destroy'])->whereNumber('user')->middleware('can:user-destroy')->name('users.destroy');
 
+        Route::delete('/{user}/platform-role', [UserController::class, 'removePlatformRole'])->whereNumber('user')->middleware('can:super-admin-tier')->name('users.platform-role.destroy');
+        // Log in as this person — Super Admin only, checked in the controller.
+        Route::post('/{user}/impersonate', [ImpersonateController::class, 'start'])->whereNumber('user')->name('users.impersonate');
+        // Manage stores: put a person in a store with a role, change it, take it away — super admins
+        Route::middleware('can:super-admin-tier')->group(function () {
+            Route::get('/{user}/stores', [UserController::class, 'storeAccess'])->whereNumber('user')->name('users.stores');
+            Route::post('/{user}/stores', [UserController::class, 'assignToStore'])->whereNumber('user')->name('users.stores.store');
+            Route::put('/{user}/stores/{store}/role', [UserController::class, 'changeStoreRole'])->whereNumber(['user', 'store'])->name('users.store-role.update');
+            Route::delete('/{user}/stores/{store}', [UserController::class, 'removeFromStore'])->whereNumber(['user', 'store'])->name('users.stores.destroy');
         });
-        // Log in as this user (Super Admin only; enforced in the controller, not gated behind
-        // a permission, since it's a role-level capability rather than a grantable permission)
-        Route::post('/{user}/impersonate', [ImpersonateController::class, 'start'])->name('users.impersonate');
+
+        // Invitations to the platform team
+        Route::prefix('invitations')->middleware('can:super-admin-tier')->group(function () {
+            Route::get('/', [PlatformInvitationController::class, 'index'])->name('users.invitations.index');
+            Route::post('/', [PlatformInvitationController::class, 'store'])->middleware('throttle:invitations')->name('users.invitations.store');
+            Route::post('/{invitation}/resend', [PlatformInvitationController::class, 'resend'])->whereNumber('invitation')->middleware('throttle:invitations')->name('users.invitations.resend');
+            Route::delete('/{invitation}', [PlatformInvitationController::class, 'destroy'])->whereNumber('invitation')->name('users.invitations.destroy');
+        });
     });
 
     // -------------------------------------------------------------------
     // Stores
     // -------------------------------------------------------------------
-    Route::prefix('stores')->group(function () {
-        // Show Stores List Page
+    // Switching between the stores a member belongs to — any member, no permission.
+    Route::post('/stores/switch', [StoreController::class, 'switch'])->name('store.switch');
+
+    // Every store, from the platform's side. A store's own people change the
+    // store they work in from Settings → Stores instead (owner's rule,
+    // 2026-09-17), so the page and its writes stay above the stores.
+    Route::prefix('stores')->middleware('can:global-tier')->group(function () {
         Route::get('/', [StoreController::class, 'index'])->middleware('can:store-view')->name('stores.view');
-        // Get Paginated Stores Data (AJAX)
         Route::get('/data', [StoreController::class, 'data'])->middleware('can:store-view')->name('stores.data');
-        // Create New Store
+        // A new store for a customer, with an Owner invitation
         Route::post('/', [StoreController::class, 'store'])->middleware('can:store-store')->name('stores.store');
-        // Update Existing Store
-        Route::put('/{store}', [StoreController::class, 'update'])->middleware('can:store-update')->name('stores.update');
-        // Delete Store
-        Route::delete('/{store}', [StoreController::class, 'destroy'])->middleware('can:store-destroy')->name('stores.destroy');
-        // Switch Store
-        Route::post('/switch', [StoreController::class, 'switch'])->name('store.switch');
+        Route::put('/{store}', [StoreController::class, 'update'])->whereNumber('store')->middleware('can:store-update')->name('stores.update');
+        Route::delete('/{store}', [StoreController::class, 'destroy'])->whereNumber('store')->middleware('can:store-destroy')->name('stores.destroy');
+        // An Owner for a store that has none: a member of it is made Owner at once, anybody else is invited
+        Route::post('/{store}/owner-invitation', [StoreController::class, 'inviteOwner'])->whereNumber('store')->middleware('can:store-store')->name('stores.owner-invitation');
+    });
+
+    // -------------------------------------------------------------------
+    // Screens  (the TVs themselves)
+    // -------------------------------------------------------------------
+    Route::prefix('screens')->group(function () {
+        // Show Screens Page
+        Route::get('/', [ScreenController::class, 'index'])->middleware('can:screen-view')->name('screens.view');
+        // Get Paginated Screens Data (AJAX)
+        Route::get('/data', [ScreenController::class, 'data'])->middleware('can:screen-view')->name('screens.data');
+        // Playlist builder for one screen
+        Route::get('/{screen}', [ScreenController::class, 'show'])->whereNumber('screen')->middleware('can:screen-view')->name('screens.show');
+        Route::get('/{screen}/playlist', [PlaylistController::class, 'index'])->middleware('can:screen-view')->name('screens.playlist.view');
+        // Replace the whole playlist in one call (reorder, retime, add, remove, and
+        // each item's schedule rules, which travel with the save)
+        Route::put('/{screen}/playlist', [PlaylistController::class, 'update'])->middleware('can:screen-playlist')->name('screens.playlist.update');
+        // "When would this rule actually play?" — resolved server-side through the
+        // same code the device is answered with, so the preview cannot drift
+        Route::post('/{screen}/playlist/preview', [PlaylistController::class, 'preview'])->middleware('can:screen-playlist')->name('screens.playlist.preview');
+        // Put this whole playlist (schedules included) onto other screens
+        Route::get('/{screen}/playlist/copy-targets', [PlaylistController::class, 'copyTargets'])->middleware('can:screen-playlist')->name('screens.playlist.copy-targets');
+        Route::post('/{screen}/playlist/copy', [PlaylistController::class, 'copy'])->middleware('can:screen-playlist')->name('screens.playlist.copy');
+        // The picker's options - gated by the playlist permission alone, so it is
+        // self-sufficient and does not drag in media-view
+        Route::get('/{screen}/available-media', [PlaylistController::class, 'availableMedia'])->middleware('can:screen-playlist')->name('screens.available-media');
+        // Every channel this screen can carry — the platform's and its own store's, never
+        // another store's. Gated by the playlist permission alone for the same reason as
+        // the media picker above
+        Route::get('/{screen}/available-channels', [PlaylistController::class, 'availableChannels'])->middleware('can:screen-playlist')->name('screens.available-channels');
+        // The default-media picker's options, gated by the screen permission that
+        // needs them for the same reason
+        Route::get('/{screen}/media-options', [ScreenController::class, 'mediaOptions'])->middleware('can:screen-update')->name('screens.media-options');
+        // Pair A Waiting TV (new screen, or re-pair an existing one)
+        Route::post('/pair', [ScreenController::class, 'pair'])->middleware('can:screen-store')->name('screens.pair');
+        // Rename / Re-orient
+        Route::put('/{screen}', [ScreenController::class, 'update'])->middleware('can:screen-update')->name('screens.update');
+        // Delete A Screen
+        Route::delete('/{screen}', [ScreenController::class, 'destroy'])->middleware('can:screen-destroy')->name('screens.destroy');
+    });
+
+    // -------------------------------------------------------------------
+    // Media library  (the content that ends up on a screen)
+    // -------------------------------------------------------------------
+    Route::prefix('media')->group(function () {
+        // Show Media Library Page
+        Route::get('/', [MediaController::class, 'index'])->middleware('can:media-view')->name('media.view');
+        // Get Paginated Media Data (AJAX)
+        Route::get('/data', [MediaController::class, 'data'])->middleware('can:media-view')->name('media.data');
+        // Upload A New File (multipart)
+        Route::post('/', [MediaController::class, 'store'])->middleware('can:media-store')->name('media.store');
+        // Update Title / Description / Schedule
+        Route::put('/{media}', [MediaController::class, 'update'])->middleware('can:media-update')->name('media.update');
+        // Delete A File
+        Route::delete('/{media}', [MediaController::class, 'destroy'])->middleware('can:media-destroy')->name('media.destroy');
+    });
+
+    // -------------------------------------------------------------------
+    // Network advertising  (the PLATFORM's own content, sold to a brand)
+    //
+    // `campaign-manage` is a hand-written gate, not a grantable permission row:
+    // a campaign has no store, so a store user holding it would see every
+    // brand's contract across the whole network. See AppServiceProvider.
+    // -------------------------------------------------------------------
+    Route::prefix('campaigns')->middleware('can:campaign-manage')->group(function () {
+        Route::get('/', [CampaignController::class, 'index'])->name('campaigns.view');
+        Route::get('/data', [CampaignController::class, 'data'])->name('campaigns.data');
+        // Every screen a campaign could be pointed at, grouped by shop
+        Route::get('/screens', [CampaignController::class, 'screens'])->name('campaigns.screens');
+        Route::post('/', [CampaignController::class, 'store'])->name('campaigns.store');
+        // POST, not PUT: an edit may carry a replacement file, and PHP does not
+        // parse multipart bodies on PUT. Method spoofing is no help either — it
+        // would turn the request INTO a PUT and miss this route.
+        Route::post('/{campaign}', [CampaignController::class, 'update'])->name('campaigns.update');
+        Route::delete('/{campaign}', [CampaignController::class, 'destroy'])->name('campaigns.destroy');
+    });
+
+    // Whether a shop and its screens carry advertising — the platform owner's deal, not the shopkeeper's:
+    // one shop at a time from inside it ("Log in as"), or whole shops from the Stores listing below.
+    Route::prefix('network-ads')->group(function () {
+        // Inside one shop, reached by "Log in as" — the only way a super admin gets in.
+        Route::middleware('can:network-ads-toggle')->group(function () {
+            Route::put('/store', [NetworkAdsController::class, 'store'])->name('network-ads.store');
+            Route::put('/screens', [NetworkAdsController::class, 'screens'])->name('network-ads.screens');
+        });
+
+        // Whole shops at once, from the stores listing. That page belongs to the
+        // platform owner and is reached WITHOUT impersonating anybody, so it answers
+        // to the plain super-admin ability instead.
+        Route::put('/stores', [NetworkAdsController::class, 'stores'])
+            ->middleware('can:campaign-manage')->name('network-ads.stores');
+    });
+
+    // -------------------------------------------------------------------
+    // Channels  (ads a shop may add to its screens — a wholesaler's
+    // promotions, a season, a notice)
+    //
+    // Above the stores: every channel, and one made there is offered to
+    // every shop. Inside a store, for a role carrying the channel
+    // permissions: the store's own channels, for its own screens alone.
+    // ChannelController / ChannelAdController find a channel only within
+    // reach (Channel::visibleTo) — anything else is 404.
+    // -------------------------------------------------------------------
+    Route::prefix('channels')->group(function () {
+        Route::get('/', [ChannelController::class, 'index'])->middleware('can:channel-view')->name('channels.view');
+        Route::get('/data', [ChannelController::class, 'data'])->middleware('can:channel-view')->name('channels.data');
+        Route::post('/', [ChannelController::class, 'store'])->middleware('can:channel-store')->name('channels.store');
+        Route::get('/{channel}', [ChannelController::class, 'show'])->whereNumber('channel')->middleware('can:channel-view')->name('channels.show');
+        Route::put('/{channel}', [ChannelController::class, 'update'])->whereNumber('channel')->middleware('can:channel-update')->name('channels.update');
+        Route::delete('/{channel}', [ChannelController::class, 'destroy'])->whereNumber('channel')->middleware('can:channel-destroy')->name('channels.destroy');
+
+        // The ads inside one channel. Adding, editing, reordering and removing an ad
+        // are all edits of the channel, so all of them answer to channel-update
+        Route::get('/{channel}/ads', [ChannelAdController::class, 'index'])->whereNumber('channel')->middleware('can:channel-view')->name('channels.ads.index');
+        Route::post('/{channel}/ads', [ChannelAdController::class, 'store'])->whereNumber('channel')->middleware('can:channel-update')->name('channels.ads.store');
+        Route::put('/{channel}/ads/order', [ChannelAdController::class, 'reorder'])->whereNumber('channel')->middleware('can:channel-update')->name('channels.ads.order');
+        // POST, not PUT: an edit may carry a replacement file, and PHP does not parse
+        // multipart bodies on PUT (the same as campaigns)
+        Route::post('/{channel}/ads/{ad}', [ChannelAdController::class, 'update'])->whereNumber(['channel', 'ad'])->scopeBindings()->middleware('can:channel-update')->name('channels.ads.update');
+        Route::delete('/{channel}/ads/{ad}', [ChannelAdController::class, 'destroy'])->whereNumber(['channel', 'ad'])->scopeBindings()->middleware('can:channel-update')->name('channels.ads.destroy');
+    });
+
+    // -------------------------------------------------------------------
+    // Dayparts  (named windows of time, reused by the schedule rules on playlists)
+    // -------------------------------------------------------------------
+    Route::prefix('dayparts')->group(function () {
+        // Show Dayparts Page
+        Route::get('/', [DaypartController::class, 'index'])->middleware('can:daypart-view')->name('dayparts.view');
+        // Get Paginated Dayparts Data (AJAX)
+        Route::get('/data', [DaypartController::class, 'data'])->middleware('can:daypart-view')->name('dayparts.data');
+        // Create A New Daypart (with its exceptions)
+        Route::post('/', [DaypartController::class, 'store'])->middleware('can:daypart-store')->name('dayparts.store');
+        // Rename / Re-time / Retire
+        Route::put('/{daypart}', [DaypartController::class, 'update'])->middleware('can:daypart-update')->name('dayparts.update');
+        // Delete A Daypart
+        Route::delete('/{daypart}', [DaypartController::class, 'destroy'])->middleware('can:daypart-destroy')->name('dayparts.destroy');
     });
 
     // -------------------------------------------------------------------
@@ -107,30 +306,40 @@ Route::middleware(['auth', 'throttle:240,1'])->group(function () {
         // Create New Role
         Route::post('/', [RoleController::class, 'store'])->middleware('can:role-store')->name('roles.store');
         // Update Existing Role
-        Route::put('/{role}', [RoleController::class, 'update'])->middleware('can:role-update')->name('roles.update');
+        Route::put('/{role}', [RoleController::class, 'update'])->whereNumber('role')->middleware('can:role-update')->name('roles.update');
         // Delete Role
-        Route::delete('/{role}', [RoleController::class, 'destroy'])->middleware('can:role-destroy')->name('roles.destroy');
+        Route::delete('/{role}', [RoleController::class, 'destroy'])->whereNumber('role')->middleware('can:role-destroy')->name('roles.destroy');
         // Get All Permissions Assigned To A Role
-        Route::get('/{role}/permissions', [PermissionController::class, 'permissions'])->middleware('can:role-view')->name('roles.permissions');
         // Get All Assignable Permissions
-        Route::get('/assignable', [RoleController::class, 'assignable'])->middleware('can:role-view')->name('permissions.assignable');
+        Route::get('/assignable', [RoleController::class, 'assignable'])->middleware('can:role-view')->name('roles.assignable');
     });
 
     // -------------------------------------------------------------------
     // Activity Log  (read-only audit trail)
     // -------------------------------------------------------------------
+    // Above the stores every store's history; inside a store, for a role carrying
+    // activity-view, that store's own entries (ActivityLogController). Yearly
+    // maintenance drops a whole year for every store at once, so it — and the
+    // storage panel's row counts — keep the `global-tier` lock: a permission of its
+    // own (activity-destroy) that a super admin may delegate to a platform role.
     Route::prefix('activity')->group(function () {
         Route::get('/', [ActivityLogController::class, 'index'])->middleware('can:activity-view')->name('activity.view');
         Route::get('/data', [ActivityLogController::class, 'data'])->middleware('can:activity-view')->name('activity.data');
-        // Yearly partition lifecycle (panel shows status; maintenance is super-admin-only)
-        Route::get('/partitions', [ActivityLogController::class, 'partitions'])->middleware('can:activity-view')->name('activity.partitions');
-        Route::post('/partitions/maintain', [ActivityLogController::class, 'maintainPartitions'])->middleware('can:activity-view')->name('activity.partitions.maintain');
+
+        Route::middleware('can:global-tier')->group(function () {
+            // Yearly partition lifecycle (status for the storage panel; maintenance deletes)
+            Route::get('/partitions', [ActivityLogController::class, 'partitions'])->middleware('can:activity-view')->name('activity.partitions');
+            Route::post('/partitions/maintain', [ActivityLogController::class, 'maintainPartitions'])->middleware('can:activity-destroy')->name('activity.partitions.maintain');
+        });
     });
 
     // -------------------------------------------------------------------
     // Permissions  (/permissions/*)
     // -------------------------------------------------------------------
-    Route::prefix('permissions')->group(function () {
+    // Super admins only (owner's rule): every route in this file names its permission
+    // in code, so the catalogue is never delegated — not even to a global role. The
+    // `super-admin-tier` lock holds even if a permission-* row reached another role.
+    Route::prefix('permissions')->middleware('can:super-admin-tier')->group(function () {
         // Show Permissions List Page
         Route::get('/', [PermissionController::class, 'index'])->middleware('can:permission-view')->name('permissions.view');
         // Get Paginated Permissions Data (AJAX)

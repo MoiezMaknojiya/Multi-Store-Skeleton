@@ -2,133 +2,151 @@
 
 namespace Tests\Browser;
 
+use App\Models\Invitation;
+use App\Models\Role;
+use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
 
+/**
+ * The frontend guards on the AJAX forms: client-side validation that stops an obvious mistake
+ * before any request leaves, server errors that are SHOWN rather than swallowed, and the
+ * in-flight flag that turns a double click into one request.
+ */
 class FormGuardTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    public function test_frontend_validation_blocks_an_invalid_phone_before_any_request(): void
+    /** An Owner signed in to their store, on the given page with Alpine ready. */
+    private function ownerOn(Browser $browser, string $path): User
     {
-        $admin = $this->seedSuperAdmin();
+        $store = Store::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->storeMember($store, Role::OWNER);
 
-        $this->browse(function (Browser $browser) {
-            $this->freshSession($browser);
-            $browser->loginAs(User::where('email', 'admin@gmail.com')->first())
-                ->visit('/users')
-                ->click('@add-user')
-                ->waitFor('@user-form')
-                ->type('@user-first-name', 'Bad')
-                ->type('@user-last-name', 'Phone')
-                ->type('@user-phone', '123')
-                ->type('@user-email', 'badphone@example.com')
-                ->type('@user-password', 'password123')
-                ->type('@user-password-confirm', 'password123')
-                ->press('@user-save')
-                ->waitForText('Phone must be exactly 10 digits.');
-        });
+        $this->freshSession($browser);
+        $browser->loginAs($owner);
+        $this->switchToStore($browser, $store);
+        $browser->visit($path);
+        $this->waitForAlpine($browser);
 
-        $this->assertDatabaseMissing('users', ['email' => 'badphone@example.com']);
+        return $owner;
     }
 
-    public function test_frontend_validation_catches_a_password_mismatch(): void
+    private function openInviteForm(Browser $browser): void
+    {
+        // The role list arrives with the team data — wait for it before opening the form.
+        $browser->waitForText('owner@example.com');
+        $this->clickAndAwait($browser, '@invite-member', fn (Browser $b) => $b->waitFor('@invite-form', 3));
+    }
+
+    public function test_the_invite_form_blocks_a_malformed_email_before_any_request(): void
     {
         $this->seedSuperAdmin();
 
         $this->browse(function (Browser $browser) {
-            $this->freshSession($browser);
-            $browser->loginAs(User::where('email', 'admin@gmail.com')->first())
-                ->visit('/users')
-                ->click('@add-user')
-                ->waitFor('@user-form')
-                ->type('@user-first-name', 'Mis')
-                ->type('@user-last-name', 'Match')
-                ->type('@user-phone', '1234567890')
-                ->type('@user-email', 'mismatch@example.com')
-                ->type('@user-password', 'password123')
-                ->type('@user-password-confirm', 'different456')
-                ->press('@user-save')
-                ->waitForText('Password confirmation does not match.');
+            $this->ownerOn($browser, '/members');
+            $this->openInviteForm($browser);
+
+            // No dot in the domain: the browser's own email check lets this through, ours must not.
+            $this->jsType($browser, '@invite-email', 'someone@nowhere');
+            $browser->select('@invite-role', (string) Role::starter(Role::STAFF)->id);
+            $this->jsClick($browser, '@invite-send');
+
+            $browser->waitForText('Email must be a valid email address.')
+                ->assertVisible('@invite-form');
         });
 
-        $this->assertDatabaseMissing('users', ['email' => 'mismatch@example.com']);
+        $this->assertSame(0, Invitation::count());
     }
 
-    public function test_a_role_needs_at_least_one_permission_before_any_request(): void
+    public function test_the_invite_form_needs_a_role(): void
     {
         $this->seedSuperAdmin();
 
         $this->browse(function (Browser $browser) {
-            $this->freshSession($browser);
-            $browser->loginAs(User::where('email', 'admin@gmail.com')->first())
-                ->visit('/roles')
-                ->click('@add-role')
-                ->waitFor('@role-form')
-                ->type('@role-name', 'Empty Role')
-                ->press('@role-save')
-                ->waitForText('Please select at least one permission.');
+            $this->ownerOn($browser, '/members');
+            $this->openInviteForm($browser);
+
+            $this->jsType($browser, '@invite-email', 'new.hire@example.com');
+            $this->jsClick($browser, '@invite-send');
+
+            $browser->waitForText('Role is required.');
+        });
+
+        $this->assertSame(0, Invitation::count());
+    }
+
+    public function test_a_custom_role_needs_at_least_one_permission_before_any_request(): void
+    {
+        $this->seedSuperAdmin();
+
+        $this->browse(function (Browser $browser) {
+            $this->ownerOn($browser, '/roles');
+            $browser->waitFor('@role-row-'.Role::owner()->id);
+
+            $this->clickAndAwait($browser, '@create-role', fn (Browser $b) => $b->waitFor('@permission-screen-view', 5));
+            $this->jsType($browser, '@role-name', 'Empty Role');
+            $this->jsClick($browser, '@role-save');
+
+            $browser->waitForText('Choose at least one permission.');
         });
 
         $this->assertDatabaseMissing('roles', ['name' => 'Empty Role']);
     }
 
-    public function test_renaming_the_super_admin_role_shows_the_error_instead_of_failing_silently(): void
+    /** A rule only the server knows must still reach the person, under the field it is about. */
+    public function test_a_store_role_name_is_refused_with_the_reason_shown(): void
     {
         $this->seedSuperAdmin();
 
         $this->browse(function (Browser $browser) {
-            $this->freshSession($browser);
-            $browser->loginAs(User::where('email', 'admin@gmail.com')->first())->visit('/roles');
-            $this->waitForAlpine($browser);
-            $browser->waitForText('Super-Admin');
+            $this->ownerOn($browser, '/roles');
+            $browser->waitFor('@role-row-'.Role::owner()->id);
 
-            // Fresh seed has exactly one role row — its Edit button opens the modal.
-            $this->clickAndAwait($browser, '.btn-row-neutral', function (Browser $b) {
-                $b->waitUsing(4, 100, fn () => $b->script(
-                    'return (function () {'
-                    ." const el = document.querySelector('[dusk=\"role-form\"]');"
-                    .' if (!el || el.offsetParent === null || !window.Alpine) return false;'
-                    .' return window.Alpine.$data(el).openingModal === false;'
-                    .'})();'
-                )[0]);
-            });
-
-            $this->jsType($browser, '@role-name', 'Boss');
+            $this->clickAndAwait($browser, '@create-role', fn (Browser $b) => $b->waitFor('@permission-screen-view', 5));
+            $this->jsType($browser, '@role-name', 'owner');
+            $this->jsClick($browser, '@permission-screen-view');
             $this->jsClick($browser, '@role-save');
 
-            // The server's guard message must actually SHOW (toast), not vanish.
-            $browser->waitForText('The Super-Admin role is a system role and cannot be renamed.');
+            $browser->waitForTextIn('@role-form', 'There is already a store role called Owner, and every store has it. Choose another name.');
         });
 
-        $this->assertDatabaseHas('roles', ['name' => 'Super-Admin']);
+        $this->assertSame(1, Role::whereRaw('lower(name) = ?', ['owner'])->count());
     }
 
-    public function test_double_submitting_the_user_form_creates_exactly_one_user(): void
+    public function test_double_submitting_the_invite_form_sends_exactly_one_request(): void
     {
         $this->seedSuperAdmin();
 
         $this->browse(function (Browser $browser) {
-            $this->freshSession($browser);
-            $browser->loginAs(User::where('email', 'admin@gmail.com')->first())
-                ->visit('/users')
-                ->click('@add-user')
-                ->waitFor('@user-form')
-                ->type('@user-first-name', 'Double')
-                ->type('@user-last-name', 'Click')
-                ->type('@user-phone', '5556667777')
-                ->type('@user-email', 'doubleclick@example.com')
-                ->type('@user-password', 'password123')
-                ->type('@user-password-confirm', 'password123');
+            $this->ownerOn($browser, '/members');
+            $this->openInviteForm($browser);
+
+            $this->jsType($browser, '@invite-email', 'double@example.com');
+            $browser->select('@invite-role', (string) Role::starter(Role::STAFF)->id);
+
+            // Count what actually leaves the browser — the server would refuse a second
+            // invitation for the same email anyway, so the database alone cannot prove the guard.
+            $browser->script(<<<'JS'
+                window.__invitationPosts = 0;
+                const open = XMLHttpRequest.prototype.open;
+                XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+                    if (String(method).toUpperCase() === 'POST' && String(url).endsWith('/members/invitations')) {
+                        window.__invitationPosts++;
+                    }
+                    return open.call(this, method, url, ...rest);
+                };
+            JS);
 
             // Two synchronous submits — exactly what a double click produces.
-            $browser->script("const f = document.querySelector('[dusk=\"user-form\"]'); f.requestSubmit(); f.requestSubmit();");
+            $browser->script("const f = document.querySelector('[dusk=\"invite-form\"]'); f.requestSubmit(); f.requestSubmit();");
 
-            $browser->waitForText('doubleclick@example.com');
+            $browser->waitForText('Invitation sent to double@example.com.');
+            $this->assertSame(1, $browser->script('return window.__invitationPosts;')[0]);
         });
 
-        $this->assertSame(1, User::where('email', 'doubleclick@example.com')->count());
+        $this->assertSame(1, Invitation::where('email', 'double@example.com')->count());
     }
 }

@@ -1,4 +1,4 @@
-@props(['placeholder' => 'Search...', 'model' => 'search'])
+@props(['placeholder' => 'Search...'])
 
 <div class="relative w-full max-w-xs">
     <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
@@ -9,6 +9,6 @@
     </span>
     {{-- autocomplete="off" is silently ignored by Chrome on fields it heuristically treats as
          credential-related; "new-password" is a well-known, more reliable way to actually stop it --}}
-    <input x-model="{{ $model }}" type="text" placeholder="{{ $placeholder }}" autocomplete="new-password"
-        class="form-input pl-10" />
+    <input x-model="search" type="text" placeholder="{{ $placeholder }}" autocomplete="new-password"
+        dusk="crud-search" class="form-input pl-10" />
 </div>

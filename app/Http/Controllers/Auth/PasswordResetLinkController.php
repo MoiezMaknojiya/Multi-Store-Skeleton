@@ -30,16 +30,15 @@ class PasswordResetLinkController extends Controller
             'email' => ['required', 'email'],
         ]);
 
-        // We will send the password reset link to this user. Once we have attempted
-        // to send the link, we will examine the response then see the message we
-        // need to show to the user. Finally, we'll send out a proper response.
-        $status = Password::sendResetLink(
-            $request->only('email')
-        );
+        // Send the link if there is an account for this address — and say the same thing either way
+        // (owner's decision, 2026-09-17). Laravel's own answer named the outcome: "We can't find a
+        // user with that email address" told anybody who asked which addresses have an account here,
+        // and "please wait before retrying" said it just as loudly, because only a real account is
+        // throttled. Somebody who mistyped their own address now gets the neutral line and no email,
+        // which is the trade this buys. The throttle on the route (`password-reset`) is what stops a
+        // list being walked; this stops it being read.
+        Password::sendResetLink($request->only('email'));
 
-        return $status == Password::RESET_LINK_SENT
-                    ? back()->with('status', __($status))
-                    : back()->withInput($request->only('email'))
-                        ->withErrors(['email' => __($status)]);
+        return back()->with('status', __(Password::RESET_LINK_SENT));
     }
 }

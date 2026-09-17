@@ -8,6 +8,9 @@ return new class extends Migration
 {
     /**
      * Run the migrations.
+     *
+     * An account is a login and nothing more: nobody owns it, and it gives no power by itself — that comes from
+     * memberships (store_user).
      */
     public function up(): void
     {
@@ -20,7 +23,6 @@ return new class extends Migration
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->rememberToken();
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
         });
 

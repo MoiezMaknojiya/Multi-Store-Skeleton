@@ -21,7 +21,7 @@
 
     {{-- Sidebar Flash Prevention: apply the persisted open/closed state before Alpine
          loads, so the sidebar renders correctly on first paint instead of popping in
-         after a delay. layoutHandler.init() (resources/js/layout.js) removes this class
+         after a delay. layoutHandler.init() (resources/js/core/layout.js) removes this class
          the moment Alpine takes over. --}}
     <script>
         if (localStorage.getItem('sidebarOpen') === 'false') {
@@ -44,10 +44,7 @@
     <div class="flex h-screen overflow-hidden">
 
         {{-- SIDEBAR --}}
-        <x-sidebar :nav-items="[
-            ['label' => 'Dashboard', 'href' => route('dashboard'), 'route' => 'dashboard'],
-            ['label' => 'Users', 'href' => route('users.view'), 'route' => 'users.*'],
-        ]" />
+        <x-sidebar />
 
         {{-- MAIN CONTENT AREA --}}
         <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -88,6 +85,15 @@
             </div>
         </template>
     </div>
+
+    {{-- A flash message from a redirect ("Welcome to Alpha Mart!", "Switched to …") becomes a
+         success toast. The Profile page's own status keys are shown by its forms instead. --}}
+    @php($__flash = session('status'))
+    @if (is_string($__flash) && ! in_array($__flash, ['profile-updated', 'password-updated', 'store-updated'], true))
+        <script>
+            document.addEventListener('alpine:initialized', () => window.toast({{ Js::from($__flash) }}, 'success'));
+        </script>
+    @endif
 
     @stack('scripts')
 </body>

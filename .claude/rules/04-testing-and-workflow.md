@@ -9,7 +9,7 @@
 - **Run Tests:** `php artisan test`
 - **Code Style:** `vendor/bin/pint --dirty --format agent`
 - **Development:** `php artisan serve`
-- **Browser Tests:** start the Dusk server (`APP_ENV=dusk php artisan serve --port=8001`), then `php artisan dusk`
+- **Browser Tests:** start the Dusk server the way `.claude/launch.json` does — `php artisan serve --env=dusk --host=localhost --port=8001 --no-reload` (localhost and `--no-reload` matter: `phpunit.dusk.xml` points at `http://localhost:8001`, and `php artisan dusk` swaps `.env` during the run, which restarts a reloading server) — then `php artisan dusk`
 
 ## Workflow Guidelines
 - **Formatting:** run the **Code Style** command listed above on changed files before finalizing.

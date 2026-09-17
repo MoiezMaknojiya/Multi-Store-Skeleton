@@ -6,18 +6,19 @@ use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Tests\DuskTestCase;
 use Tests\TestCase;
 
 /*
 |--------------------------------------------------------------------------
-| Test Case
+| Test case
 |--------------------------------------------------------------------------
 |
-| The closure you provide to your test functions is always bound to a specific PHPUnit test
-| case class. By default, that class is "PHPUnit\Framework\TestCase". Of course, you may
-| need to change it using the "pest()" function to bind a different classes or traits.
+| Every Feature test runs on the in-memory SQLite database of phpunit.xml, inside a transaction that is
+| rolled back afterwards (RefreshDatabase). The browser tests are PHPUnit classes of their own, extending
+| DuskTestCase; the binding below only covers a Pest-style test added under tests/Browser later.
 |
 */
 
@@ -27,21 +28,6 @@ pest()->extend(DuskTestCase::class)
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->in('Feature');
-
-/*
-|--------------------------------------------------------------------------
-| Expectations
-|--------------------------------------------------------------------------
-|
-| When you're writing tests, you often need to check that values meet certain conditions. The
-| "expect()" function gives you access to a set of "expectations" methods that you can use
-| to assert different things. Of course, you may extend the Expectation API at any time.
-|
-*/
-
-expect()->extend('toBeOne', function () {
-    return $this->toBe(1);
-});
 
 /*
 |--------------------------------------------------------------------------
@@ -104,19 +90,71 @@ function createSuperAdmin(array $permissionNames = []): User
 }
 
 /**
- * Create a user assigned to the given store with a role granting the given permissions.
- * Callers still need ->withSession(['current_store_id' => $store->id]) on the request
- * for the store-scoped permission check to take effect.
+ * Create a member of the given store holding a CUSTOM role of that store with exactly the given
+ * permissions. Callers still need ->withSession(['current_store_id' => $store->id]) on the
+ * request for the store-scoped permission check to take effect.
  */
 function createStoreUser(Store $store, array $permissionNames, string $roleName = 'Test Role'): User
 {
     $permissions = grantPermissions($permissionNames);
 
-    $role = Role::create(['name' => $roleName]);
+    $role = Role::create(['name' => $roleName, 'store_id' => $store->id]);
     $role->permissions()->sync($permissions->pluck('id'));
 
     $user = User::factory()->create();
     $user->stores()->attach($store->id, ['role_id' => $role->id]);
 
     return $user;
+}
+
+/**
+ * Register a gate for every permission row, the way AppServiceProvider does at boot — needed
+ * whenever a test relies on rows it did not create through grantPermissions(), such as the
+ * starter store roles the migrations install.
+ */
+function registerPermissionGates(): void
+{
+    Permission::all()->each(fn (Permission $permission) => Gate::define(
+        $permission->name,
+        fn (User $user) => $user->hasPermissionInCurrentStore($permission->name)
+    ));
+}
+
+/**
+ * Create a member of the store holding one of the starter store roles (Owner by default). The
+ * migrations install those roles with their permissions; this registers the gates for them.
+ */
+function createStoreMember(Store $store, string $roleKey = Role::OWNER, array $attributes = []): User
+{
+    registerPermissionGates();
+
+    $user = User::factory()->create($attributes);
+    $user->stores()->attach($store->id, ['role_id' => Role::starter($roleKey)->id]);
+
+    return $user;
+}
+
+/**
+ * Create a member of the platform team: a global role with the given permissions, held on the
+ * store_id = 0 row. Not a super admin.
+ */
+function createPlatformUser(array $permissionNames, string $roleName = 'Platform Staff'): User
+{
+    $permissions = grantPermissions($permissionNames);
+
+    $role = Role::create(['name' => $roleName, 'is_global' => true]);
+    $role->permissions()->sync($permissions->pluck('id'));
+
+    $user = User::factory()->create();
+    $user->stores()->attach(0, ['role_id' => $role->id]);
+
+    return $user;
+}
+
+/** The starter-role key a person holds in a store (null for any other role, or when not a member). */
+function roleKeyIn(User $user, Store $store): ?string
+{
+    $roleId = DB::table('store_user')->where('store_id', $store->id)->where('user_id', $user->id)->value('role_id');
+
+    return $roleId ? Role::find($roleId)?->key : null;
 }

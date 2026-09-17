@@ -1,12 +1,23 @@
+{{-- The activity log: above the stores every store's history; inside a store ($store) that store's own
+     entries. Yearly maintenance drops a year for every store at once, so its panel is the platform's alone
+     (global-tier + activity-destroy, the same pair as its routes). --}}
+@php($canMaintain = ! $store && auth()->user()->can('global-tier') && auth()->user()->can('activity-destroy'))
+
 <x-app-layout>
     <x-slot name="header">
         <h2 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Activity Log') }}</h2>
     </x-slot>
 
-    <div x-data="activityTable({ isSuperAdmin: @json(auth()->user()->isSuperAdmin()) })" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <div x-data="activityTable({ canMaintain: @json($canMaintain) })" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        {{-- Yearly storage panel (super admin only): partition status + one-click maintenance --}}
-        @if (auth()->user()->isSuperAdmin())
+        @if ($store)
+        <p class="text-sm text-gray-500 dark:text-gray-400" dusk="activity-scope-note">
+            What happened in {{ $store->name }} — by its people, and by the platform on its behalf.
+        </p>
+        @endif
+
+        {{-- Yearly storage panel (activity-destroy, above the stores): partition status + one-click maintenance --}}
+        @if ($canMaintain)
         <div class="bg-white dark:bg-gray-800 rounded-xs border border-gray-100 dark:border-gray-700 p-5">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
@@ -77,7 +88,7 @@
         </div>
 
         {{-- Activity Data Table (read-only audit trail) --}}
-        <x-crud.table-wrapper title="All Activity" searchPlaceholder="Search activity (action, user, details...)" :columns="4">
+        <x-crud.table-wrapper title="{{ $store ? 'Activity in '.$store->name : 'All Activity' }}" searchPlaceholder="Search activity (action, user, details...)" :columns="4">
             <x-slot name="head">
                 <th class="px-5 py-3 text-left font-semibold">When</th>
                 <th class="px-5 py-3 text-left font-semibold">Who</th>

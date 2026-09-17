@@ -1,17 +1,26 @@
 {{-- Edit and Delete action buttons for table rows.
      editCan / deleteCan take a permission name; when given, the button only renders
-     for users holding that permission (the backend enforces it regardless). --}}
-@props(['editClick' => '', 'deleteClick' => '', 'showEdit' => true, 'showDelete' => true, 'editCan' => null, 'deleteCan' => null, 'rowShow' => null])
+     for users holding that permission (the backend enforces it regardless).
+     dusk takes a name for the row's thing ("permission"), which becomes
+     edit-{dusk}-{id} / delete-{dusk}-{id} — without it a browser test cannot reach
+     these buttons at all, which is how the Permissions page went untested. --}}
+@props([
+    'editClick' => '',
+    'deleteClick' => '',
+    'editCan' => null,
+    'deleteCan' => null,
+    'dusk' => null,
+    'idExpr' => 'item.id',
+])
 
 <div class="flex items-center justify-end gap-2">
-    @if($showEdit && $editClick && (! $editCan || auth()->user()->can($editCan)))
-    <button @click="{{ $editClick }}" @if($rowShow) x-show="{{ $rowShow }}" @endif class="btn-row-neutral">Edit</button>
+    @if($editClick && (! $editCan || auth()->user()->can($editCan)))
+    <button @click="{{ $editClick }}" class="btn-row-neutral"
+            @if($dusk) x-bind:dusk="'edit-{{ $dusk }}-' + {{ $idExpr }}" @endif>Edit</button>
     @endif
 
-    @if($showDelete && $deleteClick && (! $deleteCan || auth()->user()->can($deleteCan)))
-    <button @click="{{ $deleteClick }}" @if($rowShow) x-show="{{ $rowShow }}" @endif class="btn-row-danger">Delete</button>
+    @if($deleteClick && (! $deleteCan || auth()->user()->can($deleteCan)))
+    <button @click="{{ $deleteClick }}" class="btn-row-danger"
+            @if($dusk) x-bind:dusk="'delete-{{ $dusk }}-' + {{ $idExpr }}" @endif>Delete</button>
     @endif
-
-    {{-- Extra buttons slot (e.g. "Stores" button on users page) --}}
-    {{ $slot }}
 </div>
