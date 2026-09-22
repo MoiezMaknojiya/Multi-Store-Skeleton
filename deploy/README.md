@@ -1,6 +1,6 @@
 # Going live
 
-One Ubuntu 24.04 server (sized for Hetzner's 2 vCPU / 4 GB plans) runs everything: Nginx, PHP 8.3-FPM,
+One Ubuntu 24.04 server (sized for Hetzner's CPX12: 1 vCPU, 2 GB, 40 GB) runs everything: Nginx, PHP 8.3-FPM,
 MySQL 8.4 LTS, HTTPS from Let's Encrypt, Laravel's scheduler and a nightly database backup. Mail goes out
 through Brevo. Nothing here is a hosted platform or a paid tool.
 
@@ -35,9 +35,14 @@ only thing it may do as root is reload PHP.
 
 1. Hetzner Cloud → your project → **Security → SSH keys → Add SSH key**: paste the whole line of
    `~/.ssh/signage_deploy.pub` (Claude made this key on the PC; the private half never leaves it).
-2. **Add server**: the location nearest the stores, **Ubuntu 24.04**, the plan, **Public IPv4 on**, the SSH key
-   ticked. Hetzner's own Backups (+20%) keep the whole server — worth it.
+2. **Add server**: the location nearest the stores (the shops are American, so Germany — Falkenstein or
+   Nuremberg — over Helsinki, and never Singapore), **Ubuntu 24.04**, the plan, **Public IPv4 on**, the SSH
+   key ticked. Hetzner's own Backups (+20%) are optional: the server already dumps its database nightly, but
+   only Backups (or a snapshot) also keep the uploads and the server itself.
 3. Note the server's IPv4 address.
+
+Outgrowing it later is a reboot: Hetzner rescales CPU and RAM in place, and the settings say which numbers
+to raise (`deploy/server/mysql.cnf`, `php-fpm-pool.conf`). Growing the DISK cannot be undone, so leave it.
 
 Keep `~/.ssh/signage_deploy` safe — it is the only way in over SSH once `setup.sh` has run. If it is ever
 lost, Hetzner's web console (and its "Reset root password") still reaches the server.
