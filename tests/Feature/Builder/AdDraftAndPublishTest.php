@@ -76,6 +76,8 @@ function changedDesign(BuilderAd $ad, string $text): array
 test('a changed published ad keeps its published version on every screen until the changes are published', function () {
     $ad = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $this->store->id, 'name' => 'Winter sale']);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
+    // A published ad is for channels only until it is opened to the shop's own playlists (2026-09-22).
+    $this->postJson("/builder/{$ad->id}/in-playlists", ['in_playlists' => true])->assertOk();
     $page = Media::sole();
 
     $screen = Screen::factory()->withToken('live-token')->create(['store_id' => $this->store->id]);
@@ -165,6 +167,7 @@ test('there is nothing to discard on an ad never published, up to date, or publi
 test('unpublishing takes the page off every screen, channel, picker and library — and publishing brings it back', function () {
     $ad = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $this->store->id, 'name' => 'Winter sale']);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
+    $this->postJson("/builder/{$ad->id}/in-playlists", ['in_playlists' => true])->assertOk();
     $page = Media::sole();
 
     // On a screen's playlist, and in a channel that screen carries beside a picture of its own.

@@ -40,6 +40,10 @@ class BuilderAdFactory extends Factory
             'published_document' => fn (array $attributes) => $attributes['document'],
             'published_name' => fn (array $attributes) => $attributes['name'],
             'updated_at' => $now,
+            // Published AND open to the shop's own playlists — an ad already in use, which is what the
+            // migration made of every ad published before the tick existed. An ad kept for channels is
+            // `create(['in_playlists' => false])`, and publishing through the endpoint leaves it that way.
+            'in_playlists' => true,
         ]);
     }
 

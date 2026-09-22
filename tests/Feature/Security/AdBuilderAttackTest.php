@@ -49,6 +49,7 @@ test('another store’s ad cannot be changed, copied, published or deleted by it
     $this->putJson("/builder/{$theirs->id}", ['name' => 'Mine now', 'document' => attackDocument()])->assertNotFound();
     $this->postJson("/builder/{$theirs->id}/duplicate")->assertNotFound();
     $this->postJson("/builder/{$theirs->id}/publish")->assertNotFound();
+    $this->postJson("/builder/{$theirs->id}/in-playlists", ['in_playlists' => true])->assertNotFound();
     $this->deleteJson("/builder/{$theirs->id}", ['password' => 'password'])->assertNotFound();
     $this->get("/builder/{$theirs->id}")->assertNotFound();
 

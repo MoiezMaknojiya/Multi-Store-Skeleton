@@ -115,6 +115,17 @@
                                               changed: 'On the screens as last published — the newer changes are not published yet',
                                           }[item.status] ?? 'Not on any screen'"
                                           x-text="{ published: 'Published', changed: 'Changes not published' }[item.status] ?? 'Draft'"></span>
+
+                                    {{-- Where a published ad may play (owner's rule, 2026-09-22): a shop's own
+                                         playlists too, or only inside a channel. A draft is on nothing, so it
+                                         says nothing; the tick itself lives in the editor, beside Publish. --}}
+                                    <span class="ml-1 mt-2 inline-block" x-show="item.status !== 'draft'" x-cloak
+                                          x-bind:class="item.in_playlists ? 'badge-info' : 'badge-neutral'"
+                                          x-bind:dusk="'ad-playlist-use-' + item.id"
+                                          x-bind:title="item.in_playlists
+                                              ? 'A screen can add this ad to its own playlist'
+                                              : 'Only inside a channel — playlists cannot pick it'"
+                                          x-text="item.in_playlists ? 'Playlists' : 'Channels only'"></span>
                                 </div>
 
                                 <div class="flex shrink-0 items-center gap-2">

@@ -347,6 +347,8 @@ Route::middleware(['auth', 'throttle:admin'])->group(function () {
         // or throw away the changes the screens do not show yet — both changes to a saved ad, like Publish.
         Route::post('/{ad}/unpublish', [BuilderController::class, 'unpublish'])->whereNumber('ad')->middleware('can:ad-update')->name('builder.unpublish');
         Route::post('/{ad}/discard', [BuilderController::class, 'discard'])->whereNumber('ad')->middleware('can:ad-update')->name('builder.discard');
+        // May a shop's own playlist play this ad, or is it for channels only (owner's rule, 2026-09-22)?
+        Route::post('/{ad}/in-playlists', [BuilderController::class, 'showInPlaylists'])->whereNumber('ad')->middleware('can:ad-update')->name('builder.in-playlists');
         // The saved design as a television would show it, full screen, before it reaches one (§10a).
         // For ad-view or ad-update — "any of", so checked in BuilderController::preview
         Route::get('/{ad}/preview', [BuilderController::class, 'preview'])->whereNumber('ad')->name('builder.preview');

@@ -83,6 +83,10 @@ class BuilderExamples extends Command
                 $media = $publisher->publish($ad);
                 $state = "published (media #{$media->id})";
 
+                // An example exists to be put on a screen, so it is one of the ads a playlist may pick
+                // (owner's rule, 2026-09-22 — an ad made in the editor starts the other way round).
+                BuilderAd::withoutTimestamps(fn () => $ad->update(['in_playlists' => true]));
+
                 ActivityLog::record('ad.published', $ad, "Published example ad {$ad->name}");
             }
 

@@ -29,7 +29,8 @@ class BuilderAd extends Model
     public const STAGE_HEIGHT = 1080;
 
     protected $fillable = [
-        'store_id', 'name', 'document', 'thumbnail_path', 'media_id', 'published_at', 'created_by', 'updated_by',
+        'store_id', 'name', 'document', 'thumbnail_path', 'media_id', 'published_at', 'in_playlists',
+        'created_by', 'updated_by',
     ];
 
     protected $appends = ['thumbnail_url'];
@@ -40,6 +41,10 @@ class BuilderAd extends Model
             'document' => 'array',
             'published_at' => 'datetime',
             'published_document' => 'array',
+            // May a shop's own playlist play this ad, or is it for channels only (owner's rule, 2026-09-22)?
+            // Off until somebody ticks it, so an ad written for a channel cannot also be added to the
+            // playlist that carries that channel and play twice in one pass.
+            'in_playlists' => 'boolean',
         ];
     }
 

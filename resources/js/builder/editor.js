@@ -85,6 +85,8 @@ export function registerAdEditor(Alpine) {
              * (Discard changes goes back to it). The server says, after every save and publish. */
             published: config.published ?? false,
             hasChanges: config.hasChanges ?? false,
+            inPlaylists: config.inPlaylists ?? false,
+            playlistUseSaving: false,
             hasPublishedVersion: config.hasPublishedVersion ?? false,
             unpublishing: false,
             discarding: false,
@@ -1063,6 +1065,31 @@ export function registerAdEditor(Alpine) {
                 this.published = ad.is_published ?? false;
                 this.hasChanges = ad.status === 'changed';
                 this.hasPublishedVersion = ad.has_published_version ?? false;
+                this.inPlaylists = ad.in_playlists ?? false;
+            },
+
+            /**
+             * "Show in playlists" (owner's rule, 2026-09-22): may a shop's own playlist play this ad, or is it
+             * for channels only — which is how it starts, so an ad inside a channel cannot also sit on the
+             * playlist carrying that channel and play twice. The server refuses to take the tick off while a
+             * screen still carries the ad, so the box goes back to where it was and says why.
+             */
+            async setInPlaylists(wanted) {
+                if (this.playlistUseSaving || !this.adId) return;
+
+                this.playlistUseSaving = true;
+
+                try {
+                    const { data } = await axios.post(`/builder/${this.adId}/in-playlists`, { in_playlists: wanted });
+                    this.adopt(data.ad);
+                    window.toast(data.message, 'success');
+                } catch (error) {
+                    const refusal = error.response?.data?.errors?.in_playlists?.[0];
+                    this.inPlaylists = !wanted;
+                    window.toast(refusal ?? error.response?.data?.message ?? 'Could not change where this ad may play.');
+                } finally {
+                    this.playlistUseSaving = false;
+                }
             },
 
             /** Changes the screens do not show yet — saved ones, or ones still only here. */

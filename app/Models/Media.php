@@ -100,6 +100,21 @@ class Media extends Model
     }
 
     /**
+     * Without the Ad Builder pages their designer keeps for channels (owner's rule, 2026-09-22): the same ad
+     * inside a channel AND on the playlist that carries that channel plays twice in one pass. So a playlist's
+     * pickers — and the playlist itself — take only the ads whose "Show in playlists" is ticked, while a
+     * channel's pickers go on offering every published one. Nothing else in a library is narrowed: an
+     * uploaded picture or video has no such switch.
+     */
+    public function scopeWithoutChannelOnly(Builder $query): Builder
+    {
+        return $query->whereNotExists(fn (QueryBuilder $design) => $design->selectRaw('1')
+            ->from('builder_ads')
+            ->whereColumn('builder_ads.media_id', 'media.id')
+            ->where('builder_ads.in_playlists', false));
+    }
+
+    /**
      * An Ad Builder page whose ad is a draft — taken off the screens with Unpublish (owner, 2026-09-21): nobody
      * sees it — no screen, no channel, no picker, not the library — until the ad is published again. The row
      * stays, so every playlist line and channel ad holding it plays it again from then on. A published ad that is
@@ -176,11 +191,39 @@ class Media extends Model
             return null;
         }
 
-        $listed = $names->take(3)->join(', ').($names->count() > 3 ? ' and '.($names->count() - 3).' more' : '');
+        $listed = self::listOfNames($names);
 
         return $names->count() === 1
             ? "Still used by the channel {$listed}. Take it out of that channel first."
             : "Still used by the channels {$listed}. Take it out of those channels first.";
+    }
+
+    /**
+     * The screens whose playlist still carries this file, worded the same way — the refusal that stops an Ad
+     * Builder ad being turned back to channels only while a television is playing it from a playlist
+     * (BuilderController::showInPlaylists). Nothing is ever pulled off a screen behind somebody's back.
+     */
+    public function stillOnScreensMessage(): ?string
+    {
+        $names = Screen::whereIn('id', PlaylistItem::where('media_id', $this->id)->select('screen_id'))
+            ->orderBy('name')
+            ->pluck('name');
+
+        if ($names->isEmpty()) {
+            return null;
+        }
+
+        $listed = self::listOfNames($names);
+
+        return $names->count() === 1
+            ? "Still on the screen {$listed}. Take it off that screen first."
+            : "Still on the screens {$listed}. Take it off those screens first.";
+    }
+
+    /** "A, B, C and 2 more" — the same shortening wherever a refusal names what still uses a file. */
+    private static function listOfNames(Collection $names): string
+    {
+        return $names->take(3)->join(', ').($names->count() > 3 ? ' and '.($names->count() - 3).' more' : '');
     }
 
     /**

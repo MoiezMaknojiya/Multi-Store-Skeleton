@@ -91,6 +91,8 @@
              'published' => (bool) $ad?->isPublished(),
              'hasChanges' => (bool) $ad?->hasUnpublishedChanges(),
              'hasPublishedVersion' => (bool) $ad?->hasPublishedVersion(),
+             // May a shop's own playlist play it, or is it for channels only (owner's rule, 2026-09-22)?
+             'inPlaylists' => (bool) $ad?->in_playlists,
              'hasPoster' => (bool) $ad?->thumbnail_path,
              // What the routes let this person do: change (and publish) a saved ad, and fetch a font.
              'canUpdate' => (bool) auth()->user()?->can('ad-update'),
@@ -246,6 +248,21 @@
                                 aria-label="More publishing options" x-bind:aria-expanded="publishMenuOpen" dusk="ad-publish-menu">▾</button>
                         <div x-show="publishMenuOpen" x-cloak dusk="publish-menu"
                              class="absolute right-0 top-full z-50 mt-1 w-72 rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+                            {{-- Where the ad may play (owner's rule, 2026-09-22). Off until it is ticked: the same
+                                 ad inside a channel and on the playlist carrying that channel would play twice in
+                                 one pass. Untick is refused while a screen still carries it, and says which. --}}
+                            <label class="flex cursor-pointer items-start gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/60">
+                                <input type="checkbox" class="mt-0.5 h-4 w-4 rounded border-gray-300 dark:border-gray-600"
+                                       x-bind:checked="inPlaylists" x-bind:disabled="!adId || playlistUseSaving"
+                                       @change="setInPlaylists($event.target.checked)" dusk="ad-in-playlists" />
+                                <span>
+                                    <span class="block text-sm text-gray-800 dark:text-gray-100">Show in playlists</span>
+                                    <span class="block text-xs text-gray-500 dark:text-gray-400">
+                                        A screen can add it to its own playlist. Leave it off for an ad that only runs inside a channel.
+                                    </span>
+                                </span>
+                            </label>
+                            <div class="my-1 border-t border-gray-100 dark:border-gray-700"></div>
                             <button type="button" class="block w-full px-3 py-2 text-left hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-gray-700/60"
                                     @click="publishMenuOpen = false; $dispatch('open-modal', 'confirm-discard-changes')"
                                     x-bind:disabled="!mayDiscard()" x-bind:title="discardHint()" dusk="ad-discard">
