@@ -123,6 +123,26 @@ ln -sfn /var/www/signage/releases/STAMP /var/www/signage/current && sudo systemc
 
 A migration the newer release ran stays run — going back is for code, not for the database.
 
+## A visitor cannot open the site
+
+One person seeing `ERR_SSL_PROTOCOL_ERROR` while the site is fine for everybody else is almost never the
+server. Work down this list before changing anything:
+
+1. `nginx -t` and the certificate: `certbot certificates` — dates and domain.
+2. **The server's own logs.** `grep -i ssl /var/log/nginx/error.log` and the access log. If the visitor's
+   attempt is not there at all, it never reached this machine: something between them and here — an
+   antivirus scanning HTTPS, an office proxy, their ISP — terminated it.
+3. From anywhere else: `openssl s_client -connect app.example.com:443 -servername app.example.com` and a
+   scan at ssllabs.com. A grade of A with a complete chain settles the server's side.
+4. Ask them to open the same link **on mobile data instead of their WiFi**. If it opens, their network is
+   the wall, and it is usually one of two things:
+   - **The certificate is ECDSA-only** (certbot's default) and the middlebox in front of them only knows
+     RSA. Fix it for everyone with `server/add-rsa-certificate.sh app.example.com`, which issues an RSA
+     certificate beside it; Nginx then hands each client whichever it can read. Test the failing case with
+     `openssl s_client … -tls1_2 -cipher 'ECDHE-RSA-AES256-GCM-SHA384'` — a handshake failure is the proof.
+   - **The network blocks the address or the hosting range.** Nothing on this server changes that; putting
+     the site behind Cloudflare would (at the cost of a 100 MB upload cap on its free plan).
+
 ## After changing `shared/.env`
 
 The settings are cached on the server, so an edit changes nothing until the cache is rebuilt:
