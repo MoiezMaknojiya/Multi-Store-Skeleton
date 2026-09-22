@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Notifications\ResetPasswordNotification;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -51,6 +52,12 @@ class User extends Authenticatable
     public function getNameAttribute(): string
     {
         return trim($this->{'first_name'}.' '.$this->{'last_name'});
+    }
+
+    /** "Forgot password" goes out in the app's own template, not Laravel's stock one. */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new ResetPasswordNotification($token));
     }
 
     /* ── Per-request memo caches ──────────────────────────────────────────

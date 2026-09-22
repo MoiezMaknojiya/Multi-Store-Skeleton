@@ -4,7 +4,7 @@ use App\Models\Channel;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Store;
-use Illuminate\Auth\Notifications\ResetPassword;
+use App\Notifications\ResetPasswordNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
@@ -249,7 +249,7 @@ test('the forgotten-password form never says whether an address has an account',
     $again->assertSessionHasNoErrors();
 
     // And only the real address is actually written to.
-    Notification::assertSentTo($this->staff, ResetPassword::class);
+    Notification::assertSentTo($this->staff, ResetPasswordNotification::class);
     Notification::assertCount(1);
 
     // A malformed address is still a plain validation error: that gives nothing away.

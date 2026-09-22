@@ -31,16 +31,17 @@ class InvitationNotification extends Notification
             ? 'the '.config('app.name').' team'
             : $this->invitation->store->name;
 
-        $invitedLine = $inviter
-            ? "{$inviter} has invited you to join {$place} as {$role}."
-            : "You have been invited to join {$place} as {$role}.";
-
+        // The app's own template rather than Laravel's stock one, with a plain-text twin beside it: an email
+        // with both parts is read by every client and is trusted further by the filters in between.
         return (new MailMessage)
             ->subject("You're invited to join {$place}")
-            ->greeting('Hello!')
-            ->line($invitedLine)
-            ->action('Accept invitation', route('invitations.show', $this->token))
-            ->line('This invitation expires on '.$this->invitation->expires_at->toFormattedDayDateString().'.')
-            ->line("If you weren't expecting it, you can safely ignore this email.");
+            ->view(['emails.invitation', 'emails.invitation-text'], [
+                'url' => route('invitations.show', $this->token),
+                'place' => $place,
+                'role' => $role,
+                'invitedBy' => $inviter,
+                'email' => $this->invitation->email,
+                'expires' => $this->invitation->expires_at->toFormattedDayDateString(),
+            ]);
     }
 }

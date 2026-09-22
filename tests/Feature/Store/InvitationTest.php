@@ -82,10 +82,15 @@ test('the invitation email reads properly', function () {
 
     Notification::assertSentOnDemand(InvitationNotification::class, function (InvitationNotification $notification) {
         $mail = $notification->toMail(new AnonymousNotifiable);
+        $html = (string) $mail->render();
 
+        // The app's own template (tests/Feature/System/EmailTemplatesTest.php draws it in full); here the
+        // question is only whether THIS invitation's words and link reached it.
         return $mail->subject === "You're invited to join Alpha Mart"
-            && str_contains(implode(' ', $mail->introLines), 'Olive Owner has invited you to join Alpha Mart as Staff.')
-            && str_contains($mail->actionUrl, '/invitations/'.$notification->token);
+            && str_contains($html, 'Olive Owner')
+            && str_contains($html, 'Alpha Mart')
+            && str_contains($html, 'Staff')
+            && str_contains($html, '/invitations/'.$notification->token);
     });
 });
 
