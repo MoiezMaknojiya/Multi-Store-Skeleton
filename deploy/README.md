@@ -140,8 +140,19 @@ server. Work down this list before changing anything:
      RSA. Fix it for everyone with `server/add-rsa-certificate.sh app.example.com`, which issues an RSA
      certificate beside it; Nginx then hands each client whichever it can read. Test the failing case with
      `openssl s_client … -tls1_2 -cipher 'ECDHE-RSA-AES256-GCM-SHA384'` — a handshake failure is the proof.
+   - **The visitor's antivirus terminates TLS and its CA bundle is old** (found 2026-09-22: Spectrum's
+     Security Suite, which is F-Secure). Since January 2026 Let's Encrypt signs from new roots (ISRG Root
+     YE / YR) that such bundles do not have; the site fails, while google.com — Google Trust Services, roots
+     in every bundle for a decade — works on the same PC. The server shows only "client closed connection
+     while SSL handshaking" at `info` level, and the PC's own Schannel log names the mismatch. Neither an
+     RSA certificate nor `--preferred-chain "ISRG Root X1"` (`server/use-compatible-chain.sh`) was enough
+     for that bundle. The fix that mirrors what the big sites do is a certificate from an authority with an
+     old root: `server/switch-to-zerossl.sh app.example.com KID HMAC you@example.com` (free, ACME, USERTrust
+     root from 2010; the EAB credentials come from the ZeroSSL dashboard). Control test for the visitor:
+     `curl -v https://letsencrypt.org` — it serves the same new chain and fails the same way.
    - **The network blocks the address or the hosting range.** Nothing on this server changes that; putting
-     the site behind Cloudflare would (at the cost of a 100 MB upload cap on its free plan).
+     the site behind Cloudflare would — with its certificate authority set to Google Trust Services, not
+     Let's Encrypt, or the same bundles fail again — at the cost of a 100 MB upload cap on its free plan.
 
 ## After changing `shared/.env`
 
