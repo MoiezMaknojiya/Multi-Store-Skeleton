@@ -36,19 +36,9 @@
 
     {{ $slot }}
 
-    {{-- Toasts, the same ones the rest of the app uses. --}}
-    <div class="fixed bottom-4 right-4 z-[100] space-y-2" x-data>
-        <template x-for="toast in $store.toasts.items" :key="toast.id">
-            <div class="flex items-center gap-3 rounded-lg px-4 py-3 text-sm shadow-lg"
-                 x-bind:class="toast.type === 'success'
-                     ? 'bg-green-600 text-white'
-                     : 'bg-red-600 text-white'">
-                <span x-text="toast.message"></span>
-                <button type="button" class="opacity-70 hover:opacity-100" @click="$store.toasts.dismiss(toast.id)"
-                        aria-label="Dismiss notification" title="Dismiss">&times;</button>
-            </div>
-        </template>
-    </div>
+    {{-- The app's own toasts — the shared component, never a copy: a second copy drifted to the bottom
+         corner and the editor spoke in a different place from every other page. --}}
+    <x-toasts />
 </body>
 
 </html>
