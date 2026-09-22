@@ -15,17 +15,19 @@ $maxWidth = [
 ][$maxWidth] ?? 'sm:max-w-2xl';
 @endphp
 
+{{-- items-center-safe, not items-center: a modal taller than the window is laid from its top and scrolls,
+     where a centred one hung its top above the window, out of reach of any scrolling. --}}
 <div
-    x-data="customModal('{{ $name }}', @js($show), @js($attributes->has('focusable')))"
+    x-data="customModal({{ Js::from($name) }}, @js($show), @js($attributes->has('focusable')))"
     x-on:open-modal.window="openEvent($event)"
     x-on:close-modal.window="closeEvent($event)"
     x-on:close.stop="closeMe"
     x-on:keydown.escape.window="closeMe"
     x-show="show"
-    class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-2 sm:p-0"
+    class="fixed inset-0 z-50 flex items-center-safe justify-center overflow-y-auto p-2 sm:p-0"
     style="display: none;"
 >
-    <!-- BACKDROP -->
+    {{-- BACKDROP --}}
     <div
         x-show="show"
         x-on:click="closeMe"
@@ -33,7 +35,7 @@ $maxWidth = [
     >
     </div>
 
-    <!-- MODAL PANEL (mobile: almost full width, desktop: respects maxWidth) -->
+    {{-- MODAL PANEL (mobile: almost full width, desktop: respects maxWidth) --}}
     <div
         x-show="show"
         x-on:click.stop

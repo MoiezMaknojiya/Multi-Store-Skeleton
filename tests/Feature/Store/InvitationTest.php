@@ -90,7 +90,7 @@ test('the invitation email reads properly', function () {
 });
 
 test('an invitation is refused for a member, a second invitation, or a platform account', function () {
-    $member = createStoreMember($this->store, Role::STAFF, ['email' => 'member@example.com']);
+    createStoreMember($this->store, Role::STAFF, ['email' => 'member@example.com']);
     inviteAs($this->owner, $this->store, 'MEMBER@example.com', $this->staffRole->id)
         ->assertStatus(422)->assertJsonValidationErrors('email');
 
@@ -280,11 +280,12 @@ test('accepting while already a member only clears the invitation', function () 
         ->and(ActivityLog::where('action', 'invitation.accepted')->where('actor_id', $member->id)->exists())->toBeTrue();
 });
 
-test('an invitation to a deleted store is dead', function () {
+test('deleting a store takes its invitations with it, so their links answer like an unknown one', function () {
     Invitation::factory()->withToken($token = str_repeat('i', 64))->create(['store_id' => $this->store->id]);
 
     $this->store->delete();
 
+    expect(Invitation::count())->toBe(0);
     $this->get("/invitations/{$token}")->assertSee('This invitation is no longer valid');
 });
 

@@ -38,7 +38,7 @@ class ActivityLogPartitioner
                 ['activity_logs']
             );
 
-            $partitions = array_map(function ($row) {
+            $partitions = array_map(function (object $row) {
                 $year = preg_match('/^p(\d{4})$/', $row->name, $m) ? (int) $m[1] : null;
                 $count = $year !== null
                     ? DB::table('activity_logs')->whereYear('created_at', $year)->count()
@@ -57,7 +57,7 @@ class ActivityLogPartitioner
 
         return [
             'driver' => DB::getDriverName(),
-            'partitions' => $years->map(fn ($r) => ['name' => 'p'.$r->y, 'year' => (int) $r->y, 'rows' => (int) $r->c])->all(),
+            'partitions' => $years->map(fn (object $r) => ['name' => 'p'.$r->y, 'year' => (int) $r->y, 'rows' => (int) $r->c])->all(),
         ];
     }
 
@@ -82,7 +82,7 @@ class ActivityLogPartitioner
 
             return [
                 'created' => [],
-                'dropped' => $old->map(fn ($r) => ['year' => (int) $r->y, 'rows' => (int) $r->c])->all(),
+                'dropped' => $old->map(fn (object $r) => ['year' => (int) $r->y, 'rows' => (int) $r->c])->all(),
             ];
         }
 
@@ -105,11 +105,11 @@ class ActivityLogPartitioner
         $created = [];
         $toCreate = array_values(array_filter(
             [$currentYear, $currentYear + 1, $currentYear + 2],
-            fn ($y) => ! in_array($y, $namedYears, true)
+            fn (int $y) => ! in_array($y, $namedYears, true)
         ));
         if ($toCreate !== []) {
             sort($toCreate);
-            $defs = implode(', ', array_map(fn ($y) => "PARTITION p{$y} VALUES LESS THAN (".($y + 1).')', $toCreate));
+            $defs = implode(', ', array_map(fn (int $y) => "PARTITION p{$y} VALUES LESS THAN (".($y + 1).')', $toCreate));
             DB::statement("ALTER TABLE activity_logs REORGANIZE PARTITION pmax INTO ({$defs}, PARTITION pmax VALUES LESS THAN MAXVALUE)");
             $created = $toCreate;
         }
@@ -129,6 +129,6 @@ class ActivityLogPartitioner
              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'activity_logs' AND PARTITION_NAME REGEXP '^p[0-9]{4}$'"
         );
 
-        return collect($years)->map(fn ($r) => (int) substr($r->name, 1))->max() ?? now()->year;
+        return collect($years)->map(fn (object $r) => (int) substr($r->name, 1))->max() ?? now()->year;
     }
 }

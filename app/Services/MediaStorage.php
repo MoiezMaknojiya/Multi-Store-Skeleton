@@ -27,23 +27,68 @@ class MediaStorage
     /** A browser-supplied poster larger than this is ignored, not stored. */
     private const POSTER_MAX_BYTES = 2 * 1024 * 1024;
 
+    /** Nor one wider or taller than this — a poster is a thumbnail, not a canvas to fill memory with. */
+    private const POSTER_MAX_SIDE = 4096;
+
     /**
-     * Store the file and return the attributes for a Media row.
+     * Store the file in a library and return the attributes for a Media row: a shop's library
+     * (`media/{store}/`), or the platform's own when there is no shop (`media/platform/`).
      *
      * @param  array<string, mixed>  $clientMeta  browser-measured duration/width/height/poster
      * @return array<string, mixed>
      */
-    public function store(UploadedFile $file, int $storeId, array $clientMeta = []): array
+    public function store(UploadedFile $file, ?int $storeId, array $clientMeta = []): array
     {
-        return ['store_id' => $storeId, ...$this->put($file, "media/{$storeId}", $clientMeta)];
+        $folder = $storeId === null ? 'media/platform' : "media/{$storeId}";
+
+        return ['store_id' => $storeId, ...$this->put($file, $folder, $clientMeta)];
+    }
+
+    /**
+     * Put an upload into a library and make its row: the one way a library file is born, whether it was
+     * uploaded on the Media page or inside a channel (docs/CHANNEL-CONTENT-SPEC.md).
+     *
+     * @param  array<string, mixed>  $clientMeta  browser-measured duration/width/height/poster
+     */
+    public function addToLibrary(UploadedFile $file, ?int $storeId, array $clientMeta, ?string $typedTitle, ?int $createdBy): Media
+    {
+        return Media::create([
+            ...$this->store($file, $storeId, $clientMeta),
+            'title' => $this->titleFor($typedTitle, $file),
+            'created_by' => $createdBy,
+        ]);
+    }
+
+    /**
+     * What to call the file: the person's own words, or the file's name.
+     *
+     * The typed title is already capped at 255 by the request. The FALLBACK is not, and it must be
+     * treated as untrusted: a filename arrives in the multipart header and a client can put anything
+     * of any length there, real filesystem limits or not. Left alone it reaches a varchar(255) column
+     * and a shop owner gets a 500 instead of a file in their library.
+     *
+     * Two other shapes worth handling rather than storing: a title of nothing but spaces, and a file
+     * called ".jpg", whose name-without-extension is empty. Both would otherwise leave a blank row that
+     * nobody can identify.
+     */
+    private function titleFor(?string $typed, UploadedFile $file): string
+    {
+        $title = trim((string) $typed);
+
+        if ($title === '') {
+            $title = trim(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME));
+        }
+
+        $title = mb_substr($title, 0, 255);
+
+        return $title === '' ? 'Untitled' : $title;
     }
 
     /**
      * The same pipeline for a network advertisement.
      *
-     * A campaign's file belongs to the PLATFORM, not to any shop, so it never
-     * becomes a `media` row — that table is the store's library and stays that way,
-     * with no exceptions to reason about. Only the plumbing is shared: the same
+     * A campaign's file is the contract's own, sold to a brand and switched on and off with
+     * the campaign, so it stays out of every library. Only the plumbing is shared: the same
      * thumbnailing, the same measuring, a different shelf.
      *
      * @param  array<string, mixed>  $clientMeta  browser-measured duration/width/height/poster
@@ -55,18 +100,18 @@ class MediaStorage
     }
 
     /**
-     * The same pipeline for an ad inside a channel.
+     * The same pipeline for a picture or a video used INSIDE an ad built in the Ad Builder.
      *
-     * Like a campaign's file it belongs to the platform or to one shop, so it never becomes a `media` row.
-     * Each channel keeps its own shelf, so a whole channel's files can be accounted for
-     * together.
+     * Its own shelf again (owner's decision, 2026-09-17): the store's media library is what a shop
+     * PLAYS, while this is raw material that only means something inside a design — a logo, a texture,
+     * a looping background. Same thumbnailing and measuring, different folder.
      *
      * @param  array<string, mixed>  $clientMeta  browser-measured duration/width/height/poster
      * @return array<string, mixed>
      */
-    public function storeChannelFile(UploadedFile $file, int $channelId, array $clientMeta = []): array
+    public function storeBuilderAsset(UploadedFile $file, int $storeId, array $clientMeta = []): array
     {
-        return $this->put($file, "channels/{$channelId}", $clientMeta);
+        return $this->put($file, "builder/{$storeId}/assets", $clientMeta);
     }
 
     /**
@@ -81,8 +126,11 @@ class MediaStorage
         $mime = (string) $file->getMimeType();
         $type = str_starts_with($mime, 'video/') ? Media::TYPE_VIDEO : Media::TYPE_IMAGE;
 
+        // The extension comes from the type read off the BYTES, never from the name the client sent:
+        // `mimes:` judges the bytes, so a real PNG named `promo.html` passes it — and kept as .html it
+        // would be served as a page from the panel's own address, running whatever its text chunks held.
         $name = (string) Str::ulid();
-        $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+        $extension = $file->extension() ?: 'bin';
         $path = $file->storeAs($directory, "{$name}.{$extension}", $disk);
 
         $width = null;
@@ -174,9 +222,6 @@ class MediaStorage
         imagejpeg($thumb, null, 80);
         $contents = (string) ob_get_clean();
 
-        imagedestroy($thumb);
-        imagedestroy($source);
-
         Storage::disk($disk)->put($target, $contents);
 
         return $target;
@@ -194,8 +239,29 @@ class MediaStorage
         };
     }
 
-    /** Decode the browser's poster frame. Anything malformed is dropped silently —
-     *  a missing thumbnail is a cosmetic loss, never a failed upload. */
+    /**
+     * An image the BROWSER drew, handed over as a data URI, written to a path we choose.
+     *
+     * The Ad Builder's poster comes this way: an ad is HTML, and there is no headless browser on the
+     * server to photograph it, so the editor captures its own stage and sends the picture along with the
+     * save. Anything that is not a small PNG or JPEG data URI is quietly refused — a listing without a
+     * poster is a nuisance, a listing with somebody's arbitrary bytes in it is a problem.
+     */
+    public function storePoster(string $target, ?string $dataUrl, string $disk = 'public'): ?string
+    {
+        return $this->savePoster($disk, $target, $dataUrl);
+    }
+
+    /**
+     * Decode a poster frame a browser drew — an uploaded video's first frame, an ad's stage — and store
+     * GD's own re-encoding of it, never the bytes that were sent.
+     *
+     * Whatever those bytes claimed to be, what lands on disk is then a JPEG GD drew, or nothing: a data URI
+     * carrying a script, a page or a PHP file under an `image/jpeg` label stores nothing at all. The size is
+     * read from the header BEFORE anything is decoded, so a tiny file claiming to be 50 000 pixels across
+     * cannot make GD allocate for it. Anything malformed is dropped silently — a missing thumbnail is a
+     * cosmetic loss, never a failed upload.
+     */
     private function savePoster(string $disk, string $target, ?string $dataUrl): ?string
     {
         if (! $dataUrl || ! preg_match('#^data:image/(jpeg|png);base64,#', $dataUrl, $match)) {
@@ -208,7 +274,30 @@ class MediaStorage
             return null;
         }
 
-        Storage::disk($disk)->put($target, $binary);
+        $size = @getimagesizefromstring($binary);
+
+        if ($size === false
+            || ! in_array($size[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG], true)
+            || $size[0] < 1 || $size[1] < 1
+            || $size[0] > self::POSTER_MAX_SIDE || $size[1] > self::POSTER_MAX_SIDE) {
+            return null;
+        }
+
+        $image = @imagecreatefromstring($binary);
+
+        if ($image === false) {
+            return null;
+        }
+
+        ob_start();
+        imagejpeg($image, null, 85);
+        $jpeg = (string) ob_get_clean();
+
+        if ($jpeg === '') {
+            return null;
+        }
+
+        Storage::disk($disk)->put($target, $jpeg);
 
         return $target;
     }

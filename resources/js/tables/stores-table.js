@@ -115,7 +115,8 @@ export function registerStoresTable(Alpine) {
                 if (!this.selectedItem || this.deleting) return;
 
                 const errors = {};
-                if (this.deleteConfirmName !== this.selectedItem.name) {
+                // Trimmed, as the server reads it (TrimStrings): a stray space is not a different name.
+                if (String(this.deleteConfirmName ?? '').trim() !== this.selectedItem.name) {
                     errors.confirm_name = ['Type the store name exactly as it is shown.'];
                 }
                 if (!this.deletePassword) {

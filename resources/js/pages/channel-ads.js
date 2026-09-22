@@ -5,14 +5,27 @@
  * page never has to guess what the server did. An upload, a reorder and a removal all
  * end the same way: with the list as it now stands.
  *
+ * An ad is a file of a media library (docs/CHANNEL-CONTENT-SPEC.md), and the form offers
+ * three ways to name it: a file already in the library, one of the Ad Builder's published
+ * ads (they live in the same library), or a fresh upload — which joins the library first.
+ * An edit may also keep the file it has. Only the way chosen is sent.
+ *
  * Uploading posts FormData and measures a video in the browser first, exactly like the
- * media library and the campaigns (there is no ffmpeg on the server). An image is given
- * its seconds; a video has none to give — it plays to its own end (owner's rule).
+ * media library and the campaigns (there is no ffmpeg on the server). An image or an ad
+ * page is given its seconds; a video has none to give — it plays to its own end (owner's rule).
  */
 import axios from 'axios';
 import { fileError, readVideoMeta } from '../core/media-file.js';
 
 const blankForm = () => ({ title: '', seconds: 10, starts_on: '', ends_on: '' });
+
+const blankPicker = () => ({ items: [], page: 1, lastPage: 1, loading: false, search: '', library: 'platform' });
+
+/** Tiles fetched at a time; "Load more" asks for the next ones. */
+const PICKER_PAGE_SIZE = 24;
+
+/** The two ways that choose a row of the library, rather than upload one. */
+const PICKING = ['library', 'ads'];
 
 export function registerChannelAds(Alpine) {
     Alpine.data('channelAds', (config = {}) => ({
@@ -20,6 +33,9 @@ export function registerChannelAds(Alpine) {
 
         maxImageSeconds: config.maxImageSeconds ?? 300,
         adsPerPass: config.adsPerPass ?? null,
+        // Above the stores, the platform's channel may take any shop's files: [{id, name}], else empty.
+        libraries: config.libraries ?? [],
+        uploadsJoin: config.uploadsJoin ?? 'your media library',
 
         ads: [],
         loading: true,
@@ -31,6 +47,15 @@ export function registerChannelAds(Alpine) {
         removingAd: null,
         form: blankForm(),
         formErrors: {},
+
+        // Where the ad's file comes from: 'keep' (an edit only), 'library', 'ads' or 'upload'.
+        source: 'library',
+        // The library row picked with 'library' or 'ads'.
+        chosen: null,
+        picker: blankPicker(),
+        // Numbers each picker request, so an answer overtaken by a newer one is dropped.
+        pickerTicket: 0,
+
         selectedFile: null,
         clientMeta: {},
         preparing: false,
@@ -56,10 +81,11 @@ export function registerChannelAds(Alpine) {
         openAdModal(ad = null) {
             this.editingAd = ad;
             this.formErrors = {};
-            this.selectedFile = null;
-            this.clientMeta = {};
-            this.preparing = false;
-            if (this.$refs.fileInput) this.$refs.fileInput.value = '';
+            this.clearFile();
+            this.chosen = null;
+            this.picker = blankPicker();
+            // An edit starts from the file it has; a new ad from the library.
+            this.source = ad ? 'keep' : 'library';
 
             this.form = ad
                 ? {
@@ -71,32 +97,132 @@ export function registerChannelAds(Alpine) {
                 : blankForm();
 
             this.$dispatch('open-modal', 'channel-ad-modal');
+            if (PICKING.includes(this.source)) this.loadPicker();
         },
 
         closeAdModal() {
             this.$dispatch('close-modal', 'channel-ad-modal');
             this.editingAd = null;
             this.formErrors = {};
+            // A picker answer still on its way belongs to a form that is gone.
+            this.pickerTicket++;
         },
 
-        /** Is the ad in the form a video? The newly chosen file decides when there is
-         *  one; otherwise the file the ad already has. */
-        isVideo() {
-            if (this.selectedFile) return this.selectedFile.type.startsWith('video/');
+        /** Switch the way the file is named. What was picked or chosen the other way is
+         *  dropped, so the form only ever sends what it shows. */
+        setSource(source) {
+            if (this.source === source) return;
 
-            return this.editingAd?.type === 'video';
+            this.source = source;
+            this.chosen = null;
+            this.clearFile();
+            this.forgetErrors('file', 'media_id');
+
+            if (PICKING.includes(source)) {
+                // The library a platform user chose stays chosen; the search starts again.
+                this.picker = { ...blankPicker(), library: this.picker.library };
+                this.loadPicker();
+            }
+        },
+
+        clearFile() {
+            this.selectedFile = null;
+            this.clientMeta = {};
+            this.preparing = false;
+            if (this.$refs.fileInput) this.$refs.fileInput.value = '';
+        },
+
+        forgetErrors(...fields) {
+            this.formErrors = Object.fromEntries(
+                Object.entries(this.formErrors).filter(([field]) => ! fields.includes(field)),
+            );
+        },
+
+        /** The field the chosen way is refused under, or null when the ad keeps its file. */
+        sourceField() {
+            if (this.source === 'upload') return 'file';
+
+            return PICKING.includes(this.source) ? 'media_id' : null;
+        },
+
+        /* ── The picker ──────────────────────────────────────────────────── */
+
+        /** The first page for the current way, search and library — or, with `more`, the next one. */
+        async loadPicker({ more = false } = {}) {
+            if (! PICKING.includes(this.source)) return;
+
+            const ticket = ++this.pickerTicket;
+            const params = {
+                // The Ad Builder's published ads are the library's ad pages; the library, its pictures and videos.
+                type: this.source === 'ads' ? 'html' : 'files',
+                page: more ? this.picker.page + 1 : 1,
+                per_page: PICKER_PAGE_SIZE,
+            };
+            const search = this.picker.search.trim();
+            if (search !== '') params.search = search;
+            if (this.libraries.length > 0) params.library = this.picker.library;
+
+            this.picker.loading = true;
+            try {
+                const { data } = await axios.get(`/channels/${this.channelId}/library`, { params });
+                if (ticket !== this.pickerTicket) return;
+
+                // A file uploaded between two pages pushes the next page along by one; the id it
+                // repeats would give two tiles the same key.
+                const shown = new Set(more ? this.picker.items.map((item) => item.id) : []);
+                const fresh = data.media.filter((item) => ! shown.has(item.id));
+
+                this.picker.items = more ? [...this.picker.items, ...fresh] : fresh;
+                this.picker.page = data.currentPage;
+                this.picker.lastPage = data.lastPage;
+            } catch (error) {
+                if (ticket !== this.pickerTicket) return;
+
+                const errors = error.response?.data?.errors;
+                window.toast(errors ? Object.values(errors)[0][0] : (error.response?.data?.message ?? 'Could not load the library.'));
+            } finally {
+                if (ticket === this.pickerTicket) this.picker.loading = false;
+            }
+        },
+
+        pick(item) {
+            this.chosen = item;
+            this.forgetErrors('media_id');
+        },
+
+        pickerEmptyText() {
+            if (this.picker.search.trim() !== '') return 'Nothing here matches that search.';
+
+            if (this.source === 'ads') {
+                // The Ad Builder works inside a shop and publishes into that shop's library.
+                return this.libraries.length > 0 && this.picker.library === 'platform'
+                    ? 'Ad Builder ads are published into a shop\'s library — choose the shop above.'
+                    : 'No published ads here yet. Publish one in the Ad Builder, then choose it here.';
+            }
+
+            return 'Nothing in this library yet. Choose Upload to add a file.';
+        },
+
+        /** Is the ad in the form a video? Whatever the chosen way names decides. */
+        isVideo() {
+            if (this.source === 'upload') return this.selectedFile?.type.startsWith('video/') ?? false;
+            if (this.source === 'keep') return this.editingAd?.type === 'video';
+
+            return this.chosen?.type === 'video';
         },
 
         async onFileSelected(event) {
             const file = event.target.files?.[0] ?? null;
             this.selectedFile = file;
             this.clientMeta = {};
-            this.formErrors = {};
+            this.forgetErrors('file');
+            // Whatever an earlier pick was still measuring no longer matters.
+            this.preparing = false;
             if (! file) return;
 
             const error = fileError(file);
             if (error) {
-                this.formErrors = { file: [error] };
+                this.formErrors = { ...this.formErrors, file: [error] };
                 this.selectedFile = null;
                 return;
             }
@@ -104,9 +230,12 @@ export function registerChannelAds(Alpine) {
             if (file.type.startsWith('video/')) {
                 this.preparing = true;
                 try {
-                    this.clientMeta = await readVideoMeta(file);
+                    const meta = await readVideoMeta(file);
+                    // Another file was chosen while this one was measured: its numbers are
+                    // not that file's, and must not ride along with its upload.
+                    if (this.selectedFile === file) this.clientMeta = meta;
                 } finally {
-                    this.preparing = false;
+                    if (this.selectedFile === file) this.preparing = false;
                 }
             }
         },
@@ -115,8 +244,12 @@ export function registerChannelAds(Alpine) {
         validateAd() {
             const errors = {};
 
-            if (! this.editingAd && ! this.selectedFile) {
-                errors.file = ['Choose the ad to upload.'];
+            if (this.source === 'upload' && ! this.selectedFile) {
+                errors.file = ['Choose the file to upload.'];
+            }
+
+            if (PICKING.includes(this.source) && ! this.chosen) {
+                errors.media_id = [this.source === 'ads' ? 'Choose one of the published ads.' : 'Choose a file from the library.'];
             }
 
             if (String(this.form.title ?? '').length > 255) {
@@ -127,9 +260,9 @@ export function registerChannelAds(Alpine) {
                 const seconds = Number(this.form.seconds);
 
                 if (! Number.isInteger(seconds) || seconds < 1) {
-                    errors.seconds = ['Say how many seconds the image stays on screen.'];
+                    errors.seconds = ['Say how many seconds it stays on screen.'];
                 } else if (seconds > this.maxImageSeconds) {
-                    errors.seconds = [`An image may not stay up longer than ${this.maxImageSeconds} seconds.`];
+                    errors.seconds = [`It may not stay up longer than ${this.maxImageSeconds} seconds.`];
                 }
             }
 
@@ -155,7 +288,8 @@ export function registerChannelAds(Alpine) {
             this.saving = true;
             try {
                 const payload = new FormData();
-                if (this.selectedFile) payload.append('file', this.selectedFile);
+                if (this.source === 'upload') payload.append('file', this.selectedFile);
+                if (PICKING.includes(this.source)) payload.append('media_id', this.chosen.id);
 
                 const fields = {
                     title: this.form.title,
@@ -163,16 +297,18 @@ export function registerChannelAds(Alpine) {
                     ends_on: this.form.ends_on,
                 };
 
-                // Seconds only for an image. A video has none to send.
+                // Seconds only for an image or an ad page. A video has none to send.
                 if (! this.isVideo()) fields.seconds = this.form.seconds;
 
                 Object.entries(fields).forEach(([key, value]) => {
                     if (value !== '' && value !== null && value !== undefined) payload.append(key, value);
                 });
 
-                Object.entries(this.clientMeta).forEach(([key, value]) => {
-                    if (value !== null && value !== undefined) payload.append(key, value);
-                });
+                if (this.source === 'upload') {
+                    Object.entries(this.clientMeta).forEach(([key, value]) => {
+                        if (value !== null && value !== undefined) payload.append(key, value);
+                    });
+                }
 
                 const url = this.editingAd
                     ? `/channels/${this.channelId}/ads/${this.editingAd.id}`
@@ -183,8 +319,15 @@ export function registerChannelAds(Alpine) {
                 this.closeAdModal();
                 window.toast(data.message, 'success');
             } catch (error) {
-                if (error.response?.status === 422 && error.response.data.errors) {
-                    this.formErrors = error.response.data.errors;
+                const errors = error.response?.status === 422 ? error.response.data.errors : null;
+
+                if (errors) {
+                    this.formErrors = errors;
+                    // A refusal the form has no place for (a video's measurements, the other way's
+                    // field) would otherwise say nothing at all.
+                    const shown = ['title', 'seconds', 'starts_on', 'ends_on', this.sourceField()];
+                    const unseen = Object.keys(errors).find((field) => ! shown.includes(field));
+                    if (unseen) window.toast(errors[unseen][0]);
                 } else {
                     window.toast(error.response?.data?.message ?? 'Could not save the ad.');
                 }
@@ -252,14 +395,20 @@ export function registerChannelAds(Alpine) {
             return `${running.length} of ${this.ads.length} running today · ${this.formatDuration(seconds)} in all · ${each}`;
         },
 
+        /** The word the media library uses: "html" is nobody's word for an Ad Builder page. */
+        typeLabel(type) {
+            return { image: 'Image', video: 'Video', html: 'Ad page' }[type] ?? type;
+        },
+
         datesLabel(ad) {
             if (! ad.starts_on && ! ad.ends_on) return 'No end date';
 
             return `${ad.starts_on ?? 'now'} → ${ad.ends_on ?? 'no end'}`;
         },
 
+        /** A draft is an Ad Builder ad taken off the screens (Unpublish): off the air until it is published again. */
         statusLabel(ad) {
-            return { running: 'Running', scheduled: 'Starts later', ended: 'Ended' }[ad.status] ?? ad.status;
+            return { running: 'Running', scheduled: 'Starts later', ended: 'Ended', draft: 'Draft · not playing' }[ad.status] ?? ad.status;
         },
 
         lengthLabel(ad) {

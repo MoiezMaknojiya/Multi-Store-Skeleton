@@ -2,8 +2,8 @@
  * Factory function for CRUD table Alpine.js components.
  * Provides shared pagination, debounced search, fetch, save, and delete logic.
  * The listings built on it — accounts, stores, permissions, the activity log, media, screens, dayparts,
- * campaigns and channels — add their own form shape and overrides (roles, playlists and channel ads have
- * their own components instead).
+ * campaigns, channels, and the Ad Builder's ads and assets — add their own form shape and overrides
+ * (roles, playlists and channel ads have their own components instead).
  */
 import axios from 'axios';
 
@@ -14,9 +14,9 @@ import axios from 'axios';
  * twenty-five there, a hundred somewhere else — and a person moving between them had
  * no idea whether a short list meant "that is all there is" or "there is more below".
  * Mirrored by HandlesCrudData's own default so the server agrees when a client sends
- * no per_page at all.
+ * no per_page at all. Not exported: a listing takes it through `perPage` below.
  */
-export const ROWS_PER_PAGE = 50;
+const ROWS_PER_PAGE = 50;
 
 export function createCrudTable({
     fetchUrl,            // API endpoint for listing, e.g. '/stores/data'
@@ -37,6 +37,11 @@ export function createCrudTable({
     extraState = {},     // Additional reactive properties specific to the entity
     extraMethods = {},   // Additional methods specific to the entity
 }) {
+    /* A fresh copy of the empty form every time, nested arrays included. A spread copy shared
+     * them with defaultForm, so a daypart's exception rows or a campaign's ticked screens were
+     * pushed into the default itself — and the next "Add" opened with them already there. */
+    const blankForm = () => structuredClone(defaultForm);
+
     return () => ({
         /* ── Shared reactive state ─────────────────────────────────────── */
         search: '',
@@ -52,10 +57,11 @@ export function createCrudTable({
         deletePasswordError: '',
         selectedItem: null,
         editingItem: null,
-        form: { ...defaultForm },
+        form: blankForm(),
         formErrors: {},
         searchDebounceTimer: null,
         fetchToken: 0,
+        refreshFailed: false,   // a quiet refresh failed and has said so; cleared by the next success
 
         /* Merge entity-specific state */
         ...extraState,
@@ -75,13 +81,21 @@ export function createCrudTable({
         },
 
         /* ── Data fetching ─────────────────────────────────────────────── */
-        async fetchItems() {
+        /**
+         * `quiet` is for a refresh nobody asked for — the screens list re-reading itself
+         * every thirty seconds. The rows on the page stay where they are until the new ones
+         * arrive, with no "Loading..." blink in between, and a failure keeps them and says so
+         * once, rather than emptying the table without a word.
+         */
+        async fetchItems({ quiet = false } = {}) {
             /* Rapid pagination/search can fire overlapping requests; only the response
              * matching the most recently issued request is allowed to update state, so a
              * slow older response can't overwrite a newer one that resolved first. */
             const requestToken = ++this.fetchToken;
-            this.items = [];
-            this.loading = true;
+            if (!quiet) {
+                this.items = [];
+                this.loading = true;
+            }
             try {
                 const params = { search: this.search, page: this.currentPage, per_page: this.perPage };
                 /* Entity-specific listing filters (e.g. the activity log's date range). */
@@ -93,11 +107,20 @@ export function createCrudTable({
                 this.total = data.total;
                 this.currentPage = data.currentPage;
                 this.lastPage = data.lastPage;
+                this.refreshFailed = false;
             } catch (error) {
                 if (requestToken !== this.fetchToken) return;
                 console.error(`Failed to fetch ${entityLabel}s:`, error);
-                this.items = [];
+                if (quiet) {
+                    /* The rows already shown are older, not wrong: keep them, and say once — not
+                     * every thirty seconds — that they are no longer being brought up to date. */
+                    if (!this.refreshFailed) window.toast(`Could not refresh the ${entityLabel}s. Showing the last list loaded.`);
+                    this.refreshFailed = true;
+                } else {
+                    this.items = [];
+                }
             } finally {
+                /* Also after a quiet request: one that overtook a normal fetch has to end its "Loading...". */
                 if (requestToken === this.fetchToken) this.loading = false;
             }
         },
@@ -134,7 +157,7 @@ export function createCrudTable({
             this.formErrors = {};
             this.form = item && mapItemToForm
                 ? mapItemToForm(item)
-                : { ...defaultForm };
+                : blankForm();
             this.$dispatch('open-modal', formModalName);
         },
 

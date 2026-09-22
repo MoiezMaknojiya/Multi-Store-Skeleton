@@ -11,7 +11,15 @@ function waitingDeviceCode(): string
 }
 
 test('guests cannot access any screen endpoint', function () {
-    $this->getJson('/screens/data')->assertUnauthorized();
+    // Every route under /screens — the playlist, its picker and copy included — read from the route table,
+    // so one added later is asked too.
+    $routes = routesUnder('screens');
+
+    expect($routes)->not->toBeEmpty();
+
+    foreach ($routes as [$method, $uri]) {
+        expect($this->json($method, $uri)->status())->toBe(401, "{$method} {$uri}");
+    }
 });
 
 test('a store user only sees the screens of the store they are working in', function () {

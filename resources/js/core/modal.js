@@ -1,4 +1,4 @@
-// resources/js/modal.js
+// resources/js/core/modal.js
 export function registerCustomModal(Alpine) {
     Alpine.data('customModal', (modalName, initialShow, isFocusable) => ({
         show: initialShow,

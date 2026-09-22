@@ -12,6 +12,7 @@ use App\Models\Screen;
 use App\Models\Store;
 use App\Services\DevicePairing;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -59,7 +60,7 @@ class ScreenController extends Controller
             'screens',
             ['*'],
             null,
-            function ($q, string $search) {
+            function (Builder $q, string $search) {
                 // Stored as "2026-09-07 14:08:48", so a typed 2026-09-07 — or just
                 // 2026-09 — matches straight away.
                 $q->orWhere('paired_at', 'like', "%{$search}%");
@@ -91,8 +92,10 @@ class ScreenController extends Controller
         $validated = $request->validate(['search' => ['nullable', 'string', 'max:255']]);
         $search = trim((string) ($validated['search'] ?? ''));
 
+        // Never an Ad Builder page taken off the screens (unpublished): nobody picks one until it is published again.
         $media = Media::where('store_id', $screen->store_id)
-            ->when($search !== '', fn ($q) => $q->where('title', 'like', "%{$search}%"))
+            ->withoutDrafts()
+            ->when($search !== '', fn (Builder $q) => $q->where('title', 'like', "%{$search}%"))
             ->orderBy('title')
             ->limit(100)
             ->get(['id', 'title', 'type']);
@@ -112,7 +115,7 @@ class ScreenController extends Controller
             'orientations' => Screen::ORIENTATIONS,
             // The schedule editor picks a window from these; "New daypart" on the
             // Dayparts page is the way to add one.
-            'dayparts' => $this->daypartOptions(),
+            'dayparts' => $this->daypartOptions($screen),
             'weekdays' => Daypart::WEEKDAYS,
             'recurrenceTypes' => ScheduleRule::TYPES,
             'ordinals' => ScheduleRule::ORDINALS,
@@ -134,7 +137,7 @@ class ScreenController extends Controller
             'mode' => ['required', 'in:new,replace'],
             'name' => ['required_if:mode,new', 'nullable', 'string', 'max:255'],
             'orientation' => ['required_if:mode,new', 'nullable', Rule::in(array_keys(Screen::ORIENTATIONS))],
-            'screen_id' => ['required_if:mode,replace', 'nullable', 'integer'],
+            'screen_id' => ['required_if:mode,replace', 'nullable', 'integer', 'min:1'],
         ], [
             'code.size' => 'A pairing code is exactly 6 characters.',
             'name.required_if' => 'Give the screen a name.',
@@ -211,7 +214,7 @@ class ScreenController extends Controller
             'timezone' => ['sometimes', 'required', 'string', 'max:64', Rule::in(timezone_identifiers_list())],
             // Null IS a real answer: no default media means a black screen when
             // nothing is due.
-            'default_media_id' => ['sometimes', 'nullable', 'integer'],
+            'default_media_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
         ], [
             'timezone.in' => 'That is not a timezone this server knows.',
         ]);
@@ -249,23 +252,34 @@ class ScreenController extends Controller
     }
 
     /**
-     * The live dayparts of the store being worked in.
+     * The dayparts a rule on this screen may name: the live ones of the SCREEN's store — never another
+     * store's, even for the platform team, who can see them all (the playlist would refuse one anyway) —
+     * plus any retired one a rule here still uses, marked `retired`. A retired daypart keeps working for
+     * the rules that had it; left out of this list, such a rule read "All day" on the page.
      *
      * The times go out as stored — 24-hour "HH:MM" — and the browser turns them into
      * AM/PM. Building the label here too would mean two places that decide how a clock
      * reads, and one of them would eventually drift.
+     *
+     * @return list<array{id: int, name: string, start_time: string, end_time: string, retired: bool}>
      */
-    private function daypartOptions(): array
+    private function daypartOptions(Screen $screen): array
     {
+        $used = ScheduleRule::whereIn('playlist_item_id', $screen->playlistItems()->select('id'))
+            ->whereNotNull('daypart_id')
+            ->select('daypart_id');
+
         return Daypart::visibleTo(auth()->user())
-            ->active()
+            ->where('store_id', $screen->store_id)
+            ->where(fn (Builder $query) => $query->where('is_retired', false)->orWhereIn('id', $used))
             ->orderBy('name')
-            ->get(['id', 'name', 'start_time', 'end_time'])
+            ->get(['id', 'name', 'start_time', 'end_time', 'is_retired'])
             ->map(fn (Daypart $daypart) => [
                 'id' => $daypart->id,
                 'name' => $daypart->name,
                 'start_time' => $daypart->start_time,
                 'end_time' => $daypart->end_time,
+                'retired' => $daypart->is_retired,
             ])->all();
     }
 

@@ -24,12 +24,12 @@ class AppServiceProvider extends ServiceProvider
 
         // Register gates for every permission in the database
         try {
-            Permission::all()->each(function ($permission) {
-                Gate::define($permission->name, function ($user) use ($permission) {
+            Permission::all()->each(function (Permission $permission) {
+                Gate::define($permission->name, function (User $user) use ($permission) {
                     return $user->hasPermissionInCurrentStore($permission->name);
                 });
             });
-        } catch (\Exception $e) {
+        } catch (\Exception) {
             // Table might not exist during migration
         }
 
@@ -73,7 +73,7 @@ class AppServiceProvider extends ServiceProvider
     private function registerNetworkAdGates(): void
     {
         // Campaigns belong to the platform, not to any shop.
-        Gate::define('campaign-manage', fn ($user) => $user->isSuperAdmin());
+        Gate::define('campaign-manage', fn (User $user) => $user->isSuperAdmin());
 
         /**
          * Whether a shop and its screens carry advertising is the PLATFORM owner's
@@ -178,7 +178,7 @@ class AppServiceProvider extends ServiceProvider
         // shared bucket, which is what we want for junk traffic. Note this limiter
         // runs BEFORE device.token so a wrong token is throttled too.
         RateLimiter::for('device-api', function (Request $request) {
-            $token = $request->bearerToken() ?? $request->header('X-Device-Token') ?? '';
+            $token = $request->bearerToken() ?? '';
 
             return [
                 Limit::perMinute(60)->by('device-api:device:'.hash('sha256', $token)),
@@ -209,12 +209,19 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('invitation-response', fn (Request $request) => Limit::perMinute(20)
             ->by('invitation-response:'.$request->ip()));
 
+        // Installing a font reaches OUT of this server to Google and writes files, so it is counted
+        // even though it needs `ad-store` or `ad-update` to get here at all: a loop in a client must
+        // not be able to pull a hundred families down. One family is one request, and a design needs
+        // a handful.
+        RateLimiter::for('font-install', fn (Request $request) => Limit::perMinute(10)
+            ->by('font-install:'.($request->user()?->id ?: $request->ip())));
+
         // The forgotten-password pair. The password broker has a throttle of its own, but it only
         // stops the SAME address being mailed twice within a minute — it does nothing about a list
-        // of addresses being walked one at a time, which sends one email per address and, because
-        // the form says whether an address has an account, also reads the list back. Keyed on the
-        // visitor like the invitation link's end; a reset is rare enough that 10 a minute is far
-        // above anybody who has simply mistyped their new password.
+        // of addresses being walked one at a time, which sends one email per address (the form's
+        // answer is the same for every address, so it reads nothing back — the mail is the harm).
+        // Keyed on the visitor like the invitation link's end; a reset is rare enough that 10 a
+        // minute is far above anybody who has simply mistyped their new password.
         RateLimiter::for('password-reset', fn (Request $request) => Limit::perMinute(10)
             ->by('password-reset:'.$request->ip()));
     }

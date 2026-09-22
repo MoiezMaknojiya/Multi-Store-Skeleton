@@ -56,7 +56,7 @@ class DatabaseSeeder extends Seeder
         // Set the password only when creating the admin, or when SEED_ADMIN_PASSWORD is given —
         // a routine re-seed must never silently rotate a working password. Without the env key
         // a random one is generated and printed ONCE.
-        $envPassword = env('SEED_ADMIN_PASSWORD');
+        $envPassword = config('app.seed_admin_password');
         if (! $superAdmin->exists || $envPassword) {
             $password = $envPassword ?: Str::random(16);
             if (! $envPassword) {

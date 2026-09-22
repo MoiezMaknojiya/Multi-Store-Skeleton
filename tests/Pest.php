@@ -5,6 +5,7 @@ use App\Models\Role;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Routing\Route;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -28,17 +29,6 @@ pest()->extend(DuskTestCase::class)
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->in('Feature');
-
-/*
-|--------------------------------------------------------------------------
-| Functions
-|--------------------------------------------------------------------------
-|
-| While Pest is very powerful out-of-the-box, you may have some testing code specific to your
-| project that you don't want to repeat in every file. Here you can also expose helpers as
-| global functions to help you to reduce the number of lines of code in your test files.
-|
-*/
 
 /*
 |--------------------------------------------------------------------------
@@ -70,8 +60,13 @@ function grantPermissions(array $names): Collection
 }
 
 /**
- * Create a Super-Admin user (assigned via the store_id = 0 sentinel, matching
- * the real seeder) with the given permissions granted to the Super-Admin role.
+ * Create a super admin: the Super-Admin role (made here when the test has none yet — in a real install the
+ * seeder makes it, not the migrations) held on the store_id = 0 platform row, the way the seeder holds it.
+ * The first one made in a test is the primary super admin.
+ *
+ * A super admin holds every permission whatever the role's rows say (the Gate::before in AppServiceProvider),
+ * so the names given change nothing about what they may do: they only write rows onto the role, for a test
+ * that reads those rows.
  */
 function createSuperAdmin(array $permissionNames = []): User
 {
@@ -157,4 +152,29 @@ function roleKeyIn(User $user, Store $store): ?string
     $roleId = DB::table('store_user')->where('store_id', $store->id)->where('user_id', $user->id)->value('role_id');
 
     return $roleId ? Role::find($roleId)?->key : null;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Route Helpers
+|--------------------------------------------------------------------------
+*/
+
+/**
+ * Every route under a URI prefix — "media" gives /media, /media/data, /media/{media} and the rest — as
+ * [method, uri] pairs with each {parameter} filled in with 1. Read from the route table, so a test that
+ * promises "any endpoint" asks every one of them, a route added later included. HEAD is left out: it is
+ * GET's twin.
+ *
+ * @return list<array{0: string, 1: string}>
+ */
+function routesUnder(string $prefix): array
+{
+    return collect(app('router')->getRoutes()->getRoutes())
+        ->filter(fn (Route $route) => $route->uri() === $prefix || str_starts_with($route->uri(), $prefix.'/'))
+        ->flatMap(fn (Route $route) => collect($route->methods())
+            ->reject(fn (string $method) => $method === 'HEAD')
+            ->map(fn (string $method) => [$method, '/'.preg_replace('/\{[^}]+\}/', '1', $route->uri())]))
+        ->values()
+        ->all();
 }

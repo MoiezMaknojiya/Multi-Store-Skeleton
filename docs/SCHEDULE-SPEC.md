@@ -129,7 +129,7 @@ playlist item, do rules.
 Har item ke liye **do** sawal. **Koi ek bhi na kahe → item band.**
 
 ```
-1. File zinda hai?            media.start_at / media.expires_at   (ye pehle se hai)
+1. File zinda hai?            media.starts_at / media.expires_at  (ye pehle se hai)
 2. Koi rule haan kehta hai?   rules khali hon to khud-ba-khud haan
                               (rules screen ke timezone par parhi jati hain)
 ```
@@ -336,9 +336,10 @@ usi code se), `playlist/copy-targets`, aur `media-options` (default-media picker
 endpoint, `screen-update` ke peeche — capability-complete usool).
 
 **Daypart ki list ke liye naya AJAX endpoint nahi.** Jaise `$orientations` abhi Blade mein
-jata hai, waise `$dayparts` bhi `ScreenController::index()` aur `::show()` se jata hai
-(`ScreenController::daypartOptions()`). Isse capability-complete permissions ka masla khud
-hal ho jata hai — page ka apna permission hi kaafi hai.
+jata hai, waise `$dayparts` bhi jata hai — lekin sirf `ScreenController::show()` se
+(`ScreenController::daypartOptions()`), kyunke schedule editor sirf screen ke page par hai.
+Isse capability-complete permissions ka masla khud hal ho jata hai — page ka apna permission
+hi kaafi hai.
 
 Har write par `visibleTo()->findOrFail()`, aur har mutation par `ActivityLog::record()`.
 Asal action names (design ke `screen.hours_updated` / `playlist.schedule_updated` /
@@ -544,7 +545,7 @@ Har phase ke baad Pest + Dusk chalenge aur localhost par live verify hoga.
 | Request | `DaypartRequest` (create + update, ek hi rules) |
 | Controller | `DaypartController` (index · data · store · update · destroy) |
 | Routes | `/dayparts` CRUD, har ek apni `can:daypart-*` ke peeche |
-| Permissions | `daypart-view/store/update/destroy` — seeder mein, aur signup-default role ko |
+| Permissions | `daypart-view/store/update/destroy` — migration `2026_09_16_110200` mein, starter roles ko (Owner aur Admin ko charon, Staff aur Viewer ko `daypart-view`) |
 | UI | `dayparts/index.blade.php` + `dayparts-table.js` + sidebar link |
 | Tests | `DaypartCrudTest` (18) · `DaypartWindowTest` (10) · Dusk `DaypartUiTest` (2) |
 

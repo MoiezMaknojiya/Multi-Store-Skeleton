@@ -82,8 +82,12 @@ class InvitationAcceptFlowTest extends DuskTestCase
                 'declining joins nobody'
             );
 
-            // The link is spent: opening it again says so.
-            $browser->visit('/invitations/'.$token)->assertDontSee('Accept invitation');
+            // The link is spent: opening it again says so — on the page every dead link gets,
+            // with nothing on it to accept.
+            $browser->visit('/invitations/'.$token)
+                ->assertPresent('@invitation-invalid')
+                ->assertSeeIn('@invitation-invalid', 'This invitation is no longer valid')
+                ->assertMissing('@invitation-accept');
         });
     }
 }

@@ -20,7 +20,6 @@ beforeEach(function () {
     Notification::fake();
 
     $this->admin = createSuperAdmin(['store-view', 'store-store', 'store-update', 'store-destroy']);
-    registerPermissionGates();
 });
 
 function storeFormPayload(array $overrides = []): array

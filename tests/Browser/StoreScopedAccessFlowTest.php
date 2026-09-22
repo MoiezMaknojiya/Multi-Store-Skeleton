@@ -26,9 +26,9 @@ class StoreScopedAccessFlowTest extends DuskTestCase
         $this->storeMember($alpha, Role::OWNER, 'olive@example.com');
         $sam = $this->storeMember($alpha, Role::STAFF, 'sam@example.com');
         Channel::factory()->create(['name' => 'Beta Specials', 'store_id' => $beta->id]);
-        Channel::factory()->create(['name' => 'GAMA']);
+        $gama = Channel::factory()->create(['name' => 'GAMA']);
 
-        $this->browse(function (Browser $browser) use ($admin, $alpha, $sam) {
+        $this->browse(function (Browser $browser) use ($admin, $alpha, $sam, $gama) {
             /* ── 1. Roles → Create role → Store role: offered in every store, with what works inside a store ── */
             $this->freshSession($browser);
             $browser->loginAs($admin)->visit('/roles');
@@ -73,7 +73,8 @@ class StoreScopedAccessFlowTest extends DuskTestCase
                 ->assertMissing('#main-sidebar a[href$="/users"]')
                 ->assertPresent('@sidebar-settings');
 
-            // Channels: the store's own, made here — never the platform's or another store's.
+            // Channels: the store's own, made here; the platform's listed to look at (owner, 2026-09-19) — nothing
+            // on it to change; another store's never.
             $browser->visit('/channels');
             $this->waitForAlpine($browser);
             $browser->waitForText('Channels of Alpha Mart');
@@ -82,7 +83,10 @@ class StoreScopedAccessFlowTest extends DuskTestCase
             $this->jsClick($browser, '@channel-save');
             $browser->waitForText('Alpha Lunch Deals')
                 ->assertDontSee('Beta Specials')
-                ->assertDontSee('GAMA');
+                ->assertSeeIn('@channel-name-'.$gama->id, 'GAMA')
+                ->assertVisible('@channel-from-platform-'.$gama->id)
+                ->assertMissing('@edit-channel-'.$gama->id)
+                ->assertMissing('@delete-channel-'.$gama->id);
             $this->assertSame($alpha->id, Channel::where('name', 'Alpha Lunch Deals')->firstOrFail()->store_id);
 
             // Settings → Stores: the stores Sam belongs to, the details to read, and no Create store without store-store.

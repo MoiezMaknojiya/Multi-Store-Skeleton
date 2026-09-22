@@ -6,7 +6,7 @@ use App\Models\User;
 
 beforeEach(function () {
     // Keep the seeder from printing a generated admin password on every test.
-    putenv('SEED_ADMIN_PASSWORD=not-used-by-these-tests');
+    config(['app.seed_admin_password' => 'not-used-by-these-tests']);
 });
 
 test('the catalogue lists cover every labelled permission exactly once', function () {
@@ -22,27 +22,22 @@ test('the catalogue lists cover every labelled permission exactly once', functio
         ->and(collect(Permission::PLATFORM)->diff(Permission::STORE_SCOPED)->values()->all())->toBe(['user-view', 'user-destroy', 'activity-destroy']);
 });
 
-test('the seeder bootstraps the catalogue, the Super-Admin and the four store roles', function () {
+test('the seeder adds the Super-Admin role, holding the whole catalogue, and its account — over what the migrations installed', function () {
+    // The migrations install the catalogue and the four starter store roles (DatabaseSchemaTest checks
+    // them before any seeder); the seeder repairs the labels, adds Super-Admin and the admin account, and
+    // touches no starter role.
     $this->seed();
 
     expect(Permission::count())->toBe(count(Permission::LABELS));
     expect(Permission::where('name', 'member-invite')->value('label'))->toBe('Invite Members');
 
     $superAdminRole = Role::where('name', 'Super-Admin')->firstOrFail();
-    expect($superAdminRole->permissions()->count())->toBe(count(Permission::LABELS));
+    expect($superAdminRole->is_global)->toBeTrue()
+        ->and($superAdminRole->permissions()->count())->toBe(count(Permission::LABELS));
 
-    foreach (Role::STARTERS as $key => $definition) {
-        $role = Role::starter($key);
-
-        expect($role->name)->toBe($definition['name'])
-            ->and($role->is_global)->toBeFalse()
-            ->and($role->store_id)->toBeNull()
-            ->and($role->permissions()->pluck('name')->sort()->values()->all())
-            ->toBe(collect(Role::starterPermissions($key))->sort()->values()->all());
-    }
-
-    // Owner and Admin start with every store permission and the Stores tab; the Owner alone also deletes the
-    // store (owner's rules, 2026-09-17).
+    // Owner and Admin still start with every store permission and the Stores tab; the Owner alone also deletes
+    // the store (owner's rules, 2026-09-17).
+    expect(Role::whereNotNull('key')->count())->toBe(count(Role::STARTERS));
     expect(Role::starter(Role::OWNER)->permissions()->pluck('name')->sort()->values()->all())
         ->toBe(collect([...Permission::STORE, 'store-view', 'store-destroy'])->sort()->values()->all())
         ->and(Role::starter(Role::ADMIN)->permissions()->pluck('name')->sort()->values()->all())

@@ -1,21 +1,24 @@
 /**
  * Choosing and measuring a file before it is uploaded.
  *
- * Shared by the store's media library and by the platform's advertising campaigns:
- * both accept exactly the same formats and both need a video's shape, length and a
- * poster frame — because the server has no ffmpeg, so the BROWSER measures them and
- * sends the numbers along. The server re-validates everything it is told.
+ * Shared by the store's media library, the platform's advertising campaigns, a
+ * channel's ads (channel-ads.js) and the Ad Builder's asset shelf
+ * (builder-assets-table.js): all of them accept exactly the same formats and all need
+ * a video's shape, length and a poster frame — because the server has no ffmpeg, so
+ * the BROWSER measures them and sends the numbers along. The server re-validates
+ * everything it is told.
  *
  * Kept in one place because the fiddly part is the canvas: a codec the browser can
  * decode but not paint throws, and every failure path here has to end with the
  * upload still going ahead. Two copies of that would eventually stop agreeing.
  */
 
-/* Mirrors StoreMediaRequest::ALLOWED_MIMES — the server still validates. */
-export const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm'];
+/* Mirrors StoreMediaRequest::ALLOWED_MIMES — the server still validates. Read through
+ * fileError() below, which every upload form uses, so it is not exported. */
+const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm'];
 
 /* Mirrors StoreMediaRequest::MAX_KILOBYTES. */
-export const MAX_BYTES = 256000 * 1024;
+const MAX_BYTES = 256000 * 1024;
 
 const POSTER_MAX_EDGE = 480;
 const METADATA_TIMEOUT_MS = 8000;
@@ -45,27 +48,31 @@ export function readVideoMeta(file) {
     return new Promise((resolve) => {
         const url = URL.createObjectURL(file);
         const video = document.createElement('video');
+        /* What has been measured so far. Every way out resolves with it, so a poster frame
+         * that never comes — a seek that hangs past the timeout, an error after the
+         * metadata — still leaves the length and the size, which matter far more to the
+         * upload than a thumbnail does. */
+        const meta = {};
         let settled = false;
 
-        const finish = (meta) => {
+        const finish = () => {
             if (settled) return;
             settled = true;
             URL.revokeObjectURL(url);
-            resolve(meta);
+            // A copy: a handler that fires after this must not change what the caller was given.
+            resolve({ ...meta });
         };
 
-        setTimeout(() => finish({}), METADATA_TIMEOUT_MS);
+        setTimeout(finish, METADATA_TIMEOUT_MS);
 
         video.preload = 'metadata';
         video.muted = true;
-        video.onerror = () => finish({});
+        video.onerror = finish;
 
         video.onloadedmetadata = () => {
-            const meta = {
-                duration_seconds: Number.isFinite(video.duration) ? Math.round(video.duration) : null,
-                width: video.videoWidth || null,
-                height: video.videoHeight || null,
-            };
+            meta.duration_seconds = Number.isFinite(video.duration) ? Math.round(video.duration) : null;
+            meta.width = video.videoWidth || null;
+            meta.height = video.videoHeight || null;
 
             video.onseeked = () => {
                 try {
@@ -78,7 +85,7 @@ export function readVideoMeta(file) {
                 } catch {
                     /* Codec the browser can decode but not paint: skip the poster. */
                 }
-                finish(meta);
+                finish();
             };
 
             // A frame a second in is more representative than black frame zero.

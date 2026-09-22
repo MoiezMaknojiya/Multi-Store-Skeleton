@@ -128,6 +128,7 @@ const state = {
         playTimer: null,  // backstop for one advert that stalls or never ends
         deferred: false,  // this break already waited out an item's last seconds, once
         resumeMs: 0,      // what was left of the interrupted item
+        contentPaused: false, // an advert has appeared and the shop's content is paused under it
         pendingData: null, // a manifest that arrived mid-break, applied afterwards
     },
 };
@@ -154,6 +155,9 @@ function clearTimers() {
     state.pollTimer = state.playlistTimer = state.heartbeatTimer = null;
     if (state.itemTimer) clearTimeout(state.itemTimer);
     state.itemTimer = null;
+    // Dropped BEFORE the break is ended: ending it applies a held manifest, and one held
+    // across a 401 would draw the removed screen's playlist again, behind the pairing code.
+    state.ad.pendingData = null;
     endAdBreak({ resume: false });
     if (state.ad.timer) clearTimeout(state.ad.timer);
     state.ad.timer = null;
@@ -163,6 +167,14 @@ function clearTimers() {
 /** Token is gone or no longer valid: forget everything and start over. */
 function resetToPairing(message = null) {
     clearTimers();
+    // Stop what is PLAYING too, not only the clocks: a hidden <video> still fires `ended`,
+    // and that alone would go on walking the old playlist behind the pairing code.
+    stopPlayback();
+    state.entries = [];
+    state.items = [];
+    state.index = 0;
+    state.cursors = {};
+    state.nextCursors = {};
     store.remove(TOKEN_KEY);
     store.remove(CODE_KEY);
     store.remove(CODE_EXPIRES_KEY);
@@ -311,8 +323,15 @@ function deviceHeaders() {
 }
 
 async function fetchPlaylist() {
+    // The token this request speaks for. An answer that arrives after it was dropped — the
+    // heartbeat's 401 got there first, or the screen was paired again — belongs to a screen
+    // this page no longer is: a second 401 would start a second pairing, and a late playlist
+    // would be drawn over the pairing code.
+    const token = state.token;
+
     try {
         const response = await fetch('/device/playlist', { headers: deviceHeaders() });
+        if (token !== state.token) return;
 
         if (response.status === 401) {
             return resetToPairing('This screen was removed. Pair it again to continue.');
@@ -320,6 +339,7 @@ async function fetchPlaylist() {
         if (!response.ok) return;
 
         const data = await response.json();
+        if (token !== state.token) return;
         applyOrientation(data.screen?.orientation);
 
         // Nothing changed: leave whatever is on screen alone rather than
@@ -334,9 +354,13 @@ async function fetchPlaylist() {
 }
 
 async function sendHeartbeat() {
+    const token = state.token;   // see fetchPlaylist: only an answer for the current token counts
+
     try {
         const response = await fetch('/device/heartbeat', { method: 'POST', headers: deviceHeaders() });
-        if (response.status === 401) resetToPairing('This screen was removed. Pair it again to continue.');
+        if (response.status === 401 && token === state.token) {
+            resetToPairing('This screen was removed. Pair it again to continue.');
+        }
     } catch {
         /* ignore */
     }
@@ -417,6 +441,17 @@ function stopPlayback() {
 }
 
 function buildElement(item) {
+    /* An ad built in the Ad Builder is a whole page: it brings its own layout, its own fonts and its
+     * own animations, so it gets a frame rather than a tag. `sandbox="allow-scripts"` lets that page
+     * run itself and nothing else — it cannot reach this one, even though we wrote both. */
+    if (item.type === 'html') {
+        const frame = document.createElement('iframe');
+        frame.src = assetUrl(item);
+        frame.setAttribute('scrolling', 'no');
+        frame.setAttribute('sandbox', 'allow-scripts');
+        return frame;
+    }
+
     if (item.type === 'video') {
         const video = document.createElement('video');
         video.src = assetUrl(item);
@@ -459,6 +494,12 @@ function playCurrent() {
     incoming.appendChild(node);
 
     const reveal = () => {
+        // A node no longer on the page — replaced by the next item before it finished
+        // loading, or torn down with its playlist — can still finish loading. Swapping the
+        // layers for it would hide and empty the layer the CURRENT item was just put in: a
+        // black screen until the next item.
+        if (!node.isConnected) return;
+
         const outgoing = layer(state.front);
         const previous = outgoing.firstElementChild;
 
@@ -476,17 +517,23 @@ function playCurrent() {
         preloadNext();
     };
 
+    // The same for a file that fails after it was replaced: skipping then would cut short
+    // whatever is playing now, which is not the file that broke.
+    const broken = () => {
+        if (node.isConnected) skipBroken();
+    };
+
     if (item.type === 'video') {
         node.addEventListener('loadeddata', reveal, { once: true });
         // A video advances when it actually ends; the duration is only a backstop
         // for a file that stalls or has no end event.
         node.addEventListener('ended', advance, { once: true });
-        node.addEventListener('error', skipBroken, { once: true });
+        node.addEventListener('error', broken, { once: true });
         startItemTimer((item.duration + 5) * 1000);
         node.play().catch(() => {});
     } else {
         node.addEventListener('load', reveal, { once: true });
-        node.addEventListener('error', skipBroken, { once: true });
+        node.addEventListener('error', broken, { once: true });
         startItemTimer(Math.max(1, item.duration) * 1000);
     }
 }
@@ -509,7 +556,8 @@ function frontNode() {
 function preloadNext() {
     if (state.items.length < 2) return;
     const next = state.items[(state.index + 1) % state.items.length];
-    if (next.type === 'video') return;   // videos stream; only images are worth warming
+    // Videos stream and ad pages fetch their own pieces; only a plain picture is worth warming.
+    if (next.type === 'video' || next.type === 'html') return;
     const warm = new Image();
     warm.src = assetUrl(next);
 }
@@ -713,13 +761,21 @@ function playAd() {
 
     let done = false;
     const finish = () => {
-        if (done) return;
+        // Once per advert, and never for one no longer on the stage: an error, or a refused
+        // play(), can arrive after the break has ended and emptied the layer, and moving on
+        // from it then would start an advert outside any break.
+        if (done || ! node.isConnected) return;
         done = true;
         state.ad.index += 1;
         playAd();
     };
 
     const reveal = () => {
+        // An advert that finishes loading after its time was up, or after the break ended,
+        // must not show itself: un-hiding the emptied layer is a black screen over the shop's
+        // content, and pausing that content would freeze it with nothing to resume it.
+        if (done || ! node.isConnected) return;
+
         pauseContent();
         stage.hidden = false;
 
@@ -739,8 +795,15 @@ function playAd() {
     }
 }
 
-/** Stop the shop's content where it stands, remembering what it had left. */
+/** Stop the shop's content where it stands, remembering what it had left — once per break. */
 function pauseContent() {
+    // Every advert in a break comes here as it appears, but only the first may measure. An
+    // image's time left is counted from when it STARTED, so measured again at the second
+    // advert it has lost the first advert's seconds as well — nothing left — and the picture
+    // came back for half a second before moving on.
+    if (state.ad.contentPaused) return;
+    state.ad.contentPaused = true;
+
     if (state.itemTimer) clearTimeout(state.itemTimer);
     state.itemTimer = null;
     state.ad.resumeMs = remainingOnScreen();
@@ -760,8 +823,10 @@ function resumeContent() {
 
     if (node.tagName === 'VIDEO') {
         node.play().catch(() => {});
-        // The backstop is rearmed from what was left, not from the whole duration.
-        startItemTimer(Math.max(1000, state.ad.resumeMs || 1000));
+        // The backstop is rearmed from what was left, not from the whole duration — with the
+        // same five seconds of slack playCurrent gives a video. Exactly the time left would
+        // fire a moment before `ended` (starting again takes a moment) and cut its last frames.
+        startItemTimer(Math.max(1000, state.ad.resumeMs || 1000) + 5000);
 
         return;
     }
@@ -773,6 +838,12 @@ function resumeContent() {
 function endAdBreak({ resume }) {
     if (state.ad.playTimer) clearTimeout(state.ad.playTimer);
     state.ad.playTimer = null;
+
+    // Whether an advert ever actually appeared. If none did, nothing was paused: the content
+    // kept playing on its own clock, and "resuming" it would re-arm that clock from a stale
+    // measurement — cutting off a video that had been playing all along.
+    const contentWasPaused = state.ad.contentPaused;
+    state.ad.contentPaused = false;
 
     const stage = el('layer-ad');
 
@@ -800,7 +871,7 @@ function endAdBreak({ resume }) {
         return;
     }
 
-    if (resume) resumeContent();
+    if (resume && contentWasPaused) resumeContent();
 }
 
 function scheduleNextBreak() {

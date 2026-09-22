@@ -52,6 +52,23 @@ class MediaFactory extends Factory
         ]);
     }
 
+    /** A file of the platform's own library, which belongs to no shop. */
+    public function platformOwned(): static
+    {
+        return $this->state(fn () => ['store_id' => null]);
+    }
+
+    /** A published Ad Builder page, as AdPublisher writes one. */
+    public function adPage(): static
+    {
+        return $this->state(fn () => [
+            'type' => Media::TYPE_HTML,
+            'mime_type' => 'text/html',
+            'path' => 'builder/1/ads/'.fake()->unique()->numberBetween(1, 1_000_000).'/index.html',
+            'size' => 4_000,
+        ]);
+    }
+
     /** Already past its expiry window. */
     public function expired(): static
     {

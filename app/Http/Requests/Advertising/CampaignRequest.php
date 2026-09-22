@@ -18,8 +18,10 @@ class CampaignRequest extends FormRequest
     {
         $this->merge([
             'is_active' => $this->boolean('is_active'),
+            // Numbers from the form become ints; anything that is not one plain value is left as it came,
+            // for `integer` to refuse — intval() read a nested array as screen 1.
             'screen_ids' => array_values(array_filter(
-                array_map('intval', (array) $this->input('screen_ids', []))
+                array_map(fn (mixed $id) => is_scalar($id) ? (int) $id : $id, (array) $this->input('screen_ids', []))
             )),
         ]);
     }
@@ -69,7 +71,8 @@ class CampaignRequest extends FormRequest
             // Which screens carry it. An empty list is allowed — a campaign can be
             // set up before its screens are chosen.
             'screen_ids' => ['present', 'array'],
-            'screen_ids.*' => ['integer'],
+            // A screen that does not exist is refused here, not by the foreign key after the file is stored.
+            'screen_ids.*' => ['bail', 'integer', 'min:1', 'exists:screens,id'],
         ];
     }
 
@@ -95,8 +98,9 @@ class CampaignRequest extends FormRequest
     {
         return [
             'file.required' => 'Choose the advert to upload.',
-            'file.mimes' => 'Only images (JPG, PNG, GIF, WEBP) and videos (MP4, WEBM) can be uploaded.',
-            'file.max' => 'The file may not be larger than 250 MB.',
+            'file.mimes' => 'Only '.StoreMediaRequest::FORMATS_IN_WORDS.' can be uploaded.',
+            'file.max' => StoreMediaRequest::tooLargeMessage(),
+            'screen_ids.*.exists' => 'One of the chosen screens no longer exists. Reload the page and choose again.',
             'duration_seconds.max' => 'A single advert may not run longer than 5 minutes.',
             'ends_on.after_or_equal' => 'The end date cannot be before the start date.',
             'start_time.required_with' => 'Give both a start and an end time, or leave both blank to run all day.',

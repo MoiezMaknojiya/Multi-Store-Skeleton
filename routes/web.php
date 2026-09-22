@@ -3,6 +3,9 @@
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\Advertising\CampaignController;
 use App\Http\Controllers\Advertising\NetworkAdsController;
+use App\Http\Controllers\Builder\BuilderAssetController;
+use App\Http\Controllers\Builder\BuilderController;
+use App\Http\Controllers\Builder\BuilderFontController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InvitationResponseController;
 use App\Http\Controllers\Platform\ImpersonateController;
@@ -153,11 +156,11 @@ Route::middleware(['auth', 'throttle:admin'])->group(function () {
         Route::get('/', [StoreController::class, 'index'])->middleware('can:store-view')->name('stores.view');
         Route::get('/data', [StoreController::class, 'data'])->middleware('can:store-view')->name('stores.data');
         // A new store for a customer, with an Owner invitation
-        Route::post('/', [StoreController::class, 'store'])->middleware('can:store-store')->name('stores.store');
+        Route::post('/', [StoreController::class, 'store'])->middleware(['can:store-store', 'throttle:invitations'])->name('stores.store');
         Route::put('/{store}', [StoreController::class, 'update'])->whereNumber('store')->middleware('can:store-update')->name('stores.update');
         Route::delete('/{store}', [StoreController::class, 'destroy'])->whereNumber('store')->middleware('can:store-destroy')->name('stores.destroy');
         // An Owner for a store that has none: a member of it is made Owner at once, anybody else is invited
-        Route::post('/{store}/owner-invitation', [StoreController::class, 'inviteOwner'])->whereNumber('store')->middleware('can:store-store')->name('stores.owner-invitation');
+        Route::post('/{store}/owner-invitation', [StoreController::class, 'inviteOwner'])->whereNumber('store')->middleware(['can:store-store', 'throttle:invitations'])->name('stores.owner-invitation');
     });
 
     // -------------------------------------------------------------------
@@ -256,9 +259,10 @@ Route::middleware(['auth', 'throttle:admin'])->group(function () {
     //
     // Above the stores: every channel, and one made there is offered to
     // every shop. Inside a store, for a role carrying the channel
-    // permissions: the store's own channels, for its own screens alone.
-    // ChannelController / ChannelAdController find a channel only within
-    // reach (Channel::visibleTo) — anything else is 404.
+    // permissions: the store's own channels, for its own screens alone —
+    // and the platform's, listed and opened to READ only. Every change
+    // finds a channel only within reach (Channel::visibleTo), every look
+    // within Channel::listableIn — anything else is 404.
     // -------------------------------------------------------------------
     Route::prefix('channels')->group(function () {
         Route::get('/', [ChannelController::class, 'index'])->middleware('can:channel-view')->name('channels.view');
@@ -271,6 +275,9 @@ Route::middleware(['auth', 'throttle:admin'])->group(function () {
         // The ads inside one channel. Adding, editing, reordering and removing an ad
         // are all edits of the channel, so all of them answer to channel-update
         Route::get('/{channel}/ads', [ChannelAdController::class, 'index'])->whereNumber('channel')->middleware('can:channel-view')->name('channels.ads.index');
+        // The library rows an ad may be chosen from (the Add-ad pickers): the channel's own library, and the
+        // Ad Builder's published ads in it (docs/CHANNEL-CONTENT-SPEC.md). Adding an ad edits the channel
+        Route::get('/{channel}/library', [ChannelAdController::class, 'library'])->whereNumber('channel')->middleware('can:channel-update')->name('channels.library');
         Route::post('/{channel}/ads', [ChannelAdController::class, 'store'])->whereNumber('channel')->middleware('can:channel-update')->name('channels.ads.store');
         Route::put('/{channel}/ads/order', [ChannelAdController::class, 'reorder'])->whereNumber('channel')->middleware('can:channel-update')->name('channels.ads.order');
         // POST, not PUT: an edit may carry a replacement file, and PHP does not parse
@@ -296,12 +303,64 @@ Route::middleware(['auth', 'throttle:admin'])->group(function () {
     });
 
     // -------------------------------------------------------------------
+    // Ad Builder  (docs/AD-BUILDER-SPEC.md)
+    //
+    // Three tabs around one editor: Create draws a 1920×1080 advert, Ads
+    // lists what has been saved, Assets holds the pictures and videos the
+    // designs are made of — the Builder's own shelf, not the store's media
+    // library. Publishing an ad writes an HTML file and a `media` row of
+    // type `html`, which is how it reaches a playlist and a television.
+    //
+    // A store's people work on their own store's ads; the platform team
+    // works above them all (BuilderAd::visibleTo) — anything out of reach
+    // is a 404, checked in the controller as well as here.
+    // -------------------------------------------------------------------
+    Route::prefix('builder')->group(function () {
+        // The Ads tab (the section's home) and its data
+        Route::get('/', [BuilderController::class, 'index'])->middleware('can:ad-view')->name('builder.index');
+        Route::get('/data', [BuilderController::class, 'data'])->middleware('can:ad-view')->name('builder.data');
+
+        // The Assets tab. Declared before /{ad} so the word is never read as an id
+        Route::get('/assets', [BuilderAssetController::class, 'index'])->middleware('can:ad-view')->name('builder.assets');
+        Route::get('/assets/data', [BuilderAssetController::class, 'data'])->middleware('can:ad-view')->name('builder.assets.data');
+        Route::post('/assets', [BuilderAssetController::class, 'store'])->middleware('can:ad-store')->name('builder.assets.store');
+        Route::delete('/assets/{asset}', [BuilderAssetController::class, 'destroy'])->whereNumber('asset')->middleware('can:ad-destroy')->name('builder.assets.destroy');
+
+        // The fonts the editor may set text in. Installing one fetches it from Google ONCE and
+        // keeps it here, so a television with no internet still shows the right typeface.
+        // The editor opens with Create Ads or Update Ads, and neither needs View Ads, so these
+        // two ask for "any of" — which a `can:` here cannot say — in BuilderFontController:
+        // the list for ad-view, ad-store or ad-update, installing for ad-store or ad-update
+        Route::get('/fonts', [BuilderFontController::class, 'index'])->name('builder.fonts');
+        Route::post('/fonts', [BuilderFontController::class, 'store'])->middleware('throttle:font-install')->name('builder.fonts.store');
+
+        // The Create tab: the editor with an empty stage
+        Route::get('/create', [BuilderController::class, 'create'])->middleware('can:ad-store')->name('builder.create');
+
+        Route::post('/', [BuilderController::class, 'store'])->middleware('can:ad-store')->name('builder.store');
+        Route::get('/{ad}', [BuilderController::class, 'edit'])->whereNumber('ad')->middleware('can:ad-update')->name('builder.edit');
+        Route::put('/{ad}', [BuilderController::class, 'update'])->whereNumber('ad')->middleware('can:ad-update')->name('builder.update');
+        Route::post('/{ad}/duplicate', [BuilderController::class, 'duplicate'])->whereNumber('ad')->middleware('can:ad-store')->name('builder.duplicate');
+        // Compile the design into a page and put it in the library, where a playlist can reach it
+        Route::post('/{ad}/publish', [BuilderController::class, 'publish'])->whereNumber('ad')->middleware('can:ad-update')->name('builder.publish');
+        // The rest of the draft/publish model (docs/AD-BUILDER-SPEC.md §9): take a published ad off the screens,
+        // or throw away the changes the screens do not show yet — both changes to a saved ad, like Publish.
+        Route::post('/{ad}/unpublish', [BuilderController::class, 'unpublish'])->whereNumber('ad')->middleware('can:ad-update')->name('builder.unpublish');
+        Route::post('/{ad}/discard', [BuilderController::class, 'discard'])->whereNumber('ad')->middleware('can:ad-update')->name('builder.discard');
+        // The saved design as a television would show it, full screen, before it reaches one (§10a).
+        // For ad-view or ad-update — "any of", so checked in BuilderController::preview
+        Route::get('/{ad}/preview', [BuilderController::class, 'preview'])->whereNumber('ad')->name('builder.preview');
+        // A big delete: the published copy goes with the design, so it asks for the password
+        Route::delete('/{ad}', [BuilderController::class, 'destroy'])->whereNumber('ad')->middleware('can:ad-destroy')->name('builder.destroy');
+    });
+
+    // -------------------------------------------------------------------
     // Roles
     // -------------------------------------------------------------------
     Route::prefix('roles')->group(function () {
         // Show Roles List Page
         Route::get('/', [RoleController::class, 'index'])->middleware('can:role-view')->name('roles.view');
-        // Get Paginated Roles Data (AJAX)
+        // Get Every Role In Reach, With What May Be Done To Each (AJAX)
         Route::get('/data', [RoleController::class, 'data'])->middleware('can:role-view')->name('roles.data');
         // Create New Role
         Route::post('/', [RoleController::class, 'store'])->middleware('can:role-store')->name('roles.store');
@@ -309,8 +368,7 @@ Route::middleware(['auth', 'throttle:admin'])->group(function () {
         Route::put('/{role}', [RoleController::class, 'update'])->whereNumber('role')->middleware('can:role-update')->name('roles.update');
         // Delete Role
         Route::delete('/{role}', [RoleController::class, 'destroy'])->whereNumber('role')->middleware('can:role-destroy')->name('roles.destroy');
-        // Get All Permissions Assigned To A Role
-        // Get All Assignable Permissions
+        // Get The Permissions The Role In The Form Can Hold
         Route::get('/assignable', [RoleController::class, 'assignable'])->middleware('can:role-view')->name('roles.assignable');
     });
 

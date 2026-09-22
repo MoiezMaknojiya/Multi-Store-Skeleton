@@ -18,7 +18,7 @@
             <x-crud.password-confirm id="{{ $name }}-password" />
 
             <div class="mt-6 flex justify-end gap-3">
-                <x-secondary-button x-on:click="$dispatch('close-modal', '{{ $name }}')">
+                <x-secondary-button x-on:click="$dispatch('close-modal', {{ Js::from($name) }})">
                     Cancel
                 </x-secondary-button>
                 <x-danger-button x-bind:disabled="{{ $disabledVar }}" dusk="{{ $name }}-confirm">
@@ -35,7 +35,7 @@
                 This action cannot be undone.
             </p>
             <div class="mt-6 flex justify-end gap-3">
-                <x-secondary-button x-on:click="$dispatch('close-modal', '{{ $name }}')">
+                <x-secondary-button x-on:click="$dispatch('close-modal', {{ Js::from($name) }})">
                     Cancel
                 </x-secondary-button>
                 <x-danger-button x-on:click="{{ $deleteAction }}" x-bind:disabled="{{ $disabledVar }}" dusk="{{ $name }}-confirm">

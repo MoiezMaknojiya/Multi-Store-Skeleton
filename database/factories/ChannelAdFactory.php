@@ -6,7 +6,6 @@ use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Illuminate\Support\Str;
 
 /**
  * @extends Factory<ChannelAd>
@@ -16,27 +15,19 @@ class ChannelAdFactory extends Factory
     protected $model = ChannelAd::class;
 
     /**
-     * A running image ad with no dates.
+     * A running image ad with no dates. Its file is a row of the channel's own library — the shop's for a shop's
+     * channel, the platform's for the platform's — the way an upload inside the channel would have made it.
      *
      * @return array<string, mixed>
      */
     public function definition(): array
     {
-        $name = (string) Str::ulid();
-
         return [
             'channel_id' => Channel::factory(),
+            'media_id' => fn (array $attributes) => Media::factory()->create([
+                'store_id' => Channel::find($attributes['channel_id'])?->store_id,
+            ])->id,
             'title' => fake()->words(3, true),
-            'type' => Media::TYPE_IMAGE,
-            'mime_type' => 'image/jpeg',
-            'disk' => 'public',
-            'path' => "channels/1/{$name}.jpg",
-            'thumbnail_path' => "channels/1/thumbs/{$name}.jpg",
-            'size' => 120_000,
-            'width' => 1920,
-            'height' => 1080,
-            'orientation' => 'landscape',
-            'media_duration_seconds' => null,
             'duration_seconds' => 10,
             'position' => 0,
             'starts_on' => null,
@@ -48,11 +39,37 @@ class ChannelAdFactory extends Factory
     public function video(int $seconds = 20): static
     {
         return $this->state(fn () => [
-            'type' => Media::TYPE_VIDEO,
-            'mime_type' => 'video/mp4',
-            'path' => 'channels/1/'.Str::ulid().'.mp4',
-            'media_duration_seconds' => $seconds,
+            'media_id' => fn (array $attributes) => Media::factory()->video()->create([
+                'store_id' => Channel::find($attributes['channel_id'])?->store_id,
+                'duration_seconds' => $seconds,
+            ])->id,
             'duration_seconds' => null,
+        ]);
+    }
+
+    /**
+     * The file it shows, made in the channel's own library with these attributes — a real path for a
+     * television to fetch, say, or no thumbnail for a page that must not ask for a missing one.
+     *
+     * @param  array<string, mixed>  $file
+     */
+    public function showing(array $file): static
+    {
+        return $this->state(fn () => [
+            'media_id' => fn (array $attributes) => Media::factory()->create([
+                'store_id' => Channel::find($attributes['channel_id'])?->store_id,
+                ...$file,
+            ])->id,
+        ]);
+    }
+
+    /** A published Ad Builder page, shown for its seconds like an image. */
+    public function adPage(): static
+    {
+        return $this->state(fn () => [
+            'media_id' => fn (array $attributes) => Media::factory()->adPage()->create([
+                'store_id' => Channel::find($attributes['channel_id'])?->store_id,
+            ])->id,
         ]);
     }
 

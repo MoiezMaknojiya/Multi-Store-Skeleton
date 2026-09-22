@@ -98,11 +98,17 @@ class StoreOwnershipFlowTest extends DuskTestCase
             $this->waitForAlpine($browser);
 
             $this->clickAndAwait($browser, '@delete-store-button', fn (Browser $b) => $b->waitFor('@delete-store-form', 3));
+            $this->recordFormSubmits($browser);
             $this->jsType($browser, '@delete-store-name', 'alpha mart');
             $this->jsType($browser, '@delete-store-password', 'password');
             $this->jsClick($browser, '@delete-store-confirm');
 
-            $browser->waitForText('Type the store name exactly as it is shown.');
+            // The server would say the very same words, so the words alone prove nothing. The
+            // marker only the browser's own check puts on a field, and a submit the page kept to
+            // itself, are what show it never left.
+            $browser->waitForText('Type the store name exactly as it is shown.')
+                ->assertPresent('#confirm_name[data-client-invalid]');
+            $this->assertSame(['stopped'], $this->formSubmits($browser), 'the mistyped name was sent to the server');
             $this->assertNotNull(Store::find($store->id));
         });
     }

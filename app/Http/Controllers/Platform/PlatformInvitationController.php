@@ -9,7 +9,6 @@ use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -63,7 +62,8 @@ class PlatformInvitationController extends Controller
             throw ValidationException::withMessages(['email' => "{$email} is already on the platform team."]);
         }
 
-        if ($account !== null && DB::table('store_user')->where('user_id', $account->id)->where('store_id', '>', 0)->exists()) {
+        // User::stores() joins real stores, so the platform row (store_id = 0) is never among them.
+        if ($account !== null && $account->stores()->exists()) {
             throw ValidationException::withMessages(['email' => 'This email belongs to a store account, which cannot join the platform team.']);
         }
 

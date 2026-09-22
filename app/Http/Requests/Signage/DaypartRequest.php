@@ -4,6 +4,7 @@ namespace App\Http\Requests\Signage;
 
 use App\Models\Daypart;
 use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -14,16 +15,31 @@ use Illuminate\Validation\Rule;
 class DaypartRequest extends FormRequest
 {
     /**
+     * A daypart is changed only from where it can be seen: another store's is not found (404) — before
+     * its name is checked, so "this store already has a daypart with that name" never answers for a
+     * store the person does not work in.
+     */
+    public function authorize(): bool
+    {
+        $daypart = $this->route('daypart');
+
+        abort_if($daypart instanceof Daypart && ! Daypart::visibleTo($this->user())->whereKey($daypart->id)->exists(), 404);
+
+        return true;
+    }
+
+    /**
      * Empty rows and blank times come out of the UI as it is being filled in. They
      * are noise, not input, so they are cleaned off before the rules run rather than
      * being reported back as errors the person did not make.
      */
     protected function prepareForValidation(): void
     {
-        $exceptions = collect($this->input('exceptions', []))
-            ->filter(fn ($row) => is_array($row) && ! blank($row['weekday'] ?? null))
-            ->map(fn ($row) => [
-                'weekday' => (int) $row['weekday'],
+        $exceptions = collect((array) $this->input('exceptions', []))
+            ->filter(fn (mixed $row) => is_array($row) && ! blank($row['weekday'] ?? null))
+            ->map(fn (array $row) => [
+                // A weekday that is not one plain value is left as it came, for `integer` to refuse.
+                'weekday' => is_scalar($row['weekday']) ? (int) $row['weekday'] : $row['weekday'],
                 'start_time' => blank($row['start_time'] ?? null) ? null : $row['start_time'],
                 'end_time' => blank($row['end_time'] ?? null) ? null : $row['end_time'],
             ])
@@ -45,9 +61,9 @@ class DaypartRequest extends FormRequest
 
         return [
             'name' => [
-                'required', 'string', 'max:100',
+                'bail', 'required', 'string', 'max:100',
                 Rule::unique('dayparts', 'name')
-                    ->where(fn ($query) => $query->where('store_id', $this->storeIdForRules()))
+                    ->where(fn (QueryBuilder $query) => $query->where('store_id', $this->storeIdForRules()))
                     ->ignore($daypart instanceof Daypart ? $daypart->id : null),
             ],
 

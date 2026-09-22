@@ -93,9 +93,9 @@ class CampaignController extends Controller
      * own length and an image for its typed seconds — the same rule the break itself
      * uses, expressed in SQL.
      *
-     * @return Collection<int, int>
+     * @return Collection<int, int|string> seconds by screen id — MySQL hands a SUM back as a string, hence the cast where it is read
      */
-    private function bookedSecondsPerScreen()
+    private function bookedSecondsPerScreen(): Collection
     {
         return DB::table('campaign_screen')
             ->join('campaigns', 'campaigns.id', '=', 'campaign_screen.campaign_id')
@@ -164,11 +164,11 @@ class CampaignController extends Controller
             $campaign->update($attributes);
             $campaign->screens()->sync($validated['screen_ids']);
 
-            // The replaced file goes only after the row is safely pointing at the new
-            // one: a stale file on disk is harmless, a row pointing at a deleted file
-            // is a black rectangle on somebody's wall.
+            // The replaced file goes only once the row is safely pointing at the new
+            // one — after the commit: a stale file on disk is harmless, a row pointing
+            // at a deleted file is a black rectangle on somebody's wall.
             if (isset($old)) {
-                $this->storage->deleteFiles(...$old);
+                DB::afterCommit(fn () => $this->storage->deleteFiles(...$old));
             }
         });
 
@@ -189,7 +189,8 @@ class CampaignController extends Controller
         DB::transaction(function () use ($campaign) {
             $campaign->screens()->detach();
             $campaign->delete();
-            $this->storage->deleteFiles($campaign->disk, $campaign->path, $campaign->thumbnail_path);
+            // The files only once the row is really gone: a rolled-back delete keeps a campaign that plays.
+            DB::afterCommit(fn () => $this->storage->deleteFiles($campaign->disk, $campaign->path, $campaign->thumbnail_path));
         });
 
         ActivityLog::record('campaign.deleted', null, "Deleted campaign {$name}");

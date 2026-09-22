@@ -18,11 +18,11 @@ class ScreenPairingTest extends DuskTestCase
     use DatabaseMigrations;
 
     /** An owner who can do everything with screens inside one store. */
-    private function makeOwner(Store $store, array $permissions = ['screen-view', 'screen-store', 'screen-update', 'screen-destroy']): User
+    private function makeOwner(Store $store): User
     {
         $this->seedSuperAdmin();
 
-        return $this->storeMember($store, $permissions);
+        return $this->storeMember($store, ['screen-view', 'screen-store', 'screen-update', 'screen-destroy']);
     }
 
     /**
@@ -37,8 +37,9 @@ class ScreenPairingTest extends DuskTestCase
         $this->browse(function (Browser $tv, Browser $panel) use ($owner, $store) {
             // -- The TV boots with nothing and asks to be adopted ---------------
             // Guarantee the "with nothing" rather than hoping the previous test
-            // tidied up: Dusk reuses one Chrome for the whole run, so a token left
-            // in localStorage would send this TV straight into playback.
+            // tidied up: Dusk keeps its first browser — this one — open from one test
+            // of the class to the next, so a token left in localStorage would send this
+            // TV straight into playback.
             $tv->visit('/login');
             $tv->script('localStorage.clear();');
             $tv->visit('/player');

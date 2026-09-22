@@ -23,7 +23,6 @@ use Tests\DuskTestCase;
  *   · only one video decodes at a time, so a cheap box is never asked to play two
  *   · the advert's element is DESTROYED when the break ends. A hidden <video> keeps
  *     its decoder and its buffer, and a set left running would collect one an hour
- *   · a poll landing mid-break does not tear the screen down underneath the advert
  *
  * config/signage.php turns the interval right down in the dusk environment, so a
  * whole break happens in seconds instead of an hour.
@@ -32,43 +31,33 @@ class NetworkAdBreakTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    /** A real PNG on the (isolated) dusk disk, and the path it was written to. */
-    private function putImage(string $path, int $r, int $g, int $b): string
-    {
-        $image = imagecreatetruecolor(640, 360);
-        imagefilledrectangle($image, 0, 0, 640, 360, imagecolorallocate($image, $r, $g, $b));
-
-        ob_start();
-        imagepng($image);
-        $binary = (string) ob_get_clean();
-        imagedestroy($image);
-
-        Storage::disk('public')->put($path, $binary);
-
-        return $path;
-    }
-
-    /** A shop that agreed, a television cleared for advertising, and one campaign. */
-    private function setUpScreen(string $token, int $adSeconds = 2): array
+    /**
+     * A shop that agreed, a television cleared for advertising, and one two-second campaign.
+     *
+     * @return array{0: Store, 1: Screen}
+     */
+    private function setUpScreen(string $token): array
     {
         $store = Store::factory()->create(['name' => 'Alpha Mart', 'accepts_network_ads' => true]);
         $screen = Screen::factory()->withToken($token)->create([
             'store_id' => $store->id, 'name' => 'Counter TV', 'accepts_network_ads' => true,
         ]);
 
-        $campaign = Campaign::factory()->lasting($adSeconds)->create([
+        $campaign = Campaign::factory()->lasting(2)->create([
             'name' => 'Coca-Cola', 'path' => $this->putImage('campaigns/advert.png', 220, 30, 40),
             'thumbnail_path' => null, 'mime_type' => 'image/png',
         ]);
         $campaign->screens()->attach($screen);
 
-        return [$store, $screen, $campaign];
+        return [$store, $screen];
     }
 
     /**
-     * An image on screen is interrupted, and comes back with the time it had LEFT.
+     * An image on screen is interrupted by the advert, which sits over it rather than
+     * replacing it, and the picture is back when the break ends.
      *
-     * The advert's element is gone afterwards, not merely hidden.
+     * The advert's element is gone afterwards, not merely hidden — and the break comes
+     * round again.
      */
     public function test_an_advert_interrupts_the_shops_content_and_leaves_nothing_behind(): void
     {
@@ -303,16 +292,38 @@ class NetworkAdBreakTest extends DuskTestCase
             $tv->script("localStorage.clear(); localStorage.setItem('signage.device.token', 'clean-token');");
             $tv->visit('/player');
 
+            // Watch the advert layer from here on rather than looking at it once: a break
+            // lasts two seconds, and a single look after a fixed wait can fall either side
+            // of one. Building an advert counts as much as showing it — a screen that
+            // carries none should never be handed one at all.
+            $tv->script(<<<'JS'
+                window.__advertAppeared = false;
+                const layer = document.getElementById('layer-ad');
+                new MutationObserver(() => {
+                    if (! layer.hidden || layer.childElementCount > 0) window.__advertAppeared = true;
+                }).observe(layer, { attributes: true, attributeFilter: ['hidden'], childList: true });
+            JS);
+
             $tv->waitUsing(30, 200, fn () => $tv->script(
                 'return !!document.querySelector("#layer-a:not([hidden]) img, #layer-b:not([hidden]) img");'
             )[0]);
 
-            // Well past several break intervals, and nothing has interrupted it.
-            $tv->pause(9000);
+            // Two whole break intervals and some (six seconds each in the dusk environment,
+            // config/signage.php — fifteen seconds in all), watched the whole way, and cut
+            // short the moment an advert turns up, which is then reported below.
+            $watch = 2 * (int) config('signage.ad_break_seconds') + 3;
+            $until = microtime(true) + $watch;
+            $tv->waitUsing($watch + 10, 250,
+                fn () => $tv->script('return window.__advertAppeared;')[0] === true || microtime(true) >= $until);
 
-            $this->assertTrue($tv->script('return document.getElementById("layer-ad").hidden;')[0],
+            $this->assertFalse($tv->script('return window.__advertAppeared;')[0],
                 'a screen that carries no advertising was interrupted anyway');
             $this->assertSame(0, $tv->script('return document.getElementById("layer-ad").children.length;')[0]);
+
+            // And not because the player had stopped: the shop's own picture is still up.
+            $this->assertTrue($tv->script(
+                'return !!document.querySelector("#layer-a:not([hidden]) img, #layer-b:not([hidden]) img");'
+            )[0], 'the player stopped showing the shop\'s content while it was being watched');
 
             $tv->visit('/login');
             $tv->script('localStorage.clear();');

@@ -34,7 +34,6 @@
    ───────────────────────────────────────────────────────────────────────── */
 @theme {
     --font-sans:   'Outfit', ui-sans-serif, system-ui, sans-serif;
-    --font-outfit: 'Outfit', sans-serif;
 
     --color-current:     currentColor;
     --color-transparent: transparent;
@@ -200,9 +199,6 @@
            disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
-/* Outlined ghost button. Background and border match form-input so ghost
-   buttons sit on the same visual surface as text inputs. */
-
 /* ── Cards / Surfaces ─────────────────────────────────────────────────── */
 @utility card {
     @apply bg-white dark:bg-gray-800
@@ -245,9 +241,11 @@
            disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
-/* Larger rounded variant for auth (login/register) pages — same 40px height
-   as the standard form-input. Auth pages are intentionally light-mode only
-   (the guest layout has no dark mode), so no dark counterpart is needed. */
+/* Larger rounded variant for the plain-POST forms (x-auth.form-field) — the
+   auth and invitation pages, Profile and Settings → Stores — same 40px height
+   as the standard form-input. The guest layout never turns dark mode on, but
+   Profile and Settings live in the app shell, which does: hence the dark:
+   variants (and the dark autofill override below). */
 @utility form-input-auth {
     @apply block w-full h-10 px-4 text-sm
            border border-gray-300
@@ -374,6 +372,16 @@
     caret-color: var(--color-gray-300);
 }
 
+/* form-input-auth in the dark app shell (Profile, Settings → Stores): the same
+   gray-900 surface, with its own lighter text (dark:text-gray-100). */
+.dark .form-input-auth:-webkit-autofill,
+.dark .form-input-auth:-webkit-autofill:hover,
+.dark .form-input-auth:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px var(--color-gray-900) inset !important;
+    -webkit-text-fill-color: var(--color-gray-100) !important;
+    caret-color: var(--color-gray-100);
+}
+
 /* ── Tables ───────────────────────────────────────────────────────────── */
 @utility table-base       { @apply w-full text-sm; }
 @utility table-head-row   { @apply border-b border-gray-100 dark:border-gray-700 text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/80; }
@@ -405,8 +413,6 @@
 /* ── Typography helpers ───────────────────────────────────────────────── */
 @utility text-subheading    { @apply text-lg font-semibold text-gray-800 dark:text-white; }
 @utility text-muted-soft    { @apply text-gray-500 dark:text-gray-400; }
-
-/* ── Layout helpers ───────────────────────────────────────────────────── */
 
 /* ── Navigation (sidebar links) ───────────────────────────────────────── */
 @utility nav-link {

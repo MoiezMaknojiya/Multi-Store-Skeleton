@@ -43,7 +43,7 @@ function searchScreens(string $term): array
 beforeEach(function () {
     $this->store = Store::factory()->create();
     $this->actor = createStoreUser($this->store, ['screen-view']);
-    [$this->counter, $this->window] = twoScreens($this->store);
+    twoScreens($this->store);
 
     $this->actingAs($this->actor)->withSession(['current_store_id' => $this->store->id]);
 });
@@ -102,11 +102,19 @@ test('search never reaches outside the store being worked in', function () {
 });
 
 test('an unpaired screen has no device or date to be found by', function () {
-    $bare = Screen::factory()->unpaired()->create([
+    // Made on a day that is nobody's pairing date, and never paired: no device id, no pairing date.
+    $this->travelTo('2026-10-01 12:00:00');
+    Screen::factory()->unpaired()->create([
         'store_id' => $this->store->id,
         'name' => 'Entrance Display',
     ]);
 
     expect(searchScreens('Entrance'))->toBe(['Entrance Display']);
-    expect(searchScreens('377b8a3f87bf'))->not->toContain($bare->name);
+
+    // A hyphen is in every device id and every stored pairing date, so it finds every paired
+    // screen — and the unpaired one, which has neither, is not among them.
+    expect(collect(searchScreens('-'))->sort()->values()->all())->toBe(['Counter TV', 'Window Board']);
+
+    // Nor is the day it was made a date it answers to: the date searched is the pairing date.
+    expect(searchScreens('2026-10-01'))->toBe([]);
 });

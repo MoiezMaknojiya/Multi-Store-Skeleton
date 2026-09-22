@@ -62,14 +62,12 @@ test('inside a store: one list — the store roles to read, then the store’s o
 
     // Above the stores, every store counts.
     $superAdmin = createSuperAdmin();
-    registerPermissionGates();
     $platformRows = collect(rolesAs($superAdmin)->getJson('/roles/data')->assertOk()->json('roles'));
     expect($platformRows->firstWhere('name', 'Staff'))->holders_count->toBe(1)->invitations_count->toBe(3);
 });
 
 test('on the platform the super admin renames and changes a store role — in every store at once', function () {
     $superAdmin = createSuperAdmin();
-    registerPermissionGates();
     $staff = Role::starter(Role::STAFF);
 
     $rows = collect(rolesAs($superAdmin)->getJson('/roles/data')->assertOk()->json('roles'));
@@ -101,7 +99,6 @@ test('on the platform the super admin renames and changes a store role — in ev
         ->and(ActivityLog::where('action', 'role.updated')->value('description'))->toBe('Updated store role Cashier (was Staff), in every store');
 
     // What cannot work inside one store never goes on a store role.
-    grantPermissions(['activity-destroy']);
     rolesAs($superAdmin)->putJson("/roles/{$staff->id}", ['name' => 'Cashier', 'permissions' => permissionIds(['activity-destroy', 'screen-view'])])
         ->assertStatus(422)->assertJsonValidationErrors(['permissions' => 'A store role cannot hold Delete Old Activity Logs: it works above the stores only.']);
 
@@ -111,7 +108,6 @@ test('on the platform the super admin renames and changes a store role — in ev
 
 test('the Owner role is renamed like any other, and never deleted; an unheld store role is', function () {
     $superAdmin = createSuperAdmin();
-    registerPermissionGates();
     $ownerRole = Role::owner();
     $viewer = Role::starter(Role::VIEWER);
 
@@ -129,8 +125,6 @@ test('the Owner role is renamed like any other, and never deleted; an unheld sto
 
 test('the super admin says what a new role is for: a store role for every store, or a platform role', function () {
     $superAdmin = createSuperAdmin();
-    registerPermissionGates();
-    grantPermissions(['user-view', 'channel-view', 'activity-destroy']);
 
     rolesAs($superAdmin)->postJson('/roles', ['name' => 'Floor Lead', 'permissions' => permissionIds(['screen-view'])])
         ->assertStatus(422)->assertJsonValidationErrors(['type' => 'Choose what this role is for.']);
@@ -145,7 +139,7 @@ test('the super admin says what a new role is for: a store role for every store,
 
     expect(Role::firstWhere('name', 'Floor Lead'))->is_global->toBeFalse()->store_id->toBeNull()
         ->and(Role::firstWhere('name', 'Support')->is_global)->toBeTrue()
-        ->and(ActivityLog::where('action', 'role.created')->pluck('description')->all())
+        ->and(ActivityLog::where('action', 'role.created')->orderBy('id')->pluck('description')->all())
         ->toBe(['Created store role Floor Lead, offered in every store', 'Created platform role Support']);
 
     // A store role is offered in every store's pickers; a store role never holds what works above the stores.
@@ -158,7 +152,7 @@ test('the super admin says what a new role is for: a store role for every store,
     // Each kind is offered its own permissions: the accounts are the platform's (owner's rule, 2026-09-17).
     $forStore = collect(rolesAs($superAdmin)->getJson('/roles/assignable?type=store')->json())->pluck('name');
     $forPlatform = collect(rolesAs($superAdmin)->getJson('/roles/assignable?type=platform')->json())->pluck('name');
-    expect($forStore)->toContain('channel-view')->not->toContain('user-view', 'activity-destroy')
+    expect($forStore)->toContain('channel-view')->not->toContain('user-view')->not->toContain('activity-destroy')
         ->and($forPlatform)->toContain('activity-destroy', 'user-view')->not->toContain('permission-view');
 });
 
@@ -172,7 +166,6 @@ test('a member creates a custom role only from store permissions they hold', fun
     rolesAs($supervisor, $this->store)->postJson('/roles', ['name' => 'Uploader', 'permissions' => permissionIds(['media-store'])])
         ->assertStatus(422)->assertJsonValidationErrors('permissions');
 
-    grantPermissions(['activity-view']);
     rolesAs($this->owner, $this->store)->postJson('/roles', ['name' => 'Snoop', 'permissions' => permissionIds(['activity-view', 'screen-view'])])
         ->assertStatus(422)->assertJsonValidationErrors('permissions');
 
@@ -190,16 +183,16 @@ test('a name has to be new to every list the role appears in', function () {
     rolesAs($this->owner, $this->store)->postJson('/roles', ['name' => 'cashier', 'permissions' => permissionIds(['screen-view'])])
         ->assertStatus(422)->assertJsonValidationErrors(['name' => 'There is already a role called Cashier. Choose another name.']);
 
+    // Above the stores, a store role may not take a name any store's custom role has. Asked while Alpha
+    // Mart alone has one: with two, which store the message names would depend on row order.
+    $superAdmin = createSuperAdmin();
+    rolesAs($superAdmin)->postJson('/roles', ['name' => 'Cashier', 'type' => 'store', 'permissions' => permissionIds(['screen-view'])])
+        ->assertStatus(422)->assertJsonValidationErrors(['name' => 'Alpha Mart already has a custom role called Cashier. Choose another name.']);
+
     // Another store may use the same custom name.
     $beta = Store::factory()->create();
     $betaOwner = createStoreMember($beta, Role::OWNER);
     rolesAs($betaOwner, $beta)->postJson('/roles', ['name' => 'Cashier', 'permissions' => permissionIds(['screen-view'])])->assertCreated();
-
-    // Above the stores, a store role may not take a name any store's custom role has.
-    $superAdmin = createSuperAdmin();
-    registerPermissionGates();
-    rolesAs($superAdmin)->postJson('/roles', ['name' => 'Cashier', 'type' => 'store', 'permissions' => permissionIds(['screen-view'])])
-        ->assertStatus(422)->assertJsonValidationErrors(['name' => 'Alpha Mart already has a custom role called Cashier. Choose another name.']);
 
     // A platform role only has to stand apart from the platform roles.
     rolesAs($superAdmin)->postJson('/roles', ['name' => 'Cashier', 'type' => 'platform', 'permissions' => permissionIds(['screen-view'])])->assertCreated();
@@ -278,7 +271,9 @@ test('a role still held cannot be deleted; a store never changes the store roles
     $role->permissions()->sync(permissionIds(['screen-view']));
     User::factory()->create()->stores()->attach($this->store->id, ['role_id' => $role->id]);
 
-    rolesAs($this->owner, $this->store)->deleteJson("/roles/{$role->id}")->assertStatus(422);
+    // Refused for that reason, before any password is asked for.
+    rolesAs($this->owner, $this->store)->deleteJson("/roles/{$role->id}")
+        ->assertStatus(422)->assertJsonPath('message', 'Please unassign Cashier from everyone first: 1 person still holds it.');
     rolesAs($this->owner, $this->store)->deleteJson('/roles/'.Role::starter(Role::STAFF)->id)
         ->assertForbidden()->assertJsonPath('message', 'Store roles are changed by the super admin, for every store at once.');
     rolesAs($this->owner, $this->store)->putJson('/roles/'.Role::starter(Role::VIEWER)->id, ['name' => 'Peeker', 'permissions' => permissionIds(['screen-view'])])
@@ -287,24 +282,8 @@ test('a role still held cannot be deleted; a store never changes the store roles
     expect(Role::starter(Role::VIEWER)->name)->toBe('Viewer');
 });
 
-test('on the platform: a super admin manages platform roles, never with the catalogue in them', function () {
-    $admin = createSuperAdmin(['role-view', 'role-store', 'role-update', 'role-destroy']);
-    registerPermissionGates();
-
-    rolesAs($admin)->postJson('/roles', ['name' => 'Support', 'type' => 'platform', 'permissions' => permissionIds(['user-view', 'media-view'])])->assertCreated();
-    expect(Role::where('name', 'Support')->value('is_global'))->toBeTrue();
-
-    rolesAs($admin)->postJson('/roles', ['name' => 'Sneaky', 'type' => 'platform', 'permissions' => permissionIds(['permission-update'])])
-        ->assertStatus(422)->assertJsonValidationErrors('permissions');
-
-    $superAdminRole = Role::where('name', 'Super-Admin')->first();
-    rolesAs($admin)->putJson("/roles/{$superAdminRole->id}", ['name' => 'Super-Admin', 'permissions' => permissionIds(['user-view'])])
-        ->assertForbidden();
-});
-
 test('on the platform the super admin looks after the custom roles stores made — any store', function () {
     $superAdmin = createSuperAdmin();
-    registerPermissionGates();
     $beta = Store::factory()->create(['name' => 'Beta Deli']);
     $cashier = Role::create(['name' => 'Cashier', 'store_id' => $beta->id]);
     $cashier->permissions()->sync(permissionIds(['screen-view']));
@@ -328,8 +307,6 @@ test('a platform role that is not Super-Admin has no roles page', function () {
 });
 
 test('the permissions offered for a role are the ones that can go on it from here', function () {
-    grantPermissions(['activity-view', 'permission-view', 'channel-view']);
-
     // Inside a store: store permissions the actor holds.
     $supervisor = createStoreUser($this->store, ['role-view', 'screen-view', 'media-view'], 'Supervisor');
     $names = collect(rolesAs($supervisor, $this->store)->getJson('/roles/assignable')->assertOk()->json())->pluck('name')->sort()->values()->all();

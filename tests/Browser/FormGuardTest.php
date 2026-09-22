@@ -5,7 +5,6 @@ namespace Tests\Browser;
 use App\Models\Invitation;
 use App\Models\Role;
 use App\Models\Store;
-use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -20,7 +19,7 @@ class FormGuardTest extends DuskTestCase
     use DatabaseMigrations;
 
     /** An Owner signed in to their store, on the given page with Alpine ready. */
-    private function ownerOn(Browser $browser, string $path): User
+    private function ownerOn(Browser $browser, string $path): void
     {
         $store = Store::factory()->create(['name' => 'Alpha Mart']);
         $owner = $this->storeMember($store, Role::OWNER);
@@ -30,8 +29,6 @@ class FormGuardTest extends DuskTestCase
         $this->switchToStore($browser, $store);
         $browser->visit($path);
         $this->waitForAlpine($browser);
-
-        return $owner;
     }
 
     private function openInviteForm(Browser $browser): void
@@ -87,10 +84,16 @@ class FormGuardTest extends DuskTestCase
             $browser->waitFor('@role-row-'.Role::owner()->id);
 
             $this->clickAndAwait($browser, '@create-role', fn (Browser $b) => $b->waitFor('@permission-screen-view', 5));
+
+            // The server refuses an empty role in the very same words, so the message alone cannot
+            // say which of the two stopped it — the count of what left the page can.
+            $this->countRequests($browser, 'POST', '/roles');
+
             $this->jsType($browser, '@role-name', 'Empty Role');
             $this->jsClick($browser, '@role-save');
 
             $browser->waitForText('Choose at least one permission.');
+            $this->assertSame(0, $this->requestsCounted($browser), 'the empty role was sent to the server');
         });
 
         $this->assertDatabaseMissing('roles', ['name' => 'Empty Role']);
@@ -129,22 +132,13 @@ class FormGuardTest extends DuskTestCase
 
             // Count what actually leaves the browser — the server would refuse a second
             // invitation for the same email anyway, so the database alone cannot prove the guard.
-            $browser->script(<<<'JS'
-                window.__invitationPosts = 0;
-                const open = XMLHttpRequest.prototype.open;
-                XMLHttpRequest.prototype.open = function (method, url, ...rest) {
-                    if (String(method).toUpperCase() === 'POST' && String(url).endsWith('/members/invitations')) {
-                        window.__invitationPosts++;
-                    }
-                    return open.call(this, method, url, ...rest);
-                };
-            JS);
+            $this->countRequests($browser, 'POST', '/members/invitations');
 
             // Two synchronous submits — exactly what a double click produces.
             $browser->script("const f = document.querySelector('[dusk=\"invite-form\"]'); f.requestSubmit(); f.requestSubmit();");
 
             $browser->waitForText('Invitation sent to double@example.com.');
-            $this->assertSame(1, $browser->script('return window.__invitationPosts;')[0]);
+            $this->assertSame(1, $this->requestsCounted($browser));
         });
 
         $this->assertSame(1, Invitation::where('email', 'double@example.com')->count());

@@ -19,6 +19,7 @@ class Permission extends Model
         'screen-view', 'screen-store', 'screen-update', 'screen-destroy', 'screen-playlist',
         'media-view', 'media-store', 'media-update', 'media-destroy',
         'daypart-view', 'daypart-store', 'daypart-update', 'daypart-destroy',
+        'ad-view', 'ad-store', 'ad-update', 'ad-destroy',
     ];
 
     /**
@@ -86,6 +87,10 @@ class Permission extends Model
         'daypart-store' => 'Create Dayparts',
         'daypart-update' => 'Update Dayparts',
         'daypart-destroy' => 'Delete Dayparts',
+        'ad-view' => 'View Ads',
+        'ad-store' => 'Create Ads',
+        'ad-update' => 'Update Ads',
+        'ad-destroy' => 'Delete Ads',
         'user-view' => 'View Accounts',
         'user-destroy' => 'Delete Accounts',
         'store-view' => 'View Stores',

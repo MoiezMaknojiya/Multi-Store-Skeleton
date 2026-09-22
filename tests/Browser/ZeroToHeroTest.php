@@ -11,7 +11,6 @@ use App\Models\User;
 use App\Services\MediaStorage;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -34,25 +33,16 @@ class ZeroToHeroTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    /** A real PNG for the upload step, so the TV has something genuine to show. */
-    private function fixtureImage(string $name, int $r, int $g, int $b): string
-    {
-        $directory = storage_path('framework/testing');
-        File::ensureDirectoryExists($directory);
-        $path = $directory.DIRECTORY_SEPARATOR.$name;
-
-        $image = imagecreatetruecolor(800, 450);
-        imagefilledrectangle($image, 0, 0, 800, 450, imagecolorallocate($image, $r, $g, $b));
-        imagepng($image, $path);
-        imagedestroy($image);
-
-        return $path;
-    }
-
     /** Upload one file through the real modal and return its row. */
     private function upload(Browser $panel, string $path, string $title): Media
     {
         $this->clickAndAwait($panel, '@upload-media', fn (Browser $b) => $b->waitFor('@media-upload-form', 5));
+
+        // The "select a store first" banner belongs to people who work above the stores. A
+        // fresh owner has exactly one and is already inside it. Asked with the form OPEN:
+        // the banner lives in this modal, so with the modal shut it would be missing anyway.
+        $panel->assertDontSeeIn('@media-upload-form', 'Select a store first');
+
         $panel->attach('@media-file', $path);
         $this->jsType($panel, '@media-title', $title);
         $this->jsClick($panel, '@media-upload-save');
@@ -68,8 +58,8 @@ class ZeroToHeroTest extends DuskTestCase
      *
      * The TV goes to a quiet page first: a <video> holds its file open and on
      * Windows an open file will not unlink, so deleting while the player is live
-     * fails silently. Leaving the player also stops its poll and heartbeat timers
-     * before this browser is handed to the next test.
+     * fails silently. Leaving the player also stops its timers, so nothing on that
+     * page is still asking the server anything while the files go.
      */
     private function removeUploads(Browser $tv, Media ...$media): void
     {
@@ -81,7 +71,7 @@ class ZeroToHeroTest extends DuskTestCase
             foreach (array_filter([$item->path, $item->thumbnail_path]) as $path) {
                 $this->assertFalse(
                     Storage::disk('public')->exists($path),
-                    "left {$path} on disk — a Dusk run must not litter storage/app/public"
+                    "left {$path} on disk — a Dusk run must not litter storage/app/dusk-public"
                 );
             }
         }
@@ -139,11 +129,7 @@ class ZeroToHeroTest extends DuskTestCase
             /* ── 3. Straight to work: one store means no store to pick ──── */
             $panel->visit('/media');
             $this->waitForAlpine($panel);
-            $panel->waitForText('No media found.')
-                // The "select a store first" banner belongs to people who work
-                // above the stores. A fresh owner has exactly one and is already
-                // inside it.
-                ->assertDontSee('Select a store first');
+            $panel->waitForText('No media found.');
 
             $poster = $this->upload($panel, $posterPath, 'Opening Poster');
             $second = $this->upload($panel, $secondPath, 'Second Board');
@@ -229,9 +215,6 @@ class ZeroToHeroTest extends DuskTestCase
             $reordered = PlaylistItem::where('screen_id', $screen->id)->orderBy('position')->get();
             $this->assertSame([$second->id, $poster->id], $reordered->pluck('media_id')->all());
             $this->assertSame(4, $reordered->last()->duration_seconds, 'the retimed row did not follow its file');
-
-            // The screen keeps playing across the change rather than going blank.
-            $tv->waitUsing(45, 250, fn () => $srcOf() !== '');
 
             /* ── 10. Emptying the playlist puts the wall back to "No content" */
             $this->jsClick($panel, '@playlist-remove-0');

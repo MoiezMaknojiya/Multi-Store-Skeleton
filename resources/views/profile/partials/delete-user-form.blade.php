@@ -26,20 +26,12 @@
                 {{ __('Your account and your access to every store will be removed for good. Please enter your password to confirm.') }}
             </p>
 
+            {{-- The plain-POST track, laid out like Delete Store on Settings → Stores. No native `required`:
+                 client validation (validateBeforeSubmit) shows the same red-border + message UX as every
+                 other form. The id stays `password` — unique on this page (the password form uses its own). --}}
             <div class="mt-6">
-                <x-input-label for="password" value="{{ __('Password') }}" class="sr-only" />
-
-                {{-- No native `required`: client validation (validateBeforeSubmit)
-                     shows the same red-border + message UX as every other form. --}}
-                <x-text-input
-                    id="password"
-                    name="password"
-                    type="password"
-                    class="mt-1 block w-full {{ $errors->userDeletion->has('password') ? '!border-red-500' : '' }}"
-                    placeholder="{{ __('Password') }}"
-                />
-
-                <x-input-error :messages="$errors->userDeletion->get('password')" class="mt-2" />
+                <x-auth.form-field name="password" label="Your password" type="password" bag="userDeletion"
+                    :required="true" autocomplete="current-password" />
             </div>
 
             <div class="mt-6 flex justify-center">

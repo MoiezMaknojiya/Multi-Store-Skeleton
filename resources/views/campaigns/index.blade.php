@@ -16,7 +16,10 @@
 
             {{-- The two facts that govern everything on this page, stated once. --}}
             <p class="text-sm text-gray-500 dark:text-gray-400">
-                One advert break every <span class="font-medium" x-text="Math.round(breakEverySeconds / 60)"></span> minutes,
+                {{-- In seconds below a minute (a browser test turns it right down), in minutes above. --}}
+                One advert break every <span class="font-medium" x-text="breakEverySeconds < 60
+                    ? breakEverySeconds + (breakEverySeconds === 1 ? ' second' : ' seconds')
+                    : Math.round(breakEverySeconds / 60) + (Math.round(breakEverySeconds / 60) === 1 ? ' minute' : ' minutes')"></span>,
                 up to <span class="font-medium" x-text="maxBreakSeconds"></span> seconds long.
                 The shop's own content pauses and carries on afterwards.
             </p>
@@ -78,12 +81,8 @@
                         </td>
 
                         <td class="px-5 py-4">
-                            <div class="flex items-center justify-end gap-2">
-                                <button @click="openCampaignModal(item)" x-bind:dusk="'edit-campaign-' + item.id"
-                                    class="btn-row-neutral">Edit</button>
-                                <button @click="confirmDelete(item)" x-bind:dusk="'delete-campaign-' + item.id"
-                                    class="btn-row-danger">Delete</button>
-                            </div>
+                            {{-- No permission names: the whole page is campaign-manage, a hand-written gate. --}}
+                            <x-crud.table-actions editClick="openCampaignModal(item)" deleteClick="confirmDelete(item)" dusk="campaign" />
                         </td>
                     </tr>
                 </template>
@@ -246,7 +245,8 @@
                         </label>
                     </div>
 
-                    <x-crud.form-actions savingVar="saving" dusk="campaign-save" cancelDusk="campaign-cancel" />
+                    {{-- Save waits while a video is still being measured, or it would go without its length and poster. --}}
+                    <x-crud.form-actions savingVar="saving || preparing" dusk="campaign-save" cancelDusk="campaign-cancel" />
                 </form>
             </div>
         </x-modal>

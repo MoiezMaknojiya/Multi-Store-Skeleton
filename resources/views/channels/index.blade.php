@@ -17,7 +17,7 @@
             <p class="text-sm text-gray-500 dark:text-gray-400" dusk="channels-scope-note">
                 @if ($store)
                     Channels made here belong to {{ $store->name }} and play only on its own screens. The platform's channels are
-                    offered to your playlists as well.
+                    listed too, to look at — add one to a screen from that screen's Channels box.
                 @else
                     A channel made here is offered to every shop, and each shop decides whether to put it on a screen. A channel a
                     store made for itself is marked with that store.
@@ -25,7 +25,8 @@
             </p>
         </div>
 
-        <x-crud.table-wrapper title="{{ $store ? 'Channels of '.$store->name : 'All Channels' }}" searchPlaceholder="Search channels..." :columns="6">
+        {{-- A bound :title — the wrapper echoes it itself, and an echo here as well escaped a store's name twice. --}}
+        <x-crud.table-wrapper :title="$store ? 'Channels of '.$store->name : 'All Channels'" searchPlaceholder="Search channels..." :columns="6">
             <x-slot name="head">
                 <th class="px-5 py-3 text-left font-semibold">Channel</th>
                 <th class="px-5 py-3 text-left font-semibold">Ads</th>
@@ -50,6 +51,11 @@
                                       x-bind:dusk="'channel-reach-' + item.id"
                                       x-text="item.store_name ? item.store_name + ' only' : 'Every shop'"></span>
                             </div>
+                            @else
+                            {{-- Inside a store, the platform's channels are there to look at, never to change. --}}
+                            <div class="mt-1" x-show="item.read_only" x-cloak>
+                                <span class="badge-info whitespace-nowrap" x-bind:dusk="'channel-from-platform-' + item.id">From the platform</span>
+                            </div>
                             @endunless
                             <p class="text-xs text-gray-400" x-text="item.created_by_name ? 'by ' + item.created_by_name : ''"></p>
                         </td>
@@ -73,12 +79,14 @@
                             <div class="flex items-center justify-end gap-2">
                                 <a x-bind:href="'/channels/' + item.id" x-bind:dusk="'channel-open-' + item.id"
                                    class="btn-row-success">Ads</a>
+                                {{-- A platform channel seen from inside a shop offers nothing to change; the server
+                                     refuses it anyway (404). --}}
                                 @can('channel-update')
-                                <button @click="openFormModal(item)" x-bind:dusk="'edit-channel-' + item.id"
+                                <button x-show="!item.read_only" @click="openFormModal(item)" x-bind:dusk="'edit-channel-' + item.id"
                                         class="btn-row-neutral">Edit</button>
                                 @endcan
                                 @can('channel-destroy')
-                                <button @click="confirmDelete(item)" x-bind:dusk="'delete-channel-' + item.id"
+                                <button x-show="!item.read_only" @click="confirmDelete(item)" x-bind:dusk="'delete-channel-' + item.id"
                                         class="btn-row-danger">Delete</button>
                                 @endcan
                             </div>
@@ -99,7 +107,7 @@
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Delete Channel</h2>
                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
                     Delete <span class="font-semibold" x-text="selectedItem?.name"></span> and every ad in it?
-                    This cannot be undone.
+                    This cannot be undone. The files stay in their media libraries.
                 </p>
 
                 <p x-show="(selectedItem?.screens_count ?? 0) > 0" x-cloak dusk="channel-delete-usage"

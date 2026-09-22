@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\PairingRequest;
 use App\Models\Screen;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -33,7 +34,7 @@ class DevicePairing
      * its live code rather than minting a new one, so a page refresh does not
      * change the number a shop owner is halfway through typing.
      *
-     * @return array{device_uuid: string, code: string, expires_at: string, poll_secret: string}
+     * @return array{device_uuid: string, code: string, expires_at: string, poll_secret: string, known_device: bool}
      */
     public function register(?string $deviceUuid = null): array
     {
@@ -163,8 +164,8 @@ class DevicePairing
     public function pruneExpired(): int
     {
         return PairingRequest::query()
-            ->where(fn ($q) => $q->whereNull('claimed_screen_id')->where('expires_at', '<', now()))
-            ->orWhere(fn ($q) => $q->whereNotNull('claimed_screen_id')->where('expires_at', '<', now()->subDay()))
+            ->where(fn (Builder $q) => $q->whereNull('claimed_screen_id')->where('expires_at', '<', now()))
+            ->orWhere(fn (Builder $q) => $q->whereNotNull('claimed_screen_id')->where('expires_at', '<', now()->subDay()))
             ->delete();
     }
 

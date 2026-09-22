@@ -3,6 +3,7 @@
 use App\Models\ActivityLog;
 use App\Models\Channel;
 use App\Models\ChannelAd;
+use App\Models\Media;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
@@ -29,7 +30,6 @@ beforeEach(function () {
     $this->beta = Store::factory()->create(['name' => 'Beta Deli']);
 
     $this->keeper = createStoreUser($this->alpha, ['channel-view', 'channel-store', 'channel-update', 'channel-destroy', 'screen-view', 'screen-playlist']);
-    $this->rivalKeeper = createStoreUser($this->beta, ['channel-view', 'channel-store', 'channel-update', 'channel-destroy', 'screen-view', 'screen-playlist'], 'Rival Keeper');
 
     $this->platformChannel = Channel::factory()->create(['name' => 'GAMA']);
     $this->alphaChannel = Channel::factory()->create(['name' => 'Alpha Specials', 'store_id' => $this->alpha->id]);
@@ -52,15 +52,25 @@ test('a channel made inside a store belongs to that store', function () {
         ->and(ActivityLog::where('action', 'channel.created')->value('store_id'))->toBe($this->alpha->id);
 });
 
-test('inside a store only its own channels are listed, opened, changed or deleted', function () {
-    $names = asKeeper($this)->getJson('/channels/data')->assertOk()->json('channels.*.name');
-    expect($names)->toBe(['Alpha Specials']);
+test("inside a store its own channels are managed, the platform's only looked at, and another store's not found", function () {
+    // Owner, 2026-09-19: a shop sees the platform's channels too — read-only, each marked so.
+    $rows = collect(asKeeper($this)->getJson('/channels/data')->assertOk()->json('channels'));
+    expect($rows->pluck('read_only', 'name')->all())->toBe(['Alpha Specials' => false, 'GAMA' => true]);
 
     asKeeper($this)->get('/channels')->assertOk()->assertSee('Channels of Alpha Mart');
-    asKeeper($this)->get("/channels/{$this->alphaChannel->id}")->assertOk();
+    asKeeper($this)->get("/channels/{$this->alphaChannel->id}")->assertOk()
+        ->assertSee('dusk="add-channel-ad"', false)
+        ->assertDontSee('dusk="channel-read-only-note"', false);
+
+    // The platform's channel opens to be read: nothing on the page adds, changes or takes out an ad.
+    asKeeper($this)->get("/channels/{$this->platformChannel->id}")->assertOk()
+        ->assertSee('dusk="channel-read-only-note"', false)
+        ->assertDontSee('dusk="add-channel-ad"', false)
+        ->assertDontSee('channel-ad-modal', false);
+
+    asKeeper($this)->get("/channels/{$this->betaChannel->id}")->assertNotFound();
 
     foreach ([$this->platformChannel, $this->betaChannel] as $outOfReach) {
-        asKeeper($this)->get("/channels/{$outOfReach->id}")->assertNotFound();
         asKeeper($this)->putJson("/channels/{$outOfReach->id}", ['name' => 'Taken'])->assertNotFound();
         asKeeper($this)->deleteJson("/channels/{$outOfReach->id}", ['password' => 'password'])->assertNotFound();
     }
@@ -70,6 +80,26 @@ test('inside a store only its own channels are listed, opened, changed or delete
     expect($this->alphaChannel->fresh()->name)->toBe('Alpha Weekly')
         ->and($this->platformChannel->fresh()->name)->toBe('GAMA')
         ->and($this->betaChannel->fresh()->name)->toBe('Beta Specials');
+});
+
+test("inside a store the platform's channel counts this store's screens only, and does not name its maker", function () {
+    // How far the platform's channel has spread in OTHER shops is not this shop's business, and neither is
+    // who on the platform's team made it.
+    $this->platformChannel->update(['created_by' => $this->superAdmin->id]);
+    $betaScreen = Screen::factory()->create(['store_id' => $this->beta->id]);
+    foreach ([$this->alphaScreen, $betaScreen] as $screen) {
+        PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $this->platformChannel->id, 'position' => 0]);
+    }
+
+    $inAlpha = collect(asKeeper($this)->getJson('/channels/data')->assertOk()->json('channels'))->keyBy('name');
+    expect($inAlpha['GAMA']['screens_count'])->toBe(1)
+        ->and($inAlpha['GAMA']['stores_count'])->toBe(1)
+        ->and($inAlpha['GAMA']['created_by_name'])->toBeNull();
+
+    $above = collect($this->actingAs($this->superAdmin)->getJson('/channels/data')->assertOk()->json('channels'))->keyBy('name');
+    expect($above['GAMA']['screens_count'])->toBe(2)
+        ->and($above['GAMA']['stores_count'])->toBe(2)
+        ->and($above['GAMA']['created_by_name'])->toBe($this->superAdmin->name);
 });
 
 test('with no store selected a store member sees no channels at all', function () {
@@ -127,16 +157,26 @@ test("a name must stand apart within one store's list — the platform's channel
 });
 
 test("deleting a store takes its own channels, their files and their playlist lines — and leaves everybody else's", function () {
-    $ad = ChannelAd::factory()->create([
-        'channel_id' => $this->alphaChannel->id,
-        'path' => "channels/{$this->alphaChannel->id}/deal.jpg",
-        'thumbnail_path' => "channels/{$this->alphaChannel->id}/thumbs/deal.jpg",
+    // Alpha's channel shows a file of Alpha's library; the platform's channel one of its own library — and
+    // one it borrowed from Alpha's, which goes with Alpha's library while the channel stays.
+    $ad = ChannelAd::factory()->create(['channel_id' => $this->alphaChannel->id]);
+    $platformAd = ChannelAd::factory()->create(['channel_id' => $this->platformChannel->id]);
+    $borrowed = ChannelAd::factory()->create([
+        'channel_id' => $this->platformChannel->id,
+        'media_id' => Media::factory()->create(['store_id' => $this->alpha->id])->id,
     ]);
-    Storage::disk('public')->put($ad->path, 'image');
-    Storage::disk('public')->put($ad->thumbnail_path, 'thumb');
+    foreach ([$ad, $platformAd, $borrowed] as $each) {
+        Storage::disk('public')->put($each->media->path, 'image');
+        Storage::disk('public')->put($each->media->thumbnail_path, 'thumb');
+    }
 
-    $platformAd = ChannelAd::factory()->create(['channel_id' => $this->platformChannel->id, 'path' => 'channels/gama/promo.jpg', 'thumbnail_path' => null]);
-    Storage::disk('public')->put($platformAd->path, 'image');
+    // Alpha's own channel on Alpha's screen — and, next door, Beta's screen carrying the platform's channel
+    // and Beta's own.
+    $alphaLine = PlaylistItem::create(['screen_id' => $this->alphaScreen->id, 'channel_id' => $this->alphaChannel->id, 'position' => 0]);
+    $betaScreen = Screen::factory()->create(['store_id' => $this->beta->id]);
+    $betaLines = collect([$this->platformChannel, $this->betaChannel])->map(fn (Channel $channel, int $position) => PlaylistItem::create([
+        'screen_id' => $betaScreen->id, 'channel_id' => $channel->id, 'position' => $position,
+    ]));
 
     $owner = createStoreMember($this->alpha, Role::OWNER);
     $this->actingAs($owner)->withSession(['current_store_id' => $this->alpha->id])
@@ -145,11 +185,21 @@ test("deleting a store takes its own channels, their files and their playlist li
 
     expect(Channel::find($this->alphaChannel->id))->toBeNull()
         ->and(ChannelAd::find($ad->id))->toBeNull()
+        ->and(Media::find($ad->media_id))->toBeNull()
+        ->and(PlaylistItem::find($alphaLine->id))->toBeNull()
+        ->and(PlaylistItem::where('channel_id', $this->alphaChannel->id)->exists())->toBeFalse()
         ->and(Channel::find($this->platformChannel->id))->not->toBeNull()
-        ->and(Channel::find($this->betaChannel->id))->not->toBeNull();
+        ->and(ChannelAd::where('channel_id', $this->platformChannel->id)->pluck('id')->all())->toBe([$platformAd->id])
+        ->and(Media::find($borrowed->media_id))->toBeNull()
+        ->and(Media::find($platformAd->media_id))->not->toBeNull()
+        ->and(Channel::find($this->betaChannel->id))->not->toBeNull()
+        ->and(PlaylistItem::whereKey($betaLines->pluck('id'))->orderBy('position')->pluck('channel_id')->all())
+        ->toBe([$this->platformChannel->id, $this->betaChannel->id]);
 
-    Storage::disk('public')->assertMissing([$ad->path, $ad->thumbnail_path]);
-    Storage::disk('public')->assertExists($platformAd->path);
+    Storage::disk('public')->assertMissing([
+        $ad->media->path, $ad->media->thumbnail_path, $borrowed->media->path, $borrowed->media->thumbnail_path,
+    ]);
+    Storage::disk('public')->assertExists([$platformAd->media->path, $platformAd->media->thumbnail_path]);
 });
 
 test("a store channel's deletion is in that store's history", function () {

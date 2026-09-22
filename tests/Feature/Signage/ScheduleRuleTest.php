@@ -199,15 +199,18 @@ test('a daypart that runs past midnight is counted against the day it OPENED', f
     expect($fridayNights->coversAt(on('2026-03-20 15:00')))->toBeFalse();
 });
 
-test('a rule whose daypart was deleted plays never, not always', function () {
-    // The foreign key is nullOnDelete, so the id survives as null. Treating "no
-    // daypart" as "all day" here would turn a lunchtime advert into a permanent one.
+test('a daypart id with nothing behind it plays never, not all day', function () {
+    // The rule names a window that cannot be found — gone after the rule was read, or
+    // never there. Reading that as "no daypart" (the whole day) would turn a lunchtime
+    // advert into a permanent one. (Deleting a daypart in the database is another
+    // matter: its foreign key empties daypart_id, which does read as the whole day —
+    // which is why a daypart still in use is retired, never deleted.)
     $orphan = new ScheduleRule(['daypart_id' => 999999]);
 
     expect($orphan->coversAt(on('2026-03-20 12:00')))->toBeFalse();
 });
 
-test('the next seven days are listed with the window each day opens', function () {
+test('the next fourteen days are listed with the window each day opens', function () {
     $store = Store::factory()->create();
     $lunch = Daypart::factory()->between('11:00', '15:00')->create(['store_id' => $store->id]);
 

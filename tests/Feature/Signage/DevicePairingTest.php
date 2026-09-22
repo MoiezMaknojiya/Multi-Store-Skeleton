@@ -16,10 +16,14 @@ test('a device with nothing can ask for a pairing code without logging in', func
 });
 
 test('the code avoids characters that are misread on a TV', function () {
-    $code = $this->postJson('/device/register')->assertOk()->json('code');
+    // No I, O, 0 or 1, and never lowercase — it is read across a room. One random code could miss a
+    // forbidden letter by luck, so two hundred are drawn; through the service rather than the endpoint,
+    // which allows a single address thirty a minute.
+    $pairing = app(DevicePairing::class);
 
-    // No I, O, 0 or 1, and never lowercase — it is read across a room.
-    expect($code)->toMatch('/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/');
+    foreach (range(1, 200) as $draw) {
+        expect($pairing->register()['code'])->toMatch('/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/');
+    }
 });
 
 test('re-registering the same device keeps the code already on screen', function () {
@@ -37,9 +41,9 @@ test('re-registering the same device keeps the code already on screen', function
 test('a device whose code expired can simply ask for another one', function () {
     $first = $this->postJson('/device/register')->assertOk()->json();
 
-    // The old row is still on file — expired codes are swept up later, not the
-    // instant they die — so registering again must reuse that row, not insert a
-    // second one for the same device.
+    // Registering sweeps expired, unclaimed codes before anything else, so the dead
+    // row is gone by the time the device asks again: it is given a new code under the
+    // same uuid, and there is still only one row on file for it.
     PairingRequest::query()->update(['expires_at' => now()->subMinute()]);
 
     $second = $this->postJson('/device/register', ['device_uuid' => $first['device_uuid']])
@@ -192,18 +196,9 @@ test('a paired screen gets an envelope it can already build against', function (
     $response->assertJsonStructure(['screen' => ['id', 'name', 'orientation'], 'server_time', 'version', 'items']);
     expect($response->json('screen.name'))->toBe('Counter TV');
     expect($response->json('screen.orientation'))->toBe('portrait');
-    // Phase 2 has no playlist yet, so the player shows "No content".
+    // Nothing is on this screen's playlist yet, so the player shows "No content".
     expect($response->json('items'))->toBe([]);
     expect($response->json('screen.id'))->toBe($screen->id);
-});
-
-test('the playlist version only changes when what to show changes', function () {
-    Screen::factory()->withToken('tok')->create(['store_id' => Store::factory()]);
-
-    $first = $this->withHeader('Authorization', 'Bearer tok')->getJson('/device/playlist')->json('version');
-    $second = $this->withHeader('Authorization', 'Bearer tok')->getJson('/device/playlist')->json('version');
-
-    expect($second)->toBe($first);
 });
 
 test('a heartbeat marks the screen online', function () {

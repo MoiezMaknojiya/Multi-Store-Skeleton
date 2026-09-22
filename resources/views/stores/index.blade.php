@@ -152,14 +152,15 @@
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Delete <span x-text="selectedItem?.name"></span>?</h2>
                     <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
                         This deletes the store and everything in it — screens (they stop playing at once), media files,
-                        playlists, dayparts, custom roles, its own channels, invitations and every member's access.
+                        playlists, dayparts, custom roles, its own channels, its Ad Builder designs and assets, invitations
+                        and every member's access.
                         People's accounts are not deleted. <span class="font-semibold text-red-600 dark:text-red-400">This cannot be undone.</span>
                     </p>
                 </div>
                 <div>
-                    <label class="form-label">Type <span class="font-semibold" x-text="selectedItem?.name"></span> to confirm <span class="text-red-500">*</span></label>
+                    <label class="form-label" for="delete-store-name">Type <span class="font-semibold" x-text="selectedItem?.name"></span> to confirm <span class="text-red-500">*</span></label>
                     <div class="mt-1" x-bind:class="deleteErrors.confirm_name ? 'crud-field-error' : ''">
-                        <x-text-input x-model="deleteConfirmName" dusk="delete-store-name" class="block w-full" autocomplete="off" />
+                        <x-text-input id="delete-store-name" x-model="deleteConfirmName" dusk="delete-store-name" class="block w-full" autocomplete="off" />
                     </div>
                     <template x-if="deleteErrors.confirm_name">
                         <p class="form-error" x-text="deleteErrors.confirm_name[0]"></p>
@@ -186,9 +187,9 @@
                     </p>
                 </div>
                 <div>
-                    <label class="form-label">Email <span class="text-red-500">*</span></label>
+                    <label class="form-label" for="invite-owner-email">Email <span class="text-red-500">*</span></label>
                     <div class="mt-1" x-bind:class="ownerErrors.email ? 'crud-field-error' : ''">
-                        <x-text-input type="email" x-model="ownerEmail" dusk="invite-owner-email" class="block w-full" autocomplete="off" placeholder="owner@example.com" />
+                        <x-text-input id="invite-owner-email" type="email" x-model="ownerEmail" dusk="invite-owner-email" class="block w-full" autocomplete="off" placeholder="owner@example.com" />
                     </div>
                     <template x-if="ownerErrors.email">
                         <p class="form-error" x-text="ownerErrors.email[0]"></p>

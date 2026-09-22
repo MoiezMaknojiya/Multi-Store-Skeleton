@@ -60,7 +60,7 @@ class MemberController extends Controller
             ->get();
 
         return response()->json([
-            'members' => $members->map(fn ($row) => [
+            'members' => $members->map(fn (object $row) => [
                 'id' => (int) $row->id,
                 'name' => trim($row->first_name.' '.$row->last_name),
                 'email' => $row->email,
@@ -142,22 +142,22 @@ class MemberController extends Controller
     {
         $store = $this->currentStore();
         $actor = auth()->user();
-        $role = $this->team->roleOf($user, $store) ?? abort(404);
+        $this->team->roleOf($user, $store) ?? abort(404);
 
         if ($actor->is($user)) {
             return response()->json(['message' => 'To leave this store, use Leave store.'], 422);
         }
 
         abort_unless($this->team->mayManage($actor, $store, $user), 403, 'You cannot remove someone who has access you do not have.');
-        $this->refuseTheLastOwner($user, $store, $role);
+        $this->refuseTheLastOwner($user, $store);
 
         $this->confirmPassword($request);
 
         $this->team->changeTeam($store, function () use ($store, $actor, $user) {
-            $role = $this->team->roleOf($user, $store) ?? abort(404);
+            $this->team->roleOf($user, $store) ?? abort(404);
 
             abort_unless($this->team->mayManage($actor, $store, $user), 403, 'You cannot remove someone who has access you do not have.');
-            $this->refuseTheLastOwner($user, $store, $role);
+            $this->refuseTheLastOwner($user, $store);
 
             DB::table('store_user')->where('store_id', $store->id)->where('user_id', $user->id)->delete();
         });
@@ -186,12 +186,13 @@ class MemberController extends Controller
     }
 
     /**
-     * A store's last Owner stays (rule 9). Holding everything the Owner role allows is enough to reach an Owner, so this
-     * is asked on its own — before the password, and again under the store's lock.
+     * A store's last Owner stays (rule 9) — the test that keeps them from leaving (StoreTeam::mayLeave). Holding
+     * everything the Owner role allows is enough to reach an Owner, so this is asked on its own — before the password,
+     * and again under the store's lock.
      */
-    private function refuseTheLastOwner(User $user, Store $store, Role $role): void
+    private function refuseTheLastOwner(User $user, Store $store): void
     {
-        if ($role->isOwner() && $this->team->ownerCount($store) === 1) {
+        if (! $this->team->mayLeave($user, $store)) {
             abort(response()->json([
                 'message' => "{$user->name} is the only Owner of {$store->name}. Make someone else an Owner first.",
             ], 422));

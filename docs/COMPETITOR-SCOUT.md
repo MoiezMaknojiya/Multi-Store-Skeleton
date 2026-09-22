@@ -100,7 +100,7 @@ Playlist item ⋮ → **Schedule periodic display** → modal "Periodic display"
 - Content library **⋮ → Delete expired content** is the housekeeping for it.
 - Content library **Sort** offers **Start date** and **Expiry date**, both directions.
 
-**We already have Layer 0** (`media.start_at` / `expires_at`, resolved server-side in
+**We already have Layer 0** (`media.starts_at` / `expires_at`, resolved server-side in
 `DeviceController::playlist`), and the wording of their help text matches our behaviour,
 including blank = always. Layers 1–3 are the gap.
 

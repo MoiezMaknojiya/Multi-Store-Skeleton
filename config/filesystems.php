@@ -53,10 +53,19 @@ return [
          * Both halves have to move together: the ROOT so writes are separated,
          * and the URL so the player can still fetch what a test uploaded (the
          * public/dusk-storage symlink in 'links' below points at it).
+         *
+         * The backend tests get a throwaway root as well, so a test that forgets
+         * Storage::fake('public') can never reach a real file. One did: its fresh
+         * database numbered its store and ads from 1, just like the real one, and
+         * deleting that store took the owner's own published ads 1 and 2 with it.
          */
         'public' => [
             'driver' => 'local',
-            'root' => storage_path(env('APP_ENV') === 'dusk' ? 'app/dusk-public' : 'app/public'),
+            'root' => storage_path(match (env('APP_ENV')) {
+                'dusk' => 'app/dusk-public',
+                'testing' => 'framework/testing/public',
+                default => 'app/public',
+            }),
             'url' => rtrim(env('APP_URL', 'http://localhost'), '/').(env('APP_ENV') === 'dusk' ? '/dusk-storage' : '/storage'),
             'visibility' => 'public',
             'throw' => false,

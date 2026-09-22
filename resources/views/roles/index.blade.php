@@ -32,7 +32,7 @@
             </div>
 
             @can('role-store')
-            <x-crud.add-button label="{{ $store ? 'Create custom role' : 'Create role' }}" @click="openForm()" x-bind:disabled="openingForm" dusk="create-role" class="shrink-0" />
+            <x-crud.add-button :label="$store ? 'Create custom role' : 'Create role'" @click="openForm()" x-bind:disabled="openingForm" dusk="create-role" class="shrink-0" />
             @endcan
         </div>
 

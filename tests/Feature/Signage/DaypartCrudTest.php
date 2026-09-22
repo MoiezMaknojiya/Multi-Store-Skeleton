@@ -8,10 +8,10 @@ use App\Models\Store;
 | Dayparts — the named windows of time a shop reuses
 |--------------------------------------------------------------------------
 |
-| A daypart is shop inventory like a media file, not personal property like a
-| role: everyone working in the store shares it, and it is invisible from any
-| other store. Its exceptions are replaced as a whole set on every save, the
-| same way a playlist is, so a half-applied set of hours never survives.
+| A daypart is shop inventory, like a media file: everyone working in the store
+| shares it, whoever typed it in, and it is invisible from any other store. Its
+| exceptions are replaced as a whole set on every save, the same way a playlist
+| is, so a half-applied set of hours never survives.
 |
 */
 
@@ -39,11 +39,18 @@ beforeEach(function () {
 test('guests cannot reach any daypart endpoint', function () {
     auth()->logout();
 
-    $this->getJson('/dayparts/data')->assertUnauthorized();
+    // Every route under /dayparts, read from the route table — so one added later is asked too.
+    $routes = routesUnder('dayparts');
+
+    expect($routes)->not->toBeEmpty();
+
+    foreach ($routes as [$method, $uri]) {
+        expect($this->json($method, $uri)->status())->toBe(401, "{$method} {$uri}");
+    }
 });
 
 test('the dayparts page itself renders', function () {
-    // Worth its own test: every endpoint above can pass while the PAGE throws,
+    // Worth its own test: every endpoint below can pass while the PAGE throws,
     // because the view needs the weekday list the controller hands it and nothing
     // else here would notice it missing.
     $this->get('/dayparts')
@@ -110,17 +117,24 @@ test('an end time equal to the start is refused, because it has no honest readin
 });
 
 test('two dayparts in one store cannot share a name, but two stores can', function () {
+    $otherStore = Store::factory()->create();
+    $neighbour = createStoreUser($otherStore, ['daypart-store'], 'Neighbour Role');
+
     $this->postJson('/dayparts', daypartPayload())->assertOk();
 
-    $this->postJson('/dayparts', daypartPayload())
+    // The same name in a different store is a different window entirely: the name check looks inside the
+    // store the person works in, so it goes through the endpoint rather than the factory.
+    $this->actingAs($neighbour)->withSession(['current_store_id' => $otherStore->id])
+        ->postJson('/dayparts', daypartPayload())->assertOk();
+
+    // Back in the first store, the name is taken.
+    $this->actingAs($this->actor)->withSession(['current_store_id' => $this->store->id])
+        ->postJson('/dayparts', daypartPayload())
         ->assertStatus(422)
         ->assertJsonValidationErrors('name');
 
-    // The same name in a different store is a different window entirely.
-    $otherStore = Store::factory()->create();
-    Daypart::factory()->create(['store_id' => $otherStore->id, 'name' => 'Deli hours']);
-
-    expect(Daypart::where('name', 'Deli hours')->count())->toBe(2);
+    expect(Daypart::where('name', 'Deli hours')->orderBy('store_id')->pluck('store_id')->all())
+        ->toBe([$this->store->id, $otherStore->id]);
 });
 
 test('renaming a daypart does not collide with its own name', function () {

@@ -186,7 +186,13 @@ class ScheduleUiTest extends DuskTestCase
         $screen = Screen::factory()->withToken('hours-token')->create([
             'store_id' => $store->id, 'name' => 'Deli TV', 'timezone' => 'America/Chicago',
         ]);
-        $poster = Media::factory()->create(['store_id' => $store->id, 'title' => 'Poster']);
+        // A real picture on the Dusk disk: coming back is proved by the poster being on
+        // screen, and a factory row's file does not exist.
+        $poster = Media::factory()->create([
+            'store_id' => $store->id, 'title' => 'Poster', 'mime_type' => 'image/png',
+            'path' => $this->putImage("media/{$store->id}/hours-poster.png", 40, 160, 90),
+            'thumbnail_path' => null,
+        ]);
         $item = PlaylistItem::create([
             'screen_id' => $screen->id, 'media_id' => $poster->id,
             'position' => 0, 'duration_seconds' => 10,
@@ -226,8 +232,20 @@ class ScheduleUiTest extends DuskTestCase
             $rule->update(['daypart_id' => $now->id]);
 
             $tv->visit('/player');
-            $tv->waitUntil("!document.body.classList.contains('closed')", 30);
-            $tv->waitUntilMissing('@pairing-code');
+
+            // A fresh page has no 'closed' class until its first manifest says so, so looking
+            // for its absence alone would pass before the player had asked anything. The
+            // poster itself, revealed on a content layer, is what proves the server said "due".
+            $tv->waitUsing(30, 200, fn () => $tv->script(
+                'return !!document.querySelector("#layer-a:not([hidden]) img, #layer-b:not([hidden]) img");'
+            )[0]);
+
+            $this->assertFalse($tv->script("return document.body.classList.contains('closed');")[0],
+                'the poster is due, yet the screen is still dark');
+            $this->assertSame('visible', $tv->script(
+                "return getComputedStyle(document.querySelector('.media-layer')).visibility;"
+            )[0]);
+            $tv->assertMissing('@pairing-code');
 
             $tv->visit('/login');
             $tv->script('localStorage.clear();');

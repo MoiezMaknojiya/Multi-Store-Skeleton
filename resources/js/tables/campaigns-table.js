@@ -7,7 +7,7 @@
  * runs on are chosen from every shop at once.
  */
 import axios from 'axios';
-import { toAmPm } from '../core/clock.js';
+import { windowLabel as clockRange } from '../core/clock.js';
 import { createCrudTable } from '../core/crud-table-base.js';
 import { fileError, readVideoMeta } from '../core/media-file.js';
 import { validate, required, maxLen } from '../core/validate.js';
@@ -95,6 +95,8 @@ export function registerCampaignsTable(Alpine) {
                 this.selectedFile = file;
                 this.clientMeta = {};
                 this.formErrors = {};
+                // Whatever an earlier pick was still measuring no longer matters.
+                this.preparing = false;
                 if (! file) return;
 
                 const error = fileError(file);
@@ -107,9 +109,12 @@ export function registerCampaignsTable(Alpine) {
                 if (file.type.startsWith('video/')) {
                     this.preparing = true;
                     try {
-                        this.clientMeta = await readVideoMeta(file);
+                        const meta = await readVideoMeta(file);
+                        // Another file was chosen while this one was measured: its numbers are
+                        // not that file's, and must not ride along with its upload.
+                        if (this.selectedFile === file) this.clientMeta = meta;
                     } finally {
-                        this.preparing = false;
+                        if (this.selectedFile === file) this.preparing = false;
                     }
                 }
             },
@@ -129,7 +134,8 @@ export function registerCampaignsTable(Alpine) {
              * the request INTO a PUT and miss the route entirely.
              */
             async saveCampaign() {
-                if (this.saving) return;
+                // Not while a video is still being measured: it would go without its length and poster.
+                if (this.saving || this.preparing) return;
 
                 const errors = validate(this.form, {
                     name: [required('Name'), maxLen('Name', 120)],
@@ -286,7 +292,8 @@ export function registerCampaignsTable(Alpine) {
             windowLabel(campaign) {
                 if (! campaign.start_time || ! campaign.end_time) return 'All day';
 
-                return `${toAmPm(campaign.start_time)} – ${toAmPm(campaign.end_time)}`;
+                // One place decides how a window of time reads (core/clock.js), as on the Dayparts page.
+                return clockRange(campaign.start_time, campaign.end_time);
             },
 
             datesLabel(campaign) {

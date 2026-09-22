@@ -9,6 +9,8 @@ use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Store;
 use App\Services\StoreTeam;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -63,11 +65,11 @@ class RoleController extends Controller
         // Inside a store only its own open invitations and members are counted — never another store's.
         $roles = ($store ? Role::availableInStore($store->id) : Role::query())
             ->with(['permissions:id,name,label', 'store:id,name'])
-            ->withCount(['invitations as invitations_count' => fn ($query) => $query->when($store, fn ($query) => $query->where('store_id', $store->id))])
+            ->withCount(['invitations as invitations_count' => fn (Builder $query) => $query->when($store, fn (Builder $query) => $query->where('store_id', $store->id))])
             ->get();
 
         $holders = DB::table('store_user')
-            ->when($store, fn ($query) => $query->where('store_id', $store->id))
+            ->when($store, fn (QueryBuilder $query) => $query->where('store_id', $store->id))
             ->groupBy('role_id')
             ->selectRaw('role_id, count(*) as holders')
             ->pluck('holders', 'role_id');
@@ -250,12 +252,13 @@ class RoleController extends Controller
     /**
      * What may be changed from here, and what kind of role it is: above the stores, every role but
      * Super-Admin — the Owner role never deleted; inside a store, its own custom roles within reach.
+     * Inside a store Super-Admin is a platform role like any other, so it is not found there (404) —
+     * the same answer every role out of reach gets, rather than a 403 that names it.
      */
     private function ensureManageable(Role $role, ?Store $store, bool $deleting = false): string
     {
-        abort_if($role->isSuperAdmin(), 403, 'The Super-Admin role always holds every permission, and is never changed.');
-
         if ($store === null) {
+            abort_if($role->isSuperAdmin(), 403, 'The Super-Admin role always holds every permission, and is never changed.');
             abort_if($deleting && $role->isOwner(), 403, 'The Owner role is never deleted: it is how a store has an owner. Rename it or change what it allows instead.');
 
             return $this->typeOf($role);
@@ -335,9 +338,9 @@ class RoleController extends Controller
     private function rolesListedWith(string $type, ?Store $roleStore): Collection
     {
         return match ($type) {
-            'platform' => Role::platform()->get(['id', 'name', 'is_global', 'store_id']),
-            'store' => Role::where('is_global', false)->with('store:id,name')->get(['id', 'name', 'is_global', 'store_id']),
-            default => Role::availableInStore($roleStore->id)->get(['id', 'name', 'is_global', 'store_id']),
+            'platform' => Role::platform()->orderBy('id')->get(['id', 'name', 'is_global', 'store_id']),
+            'store' => Role::where('is_global', false)->with('store:id,name')->orderBy('id')->get(['id', 'name', 'is_global', 'store_id']),
+            default => Role::availableInStore($roleStore->id)->orderBy('id')->get(['id', 'name', 'is_global', 'store_id']),
         };
     }
 

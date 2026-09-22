@@ -16,7 +16,7 @@ export function registerRegisterForm(Alpine) {
                     first_name: [required('First name'), maxLen('First name', 255)],
                     last_name: [required('Last name'), maxLen('Last name', 255)],
                     phone: [required('Phone'), digitsExactly('Phone', 10)],
-                    email: [required('Email'), emailFormat('Email')],
+                    email: [required('Email'), emailFormat('Email'), maxLen('Email', 255)],
                     password: [
                         required('Password'),
                         minLen('Password', 8),

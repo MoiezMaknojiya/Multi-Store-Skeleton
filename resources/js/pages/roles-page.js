@@ -11,7 +11,8 @@
 import axios from 'axios';
 import { validate, required, maxLen, minCount } from '../core/validate.js';
 
-/* Group titles, in the order a store is set up and run. Anything else is appended. */
+/* Group titles, in the order a store is set up and run. Anything else is appended. The catalogue's own
+   permissions (permission-*) are listed for the Super-Admin role alone. */
 const GROUPS = {
     store: 'Stores',
     member: 'Members',
@@ -19,9 +20,11 @@ const GROUPS = {
     screen: 'Screens',
     daypart: 'Dayparts',
     media: 'Media library',
+    ad: 'Ad Builder',
     channel: 'Channels',
     user: 'Accounts',
     activity: 'Activity log',
+    permission: 'Permissions',
 };
 
 /* The groups that reach every store on a platform role, and only the member's own store on a store's role.
@@ -50,6 +53,7 @@ export function registerRolesPage(Alpine) {
         editingRole: null,
         openingForm: false,
         saving: false,
+        assignableToken: 0,
 
         selectedRole: null,
         deleting: false,
@@ -129,14 +133,23 @@ export function registerRolesPage(Alpine) {
         },
 
         async loadAssignable(params) {
+            // Only the list asked for last may fill the checklist: Store role, Platform role, Store role again
+            // sends three requests, and the platform's list landing last would offer a store role what it
+            // cannot hold — and untick what it can.
+            const token = ++this.assignableToken;
             this.loadingAssignable = true;
             try {
                 const { data } = await axios.get('/roles/assignable', { params });
+                if (token !== this.assignableToken) return;
                 this.assignable = data;
                 // A permission this kind of role cannot hold does not stay ticked out of sight.
                 this.form.permissions = this.form.permissions.filter((id) => data.some((permission) => Number(permission.id) === Number(id)));
+            } catch (error) {
+                // A request already overtaken has nothing left to report.
+                if (token !== this.assignableToken) return;
+                throw error;
             } finally {
-                this.loadingAssignable = false;
+                if (token === this.assignableToken) this.loadingAssignable = false;
             }
         },
 

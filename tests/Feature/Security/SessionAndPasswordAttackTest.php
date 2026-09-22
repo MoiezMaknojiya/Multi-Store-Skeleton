@@ -4,11 +4,11 @@ use App\Models\Channel;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Store;
-use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Str;
 
 /*
 |--------------------------------------------------------------------------
@@ -73,16 +73,36 @@ test('one person’s wrong passwords never lock another person out', function ()
 });
 
 test('signing in is throttled, and a wrong password never says which half was wrong', function () {
-    $statuses = [];
-    for ($i = 0; $i < 7; $i++) {
-        $statuses[] = $this->post('/login', ['email' => $this->staff->email, 'password' => 'wrong'])->status();
+    // Frozen, so "try again in … seconds" is one exact sentence.
+    $this->freezeTime();
+
+    // An address with no account and a real address with the wrong password read exactly alike.
+    $this->from('/login')->post('/login', ['email' => 'nobody-here@example.com', 'password' => 'wrong'])
+        ->assertRedirect('/login')
+        ->assertSessionHasErrors(['email' => trans('auth.failed')]);
+
+    for ($i = 0; $i < 5; $i++) {
+        $this->from('/login')->post('/login', ['email' => $this->staff->email, 'password' => 'wrong'])
+            ->assertRedirect('/login')
+            ->assertSessionHasErrors(['email' => trans('auth.failed')]);
     }
 
-    expect($statuses)->toContain(302);      // the refusals redirect back with an error
-    expect(collect($statuses)->last())->toBeIn([302, 429]);
+    // Five wrong passwords (LoginRequest counts per address and visitor): the sixth try is refused even
+    // though the password is right, and the sign-in page it lands back on says why.
+    $this->from('/login')->followingRedirects()
+        ->post('/login', ['email' => $this->staff->email, 'password' => 'password'])
+        ->assertOk()
+        ->assertSee(trans('auth.throttle', ['seconds' => 60, 'minutes' => 1]))
+        ->assertDontSee(trans('auth.failed'));
+    $this->assertGuest();
 
     // The account is still fine, and still signs in with its real password once the window passes.
     expect(Hash::check('password', $this->staff->fresh()->password))->toBeTrue();
+
+    $this->travel(61)->seconds();
+    $this->post('/login', ['email' => $this->staff->email, 'password' => 'password'])
+        ->assertRedirect(route('dashboard', absolute: false));
+    $this->assertAuthenticatedAs($this->staff);
 });
 
 test('a member removed mid-session loses everything on the very next request', function () {
@@ -121,24 +141,35 @@ test('a role stripped of its permissions mid-session stops opening the pages it 
 });
 
 test('signing in starts a brand-new session, so anything planted in the old one is worthless', function () {
-    $this->flushSession();
-    $planted = session()->getId();
-    session(['current_store_id' => 999999, 'impersonating_user_id' => $this->owner->id]);
+    $cookie = config('session.cookie');
+    $planted = Str::random(40);     // a well-formed session id the attacker already knows
+    $admin = createSuperAdmin();
 
-    $this->post('/login', ['email' => $this->staff->email, 'password' => 'password'])->assertRedirect();
+    // The attacker's half: a session under that id holding the way back into a super admin's account
+    // that "Log in as" leaves behind — and the victim's browser made to carry its cookie.
+    $this->withCookie($cookie, $planted)
+        ->withSession(['impersonating_original_id' => $admin->id, 'impersonating_user_id' => $this->staff->id])
+        ->get('/login')->assertOk();
 
-    // A different session id (fixing a cookie beforehand gains nothing), and the way back into
-    // somebody else's account that was planted in it is gone.
+    // The app really does take the id a cookie names; without that, nothing below would prove anything.
+    expect(session()->getId())->toBe($planted);
+
+    $response = $this->withCookie($cookie, $planted)
+        ->post('/login', ['email' => $this->staff->email, 'password' => 'password'])
+        ->assertRedirect(route('dashboard', absolute: false));
+    $this->assertAuthenticatedAs($this->staff);
+
+    // A new id, handed back in the cookie, and the planted session is gone from the store — so the id the
+    // attacker knows opens nothing, and the way back that was planted in it went with the sign-in.
     expect(session()->getId())->not->toBe($planted)
+        ->and($response->getCookie($cookie)->getValue())->toBe(session()->getId())
+        ->and(session()->getHandler()->read($planted))->toBe('')
+        ->and(session('impersonating_original_id'))->toBeNull()
         ->and(session('impersonating_user_id'))->toBeNull();
 
-    // And an account deleted underneath a session leaves nothing behind that still points at it.
-    $victim = createStoreMember($this->store, Role::STAFF);
-    $admin = createSuperAdmin(['user-view', 'user-destroy']);
-    $this->actingAs($admin)->deleteJson("/users/{$victim->id}", ['password' => 'password'])->assertOk();
-
-    expect(User::find($victim->id))->toBeNull()
-        ->and(DB::table('store_user')->where('user_id', $victim->id)->exists())->toBeFalse();
+    // So "stop" has nobody to hand over: the person stays who they signed in as.
+    $this->withCookie($cookie, session()->getId())->post('/impersonate/stop')->assertRedirect(route('dashboard'));
+    expect(auth()->id())->toBe($this->staff->id);
 });
 
 test('the password change and the reset link cannot be used to take an account over', function () {
@@ -182,7 +213,7 @@ test('a platform account carrying a store id in its session gains nothing from i
 test('the forgotten-password form is not a mail cannon, nor a way to read an address list quickly', function () {
     // Ten a minute per visitor (the `password-reset` limiter). The password broker has a throttle of
     // its own, but it only stops the SAME address being mailed twice within a minute — walking a
-    // list sends one email per address, and the form's answer says which addresses have an account.
+    // list sends one email per address (the answer itself is the same for every address).
     $statuses = [];
     for ($i = 0; $i < 13; $i++) {
         $statuses[] = $this->post('/forgot-password', ['email' => "someone{$i}@example.com"])->status();

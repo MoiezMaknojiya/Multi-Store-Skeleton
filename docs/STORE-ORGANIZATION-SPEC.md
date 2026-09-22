@@ -1,7 +1,8 @@
 # Store as an Organization — People Model Spec
 
 > **Status:** approved direction (owner, 2026-09-16) — "follow the industrial standard, keep the UI/UX
-> professional, and clean up everything after building." Built on `ads-feature`, no commits.
+> professional, and clean up everything after building." Built on `ads-feature` and committed there (176f784);
+> the work continues on the `ads-builder` branch.
 > This file is the source of truth for the rebuild; the checklist at the bottom tracks progress.
 
 ## 0. Why
@@ -43,15 +44,16 @@ shops) is out of scope; these rules stay the same if it is added later.
 | Handing a store over | **On the Members page**: whoever may give the Owner role makes another member Owner, and the new Owner may change the first one's role — no Transfer Ownership screen or permission | Owner's rule (2026-09-17): "change role kar sakta hu toh transfer ownership ki zarurat nahi" |
 | Accounts inside a store | **None** — a store's people are its Members page; View Accounts and Delete Accounts work above the stores only | Owner's rule (2026-09-17): "members k tab mein sub araha ha toh accounts k tab ki zarurat nahi" |
 | Invite owner on the platform | **Only for a store with no Owner**; more Owners come from the store's Members page or Users → Stores | Owner's choice (2026-09-17) |
-| Deleting an account | Its memberships and everything pointing at it go (sessions, reset link, tokens, invitations waiting for its email); what the person made stays with its store | Owner's rule (2026-09-17): "jaha kahi per bhi link ha toh hata dena" |
+| Deleting an account | Its memberships and everything pointing at it go (sessions, reset link, invitations waiting for its email); what the person made stays with its store | Owner's rule (2026-09-17): "jaha kahi per bhi link ha toh hata dena" |
 | Campaigns | Stay a super-admin gate, not a permission row | Owner's choice (2026-09-16) |
-| Deleting | **Big deletes ask for the password** (store, account, role, permission, channel, campaign, member, platform role); everyday deletes stay one confirmation | Owner's rule (2026-09-16); a session left open must not destroy with two clicks |
+| Deleting | **Big deletes ask for the password** (store, account, role, permission, channel, campaign, ad design, member, platform role); everyday deletes (an Ad Builder asset among them) stay one confirmation | Owner's rule (2026-09-16); a session left open must not destroy with two clicks |
 | Super admins among themselves | All super admins see each other; only the **primary** super admin (the first one) may invite a new super admin, remove Super-Admin from someone or delete a super admin account; nobody may act on the primary | Replaces the old `created_by` protection ("a promoted super admin cannot act on who promoted them"); granting sits with whoever can undo it |
 
 ## 2. Vocabulary
 
 - **Account** (`users`) — an identity: name, phone, email, password. Owned by the person.
-- **Store** — the organization. Owns members, custom roles, invitations, screens, media, playlists, dayparts.
+- **Store** — the organization. Owns members, custom roles, invitations, screens, media, playlists, dayparts,
+  its own channels, and its Ad Builder designs and assets.
 - **Membership** — a `store_user` row `(user_id, store_id > 0, role_id)`. One role per person per store.
 - **Platform membership** — a `store_user` row with `store_id = 0` holding a global role (unchanged sentinel).
 - **Store role** — a role the super admin makes for the stores: offered in every store, the same everywhere.
@@ -76,7 +78,7 @@ Role invariants (enforced by code, established by the data migrations):
 **Where a permission reaches is where the role sits** (owner's rules, 2026-09-16): on a platform role,
 every store; on a store role or a custom role, the one store the member holds it in.
 
-**Store permissions (22)** — a store's own work:
+**Store permissions (26)** — a store's own work:
 
 - `store-update` — edit this store's details
 - `member-view`, `member-invite`, `member-update` (change role), `member-remove`
@@ -84,6 +86,8 @@ every store; on a store role or a custom role, the one store the member holds it
 - `screen-view`, `screen-store`, `screen-update`, `screen-destroy`, `screen-playlist`
 - `media-view`, `media-store`, `media-update`, `media-destroy`
 - `daypart-view`, `daypart-store`, `daypart-update`, `daypart-destroy`
+- `ad-view`, `ad-store`, `ad-update`, `ad-destroy` — the Ad Builder (`docs/AD-BUILDER-SPEC.md`), added with a
+  migration of their own
 
 **Platform permissions (11)** — above the stores on a platform role; `Permission::STORE_SCOPED` marks the
 eight that a store's role may carry too, and what they mean there:
@@ -104,7 +108,7 @@ eight that a store's role may carry too, and what they mean there:
 Rules:
 - A store role or a custom role carries store permissions and the store-scoped platform ones (`Permission::belongsToStores`).
 - A platform role (not Super-Admin) may carry store + platform permissions (a support person with
-  `media-view` reads every store's library, as today).
+  `media-view` reads every store's library, and the platform's own).
 - The Super-Admin role carries everything.
 - A permission in none of the lists (created on the Permissions page) counts as platform-only.
 - The role form lists only what the role in it can hold — nothing greyed out (2026-09-17): for a store role what
@@ -236,7 +240,7 @@ schema and the starter data directly.
     with the store (`created_by` stays as history).
 21. **Delete account** (Profile, or platform `user-destroy`): the account and its memberships — nothing
     else of anybody's — and nothing is left pointing at it (owner's rule, 2026-09-17): its sessions on every device,
-    its password-reset link, any API token and every invitation waiting for its email (to a store or the platform)
+    its password-reset link and every invitation waiting for its email (to a store or the platform)
     go too, and `created_by`, `invited_by` and the log's actor empty (what the person made — invitations they sent
     included — stays with its store; the log keeps their name). Self-deletion is refused while the person is the
     last Owner of any store (the message names the stores). A platform deletion is allowed; the response names the stores left without an Owner, and the super
@@ -247,7 +251,9 @@ schema and the starter data directly.
 22. **Delete store** (`store-destroy` — inside a store the Owner's by default, for the store worked in, from Settings →
     Stores; on the platform any store, from the Stores page — always the typed name and the password): everything the store owns goes in one transaction — memberships, invitations, custom roles,
     screens (devices lose their token), playlists and schedule rules, dayparts, the store's own channels (their
-    ads and the lines carrying them), media rows, and media and channel files after commit. **The store row goes
+    ads and the lines carrying them), media rows (and any ad of the platform's channel that showed one of them),
+    the Ad Builder's designs and assets, and media and Ad Builder files after commit — a channel's files are
+    library rows (docs/CHANNEL-CONTENT-SPEC.md). **The store row goes
     too, for good** (owner's rule, 2026-09-17: "A to Z") — no soft delete, and `roles.store_id` cascades, so a custom
     role never outlives its store. Accounts stay, and so does the activity log (its entries keep the store's id and
     name).
@@ -266,9 +272,9 @@ schema and the starter data directly.
 27. **A super admin holds every permission** — a `Gate::before` answers every permission check, whatever the
     Super-Admin role's rows say. Rules that are not permissions still stand (rules 9, 21, 24, 26; Super-Admin never
     changed, the Owner role never deleted).
-28. **Big deletes re-confirm the password:** a store, an account, a role, a permission, a channel, a campaign,
-    removing a member, taking a platform role. Asked after every other refusal; five wrong passwords a minute per
-    person, then a pause.
+28. **Big deletes re-confirm the password:** a store, an account, a role, a permission, a channel, a campaign, an
+    ad design, removing a member, taking a platform role. Asked after every other refusal; five wrong passwords a
+    minute per person, then a pause. Everyday deletes — an Ad Builder asset among them — stay one confirmation.
 
 ### H. Platform permissions inside a store (owner's rules, 2026-09-16)
 29. **A store's role may carry the store-scoped platform permissions** (§3 table), and there they reach that store
@@ -279,8 +285,12 @@ schema and the starter data directly.
     `super-admin-tier`).
 30. **A store's own channels:** made inside the store (stamped with it), listed, opened and changed only there;
     offered to that store's screens alone. The platform's channels stay offered to every shop and out of a store's
-    reach; another store's channels are never found. A name stands apart within one store's list (the platform's
-    channels and its own). The platform lists every channel with whose screens it reaches.
+    reach for any change — inside a store they are listed and opened to READ only (2026-09-19: "From the platform",
+    no Edit, Delete or Add ad; `Channel::listableIn` for looks, `Channel::visibleTo` for changes); another store's
+    channels are never found. A name stands apart within one store's list (the platform's channels and its own).
+    The platform lists every channel with whose screens it reaches. A channel's ads are rows of a media library
+    (docs/CHANNEL-CONTENT-SPEC.md): a shop's channel takes its shop's library, the platform's channel the
+    platform's own library (`media.store_id` NULL) or any shop's.
 31. **A store's own history:** every entry carries the store it belongs to (its subject's, or the store named for a
     delete or a person); a store's role carrying `activity-view` reads those entries alone. Entries logged before
     the column existed, personal account actions and the platform's own work belong to no store.
@@ -339,7 +349,7 @@ and activity also inside a store for a store's role carrying the permission, for
 | PUT `/users/{user}/stores/{store}/role` | `global-tier` + `super-admin-tier` | change the person's role in that store (rule 32) |
 | DELETE `/users/{user}/stores/{store}` | `global-tier` + `super-admin-tier` + password | take the person out of that store; the store keeps an Owner (rule 32) |
 | DELETE `/users/{user}/platform-role` | `global-tier` + `super-admin-tier` + password | remove platform role (rule 24) |
-| `/channels/*` | `channel-*` | channels within reach (`Channel::visibleTo`, rule 30) |
+| `/channels/*` | `channel-*` | channels within reach (`Channel::listableIn` to look, `Channel::visibleTo` to change, rule 30); `/channels/{channel}/library` feeds the Add-ad pickers under `channel-update` |
 | GET `/activity`, `/activity/data` | `activity-view` | entries within reach (rule 31) |
 | GET `/activity/partitions`, POST `/activity/partitions/maintain` | `global-tier` + `activity-view` / `activity-destroy` | yearly storage |
 | GET `/roles`, `/roles/data` | `role-view` | platform (super admin): every role, stores' custom roles included · store: the store roles and this store's custom roles |
@@ -386,13 +396,15 @@ type replaced them); `/users/{user}/store-roles` and the Roles page's `?store=` 
 **`stores`:** no `deleted_at` — a deleted store goes for good. **`roles.store_id`:** cascades on delete, so a custom
 role never outlives its store.
 
-**What a fresh install gets** (21 migrations, squashed on 2026-09-17 — the conversion migrations that upgraded the
-owner's own database are gone, and with them the only upgrade path from the old model): the tables above in their final
-shape, plus one data migration (`2026_09_16_110200_insert_permissions_and_starter_roles`) that inserts the 37
-permissions of `Permission::LABELS` with their labels and the four starter store roles — Owner (every store permission,
-`store-view`, `store-destroy`), Admin (every store permission, `store-view`), Staff (7) and Viewer (3). `db:seed` then
-adds the Super-Admin role holding the whole catalogue and the admin account. A permission added later ships a migration
-of its own; that baseline file is never edited.
+**What a fresh install gets** (24 migrations: the 21 squashed on 2026-09-17 — the conversion migrations that upgraded
+the owner's own database are gone, and with them the only upgrade path from the old model — and the Ad Builder's three,
+added since): the tables above in their final shape, plus two data migrations. The baseline
+(`2026_09_16_110200_insert_permissions_and_starter_roles`) inserts 37 permissions with their labels and the four starter
+store roles — Owner (every store permission, `store-view`, `store-destroy`), Admin (every store permission,
+`store-view`), Staff (7) and Viewer (3); the Ad Builder's `2026_09_17_140100_insert_ad_permissions` adds `ad-view`,
+`ad-store`, `ad-update` and `ad-destroy` and grants them to Owner and Admin by key — the 41 of `Permission::LABELS` in
+all. `db:seed` then adds the Super-Admin role holding the whole catalogue and the admin account. A permission added later
+ships a migration of its own; that baseline file is never edited.
 
 ## 8. UI
 
@@ -401,7 +413,7 @@ Two form tracks: AJAX modals for lists, plain POST for settings and guest pages.
 tables, `dusk` selectors on every interactive element.
 
 **Sidebar**
-- Store context: Dashboard · Screens · Dayparts · Media Library · **Team** (Members, Roles) ·
+- Store context: Dashboard · Screens · Dayparts · Media Library · Ad Builder (ad-view) · **Team** (Members, Roles) ·
   Channels (channel-view) · Activity Log (activity-view) — each link only when the role there carries it. No Stores
   link: the store is changed from Settings → Stores (rule 33).
 - Platform: Dashboard · Stores · Users · Roles · Permissions · Advertising · Channels · Activity Log
@@ -450,7 +462,11 @@ invalid state.
 
 
 **Channels page**: above the stores every channel, badged "Every shop" or "{store} only"; inside a store "Channels of
-{store}", its own alone. The playlist's Channels box marks a store's own channel "This store".
+{store}", its own — and the platform's, badged "From the platform", with Ads but no Edit or Delete. The playlist's
+Channels box marks a store's own channel "This store".
+
+**Media Library page**: inside a store, the store's library. Above the stores one library at a time, chosen in the
+Library list — "Platform library" (the default) or a shop — which is also where an upload lands.
 
 **Activity Log page**: above the stores every entry and — for activity-destroy — the yearly storage panel; inside a store
 "Activity in {store}", its entries alone, no storage panel.
@@ -568,9 +584,11 @@ sentinel or invented `current_store_id` opens nothing, because a permission read
 there is no permission), `PrivilegeEscalationAttackTest`, `InputAbuseAttackTest`, `FileUploadAttackTest` (real bytes
 under a lying filename), `DeviceApiAttackTest`, `InvitationAttackTest`, `SessionAndPasswordAttackTest`,
 `TransportAndMiddlewareAttackTest` and `HttpSurfaceSweepTest` (every route, five kinds of person: nothing answers
-500 and a guest is offered only the public doors). 65 attacks; the model held on all of them. Three defects they
-found — `?search[]=x` 500ing every listing, `?device_uuid[]=x` 500ing the open device limiter, and a name posted as
-an array 500ing role and channel creation — are fixed and described in `ISSUES.md`.
+500 and a guest is offered only the public doors) — and, with the Ad Builder, `AdBuilderAttackTest`. 96 attacks in
+those 10 files today; the model held on all of them. Five defects they found — `?search[]=x` 500ing every listing,
+`?device_uuid[]=x` 500ing the open device limiter, a name posted as an array 500ing role and channel creation,
+`password[]=x` 500ing every big delete, and a schedule rule that was not an array 500ing the playlist preview — are
+fixed and described in `ISSUES.md`.
 
 ## 11. Progress
 
@@ -612,7 +630,8 @@ an array 500ing role and channel creation — are fixed and described in `ISSUES
   feature test moved into a folder named after what it is for (`Platform/`, `Store/`, `Signage/`, `Advertising/`,
   `Device/`, `Auth/`, `Concerns/`; `core/`, `tables/`, `pages/`; `Auth/`, `Platform/`, `Store/`, `Signage/`,
   `Advertising/`, `System/`, `Security/`) with the naming rules written down in `.claude/rules/02-project-conventions.md`,
-  and nine adversarial test files added under `tests/Feature/Security/` (65 attacks). The authorization model held on
-  every attack; the three shape-of-input defects they found (`?search[]=x` on every listing, `?device_uuid[]=x` on the
-  open device limiter, a name posted as an array on role and channel creation) are fixed, each with the convention that
-  prevents the next one
+  and nine adversarial test files added under `tests/Feature/Security/` (a tenth, `AdBuilderAttackTest`, came with the
+  Ad Builder: 96 attacks in 10 files today). The authorization model held on every attack; the five shape-of-input
+  defects they found (`?search[]=x` on every listing, `?device_uuid[]=x` on the open device limiter, a name posted as an
+  array on role and channel creation, `password[]=x` on every big delete, a rule that was not an array on the playlist
+  preview) are fixed, each with the convention that prevents the next one

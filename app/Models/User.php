@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
@@ -24,7 +25,9 @@ class User extends Authenticatable
     /**
      * A deleted account leaves nothing pointing at it (owner's rules, 2026-09-17): its memberships go through their
      * foreign key, what it made stays with its stores (`created_by` empties the same way) — and here its sign-ins on
-     * every device, its password-reset link and every invitation waiting for its email go too.
+     * every device, its password-reset link and every invitation waiting for its email go too, and the activity
+     * log forgets whose id it was: on MySQL that table is partitioned and cannot carry a foreign key, so nothing
+     * else would empty `actor_id` (the entry keeps the person's name in `actor_name`).
      */
     protected static function booted(): void
     {
@@ -35,6 +38,7 @@ class User extends Authenticatable
 
             DB::table(config('auth.passwords.users.table', 'password_reset_tokens'))->where('email', $user->email)->delete();
             $user->invitationsToEmail()->delete();
+            DB::table('activity_logs')->where('actor_id', $user->id)->update(['actor_id' => null]);
         });
     }
 
@@ -64,7 +68,7 @@ class User extends Authenticatable
 
     /** refresh() also flushes the permission memos, so a refreshed instance
      *  re-reads its roles/permissions from the database. */
-    public function refresh()
+    public function refresh(): static
     {
         $this->isSuperAdminMemo = null;
         $this->globalRoleResolved = false;
@@ -113,10 +117,10 @@ class User extends Authenticatable
     }
 
     /** The stores this person is a member of (the platform row, store_id = 0, has no store and is not among them). */
-    public function stores()
+    public function stores(): BelongsToMany
     {
         return $this->belongsToMany(Store::class, 'store_user')
-            ->withPivot('role_id', 'created_at')
+            ->withPivot('role_id')
             ->withTimestamps();
     }
 
@@ -168,8 +172,9 @@ class User extends Authenticatable
     }
 
     /**
-     * Whether this person holds a permission where they stand: their role in the selected store,
-     * or — with no store selected — their platform role.
+     * Whether this person holds a permission where they stand: their platform role when they have one
+     * (the tiers are exclusive, so it always wins — a store left in the session changes nothing),
+     * otherwise their role in the selected store.
      */
     public function hasPermissionInCurrentStore(string $permissionName): bool
     {
@@ -177,8 +182,8 @@ class User extends Authenticatable
     }
 
     /**
-     * Every permission name the user holds in the current context (the session's
-     * store role, or their platform role). Loaded ONCE per request per context —
+     * Every permission name the user holds in the current context (their platform
+     * role, or else the session's store role). Loaded ONCE per request per context —
      * a page render fires a dozen @can checks and they all share this list.
      *
      * @return array<int, string>

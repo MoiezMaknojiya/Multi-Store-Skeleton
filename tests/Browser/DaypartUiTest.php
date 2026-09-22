@@ -134,13 +134,15 @@ class DaypartUiTest extends DuskTestCase
             $this->clickAndAwait($browser, '@daypart-save',
                 fn (Browser $b) => $b->waitUsing(6, 250, fn () => (bool) $daypart->fresh()->is_retired));
 
+            // For the same reason the list is read only once the modal is shut: with its
+            // label out of sight, "Retired" can only be the row's own badge.
+            $this->waitForModalClosed($browser, '@daypart-form');
             $browser->waitForText('Retired');
             $this->assertTrue($daypart->fresh()->is_retired);
             $this->assertSame(0, Daypart::active()->count());
             $this->assertSame(1, Daypart::count());
 
             // -- Delete it, and its exception goes too -------------------------
-            $this->waitForModalClosed($browser, '@daypart-form');
             $this->clickAndAwait($browser, '@delete-daypart-'.$daypart->id,
                 fn (Browser $b) => $b->waitForText('Are you sure'));
 

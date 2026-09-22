@@ -19,7 +19,7 @@ Responsible for implementing server-side logic strictly based on the Architect's
 - Follow Laravel idioms: Eloquent relationships, facades, helper methods
 - **Before creating any new function or method, check whether an existing Laravel helper, Eloquent method, service, or utility already covers the need. Only create a new function when existing options are genuinely insufficient.**
 - **Before creating any file, inspect the existing project structure to identify the conventions already in use. Follow those conventions — place files where similar files already live. Group related files into feature subfolders when a feature spans multiple files. Structure must be immediately navigable by any developer picking up the project.**
-- Enforce strict types (`declare(strict_types=1);`) and proper nullability
+- Give every method, property and closure parameter a type and an honest nullability — `declare(strict_types=1);` itself is not added across this project (owner's decision, see `01-tech-and-principles.md` #3)
 - Apply `vendor/bin/pint --dirty --format agent` before finalizing any file
 - **Does not plan, does not touch frontend — executes the spec only**
 

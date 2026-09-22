@@ -53,7 +53,10 @@ class RegisteredUserController extends Controller
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
             'phone' => 'required|numeric|digits:10',
-            'email' => ['required', 'email', 'regex:/^\S+$/', 'unique:users'],
+            // max:255 is the column's size: an address with a 300-character local part is still a valid
+            // email, and it failed only at the INSERT, as a 500. `bail`, so an address already refused
+            // never reaches the unique query.
+            'email' => ['bail', 'required', 'email', 'max:255', 'regex:/^\S+$/', 'unique:users'],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'store_name' => 'required|string|max:255',
             'street' => 'required|string|max:255',
@@ -66,7 +69,7 @@ class RegisteredUserController extends Controller
             'zip_code.regex' => 'Zip code can only contain numbers.',
         ]);
 
-        [$user, $store] = DB::transaction(function () use ($validated, $role) {
+        [$user, $store] = DB::transaction(function () use ($validated, $role): array {
             $user = User::create([
                 'first_name' => $validated['first_name'],
                 'last_name' => $validated['last_name'],

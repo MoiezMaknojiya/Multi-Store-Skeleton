@@ -22,7 +22,9 @@ use Illuminate\Support\Collection;
 | Consent is a standing fact about the shop; targeting is a decision about one
 | campaign. Both start off, so a shop that was never asked never carries an advert.
 |
-| Calendar facts these tests lean on: 2026-03-20 is a Friday.
+| Every moment below is read on the screen's own clock (America/Chicago unless a
+| test says otherwise). Nothing here looks at the day of the week — a campaign
+| has dates and a window of the day, no weekdays.
 |
 */
 

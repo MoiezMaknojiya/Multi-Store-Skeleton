@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Mail\Message;
 use Illuminate\Support\Facades\Mail;
 use Throwable;
 
@@ -66,7 +67,7 @@ class SendTestMail extends Command
                 ."If you are reading this in your inbox, password reset emails will\n"
                 ."reach your customers too.\n\n"
                 .'Sent at '.now()->toDateTimeString(),
-                fn ($message) => $message->to($recipient)->subject('Mail settings test')
+                fn (Message $message) => $message->to($recipient)->subject('Mail settings test')
             );
         } catch (Throwable $e) {
             $this->newLine();

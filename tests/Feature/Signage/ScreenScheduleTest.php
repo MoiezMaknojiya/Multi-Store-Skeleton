@@ -6,6 +6,7 @@ use App\Models\PlaylistItem;
 use App\Models\ScheduleRule;
 use App\Models\Screen;
 use App\Models\Store;
+use App\Services\DevicePairing;
 use Illuminate\Support\Carbon;
 
 /*
@@ -35,8 +36,6 @@ beforeEach(function () {
     $this->actingAs($this->actor)->withSession(['current_store_id' => $this->store->id]);
 });
 
-afterEach(fn () => Carbon::setTestNow());
-
 test('a screen keeps its clock and its holding picture', function () {
     $this->putJson("/screens/{$this->screen->id}", [
         'name' => 'Deli TV',
@@ -52,8 +51,20 @@ test('a screen keeps its clock and its holding picture', function () {
 });
 
 test('a newly paired screen carries a sensible clock and nothing else', function () {
-    expect($this->screen->timezone)->toBe(Screen::DEFAULT_TIMEZONE);
-    expect($this->screen->default_media_id)->toBeNull();
+    // Paired the way a shop really adds one — the code on the television, typed into the panel — so
+    // what is checked is what pairing leaves behind. The factory sets a timezone of its own.
+    $installer = createStoreUser($this->store, ['screen-store'], 'Installer Role');
+    $code = app(DevicePairing::class)->register()['code'];
+
+    $id = $this->actingAs($installer)->withSession(['current_store_id' => $this->store->id])
+        ->postJson('/screens/pair', ['code' => $code, 'mode' => 'new', 'name' => 'Till TV', 'orientation' => 'landscape'])
+        ->assertOk()
+        ->json('screen.id');
+
+    $paired = Screen::findOrFail($id);
+
+    expect($paired->timezone)->toBe(Screen::DEFAULT_TIMEZONE)
+        ->and($paired->default_media_id)->toBeNull();
 });
 
 test('clearing the holding picture is a real instruction', function () {
@@ -257,4 +268,34 @@ test('a gap in the schedule shows the holding picture rather than a black rectan
     expect($manifest->json('items.0.url'))->toBe($holding->url);
     // Id 0, because no playlist row stands behind it.
     expect($manifest->json('items.0.id'))->toBe(0);
+});
+
+test('the schedule editor offers the screen’s own store’s dayparts, and names a retired one still in use', function () {
+    // The platform sees every store's dayparts on their own page, but a rule on THIS screen can only use
+    // this screen's store's (the playlist refuses the rest), so only those are offered.
+    Daypart::factory()->create(['store_id' => Store::factory()->create()->id, 'name' => 'Another shop’s hours']);
+
+    // Retired, and still used by a rule here: it keeps working, so the page must say what it is —
+    // left out, the rule read "All day".
+    $lunch = Daypart::factory()->between('11:00', '15:00')->create([
+        'store_id' => $this->store->id, 'name' => 'Old lunch', 'is_retired' => true,
+    ]);
+    Daypart::factory()->create(['store_id' => $this->store->id, 'name' => 'Old breakfast', 'is_retired' => true]);
+
+    $line = PlaylistItem::create(['screen_id' => $this->screen->id, 'media_id' => $this->welcome->id, 'position' => 0, 'duration_seconds' => 10]);
+    $line->scheduleRules()->create(['recurrence_type' => ScheduleRule::DAILY, 'recurrence_interval' => 1, 'daypart_id' => $lunch->id]);
+
+    $check = function () {
+        $dayparts = collect($this->get("/screens/{$this->screen->id}")->assertOk()->viewData('dayparts'))->keyBy('name');
+
+        expect($dayparts->keys()->sort()->values()->all())->toBe(['Deli hours', 'Old lunch'])
+            ->and($dayparts['Deli hours']['retired'])->toBeFalse()
+            ->and($dayparts['Old lunch']['retired'])->toBeTrue();
+    };
+
+    $check();
+
+    $this->actingAs(createSuperAdmin());
+    $this->flushSession();
+    $check();
 });

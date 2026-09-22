@@ -63,12 +63,18 @@ test('a member with store-update edits the details; Staff cannot even open the p
 });
 
 test('the details form cannot switch advertising on or change anything it does not show', function () {
+    $this->store->update(['created_by' => $this->owner->id]);
+
+    // A save that goes through — so what it smuggled was ignored, not merely refused along with it.
     settingsAs($this->owner, $this->store)->put('/settings/store', storeDetails([
         'accepts_network_ads' => true, 'is_active' => false, 'created_by' => $this->staff->id,
-    ]));
+    ]))->assertSessionHasNoErrors()->assertRedirect(route('store-settings.edit'));
 
     $store = $this->store->fresh();
-    expect($store->accepts_network_ads)->toBeFalse()->and($store->is_active)->toBeTrue();
+    expect($store->name)->toBe('Alpha Mart Downtown')
+        ->and($store->accepts_network_ads)->toBeFalse()
+        ->and($store->is_active)->toBeTrue()
+        ->and($store->created_by)->toBe($this->owner->id);
 });
 
 test('out of the box only an Owner is shown deleting the store', function () {
@@ -140,15 +146,12 @@ test('deleting a store takes everything it owns, the store and the roles made in
 
     $screen = Screen::factory()->withToken('alpha-tv')->create(['store_id' => $this->store->id]);
     $channel = Channel::factory()->create();
-    ChannelAd::factory()->lasting(10)->create(['channel_id' => $channel->id]);
+    $platformAd = ChannelAd::factory()->lasting(10)->create(['channel_id' => $channel->id]);
+    // The store's own channel, showing a file of the store's own library.
     $ownChannel = Channel::factory()->create(['store_id' => $this->store->id]);
-    $ownAd = ChannelAd::factory()->create([
-        'channel_id' => $ownChannel->id,
-        'path' => "channels/{$ownChannel->id}/".Str::ulid().'.jpg',
-        'thumbnail_path' => "channels/{$ownChannel->id}/thumbs/".Str::ulid().'.jpg',
-    ]);
-    Storage::disk('public')->put($ownAd->path, 'ad');
-    Storage::disk('public')->put($ownAd->thumbnail_path, 'ad thumb');
+    $ownAd = ChannelAd::factory()->create(['channel_id' => $ownChannel->id]);
+    Storage::disk('public')->put($ownAd->media->path, 'ad');
+    Storage::disk('public')->put($ownAd->media->thumbnail_path, 'ad thumb');
     PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $file->id, 'position' => 0, 'duration_seconds' => 10]);
     PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $channel->id, 'position' => 1]);
     $hours = Daypart::factory()->create(['store_id' => $this->store->id]);
@@ -180,8 +183,9 @@ test('deleting a store takes everything it owns, the store and the roles made in
         ->and(Daypart::find($hours->id))->toBeNull()
         ->and(Media::find($file->id))->toBeNull()
         ->and(Channel::find($ownChannel->id))->toBeNull()
-        ->and(ChannelAd::find($ownAd->id))->toBeNull();
-    foreach ([$file->path, $file->thumbnail_path, $ownAd->path, $ownAd->thumbnail_path] as $path) {
+        ->and(ChannelAd::find($ownAd->id))->toBeNull()
+        ->and(Media::find($ownAd->media_id))->toBeNull();
+    foreach ([$file->path, $file->thumbnail_path, $ownAd->media->path, $ownAd->media->thumbnail_path] as $path) {
         Storage::disk('public')->assertMissing($path);
     }
 
@@ -192,6 +196,7 @@ test('deleting a store takes everything it owns, the store and the roles made in
     expect(User::find($this->staff->id))->not->toBeNull()
         ->and(User::find($this->admin->id))->not->toBeNull()
         ->and(Channel::find($channel->id))->not->toBeNull()
+        ->and(ChannelAd::find($platformAd->id))->not->toBeNull()
         ->and(session('current_store_id'))->toBeNull();
 
     // The neighbour is untouched — including the Staff member's place in it.
@@ -203,7 +208,8 @@ test('deleting a store takes everything it owns, the store and the roles made in
     // The history stays: what happened in the store, and its deletion.
     expect(ActivityLog::where('store_id', $this->store->id)->where('action', 'screen.paired')->exists())->toBeTrue()
         ->and(ActivityLog::where('action', 'store.deleted')->latest('id')->value('description'))
-        ->toContain('Alpha Mart')->toContain('1 screen')->toContain('1 media file');
+        // Two files: the poster, and the one its own channel shows — a channel's files are library files.
+        ->toContain('Alpha Mart')->toContain('1 screen')->toContain('2 media files');
 });
 
 test('outside a store there are no store settings', function () {

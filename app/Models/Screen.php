@@ -58,7 +58,7 @@ class Screen extends Model
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
-        if ($user->isSuperAdmin() || $user->globalRole()) {
+        if ($user->globalRole() !== null) {
             return $query;
         }
 
@@ -129,7 +129,6 @@ class Screen extends Model
     {
         $rows = $this->playlistItems()
             ->with('scheduleRules')
-            ->orderBy('position')
             ->get()
             ->map(fn (PlaylistItem $item) => implode(':', [
                 // A line is a file or a channel. The prefix keeps channel 7 from reading

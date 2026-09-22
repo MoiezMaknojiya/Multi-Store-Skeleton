@@ -12,9 +12,11 @@ use Tests\DuskTestCase;
 /**
  * Settings → Stores and the Members page's Leave, through the real pages.
  *
- * Every button here belongs to a PLAIN form — no AJAX — so a mistake shows up as a page that comes
- * back looking the same with an error nobody notices, which no backend test would catch. The cards
- * are each gated by their own permission (docs/STORE-ORGANIZATION-SPEC.md §I).
+ * Every button on Settings → Stores belongs to a PLAIN form — no AJAX — so a mistake shows up as a
+ * page that comes back looking the same with an error nobody notices, which no backend test would
+ * catch. The cards are each gated by their own permission (docs/STORE-ORGANIZATION-SPEC.md §I).
+ * Leave, on the Members page, is the one AJAX call here: it asks the server, then goes wherever
+ * the server says.
  */
 class StoreSettingsFlowTest extends DuskTestCase
 {
@@ -54,7 +56,8 @@ class StoreSettingsFlowTest extends DuskTestCase
     {
         $this->seedSuperAdmin();
         $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        // View Stores shows the tab; Create store is the card. Nothing else is needed for this.
+        // View Stores shows the tab; Create Stores puts the Create store button on its "Your stores"
+        // card. Nothing else is needed for this.
         $opener = $this->storeMember($store, ['store-view', 'store-store'], 'opener@example.com', 'Opener');
 
         $this->browse(function (Browser $browser) use ($opener, $store) {
@@ -115,10 +118,11 @@ class StoreSettingsFlowTest extends DuskTestCase
 
             $this->clickAndAwait($browser, '@leave-store', fn (Browser $b) => $b->waitFor('@leave-store-confirm', 3));
 
-            // Leaving is an AJAX call that then sends the browser wherever the server says — so wait
-            // for the button to be gone with the page rather than for a form's own reload.
+            // Leaving is an AJAX call that then sends the browser wherever the server says — the
+            // dashboard (MemberController::leave) — so wait for that address rather than for a
+            // form's own reload. The browser only goes there once the server has answered.
             $this->jsClick($browser, '@leave-store-confirm');
-            $browser->waitUntilMissing('@leave-store-confirm', 8)->pause(500);
+            $browser->waitForLocation('/dashboard', 8);
 
             $this->assertFalse(
                 DB::table('store_user')->where('user_id', $leaver->id)->where('store_id', $store->id)->exists(),

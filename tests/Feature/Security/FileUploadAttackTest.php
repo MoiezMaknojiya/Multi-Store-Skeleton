@@ -63,6 +63,24 @@ test('a file the player cannot render is refused, whatever its name or its clien
     expect(Storage::disk('public')->allFiles())->toBeEmpty();
 });
 
+test('a real picture wearing a page’s name is kept under its own type, never served as a page', function () {
+    // `mimes:` reads the bytes, so a genuine PNG called promo.html — with a script tucked in after the image
+    // data — passes it. The name it is kept under must come from those same bytes: kept as .html, the
+    // panel would serve it as a page from its own address and run whatever it carried.
+    $image = imagecreatetruecolor(8, 8);
+    ob_start();
+    imagepng($image);
+    $png = (string) ob_get_clean();
+
+    $this->postJson('/media', ['file' => uploadWithBytes('promo.html', $png.'<script>alert(document.cookie)</script>')])->assertOk();
+
+    expect(Media::sole()->path)->toEndWith('.png');
+
+    foreach (Storage::disk('public')->allFiles() as $path) {
+        expect(str_ends_with($path, '.html'))->toBeFalse("{$path} would be served as a page");
+    }
+});
+
 test('a file larger than the cap never reaches the disk', function () {
     $tooBig = UploadedFile::fake()->create('huge.mp4', 300 * 1024, 'video/mp4');   // 300 MB
 
@@ -96,6 +114,7 @@ test('a filename is never trusted as a title, and browser-measured numbers are b
     $this->postJson('/media', ['file' => UploadedFile::fake()->image($longName, 200, 200)])->assertOk();
     expect(strlen(Media::sole()->title))->toBeLessThanOrEqual(255);
 
+    // Each outside what StoreMediaRequest allows: refused, naming the field, and nothing is kept.
     foreach ([
         ['duration_seconds' => -1],
         ['duration_seconds' => 999999],
@@ -103,11 +122,48 @@ test('a filename is never trusted as a title, and browser-measured numbers are b
         ['height' => 99999],
         ['width' => 'abc'],
         ['poster' => 'javascript:alert(1)'],
-        ['poster' => str_repeat('data:image/png;base64,', 1)],
     ] as $extra) {
-        $status = $this->postJson('/media', ['file' => UploadedFile::fake()->create('clip.mp4', 20, 'video/mp4'), ...$extra])->status();
-        expect($status)->toBeIn([200, 422], 'measurement '.json_encode($extra)." answered {$status}");
+        $this->postJson('/media', ['file' => UploadedFile::fake()->create('clip.mp4', 20, 'video/mp4'), ...$extra])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(array_key_first($extra));
     }
+
+    expect(Media::count())->toBe(1);
+
+    // A poster label with nothing after it is a picture the browser failed to draw: the video still goes
+    // up, just without a thumbnail.
+    $this->postJson('/media', ['file' => UploadedFile::fake()->create('clip.mp4', 20, 'video/mp4'), 'poster' => 'data:image/png;base64,'])
+        ->assertOk();
+
+    expect(Media::count())->toBe(2)
+        ->and(Media::latest('id')->first()->thumbnail_path)->toBeNull();
+});
+
+test('a video’s poster is stored only as a picture the server drew — never the bytes that were sent', function () {
+    // A script under an image label: the video goes up, its "poster" does not.
+    $this->postJson('/media', [
+        'file' => UploadedFile::fake()->create('clip.mp4', 20, 'video/mp4'),
+        'poster' => 'data:image/jpeg;base64,'.base64_encode('<?php system($_GET["c"]); ?>'),
+    ])->assertOk();
+
+    expect(Media::sole()->thumbnail_path)->toBeNull()
+        ->and(collect(Storage::disk('public')->allFiles())->filter(fn (string $path) => str_contains($path, '/thumbs/'))->all())->toBe([]);
+
+    // A real frame is kept — as GD's own JPEG, whatever format it arrived in.
+    $frame = imagecreatetruecolor(320, 180);
+    ob_start();
+    imagepng($frame);
+    $png = (string) ob_get_clean();
+
+    $this->postJson('/media', [
+        'file' => UploadedFile::fake()->create('second.mp4', 20, 'video/mp4'),
+        'poster' => 'data:image/png;base64,'.base64_encode($png),
+    ])->assertOk();
+
+    $thumbnail = Media::latest('id')->first()->thumbnail_path;
+
+    expect($thumbnail)->not->toBeNull()
+        ->and(getimagesizefromstring(Storage::disk('public')->get($thumbnail))[2])->toBe(IMAGETYPE_JPEG);
 });
 
 test('an upload with no store in the session is refused, not filed somewhere else', function () {
@@ -135,11 +191,13 @@ test('another store’s file cannot be deleted, and deleting your own takes both
     $this->postJson('/media', ['file' => UploadedFile::fake()->image('mine.jpg', 300, 200)])->assertOk();
     $mine = Media::where('store_id', $this->store->id)->sole();
 
+    // A JPEG always gets a thumbnail of its own, so there really are two files to take.
+    expect($mine->thumbnail_path)->not->toBeNull();
+    Storage::disk('public')->assertExists([$mine->path, $mine->thumbnail_path]);
+
     $this->deleteJson("/media/{$mine->id}")->assertOk();
     Storage::disk('public')->assertMissing($mine->path);
-    if ($mine->thumbnail_path) {
-        Storage::disk('public')->assertMissing($mine->thumbnail_path);
-    }
+    Storage::disk('public')->assertMissing($mine->thumbnail_path);
     expect(Media::find($mine->id))->toBeNull()
         ->and(Media::find($theirs->id))->not->toBeNull();
 });

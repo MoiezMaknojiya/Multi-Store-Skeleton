@@ -42,13 +42,14 @@ export function registerStoreSettings(Alpine) {
         },
     }));
 
-    /* The typed name must match exactly — the same comparison the controller makes. */
+    /* The typed name must match exactly — the same comparison the controller makes, which reads it
+     * trimmed (TrimStrings), so a stray space before or after is not refused here either. */
     Alpine.data('deleteStoreForm', (storeName) => ({
         validateBeforeSubmit(event) {
             runClientValidation(event, ['confirm_name', 'password'], {
                 confirm_name: [
                     required('Store name'),
-                    (value) => (value === storeName ? null : 'Type the store name exactly as it is shown.'),
+                    (value) => (String(value ?? '').trim() === storeName ? null : 'Type the store name exactly as it is shown.'),
                 ],
                 password: [required('Password')],
             });

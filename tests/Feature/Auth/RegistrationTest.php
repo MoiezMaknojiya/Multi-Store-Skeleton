@@ -93,3 +93,14 @@ test('the email is kept lowercased, so capitals can never make a second account'
 
     expect(User::count())->toBe(1);
 });
+
+test('an email longer than its column is refused as a message, not a database error', function () {
+    // MySQL's strict mode refuses a value longer than the column (255); SQLite never checks, so only the
+    // rule can say it — before, a 300-character address was a 500 on the real database.
+    $this->from('/register')->post('/register', [
+        ...validSignupPayload(),
+        'email' => str_repeat('a', 250).'@example.com',
+    ])->assertSessionHasErrors('email');
+
+    expect(User::count())->toBe(0);
+});

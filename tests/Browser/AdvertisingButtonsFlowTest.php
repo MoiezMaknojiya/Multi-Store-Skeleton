@@ -7,7 +7,6 @@ use App\Models\Role;
 use App\Models\Screen;
 use App\Models\Store;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
-use Illuminate\Support\Facades\File;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
 
@@ -19,21 +18,6 @@ use Tests\DuskTestCase;
 class AdvertisingButtonsFlowTest extends DuskTestCase
 {
     use DatabaseMigrations;
-
-    /** A real PNG for the upload step. */
-    private function fixtureImage(string $name): string
-    {
-        $directory = storage_path('framework/testing');
-        File::ensureDirectoryExists($directory);
-        $path = $directory.DIRECTORY_SEPARATOR.$name;
-
-        $image = imagecreatetruecolor(640, 360);
-        imagefilledrectangle($image, 0, 0, 640, 360, imagecolorallocate($image, 20, 90, 200));
-        imagepng($image, $path);
-        imagedestroy($image);
-
-        return $path;
-    }
 
     public function test_the_platform_saves_a_campaign_and_it_appears_in_the_list(): void
     {
@@ -50,7 +34,7 @@ class AdvertisingButtonsFlowTest extends DuskTestCase
 
             $this->jsType($browser, '@campaign-name', 'Winter Cola');
             $this->jsType($browser, '@campaign-advertiser', 'GAMA Wholesale');
-            $browser->attach('@campaign-file', $this->fixtureImage('advert-winter.png'))
+            $browser->attach('@campaign-file', $this->fixtureImage('advert-winter.png', 20, 90, 200))
                 ->waitFor('@campaign-seconds');
             $this->jsType($browser, '@campaign-seconds', '10');
             $this->jsType($browser, '@campaign-starts-on', now()->toDateString());

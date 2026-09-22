@@ -42,7 +42,7 @@ test('each row says what the viewer may do to it', function () {
 
     expect($rows[$this->admin->id]['is_you'])->toBeTrue()
         ->and($rows[$this->admin->id]['can_manage'])->toBeFalse()   // never yourself
-        ->and($rows[$this->owner->id]['can_manage'])->toBeFalse()   // an Owner only by an Owner
+        ->and($rows[$this->owner->id]['can_manage'])->toBeFalse()   // the Admin holds less than the Owner role allows
         ->and($rows[$this->staff->id]['can_manage'])->toBeTrue()
         ->and($rows[$this->owner->id]['role']['key'])->toBe(Role::OWNER);
 

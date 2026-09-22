@@ -12,6 +12,7 @@ use App\Models\PlaylistItem;
 use App\Models\ScheduleRule;
 use App\Models\Screen;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -61,8 +62,10 @@ class PlaylistController extends Controller
         $validated = $request->validate(['search' => ['nullable', 'string', 'max:255']]);
         $search = trim((string) ($validated['search'] ?? ''));
 
+        // Never an Ad Builder page taken off the screens (unpublished): nobody picks one until it is published again.
         $media = Media::where('store_id', $screen->store_id)
-            ->when($search !== '', fn ($q) => $q->where('title', 'like', "%{$search}%"))
+            ->withoutDrafts()
+            ->when($search !== '', fn (Builder $q) => $q->where('title', 'like', "%{$search}%"))
             ->orderByDesc('created_at')
             ->limit(100)
             ->get(['id', 'title', 'type', 'duration_seconds', 'orientation', 'disk', 'path', 'thumbnail_path']);
@@ -193,7 +196,7 @@ class PlaylistController extends Controller
 
         $validated = $request->validate([
             'target_screen_ids' => ['required', 'array', 'min:1'],
-            'target_screen_ids.*' => ['integer'],
+            'target_screen_ids.*' => ['integer', 'min:1'],
         ], [
             'target_screen_ids.required' => 'Choose at least one screen to copy to.',
         ]);
@@ -277,7 +280,7 @@ class PlaylistController extends Controller
         // dying in it.
         $rekey = fn (string $path) => str_replace('items.*.rules', 'rules', $path);
         $perRule = collect($this->ruleRules())->mapWithKeys(fn (array $rules, string $key) => [
-            $rekey($key) => array_map(fn ($rule) => is_string($rule) ? $rekey($rule) : $rule, $rules),
+            $rekey($key) => array_map(fn (string|object $rule) => is_string($rule) ? $rekey($rule) : $rule, $rules),
         ])->all();
 
         $validated = $request->validate([
@@ -333,7 +336,7 @@ class PlaylistController extends Controller
     {
         // Null means "this line is a channel", nothing else — so the filter asks for
         // exactly that, rather than dropping every falsy value with it.
-        $ids = collect($items)->pluck('media_id')->reject(fn ($id) => $id === null)->unique();
+        $ids = collect($items)->pluck('media_id')->reject(fn (int|string|null $id) => $id === null)->unique();
 
         if ($ids->isEmpty()) {
             return;
@@ -374,7 +377,7 @@ class PlaylistController extends Controller
      */
     private function assertChannelsAreAvailable(Screen $screen, array $items): void
     {
-        $ids = collect($items)->pluck('channel_id')->reject(fn ($id) => $id === null)->unique();
+        $ids = collect($items)->pluck('channel_id')->reject(fn (int|string|null $id) => $id === null)->unique();
 
         if ($ids->isEmpty()) {
             return;
@@ -438,7 +441,12 @@ class PlaylistController extends Controller
                 'duration_seconds' => $isChannel ? null : $item['duration_seconds'],
             ]);
 
-            foreach (array_values($item['rules'] ?? []) as $index => $rule) {
+            // A line's rules are rebuilt the same way — one missing a key that another has can
+            // land after it — and their order is the order they are shown back in.
+            $rules = $item['rules'] ?? [];
+            ksort($rules);
+
+            foreach (array_values($rules) as $index => $rule) {
                 $created->scheduleRules()->create([
                     ...$this->ruleAttributes($rule),
                     'position' => $index,
@@ -567,7 +575,6 @@ class PlaylistController extends Controller
             'thumbnail_url' => ($running->first() ?? $channel->ads->first())?->thumbnail_url,
             'channel_active' => $channel->is_active,
             'ads_count' => $running->count(),
-            'ads_per_pass' => $channel->ads_per_pass,
             'pass_ads' => $channel->adsPerPassOf($running),
             'pass_seconds' => $channel->passSeconds($running),
         ];
@@ -580,7 +587,7 @@ class PlaylistController extends Controller
         // the television itself is answered with.
         $today = $screen->localTime();
 
-        return $screen->playlistItems()->with(['media', 'channel.ads', 'scheduleRules'])->get()
+        return $screen->playlistItems()->with(['media.builderAd', 'channel.ads', 'scheduleRules'])->get()
             ->map(fn (PlaylistItem $item) => [
                 'id' => $item->id,
                 'media_id' => $item->media_id,
@@ -590,13 +597,14 @@ class PlaylistController extends Controller
                 ...($item->channel !== null ? $this->channelSummary($item->channel, $today) : [
                     'title' => $item->media?->title,
                     'type' => $item->media?->type,
-                    'orientation' => $item->media?->orientation,
                     'thumbnail_url' => $item->media?->thumbnail_url,
-                    'media_duration' => $item->media?->duration_seconds,
                     // Both null means "always"; the player never sees an item whose
                     // window has closed, but the panel should say so.
                     'starts_at' => $item->media?->starts_at?->toIso8601String(),
                     'expires_at' => $item->media?->expires_at?->toIso8601String(),
+                    // An Ad Builder page taken off the screens (unpublished) keeps its place and plays again once it
+                    // is published — the panel says why it is not playing meanwhile.
+                    'is_draft' => $item->media?->isDraft() ?? false,
                 ]),
                 'rules' => $item->scheduleRules->map(fn (ScheduleRule $rule) => [
                     'daypart_id' => $rule->daypart_id,

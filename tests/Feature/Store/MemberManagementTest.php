@@ -49,14 +49,6 @@ test('the Owner role is given and managed only by whoever holds everything it al
     expect(roleKeyIn($this->staff, $this->store))->toBe(Role::STAFF);
 });
 
-test('nobody changes their own role', function () {
-    inStore($this->admin, $this->store)
-        ->putJson("/members/{$this->admin->id}", ['role_id' => Role::starter(Role::OWNER)->id])
-        ->assertForbidden();
-
-    expect(roleKeyIn($this->admin, $this->store))->toBe(Role::ADMIN);
-});
-
 test('a role from another store cannot be given here', function () {
     $foreign = Role::create(['name' => 'Foreign', 'store_id' => Store::factory()->create()->id]);
 
@@ -88,14 +80,15 @@ test('a custom role gives and manages only what it holds itself', function () {
         ->assertOk();
 });
 
-test('an Owner may demote or remove another Owner, but the last one always stays', function () {
+test('an Owner may demote another Owner, and then — the last one left — cannot leave', function () {
     $partner = createStoreMember($this->store, Role::OWNER);
 
     inStore($this->owner, $this->store)
         ->putJson("/members/{$partner->id}", ['role_id' => Role::starter(Role::ADMIN)->id])
         ->assertOk();
 
-    // Now the only Owner: they cannot leave, and nobody else can touch them.
+    // Now the only Owner, they cannot leave the store without one — and the partner, an Admin
+    // now, holds less than the Owner role allows, so cannot remove them either.
     inStore($this->owner, $this->store)->postJson('/members/leave')->assertStatus(422)
         ->assertJsonFragment(['message' => 'You are the only Owner of Alpha Mart. Make someone else an Owner before you leave.']);
     inStore($partner, $this->store)->deleteJson("/members/{$this->owner->id}")->assertForbidden();

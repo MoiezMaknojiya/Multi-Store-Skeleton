@@ -2,6 +2,7 @@
 
 namespace Tests\Browser;
 
+use App\Models\Channel;
 use App\Models\Permission;
 use App\Models\Screen;
 use App\Models\Store;
@@ -28,8 +29,10 @@ class EveryPageRendersTest extends DuskTestCase
     {
         $admin = $this->seedSuperAdmin();
         Store::factory()->create(['name' => 'Alpha Mart']);
+        // One of the platform's own channels, so the page of the ads it carries has one to open.
+        $channel = Channel::factory()->create(['name' => 'GAMA Wholesale']);
 
-        $this->browse(function (Browser $browser) use ($admin) {
+        $this->browse(function (Browser $browser) use ($admin, $channel) {
             $this->freshSession($browser);
             $browser->loginAs($admin);
 
@@ -41,7 +44,11 @@ class EveryPageRendersTest extends DuskTestCase
                 '/roles',
                 '/activity',
                 '/channels',
+                '/channels/'.$channel->id,   // one channel's ads
                 '/campaigns',
+                '/builder',                  // the Ad Builder's three tabs: the ads…
+                '/builder/assets',           // …the shelf…
+                '/builder/create',           // …and the editor, on an empty stage
                 '/profile',
             ]);
         });
@@ -60,8 +67,10 @@ class EveryPageRendersTest extends DuskTestCase
         ], 'owner@example.com', 'Everything');
 
         $screen = Screen::factory()->create(['store_id' => $store->id, 'name' => 'Deli TV']);
+        // The store's own channel: inside a store only those are within reach.
+        $channel = Channel::factory()->create(['store_id' => $store->id, 'name' => 'Alpha Promos']);
 
-        $this->browse(function (Browser $browser) use ($owner, $store, $screen) {
+        $this->browse(function (Browser $browser) use ($owner, $store, $screen, $channel) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
             $this->switchToStore($browser, $store);
@@ -73,6 +82,10 @@ class EveryPageRendersTest extends DuskTestCase
                 '/media',
                 '/dayparts',
                 '/channels',
+                '/channels/'.$channel->id,   // one channel's ads
+                '/builder',                  // the Ad Builder's three tabs: the ads…
+                '/builder/assets',           // …the shelf…
+                '/builder/create',           // …and the editor, on an empty stage
                 '/members',
                 '/roles',
                 '/activity',
@@ -90,7 +103,7 @@ class EveryPageRendersTest extends DuskTestCase
 
             try {
                 $this->waitForAlpine($browser);
-            } catch (\Throwable $e) {
+            } catch (\Throwable) {
                 $this->fail("Alpine never initialised on {$page} — the browser is at ".$browser->driver->getCurrentURL());
             }
 

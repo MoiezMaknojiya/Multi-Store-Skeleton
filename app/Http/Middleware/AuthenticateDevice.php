@@ -18,7 +18,7 @@ class AuthenticateDevice
 
     public function handle(Request $request, Closure $next): Response
     {
-        $token = $request->bearerToken() ?? $request->header('X-Device-Token');
+        $token = $request->bearerToken();
 
         $screen = $token ? $this->pairing->screenForToken($token) : null;
 

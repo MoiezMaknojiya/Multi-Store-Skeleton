@@ -199,7 +199,7 @@ class DeviceController extends Controller
      *
      * @param  Collection<int, Campaign>  $adBreak
      */
-    private function playlistVersion(Screen $screen, array $items, bool $blank, $adBreak): string
+    private function playlistVersion(Screen $screen, array $items, bool $blank, Collection $adBreak): string
     {
         $ads = $adBreak->map(fn (Campaign $campaign) => $campaign->id.':'.$campaign->cacheKey())->implode(',');
 

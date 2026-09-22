@@ -45,7 +45,12 @@ class InvitationResponseController extends Controller
             $state = 'register';
         }
 
-        return view('invitations.show', compact('invitation', 'token', 'state'));
+        return view('invitations.show', [
+            'invitation' => $invitation,
+            'token' => $token,
+            'state' => $state,
+            'place' => $this->placeName($invitation),
+        ]);
     }
 
     public function accept(string $token): RedirectResponse
@@ -99,7 +104,7 @@ class InvitationResponseController extends Controller
 
         // One transaction under the invitation's lock: a double submit or a second tab can neither
         // make a second account for this email nor use the link twice.
-        $user = DB::transaction(function () use ($validated, $invitation) {
+        $user = DB::transaction(function () use ($validated, $invitation): ?User {
             if (! $this->lockOpen($invitation) || $this->accountFor($invitation) !== null) {
                 return null;
             }
@@ -156,7 +161,7 @@ class InvitationResponseController extends Controller
     /** The invitation behind a link while it can still be used; null when it is gone or expired. */
     private function openInvitation(string $token): ?Invitation
     {
-        $invitation = Invitation::with(['store', 'role', 'inviter'])->where('token_hash', Invitation::hashToken($token))->first();
+        $invitation = Invitation::findByToken($token)?->load(['store', 'role', 'inviter']);
 
         if ($invitation === null || $invitation->isExpired() || $invitation->role === null) {
             return null;
@@ -183,7 +188,8 @@ class InvitationResponseController extends Controller
                 return 'You are already on the platform team.';
             }
 
-            return DB::table('store_user')->where('user_id', $user->id)->where('store_id', '>', 0)->exists()
+            // stores() joins real stores, so the platform row (store_id = 0) is never among them.
+            return $user->stores()->exists()
                 ? 'Your account is a member of one or more stores. A store account cannot join the platform team.'
                 : null;
         }
@@ -196,7 +202,7 @@ class InvitationResponseController extends Controller
     /** Use the invitation for this person. False, and nothing changed, when the link was used already. */
     private function join(Invitation $invitation, User $user): bool
     {
-        $joined = DB::transaction(function () use ($invitation, $user) {
+        $joined = DB::transaction(function () use ($invitation, $user): bool {
             if (! $this->lockOpen($invitation)) {
                 return false;
             }
@@ -250,6 +256,7 @@ class InvitationResponseController extends Controller
         return 'Welcome to '.$this->placeName($invitation).'!';
     }
 
+    /** Where the invitation leads — the store, or the platform team. The page's heading says it too. */
     private function placeName(Invitation $invitation): string
     {
         return $invitation->isForPlatform() ? 'the '.config('app.name').' team' : $invitation->store->name;

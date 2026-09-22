@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class Store extends Model
@@ -79,12 +80,13 @@ class Store extends Model
 
     public function users(): BelongsToMany
     {
+        // The pivot's created_at comes with withTimestamps(), which reads and stamps both timestamps.
         return $this->belongsToMany(User::class, 'store_user')
-            ->withPivot('role_id', 'created_at')
+            ->withPivot('role_id')
             ->withTimestamps();
     }
 
-    /** The televisions in this shop. Used to count and to switch them together. */
+    /** The televisions in this shop. Used to count them. */
     public function screens(): HasMany
     {
         return $this->hasMany(Screen::class);
@@ -100,7 +102,8 @@ class Store extends Model
      * Everything this store owns, gone: its team (memberships and open invitations), its
      * custom roles, its screens — which takes their playlists, schedule rules, campaign links
      * and pairing requests through the foreign keys, and locks every device out on its next
-     * poll — its dayparts, its own channels, and its whole media library, files included.
+     * poll — its dayparts, its own channels, its whole media library, and its Ad Builder
+     * designs with the shelf of pictures and videos they were built from, files included.
      *
      * Accounts are not the store's: the people stay, and may be members elsewhere. The store
      * row goes too, for good (owner's rule, 2026-09-17: "A to Z"); the activity log keeps its
@@ -116,33 +119,19 @@ class Store extends Model
 
         $this->purgeChannels();
         $this->purgeMedia();
+        $this->purgeBuilder();
     }
 
     /**
-     * Remove this shop's own channels: the rows — which take their ads, and every playlist
-     * line carrying them, through the foreign keys — and, once that is committed, the files
-     * those ads named. The platform's channels are not the shop's and are not touched.
-     *
-     * Returns how many channels went.
+     * Remove this shop's own channels: the rows, which take their ads and every playlist line
+     * carrying them through the foreign keys. An ad's file is a row of the shop's library, so
+     * purgeMedia() deals with it — and a platform channel that borrowed one of this shop's
+     * files loses that ad there, by the same foreign keys. The platform's channels are not the
+     * shop's and are not touched.
      */
-    public function purgeChannels(): int
+    public function purgeChannels(): void
     {
-        $channelIds = Channel::where('store_id', $this->id)->pluck('id');
-
-        if ($channelIds->isEmpty()) {
-            return 0;
-        }
-
-        $files = ChannelAd::whereIn('channel_id', $channelIds)->get(['id', 'disk', 'path', 'thumbnail_path']);
-
-        Channel::whereIn('id', $channelIds)->delete();
-
-        DB::afterCommit(function () use ($files) {
-            $storage = app(MediaStorage::class);
-            $files->each(fn (ChannelAd $ad) => $storage->deleteFiles($ad->disk, $ad->path, $ad->thumbnail_path));
-        });
-
-        return $channelIds->count();
+        Channel::where('store_id', $this->id)->delete();
     }
 
     /**
@@ -156,25 +145,50 @@ class Store extends Model
      * Only the files these rows name are touched, never the shop's folder as a whole.
      * A folder can hold something no row accounts for, and deleting on a guess in that
      * folder is exactly how real uploads were once lost.
-     *
-     * Returns how many files went.
      */
-    public function purgeMedia(): int
+    public function purgeMedia(): void
     {
         $files = Media::where('store_id', $this->id)->get(['id', 'disk', 'path', 'thumbnail_path']);
 
         if ($files->isEmpty()) {
-            return 0;
+            return;
         }
 
         // In slices, so a very large library never becomes one enormous IN list.
-        $files->pluck('id')->chunk(500)->each(fn ($ids) => Media::whereIn('id', $ids)->delete());
+        $files->pluck('id')->chunk(500)->each(fn (Collection $ids) => Media::whereIn('id', $ids)->delete());
 
         DB::afterCommit(function () use ($files) {
             $storage = app(MediaStorage::class);
             $files->each(fn (Media $media) => $storage->delete($media));
         });
+    }
 
-        return $files->count();
+    /**
+     * Remove this shop's ad designs and the shelf they were built from (docs/AD-BUILDER-SPEC.md).
+     *
+     * The rows would cascade through their foreign keys on their own; what they cannot do is take the
+     * FILES — each ad's poster and every picture on the shelf — so those are collected first and
+     * unlinked once the delete has committed. A published ad's page is a media row of the library's,
+     * and purgeMedia() has already dealt with it. Only the paths the rows name are unlinked, never an
+     * ad's folder: removing folders by their number once took the owner's own published ads with a
+     * test's store that happened to share them.
+     */
+    public function purgeBuilder(): void
+    {
+        $ads = BuilderAd::where('store_id', $this->id)->get(['id', 'store_id', 'thumbnail_path']);
+        $assets = BuilderAsset::where('store_id', $this->id)->get(['id', 'disk', 'path', 'thumbnail_path']);
+
+        if ($ads->isEmpty() && $assets->isEmpty()) {
+            return;
+        }
+
+        BuilderAsset::whereIn('id', $assets->pluck('id'))->delete();
+        BuilderAd::whereIn('id', $ads->pluck('id'))->delete();
+
+        DB::afterCommit(function () use ($ads, $assets) {
+            $storage = app(MediaStorage::class);
+            $assets->each(fn (BuilderAsset $asset) => $storage->deleteFiles($asset->disk, $asset->path, $asset->thumbnail_path));
+            $ads->each(fn (BuilderAd $ad) => $storage->deleteFiles('public', $ad->thumbnail_path));
+        });
     }
 }

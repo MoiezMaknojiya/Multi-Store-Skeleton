@@ -25,7 +25,6 @@ beforeEach(function () {
     Storage::fake('public');
 
     $this->superAdmin = createSuperAdmin();
-    registerPermissionGates();
 });
 
 /** Refused without the password and with a wrong one — each time with the reason on the field. */

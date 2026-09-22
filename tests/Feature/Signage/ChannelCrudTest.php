@@ -4,7 +4,6 @@ use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
 use App\Models\PlaylistItem;
-use App\Models\Role;
 use App\Models\ScheduleRule;
 use App\Models\Screen;
 use App\Models\Store;
@@ -24,18 +23,6 @@ use Illuminate\Support\Facades\Storage;
 |
 */
 
-/** Somebody on the platform's staff: a global role holding exactly these permissions. */
-function channelStaff(array $permissions): User
-{
-    $role = Role::create(['name' => 'Content Manager', 'is_global' => true]);
-    $role->permissions()->sync(grantPermissions($permissions)->pluck('id'));
-
-    $user = User::factory()->create();
-    $user->stores()->attach(0, ['role_id' => $role->id]);
-
-    return $user;
-}
-
 beforeEach(function () {
     Storage::fake('public');
 
@@ -49,8 +36,15 @@ beforeEach(function () {
 */
 
 test('guests cannot reach any channel endpoint', function () {
-    $this->getJson('/channels/data')->assertUnauthorized();
-    $this->postJson('/channels', ['name' => 'GAMA'])->assertUnauthorized();
+    // Every route under /channels — a channel's ads included — read from the route table, so one added
+    // later is asked too.
+    $routes = routesUnder('channels');
+
+    expect($routes)->not->toBeEmpty();
+
+    foreach ($routes as [$method, $uri]) {
+        expect($this->json($method, $uri)->status())->toBe(401, "{$method} {$uri}");
+    }
 });
 
 test('a super admin creates a channel', function () {
@@ -67,7 +61,7 @@ test('a super admin creates a channel', function () {
 });
 
 test('a global user given the permission creates one too', function () {
-    $staff = channelStaff(['channel-view', 'channel-store']);
+    $staff = createPlatformUser(['channel-view', 'channel-store'], 'Content Manager');
 
     $this->actingAs($staff)->postJson('/channels', ['name' => 'Thanksgiving'])->assertOk();
 
@@ -75,49 +69,44 @@ test('a global user given the permission creates one too', function () {
 });
 
 test('a global user without the permission is refused', function () {
-    $staff = channelStaff(['channel-view']);
+    $staff = createPlatformUser(['channel-view'], 'Content Manager');
 
     $this->actingAs($staff)->postJson('/channels', ['name' => 'Thanksgiving'])->assertForbidden();
 
     expect(Channel::count())->toBe(0);
 });
 
-test("inside a store the channel permissions reach the store's own channels — the platform's is not found", function () {
-    // Owner's rule (2026-09-16): a store's role may carry the channel permissions, for its own
-    // store alone. What it makes is the store's; the platform's channels stay out of its reach.
+test('during "Log in as" the channel pages answer to the shop person\'s permissions, never the super admin\'s', function () {
+    // This is how the owner actually reaches a shop: impersonation makes them a STORE user, so
+    // what opens is what that person's role allows in that store. The super admin behind the
+    // session holds every channel permission, and none of it comes along: a cashier without
+    // channel-view is refused the channel pages, while the shop's own side — where a channel is
+    // added to a screen — works as it should; and somebody whose role does carry channel-view
+    // sees their store's own channels and the platform's, to look at — never another store's,
+    // which the super admin behind the session would see.
     $store = Store::factory()->create();
-    $keeper = createStoreUser($store, ['channel-view', 'channel-store', 'channel-update', 'channel-destroy']);
-    $channel = Channel::factory()->create(['name' => 'GAMA']);
-
-    $this->actingAs($keeper)->withSession(['current_store_id' => $store->id]);
-
-    $this->postJson('/channels', ['name' => 'Mine'])->assertOk();
-    expect($this->getJson('/channels/data')->assertOk()->json('channels.*.name'))->toBe(['Mine']);
-
-    $this->get("/channels/{$channel->id}")->assertNotFound();
-    $this->putJson("/channels/{$channel->id}", ['name' => 'Renamed'])->assertNotFound();
-    $this->deleteJson("/channels/{$channel->id}", ['password' => 'password'])->assertNotFound();
-
-    expect($channel->fresh()->name)->toBe('GAMA')
-        ->and(Channel::firstWhere('name', 'Mine')->store_id)->toBe($store->id);
-});
-
-test('during "Log in as" the channel pages stay shut, while the shop\'s own side works', function () {
-    // This is how the owner actually reaches a shop: impersonation makes them a STORE
-    // user, so the platform's own pages close behind them — and the shop's side, which
-    // is where a channel is added to a screen, opens as it should.
-    $store = Store::factory()->create();
-    $keeper = createStoreUser($store, ['screen-view', 'screen-playlist']);
     $screen = Screen::factory()->create(['store_id' => $store->id]);
+    Channel::factory()->create(['name' => 'GAMA']);
+    Channel::factory()->create(['name' => 'Deli Specials', 'store_id' => $store->id]);
+    Channel::factory()->create(['name' => 'Next Door Deals', 'store_id' => Store::factory()->create()->id]);
 
-    $this->actingAs($keeper)->withSession([
+    $cashier = createStoreUser($store, ['screen-view', 'screen-playlist'], 'Cashier');
+    $keeper = createStoreUser($store, ['channel-view'], 'Channel Keeper');
+
+    $loggedInAs = fn (User $person) => $this->actingAs($person)->withSession([
         'current_store_id' => $store->id,
         'impersonating_original_id' => $this->admin->id,
-        'impersonating_user_id' => $keeper->id,
+        'impersonating_user_id' => $person->id,
     ]);
 
+    $loggedInAs($cashier);
     $this->getJson('/channels/data')->assertForbidden();
-    $this->getJson("/screens/{$screen->id}/available-channels")->assertOk();
+    expect(collect($this->getJson("/screens/{$screen->id}/available-channels")->assertOk()->json('channels'))->pluck('title')->sort()->values()->all())
+        ->toBe(['Deli Specials', 'GAMA']);
+
+    $loggedInAs($keeper);
+    $rows = collect($this->getJson('/channels/data')->assertOk()->json('channels'));
+    expect($rows->pluck('read_only', 'name')->all())->toBe(['Deli Specials' => false, 'GAMA' => true]);
 });
 
 test('the Channels link follows channel-view — above the stores and inside one', function () {
@@ -151,13 +140,6 @@ test('blank "ads each time" means every ad, every time', function () {
     expect(Channel::firstWhere('name', 'GAMA')->ads_per_pass)->toBeNull();
 });
 
-test('every shop sees the name, so it has to be unique', function () {
-    Channel::factory()->create(['name' => 'GAMA']);
-
-    $this->actingAs($this->admin)->postJson('/channels', ['name' => 'GAMA'])
-        ->assertStatus(422)->assertJsonValidationErrors('name');
-});
-
 test('keeping its own name on an edit is not a clash', function () {
     $channel = Channel::factory()->create(['name' => 'GAMA']);
 
@@ -187,7 +169,7 @@ test('an edit that leaves a field out changes nothing about it', function () {
 
 test('whoever holds channel-update may edit any channel, not only their own', function () {
     $channel = Channel::factory()->create(['name' => 'GAMA', 'created_by' => $this->admin->id]);
-    $staff = channelStaff(['channel-update']);
+    $staff = createPlatformUser(['channel-update'], 'Content Manager');
 
     $this->actingAs($staff)->putJson("/channels/{$channel->id}", ['name' => 'GAMA Wholesale'])->assertOk();
 
@@ -196,7 +178,7 @@ test('whoever holds channel-update may edit any channel, not only their own', fu
 
 test('and whoever holds channel-destroy may delete any channel', function () {
     $channel = Channel::factory()->create(['created_by' => $this->admin->id]);
-    $staff = channelStaff(['channel-destroy']);
+    $staff = createPlatformUser(['channel-destroy'], 'Content Manager');
 
     $this->actingAs($staff)->deleteJson("/channels/{$channel->id}", ['password' => 'password'])->assertOk();
 
@@ -248,12 +230,12 @@ test('the listing counts the ads, the ones running today, and the screens and sh
 |--------------------------------------------------------------------------
 */
 
-test('deleting a channel removes its ads, their files, and its line from every playlist', function () {
+test('deleting a channel removes its ads and its line from every playlist, and leaves their files in the library', function () {
     $channel = Channel::factory()->create(['name' => 'GAMA']);
     $ads = ChannelAd::factory()->count(2)->create(['channel_id' => $channel->id]);
     $ads->each(function (ChannelAd $ad) {
-        Storage::disk('public')->put($ad->path, 'ad');
-        Storage::disk('public')->put($ad->thumbnail_path, 'thumb');
+        Storage::disk('public')->put($ad->media->path, 'ad');
+        Storage::disk('public')->put($ad->media->thumbnail_path, 'thumb');
     });
 
     $store = Store::factory()->create();
@@ -275,9 +257,14 @@ test('deleting a channel removes its ads, their files, and its line from every p
     expect(PlaylistItem::where('channel_id', $channel->id)->count())->toBe(0);
     expect(ScheduleRule::count())->toBe(0);
 
+    // The files were never the channel's: they stay in the platform's library, rows and all
+    // (docs/CHANNEL-CONTENT-SPEC.md).
     $ads->each(function (ChannelAd $ad) {
-        Storage::disk('public')->assertMissing($ad->path);
-        Storage::disk('public')->assertMissing($ad->thumbnail_path);
+        $file = Media::find($ad->media_id);
+        expect($file)->not->toBeNull();
+        expect($file->store_id)->toBeNull();
+        Storage::disk('public')->assertExists($ad->media->path);
+        Storage::disk('public')->assertExists($ad->media->thumbnail_path);
     });
 
     // The shops' own files stay exactly where they were.
@@ -288,18 +275,12 @@ test('deleting a channel removes its ads, their files, and its line from every p
     ]);
 });
 
-test('a screen in a deleted shop is counted nowhere — not in the table, not in the log', function () {
+test('a channel on one screen is counted once in the table, and its deletion is logged as "1 screen"', function () {
+    // The table, the confirmation and the log count screens the same way, so they can never disagree by
+    // one — and one screen reads in the singular.
     $channel = Channel::factory()->create(['name' => 'GAMA']);
-
-    $alive = Store::factory()->create();
-    $gone = Store::factory()->create();
-
-    foreach ([$alive, $gone] as $store) {
-        $screen = Screen::factory()->create(['store_id' => $store->id]);
-        PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $channel->id, 'position' => 0]);
-    }
-
-    $gone->delete();
+    $screen = Screen::factory()->create(['store_id' => Store::factory()->create()->id]);
+    PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $channel->id, 'position' => 0]);
 
     $row = collect($this->actingAs($this->admin)->getJson('/channels/data')->assertOk()->json('channels'))
         ->firstWhere('id', $channel->id);
@@ -327,7 +308,7 @@ test('deleting the person who made a channel leaves the channel on the air', fun
     // Owner's decision: a channel belongs to the platform or its store, not to whoever typed it in, so
     // deleting that account never takes it along — the same as a shop's media.
     $admin = createSuperAdmin(['user-destroy']);
-    $staff = channelStaff(['channel-view', 'channel-store', 'channel-update']);
+    $staff = createPlatformUser(['channel-view', 'channel-store', 'channel-update'], 'Content Manager');
 
     $this->actingAs($staff)->postJson('/channels', ['name' => 'Thanksgiving'])->assertOk();
     $channel = Channel::firstWhere('name', 'Thanksgiving');

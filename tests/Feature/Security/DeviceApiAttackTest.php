@@ -46,11 +46,16 @@ test('no token, a wrong token, an empty token or a session cookie all answer 401
     ];
 
     foreach ($attempts as $i => $attempt) {
+        // withHeader() sticks for every later request of the test, so each attempt starts with none:
+        // otherwise the header of the attempt before would decide the answer.
+        $this->flushHeaders();
+
         $status = $attempt()->status();
         expect($status)->toBe(401, "attempt #{$i} answered {$status}");
     }
 
     // A signed-in person is not a screen: the session opens nothing here.
+    $this->flushHeaders();
     $this->actingAs(createStoreMember($this->store, Role::OWNER));
     expect($this->getJson('/device/playlist')->status())->toBe(401)
         ->and($this->postJson('/device/heartbeat')->status())->toBe(401);
@@ -104,13 +109,11 @@ test('a pairing code cannot be collected by a device that does not own it', func
     $this->actingAs($owner)->withSession(['current_store_id' => $this->store->id])
         ->postJson('/screens/pair', ['code' => $mine['code'], 'mode' => 'new', 'name' => 'New TV', 'orientation' => 'landscape'])->assertOk();
 
-    // The thief knows the uuid but not the secret.
-    $withoutSecret = $this->getJson('/device/pair-status?device_uuid=device-mine');
-    expect($withoutSecret->status())->toBeIn([200, 422]);
-    if ($withoutSecret->status() === 200) {
-        expect($withoutSecret->json('status'))->not->toBe('paired');
-        expect($withoutSecret->json('token'))->toBeNull();
-    }
+    // The thief knows the uuid but not the secret: without one the poll is not even read.
+    $this->getJson('/device/pair-status?device_uuid=device-mine')
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('poll_secret')
+        ->assertJsonMissingPath('token');
 
     $wrongSecret = $this->getJson('/device/pair-status?device_uuid=device-mine&poll_secret='.$thief['poll_secret'])->assertOk();
     expect($wrongSecret->json('status'))->toBe('unknown')
@@ -120,7 +123,9 @@ test('a pairing code cannot be collected by a device that does not own it', func
     expect($this->getJson('/device/pair-status?device_uuid=device-mine&poll_secret='.$mine['poll_secret'])->assertOk()->json('status'))->toBe('paired');
 });
 
-test('a pairing code belongs to one screen only, even when two people race for it', function () {
+test('a pairing code belongs to one screen only: whoever claims it second is refused', function () {
+    // Two claims one after the other. Two at the SAME moment are held apart by the row lock in
+    // DevicePairing::claim, which one PHP process cannot race against itself to show.
     $registration = $this->postJson('/device/register', ['device_uuid' => 'device-race'])->assertOk()->json();
 
     $owner = createStoreMember($this->store, Role::OWNER);
@@ -155,17 +160,20 @@ test('a code from another store cannot be claimed, and nonsense codes are refuse
     expect(Screen::where('name', 'Nope')->exists())->toBeFalse();
 });
 
-test('registering is throttled per device, and the playlist per token', function () {
-    // device-register keys on the IP: the 31st cold registration in a minute is refused.
+test('cold registrations are throttled per address, and a refused one files nothing', function () {
+    // device-register keys on the IP — a screen asking for its first code has nothing else to be known
+    // by — so thirty a minute pass, whatever uuid each one names, and the thirty-first is refused.
     $statuses = [];
     for ($i = 0; $i < 32; $i++) {
         $statuses[] = $this->postJson('/device/register', ['device_uuid' => "flood-{$i}"])->status();
     }
-    expect($statuses)->toContain(429);
 
-    // The rows a flood created are still bounded by what it asked for, and none of them is a screen.
-    expect(Screen::count())->toBe(2)
-        ->and(DB::table('pairing_requests')->count())->toBeLessThanOrEqual(32);
+    expect($statuses)->toBe([...array_fill(0, 30, 200), 429, 429]);
+
+    // One pairing row per registration that got through, none for the two refused, and not one screen.
+    expect(DB::table('pairing_requests')->count())->toBe(30)
+        ->and(DB::table('pairing_requests')->whereIn('device_uuid', ['flood-30', 'flood-31'])->exists())->toBeFalse()
+        ->and(Screen::count())->toBe(2);
 });
 
 test('the manifest never carries a file outside its schedule window', function () {
@@ -175,4 +183,10 @@ test('the manifest never carries a file outside its schedule window', function (
     $manifest = json_encode($this->withHeader('Authorization', 'Bearer alpha-token')->getJson('/device/playlist')->assertOk()->json());
 
     expect($manifest)->not->toContain('Yesterday')->not->toContain($expired->path);
+});
+
+test('the token travels in the Authorization header only — an X-Device-Token header opens nothing', function () {
+    // The player only ever sends "Authorization: Bearer"; a second way in was a second thing to get right.
+    $this->withHeader('X-Device-Token', 'alpha-token')->getJson('/device/playlist')->assertUnauthorized();
+    $this->withHeader('X-Device-Token', 'alpha-token')->postJson('/device/heartbeat')->assertUnauthorized();
 });

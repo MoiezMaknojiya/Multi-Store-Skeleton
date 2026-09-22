@@ -61,8 +61,11 @@ class PlayerRestartTest extends DuskTestCase
             $tv->visit('/login');
 
             // -- The owner types it into the panel meanwhile ---------------------
+            // A factory screen is already paired, so "is it paired?" would say yes either
+            // way: the claim is proved by the token on file being a NEW one.
+            $tokenHashBefore = $screen->token_hash;
             $this->assertTrue(app(DevicePairing::class)->claim($code, $screen));
-            $this->assertTrue($screen->fresh()->isPaired());
+            $this->assertNotSame($tokenHashBefore, $screen->fresh()->token_hash, 'the claim put no new token on the screen');
 
             // The token exists, but it is on the server: the TV has never seen it.
             $this->assertNotNull(PairingRequest::where('code', $code)->value('claimed_token'));

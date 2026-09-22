@@ -117,7 +117,7 @@ test('the Super-Admin role and the Owner role cannot be edited or deleted from i
         ->and(Role::owner())->not->toBeNull();
 });
 
-test('nobody promotes themselves, and the Owner role is not handed out by somebody who is not one', function () {
+test('nobody promotes themselves, or hands out a role that holds more than they do', function () {
     // Their own role
     $this->putJson("/members/{$this->maker->id}", ['role_id' => Role::starter(Role::OWNER)->id])->assertForbidden();
     // Somebody else's, to a role beyond their own reach: refused outright (403), because handing out

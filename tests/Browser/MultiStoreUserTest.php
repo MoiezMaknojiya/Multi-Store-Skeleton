@@ -44,7 +44,13 @@ class MultiStoreUserTest extends DuskTestCase
                 ->assertPresent('@invite-member');
 
             // -- In Beta, only Staff: the team page is not theirs ----------------
+            // The switch itself first: the header names the store being worked in, so the
+            // refusal below is Beta's answer and not Alpha's still standing.
             $this->switchToStore($browser, $storeB);
+            $browser->visit('/dashboard');
+            $this->waitForAlpine($browser);
+            $browser->assertSeeIn('@store-switcher', 'Beta Store');
+
             $browser->visit('/members')->assertSee('403')->assertMissing('@invite-member');
         });
     }
@@ -101,9 +107,14 @@ class MultiStoreUserTest extends DuskTestCase
                 ->assertPresent('@invite-member');
 
             // -- Switch to Beta from the HEADER dropdown (Staff: no team page) ---
+            $browser->assertSeeIn('@store-switcher', 'Alpha Store');
             $this->jsClick($browser, '@store-switcher');
             $browser->waitForReload(fn (Browser $b) => $this->jsClick($b, '@store-switch-'.$storeB->id));
-            $browser->visit('/members')->assertMissing('@invite-member');
+
+            // The header now names Beta — the switch took, rather than the button merely vanishing.
+            $browser->assertPathIs('/dashboard')
+                ->assertSeeIn('@store-switcher', 'Beta Store');
+            $browser->visit('/members')->assertSee('403')->assertMissing('@invite-member');
         });
     }
 

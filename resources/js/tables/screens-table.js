@@ -31,13 +31,13 @@ export function registerScreensTable(Alpine) {
 
         extraState: {
             hasStore: config.hasStore ?? false,
-            defaultTimezone: config.defaultTimezone ?? 'America/Chicago',
             pairForm: { code: '', mode: 'new', name: '', orientation: 'landscape', screen_id: null, screen_name: '' },
             refreshTimer: null,
             /* The default-media picker's options, fetched when the modal opens: the
              * library can be long and most edits never touch it. */
             mediaOptions: [],
             loadingMedia: false,
+            mediaOptionsToken: 0,
 
             /* Network advertising. The panel below is rendered only when the gate
              * passes, so these are meaningless — and unreachable — to a shopkeeper. */
@@ -68,10 +68,13 @@ export function registerScreensTable(Alpine) {
         }),
 
         extraMethods: {
-            /* Keep the Online/Offline chips honest without a manual refresh. */
+            /* Keep the Online/Offline chips honest without a manual refresh. Quietly: the rows
+             * stay on the page while the new ones are fetched, rather than the whole list
+             * blinking to "Loading..." every thirty seconds, and a failure is said rather than
+             * leaving stale chips looking current. Not over a fetch somebody asked for. */
             onInit() {
                 this.refreshTimer = setInterval(() => {
-                    if (!this.saving && !this.deleting) this.fetchItems();
+                    if (!this.saving && !this.deleting && !this.loading) this.fetchItems({ quiet: true });
                 }, REFRESH_MS);
 
                 /* The holding-picture list is fetched only when an edit modal opens:
@@ -82,15 +85,20 @@ export function registerScreensTable(Alpine) {
             },
 
             async loadMediaOptions(screenId) {
+                /* Edit on one screen, then quickly on another: only the list asked for last may
+                 * land, or the picker would offer the first screen's answer to the second. */
+                const token = ++this.mediaOptionsToken;
                 this.loadingMedia = true;
                 try {
                     const { data } = await axios.get(`/screens/${screenId}/media-options`);
+                    if (token !== this.mediaOptionsToken) return;
                     this.mediaOptions = data.media;
                 } catch {
+                    if (token !== this.mediaOptionsToken) return;
                     /* Without it the picker is just empty — not worth a banner. */
                     this.mediaOptions = [];
                 } finally {
-                    this.loadingMedia = false;
+                    if (token === this.mediaOptionsToken) this.loadingMedia = false;
                 }
             },
 

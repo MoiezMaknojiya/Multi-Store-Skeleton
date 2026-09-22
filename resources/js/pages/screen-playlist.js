@@ -88,6 +88,7 @@ export function registerScreenPlaylist(Alpine) {
         channels: [],
         openChannelId: null,
         search: '',
+        availableToken: 0,
         loading: true,
         saving: false,
         dirty: false,
@@ -102,6 +103,7 @@ export function registerScreenPlaylist(Alpine) {
         preview: [],
         previewing: false,
         previewTimer: null,
+        previewToken: 0,
 
         /* ── Copying this playlist onto other screens ───────────────────── */
         copyTargets: [],
@@ -110,8 +112,13 @@ export function registerScreenPlaylist(Alpine) {
 
         init() {
             this.load();
-            this.loadAvailable();
-            this.loadChannels();
+            // The library and the channels are there to add from, so the page draws them only for
+            // someone who may change the playlist (screen-playlist) — the same permission their
+            // endpoints ask for. Anybody else would only be refused.
+            if (this.canEdit) {
+                this.loadAvailable();
+                this.loadChannels();
+            }
             this.$watch('search', () => {
                 if (this.searchTimer) clearTimeout(this.searchTimer);
                 this.searchTimer = setTimeout(() => this.loadAvailable(), 400);
@@ -137,12 +144,17 @@ export function registerScreenPlaylist(Alpine) {
         },
 
         async loadAvailable() {
+            // The newest search wins: "Pro" then "Promo" sends two, and the answer to "Pro"
+            // arriving second would list files the box is no longer asking for.
+            const token = ++this.availableToken;
             try {
                 const { data } = await axios.get(`/screens/${this.screenId}/available-media`, {
                     params: { search: this.search },
                 });
+                if (token !== this.availableToken) return;
                 this.available = data.media;
             } catch (error) {
+                if (token !== this.availableToken) return;
                 if (error.response?.status !== 403) {
                     window.toast('Could not load the content library.');
                 }
@@ -169,14 +181,16 @@ export function registerScreenPlaylist(Alpine) {
                 media_id: media.id,
                 title: media.title,
                 type: media.type,
-                orientation: media.orientation,
                 thumbnail_url: media.thumbnail_url,
-                media_duration: media.duration_seconds,
-                // A video runs to its own end; an image needs a time to be told.
+                // An ad page and a picture both stay up for as long as the line says; only a video
+                // runs to its own end — its measured length, or a generous backstop for one the
+                // browser could not measure (never an image's ten seconds, which would cut it off).
                 duration_seconds: media.type === 'video'
-                    ? (media.duration_seconds || PlaylistItemDefaults.imageSeconds)
+                    ? (media.duration_seconds || PlaylistItemDefaults.unmeasuredVideoSeconds)
                     : PlaylistItemDefaults.imageSeconds,
                 expires_at: null,
+                // The picker never offers an Ad Builder page taken off the screens (unpublished).
+                is_draft: false,
                 // No rules means "whenever the screen is on", which is what almost
                 // every item wants and therefore what a new one starts as.
                 rules: [],
@@ -199,7 +213,6 @@ export function registerScreenPlaylist(Alpine) {
                 thumbnail_url: channel.thumbnail_url,
                 channel_active: channel.channel_active,
                 ads_count: channel.ads_count,
-                ads_per_pass: channel.ads_per_pass,
                 pass_ads: channel.pass_ads,
                 pass_seconds: channel.pass_seconds,
                 duration_seconds: null,
@@ -239,7 +252,9 @@ export function registerScreenPlaylist(Alpine) {
                         ? { channel_id: item.channel_id, rules: (item.rules ?? []).map(ruleToServer) }
                         : {
                             media_id: item.media_id,
-                            duration_seconds: Number(item.duration_seconds) || PlaylistItemDefaults.imageSeconds,
+                            duration_seconds: Number(item.duration_seconds) || (item.type === 'video'
+                                ? PlaylistItemDefaults.unmeasuredVideoSeconds
+                                : PlaylistItemDefaults.imageSeconds),
                             rules: (item.rules ?? []).map(ruleToServer),
                         })),
                     version: this.version,
@@ -322,11 +337,22 @@ export function registerScreenPlaylist(Alpine) {
         refreshPreview() {
             if (this.previewTimer) clearTimeout(this.previewTimer);
 
+            // Taken when the rules change, not when the request goes: every change overtakes a
+            // preview already on its way, so a slow answer for the rules as they WERE — or for the
+            // item whose schedule was open before this one — never lands over the current one.
+            const token = ++this.previewToken;
+
             this.previewTimer = setTimeout(async () => {
-                if (this.scheduleIndex === null) return;
+                // This callback is the newest (a later change would have cleared its timer), so it
+                // also ends the "working…" of any request it overtook, which no longer can.
+                if (this.scheduleIndex === null) {
+                    this.previewing = false;
+                    return;
+                }
 
                 if (this.scheduleRules.length === 0) {
                     this.preview = [];
+                    this.previewing = false;
                     return;
                 }
 
@@ -336,13 +362,15 @@ export function registerScreenPlaylist(Alpine) {
                         rules: this.scheduleRules.map(ruleToServer),
                         days: 7,
                     });
+                    if (token !== this.previewToken) return;
                     this.preview = data.occurrences;
                 } catch {
+                    if (token !== this.previewToken) return;
                     // A preview that cannot be built is not worth an error banner —
                     // the save itself will say what is wrong with the rule.
                     this.preview = [];
                 } finally {
-                    this.previewing = false;
+                    if (token === this.previewToken) this.previewing = false;
                 }
             }, 350);
         },
@@ -350,6 +378,11 @@ export function registerScreenPlaylist(Alpine) {
         /* ── Copying onto other screens ─────────────────────────────────── */
 
         async openCopyModal() {
+            // Copying sends the SAVED playlist (PlaylistController::copy reads the rows), so with
+            // changes still unsaved it would copy something other than what is on the page. The
+            // button says so and is disabled; this holds the line should it be reached anyway.
+            if (this.dirty || this.saving) return;
+
             this.copySelected = [];
             this.$dispatch('open-modal', 'playlist-copy-modal');
 
@@ -398,9 +431,24 @@ export function registerScreenPlaylist(Alpine) {
         /* ── Display ───────────────────────────────────────────────────── */
 
         /** "Lunch (11:00 AM – 3:00 PM)" — built here rather than on the server, so one
-         *  place decides how a clock reads. */
+         *  place decides how a clock reads. A retired daypart says so: it still works for the
+         *  rules that already use it, and is offered to nothing new. */
         daypartLabel(daypart) {
-            return `${daypart.name} (${windowLabel(daypart.start_time, daypart.end_time)})`;
+            const label = `${daypart.name} (${windowLabel(daypart.start_time, daypart.end_time)})`;
+
+            return daypart.retired ? `${label} — retired` : label;
+        },
+
+        /**
+         * The Time options for one rule. The page is handed the store's live dayparts plus any
+         * retired one a rule on this screen still uses (ScreenController::daypartOptions); a
+         * retired daypart is offered only to the rule that already has it, so it stays readable
+         * there — not "All day" — and is never picked afresh.
+         *
+         * A method, not a getter (see the Alpine gotcha in .claude/rules/02-project-conventions.md).
+         */
+        daypartsFor(rule) {
+            return this.dayparts.filter((daypart) => !daypart.retired || String(daypart.id) === String(rule.daypart_id));
         },
 
         /** One window of the preview: "Fri 20 Mar 11:00 AM–3:00 PM". */
@@ -457,6 +505,18 @@ export function registerScreenPlaylist(Alpine) {
             const count = (item.rules ?? []).length;
             if (count === 0) return '';
             return count === 1 ? this.ruleSummary(item.rules[0]) : `${count} schedules`;
+        },
+
+        /** What a person calls a line or a file. A page published from the Ad Builder is stored as
+         *  type "html", which is nobody's word for it. */
+        typeLabel(item) {
+            return { image: 'Image', video: 'Video', html: 'Ad page', channel: 'Channel' }[item.type] ?? item.type;
+        },
+
+        /** Whether the line's seconds are set here: a picture and an ad page stay up for as
+         *  long as the line says; a video runs to its own end and a channel to its ads'. */
+        isTimed(item) {
+            return item.type === 'image' || item.type === 'html';
         },
 
         /** How long one line holds the screen: a file its seconds, a channel about one

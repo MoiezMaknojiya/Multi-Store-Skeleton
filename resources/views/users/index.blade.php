@@ -12,14 +12,18 @@
         <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div>
                 <h1 class="text-lg font-semibold text-gray-900 dark:text-white">All accounts</h1>
+                {{-- Stores (putting a person in a store) is the super admin's alone, so only they are told of it. --}}
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    People join a store by invitation from that store, or you put them in one with Stores below. They
-                    manage their own name, email and password.
+                    People join a store by invitation from that store.
+                    @can('super-admin-tier')
+                        You can also put them in one with Stores below.
+                    @endcan
+                    They manage their own name, email and password.
                 </p>
             </div>
-            @if (auth()->user()->isSuperAdmin())
+            @can('super-admin-tier')
             <x-crud.add-button label="Invite to platform team" @click="openInvite()" dusk="invite-platform-member" />
-            @endif
+            @endcan
         </div>
 
         <x-crud.table-wrapper title="Accounts" searchPlaceholder="Search by name or email" :columns="4">
@@ -82,12 +86,13 @@
             </x-slot>
         </x-crud.table-wrapper>
 
-        @if (auth()->user()->isSuperAdmin())
+        {{-- The same gate as the routes behind everything in here (can:super-admin-tier). --}}
+        @can('super-admin-tier')
         {{-- The platform team's open invitations --}}
         <div class="card" dusk="platform-invitations">
             <div class="card-header">
                 <h3 class="text-subheading">Platform team invitations</h3>
-                <p class="text-xs text-gray-500 dark:text-gray-400">Links are valid for 7 days. Resending sends a new link.</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Links are valid for {{ \App\Models\Invitation::LIFETIME_DAYS }} days. Resending sends a new link.</p>
             </div>
             <div class="overflow-x-auto">
                 <table class="table-base">
@@ -273,7 +278,7 @@
                 </div>
             </div>
         </x-modal>
-        @endif
+        @endcan
 
         {{-- Delete an account --}}
         <x-modal name="confirm-account-deletion" :show="false" maxWidth="md" focusable>
@@ -287,7 +292,15 @@
                      class="mt-4 rounded-md border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
                     They are the only Owner of <span class="font-semibold" x-text="(selectedItem?.sole_owner_of ?? []).join(', ')"></span>.
                     <span x-text="(selectedItem?.sole_owner_of?.length ?? 0) === 1 ? 'That store' : 'Those stores'"></span>
-                    will have no owner until you give it one — Invite owner on Stores, or Stores here on Users.
+                    {{-- Only the ways back this viewer actually has: Stores here is the super admin's alone, and
+                         Invite owner on the Stores page needs View Stores and Create Stores (routes/web.php). --}}
+                    @can('super-admin-tier')
+                        will have no owner until you give it one — Invite owner on Stores, or Stores here on Users.
+                    @elsecan(['store-view', 'store-store'])
+                        will have no owner until you give it one — Invite owner on Stores.
+                    @else
+                        will have no owner until one is given.
+                    @endcan
                 </div>
 
                 <x-crud.password-confirm id="delete-account-password" />

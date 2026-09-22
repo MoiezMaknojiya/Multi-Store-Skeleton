@@ -2,7 +2,6 @@
 
 use App\Models\Screen;
 use App\Models\Store;
-use Illuminate\Support\Facades\RateLimiter;
 
 /*
 |--------------------------------------------------------------------------
@@ -20,14 +19,11 @@ use Illuminate\Support\Facades\RateLimiter;
 | getting a pairing code, while the screens already playing carried on as normal
 | and hid the problem.
 |
-| Each test below fails against the old shared-bucket setup.
+| Each test below fails against the old shared-bucket setup. Every test starts with
+| empty counters of its own: the limiter keeps them in the array cache, and each
+| test builds a fresh application, and with it a fresh cache.
 |
 */
-
-beforeEach(function () {
-    RateLimiter::clear('');
-    cache()->clear();
-});
 
 test('a shop full of screens cannot spend the signup form\'s budget', function () {
     $store = Store::factory()->create();
@@ -68,8 +64,9 @@ test('one screen hammering does not stop the screen next to it', function () {
 });
 
 test('pairing screens each get their own budget, keyed on the device they claim to be', function () {
-    // A screen waiting to be claimed polls every four seconds. Two screens
-    // setting up side by side must not eat into each other.
+    // A screen waiting to be claimed polls every thirty seconds, and once more
+    // whenever its player page is reopened. Two screens setting up side by side
+    // must not eat into each other.
     for ($i = 0; $i < 60; $i++) {
         $this->getJson('/device/pair-status?device_uuid=tv-one&poll_secret=x');
     }
@@ -113,4 +110,19 @@ test('registering is still capped per IP, since a new screen has nothing else to
     }
 
     $this->postJson('/device/register', [])->assertStatus(429);
+});
+
+test('every route that emails an address somebody typed counts into the invitations budget', function () {
+    // A new store for a customer and an owner for an ownerless store both send an Owner invitation — the
+    // same mail the Members page sends, so the same per-person cap. Before, these two had none.
+    $routes = [
+        'members.invitations.store', 'members.invitations.resend',
+        'users.invitations.store', 'users.invitations.resend',
+        'stores.store', 'stores.owner-invitation',
+    ];
+
+    foreach ($routes as $name) {
+        expect(app('router')->getRoutes()->getByName($name)->gatherMiddleware())
+            ->toContain('throttle:invitations');
+    }
 });

@@ -61,7 +61,7 @@ class Daypart extends Model
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
-        if ($user->isSuperAdmin() || $user->globalRole()) {
+        if ($user->globalRole() !== null) {
             return $query;
         }
 

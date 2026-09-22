@@ -3,26 +3,45 @@
         <h2 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Media Library') }}</h2>
     </x-slot>
 
-    <div x-data="mediaTable({ hasStore: @json((bool) session('current_store_id')) })"
+    {{-- Js::from, not @json: @json leaves its quotes raw and the first shop's name would close this
+         attribute (see .claude/rules/02-project-conventions.md). $libraries is null inside a store. --}}
+    <div x-data="mediaTable({{ Js::from(['libraries' => $libraries]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
         {{-- Upload on its own line, with the filters sitting in a row underneath —
              they belong to the table below them, not to the upload button. --}}
         <div class="space-y-3 mb-6">
             @can('media-store')
-            <div>
+            <div class="flex flex-wrap items-center gap-3">
                 <x-crud.add-button label="Upload File" @click="openUploadModal()" dusk="upload-media" />
+                @if ($libraries !== null)
+                    <p class="text-sm text-gray-500 dark:text-gray-400" dusk="media-upload-target-note">
+                        An upload goes to the library chosen in the Library list.
+                    </p>
+                @endif
             </div>
             @endcan
 
             {{-- A grid, not flex: .form-select is width:100%, so in a flex row each
-                 select would claim the full line. Three equal cells put them side by
-                 side on a desktop and stack them on a phone. --}}
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:max-w-2xl">
+                 select would claim the full line. Equal cells put them side by
+                 side on a desktop and stack them on a phone. Above the stores the first
+                 cell is the library: the platform's own (the default) or one shop's —
+                 what is listed and where an upload lands (docs/CHANNEL-CONTENT-SPEC.md §3). --}}
+            <div class="grid grid-cols-1 gap-2 {{ $libraries !== null ? 'sm:grid-cols-4 sm:max-w-4xl' : 'sm:grid-cols-3 sm:max-w-2xl' }}">
+                @if ($libraries !== null)
+                    <select x-model="library" @change="applyFilters()" dusk="media-filter-library" class="form-select text-sm"
+                            aria-label="Library">
+                        <option value="platform">Platform library</option>
+                        @foreach ($libraries as $shop)
+                            <option value="{{ $shop['id'] }}">{{ $shop['name'] }}</option>
+                        @endforeach
+                    </select>
+                @endif
                 <select x-model="filterType" @change="applyFilters()" dusk="media-filter-type" class="form-select text-sm">
                     <option value="">All types</option>
                     <option value="image">Images</option>
                     <option value="video">Videos</option>
+                    <option value="html">Ad pages</option>
                 </select>
                 <select x-model="filterOrientation" @change="applyFilters()" dusk="media-filter-orientation" class="form-select text-sm">
                     <option value="">Any orientation</option>
@@ -61,7 +80,7 @@
                                     <img :src="item.thumbnail_url" :alt="item.title" class="w-full h-full object-cover">
                                 </template>
                                 <template x-if="!item.thumbnail_url">
-                                    <span class="text-xs text-gray-400" x-text="item.type === 'video' ? 'Video' : 'Image'"></span>
+                                    <span class="text-xs text-gray-400" x-text="typeLabel(item)"></span>
                                 </template>
                                 <template x-if="item.duration_seconds">
                                     <span class="absolute bottom-1 right-1 px-1 rounded bg-black/70 text-white text-[10px]"
@@ -74,7 +93,8 @@
                             <p class="text-xs text-gray-400" x-show="item.description" x-text="item.description"></p>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">
-                            <span class="capitalize" x-text="item.type"></span>
+                            {{-- An Ad Builder page is stored as "html" — shown as what it is, an ad page. --}}
+                            <span x-text="typeLabel(item)"></span>
                             <span class="block text-xs text-gray-400" x-text="item.orientation ?? '-'"></span>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300" x-text="formatSize(item.size)"></td>
@@ -83,17 +103,9 @@
                             <span x-show="isExpired(item)" class="block text-red-500 font-medium">Expired</span>
                         </td>
                         <td class="px-5 py-4">
-                            <div class="flex items-center justify-end gap-2">
-                                @can('media-update')
-                                <button @click="openFormModal(item)" x-bind:dusk="'edit-media-' + item.id"
-                                    class="btn-row-neutral">Edit</button>
-                                @endcan
-
-                                @can('media-destroy')
-                                <button @click="confirmDelete(item)" x-bind:dusk="'delete-media-' + item.id"
-                                    class="btn-row-danger">Delete</button>
-                                @endcan
-                            </div>
+                            {{-- askToDelete: a file a channel shows is refused at once, before any confirmation. --}}
+                            <x-crud.table-actions editClick="openFormModal(item)" deleteClick="askToDelete(item)"
+                                editCan="media-update" deleteCan="media-destroy" dusk="media" />
                         </td>
                     </tr>
                 </template>
@@ -118,9 +130,12 @@
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Upload File</h2>
 
                 <form @submit.prevent="uploadFile" dusk="media-upload-form" class="mt-4 space-y-4">
-                    <div x-show="!hasStore" x-cloak class="rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
-                        Select a store first - media belongs to the store it is uploaded in.
-                    </div>
+                    @if ($libraries !== null)
+                        <p class="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200"
+                           dusk="media-upload-library">
+                            It joins <span class="font-semibold" x-text="libraryName()"></span>.
+                        </p>
+                    @endif
 
                     <x-crud.form-field label="File" field="file" :required="true">
                         <input type="file" x-ref="fileInput" dusk="media-file"
@@ -142,8 +157,9 @@
 
                     {{-- This modal is not the shared form modal, so Cancel has to close
                          the upload one — the default closeFormModal() would target the
-                         edit modal and leave this one open. --}}
-                    <x-crud.form-actions cancelAction="closeUploadModal()" savingVar="saving"
+                         edit modal and leave this one open. Upload waits while a video is
+                         still being measured, or it would go without its length and poster. --}}
+                    <x-crud.form-actions cancelAction="closeUploadModal()" savingVar="saving || preparing"
                         saveLabel="Upload" dusk="media-upload-save" cancelDusk="media-upload-cancel" />
                 </form>
             </div>

@@ -25,10 +25,10 @@ function playlistBody(Screen $screen, array $items): array
     return ['items' => $items, 'version' => $screen->playlistFingerprint()];
 }
 
-/** One item, optionally scheduled. */
-function itemBody(Media $media, array $rules = [], int $seconds = 10): array
+/** One ten-second item, optionally scheduled. */
+function itemBody(Media $media, array $rules = []): array
 {
-    return ['media_id' => $media->id, 'duration_seconds' => $seconds, 'rules' => $rules];
+    return ['media_id' => $media->id, 'duration_seconds' => 10, 'rules' => $rules];
 }
 
 beforeEach(function () {
@@ -117,14 +117,20 @@ test('saving the same schedule twice is not a conflict', function () {
         itemBody($this->poster, $rule),
     ]))->assertOk();
 
-    // The fingerprint is content-based on purpose: re-saving an identical list has
-    // lost nobody anything, so it is not a conflict.
+    // Two people now hold this version. The fingerprint is content-based on purpose:
+    // re-saving an identical list — its schedule included — has lost nobody anything,
+    // so the first save keeps the version as it was, and the second, sent with the
+    // version from before the first, is no conflict either.
     $version = $this->getJson("/screens/{$this->screen->id}/playlist")->json('version');
+    $sameAgain = ['items' => [itemBody($this->poster, $rule)], 'version' => $version];
 
-    $this->putJson("/screens/{$this->screen->id}/playlist", [
-        'items' => [itemBody($this->poster, $rule)],
-        'version' => $version,
-    ])->assertOk();
+    $this->putJson("/screens/{$this->screen->id}/playlist", $sameAgain)
+        ->assertOk()
+        ->assertJsonPath('version', $version);
+
+    $this->putJson("/screens/{$this->screen->id}/playlist", $sameAgain)->assertOk();
+
+    expect($this->screen->fresh()->playlistItems->first()->scheduleRules)->toHaveCount(1);
 });
 
 test('a daypart from another store cannot be pinned to this screen\'s playlist', function () {
@@ -216,19 +222,36 @@ test('a repeat with no start date previews the same way saving it would behave',
     // "Every 2 weeks" has to be every-2-weeks FROM something. A saved rule anchors on
     // its creation date; the preview anchors on today, so the two agree. Without that
     // the preview would quietly show every week.
-    $occurrences = $this->postJson("/screens/{$this->screen->id}/playlist/preview", [
-        'rules' => [[
-            'recurrence_type' => ScheduleRule::WEEKLY,
-            'recurrence_weekdays' => [1, 2, 3, 4, 5, 6, 7],
-            'recurrence_interval' => 2,
-        ]],
+    //
+    // Wednesday 4 March 2026, noon on the screen's clock (Chicago). A count alone cannot
+    // tell the anchor apart — any fortnight holds seven of fourteen days — so the dates are.
+    $this->travelTo('2026-03-04 18:00:00');
+    $fortnightly = [
+        'recurrence_type' => ScheduleRule::WEEKLY,
+        'recurrence_weekdays' => [1, 2, 3, 4, 5, 6, 7],
+        'recurrence_interval' => 2,
+    ];
+
+    $dates = collect($this->postJson("/screens/{$this->screen->id}/playlist/preview", [
+        'rules' => [$fortnightly],
         'days' => 14,
-    ])->assertOk()->json('occurrences');
+    ])->assertOk()->json('occurrences'))->pluck('date')->all();
 
-    $dates = collect($occurrences)->pluck('date');
+    // This week from today to Sunday, then not the week after, then the Monday and
+    // Tuesday of the week after that — the last two days of the fortnight.
+    expect($dates)->toBe([
+        '2026-03-04', '2026-03-05', '2026-03-06', '2026-03-07', '2026-03-08',
+        '2026-03-16', '2026-03-17',
+    ]);
 
-    // Every other day from today, not every day.
-    expect($dates)->toHaveCount(7);
+    // Saved today, the rule anchors on today, and plays on exactly those days.
+    $this->putJson("/screens/{$this->screen->id}/playlist", playlistBody($this->screen, [
+        itemBody($this->poster, [$fortnightly]),
+    ]))->assertOk();
+
+    $saved = ScheduleRule::firstOrFail()->occurrences($this->screen->localTime(), 14);
+
+    expect(collect($saved)->pluck('date')->all())->toBe($dates);
 });
 
 test('a preview cannot be built against another store\'s hours', function () {

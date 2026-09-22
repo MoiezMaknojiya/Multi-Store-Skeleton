@@ -120,6 +120,13 @@ test('a forged X-Forwarded-For does not hand out a fresh rate limit', function (
 test('an array where the code expects a word is answered, not exploded', function () {
     Media::factory()->count(2)->create(['store_id' => $this->store->id]);
 
+    // A listing reads anything that is not one plain value as "not sent" (HandlesCrudData::plainValue),
+    // so each of these is an ordinary page of results.
+    $answer = function (string $url): void {
+        $status = $this->getJson($url)->status();
+        expect($status)->toBe(200, "{$url} answered {$status}");
+    };
+
     foreach ([
         '/media/data?search[]=x',
         '/media/data?search[a][b]=x',
@@ -128,14 +135,17 @@ test('an array where the code expects a word is answered, not exploded', functio
         '/media/data?search[]=x&search[]=y',
         '/screens/data?search[]=x',
         '/dayparts/data?search[]=x',
-        '/channels/data?search[]=x',
         '/members/data?search[]=x',
-        '/activity/data?search[]=x',
-        '/users/data?search[]=x',
-        '/stores/data?search[]=x',
     ] as $url) {
-        $status = $this->getJson($url)->status();
-        expect($status)->toBeLessThan(500, "{$url} answered {$status}");
+        $answer($url);
+    }
+
+    // The owner here holds no channel or log permission, and the accounts and stores listings are the
+    // platform's: a 403 at the door would never let the array reach the code, so these go as a super admin.
+    $this->actingAs(createSuperAdmin());
+
+    foreach (['/channels/data?search[]=x', '/activity/data?search[]=x', '/users/data?search[]=x', '/stores/data?search[]=x'] as $url) {
+        $answer($url);
     }
 });
 

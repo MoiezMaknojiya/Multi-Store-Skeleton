@@ -32,7 +32,7 @@ class PermissionController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:permissions,name',
+            'name' => 'bail|required|string|max:255|unique:permissions,name',
             'label' => ['nullable', 'string', 'max:255', 'regex:/^[a-zA-Z0-9 ]*$/'],
         ], [
             'label.regex' => 'Label can only contain letters, numbers, and spaces.',
@@ -49,7 +49,7 @@ class PermissionController extends Controller
     public function update(Request $request, Permission $permission): JsonResponse
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255', Rule::unique('permissions')->ignore($permission->id)],
+            'name' => ['bail', 'required', 'string', 'max:255', Rule::unique('permissions')->ignore($permission->id)],
             'label' => ['nullable', 'string', 'max:255', 'regex:/^[a-zA-Z0-9 ]*$/'],
         ], [
             'label.regex' => 'Label can only contain letters, numbers, and spaces.',

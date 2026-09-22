@@ -18,14 +18,15 @@
             document.documentElement.classList.add('dark');
         }
     </script>
-
-    @stack('styles')
 </head>
 
 {{-- A focused, sidebar-less shell for pages that stand on their own (e.g. the store
      picker). Just a slim top bar with the brand and the user menu, then the content. --}}
 <body class="font-sans antialiased bg-gray-100 dark:bg-gray-900" x-data="layoutHandler">
     <div class="min-h-screen flex flex-col">
+        {{-- Impersonation Banner — "Log in as" a member of several stores lands here first --}}
+        <x-impersonation-banner />
+
         {{-- Slim top bar --}}
         <header class="flex items-center justify-between h-16 px-4 sm:px-6 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
             <a href="{{ route('dashboard') }}" class="flex items-center gap-2 text-gray-800 dark:text-white font-semibold">
@@ -39,13 +40,13 @@
 
             <div class="flex items-center gap-1" x-data="header()">
                 {{-- Theme Toggle --}}
-                <button @click="toggleDark()"
+                <button @click="toggleDark()" :aria-label="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
                     class="p-2 rounded-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
-                    <svg data-theme-icon="dark" :class="darkMode ? 'block' : 'hidden'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg data-theme-icon="dark" :class="darkMode ? 'block' : 'hidden'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
                     </svg>
-                    <svg data-theme-icon="light" :class="darkMode ? 'hidden' : 'block'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg data-theme-icon="light" :class="darkMode ? 'hidden' : 'block'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                     </svg>
@@ -55,7 +56,7 @@
                 <div class="relative">
                     <button @click="toggle()" dusk="user-menu" class="flex items-center gap-2 px-2 py-1.5 rounded-xs hover:bg-gray-100 dark:hover:bg-gray-800">
                         <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-semibold">
-                            {{ substr(auth()->user()->name ?? 'U', 0, 1) }}
+                            {{ mb_strtoupper(mb_substr(auth()->user()->name ?: 'U', 0, 1)) }}
                         </div>
                         <span class="hidden sm:block text-sm font-medium text-gray-700 dark:text-gray-300">{{ auth()->user()->name ?? 'User' }}</span>
                     </button>
@@ -84,19 +85,8 @@
         </main>
     </div>
 
-    {{-- Toast notifications --}}
-    <div x-data class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-80 max-w-[calc(100vw-2rem)] space-y-2 pointer-events-none">
-        <template x-for="toast in $store.toasts.items" :key="toast.id">
-            <div x-transition.opacity.duration.300ms
-                class="pointer-events-auto rounded-md px-4 py-3 text-sm text-white shadow-lg flex items-start gap-2"
-                :class="toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'">
-                <span class="flex-1" x-text="toast.message"></span>
-                <button type="button" class="opacity-70 hover:opacity-100" @click="$store.toasts.dismiss(toast.id)">✕</button>
-            </div>
-        </template>
-    </div>
-
-    @stack('scripts')
+    {{-- Toast notifications, and a redirect's flash message shown as one --}}
+    <x-toasts />
 </body>
 
 </html>

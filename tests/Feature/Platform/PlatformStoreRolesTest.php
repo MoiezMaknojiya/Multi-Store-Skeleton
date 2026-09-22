@@ -2,7 +2,6 @@
 
 use App\Models\ActivityLog;
 use App\Models\Invitation;
-use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Store;
 use App\Models\User;
@@ -23,7 +22,6 @@ beforeEach(function () {
     $this->superAdmin = createSuperAdmin();
     $this->alpha = Store::factory()->create(['name' => 'Alpha Mart']);
     $this->beta = Store::factory()->create(['name' => 'Beta Deli']);
-    registerPermissionGates();
 });
 
 test("the form lists a person's stores, the stores they could join, and the roles on offer", function () {
@@ -37,7 +35,7 @@ test("the form lists a person's stores, the stores they could join, and the role
     expect($access['memberships'])->toBe([['store_id' => $this->alpha->id, 'store_name' => 'Alpha Mart', 'role_id' => Role::starter(Role::STAFF)->id]])
         ->and(collect($access['stores'])->pluck('name')->all())->toBe(['Beta Deli', 'Gamma Grill'])
         ->and(collect($access['store_roles'])->pluck('name')->all())->toBe(['Owner', 'Admin', 'Staff', 'Viewer'])
-        ->and($access['store_roles'][0]['is_owner_role'])->toBeTrue()
+        ->and($access['store_roles'][0]['id'])->toBe(Role::owner()->id)
         ->and(collect($access['custom_roles'][$this->alpha->id])->pluck('name')->all())->toBe(['Cashier'])
         ->and(collect($access['custom_roles'][$this->beta->id])->pluck('name')->all())->toBe(['Baker']);
 });
@@ -163,13 +161,11 @@ test("managing a person's stores from the platform is the super admin's alone", 
 });
 
 test('the Users page offers Stores for store accounts only', function () {
-    grantPermissions(['user-view']);
     $person = createStoreMember($this->alpha, Role::STAFF);
     $support = createPlatformUser(['user-view']);
 
-    $rows = collect($this->actingAs($this->superAdmin)->getJson('/users/data')->json('users'))->keyBy('id');
+    $rows = collect($this->actingAs($this->superAdmin)->getJson('/users/data')->assertOk()->json('users'))->keyBy('id');
 
     expect($rows[$person->id]['can']['manage_stores'])->toBeTrue()
-        ->and($rows[$support->id]['can']['manage_stores'])->toBeFalse()
-        ->and(Permission::where('name', 'user-view')->exists())->toBeTrue();
+        ->and($rows[$support->id]['can']['manage_stores'])->toBeFalse();
 });

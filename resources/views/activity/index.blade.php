@@ -27,7 +27,7 @@
                     </p>
                     <div class="mt-3 flex flex-wrap gap-2">
                         <template x-for="p in partitions" :key="p.name">
-                            <span class="badge-info" x-text="(p.year ?? 'future') + ' — ' + p.rows + ' rows'"></span>
+                            <span class="badge-info" x-text="(p.year ?? 'future') + ' — ' + p.rows + (p.rows === 1 ? ' row' : ' rows')"></span>
                         </template>
                         <span x-show="partitions.length === 0" class="text-xs text-gray-400">No data yet.</span>
                     </div>
@@ -87,8 +87,9 @@
             </div>
         </div>
 
-        {{-- Activity Data Table (read-only audit trail) --}}
-        <x-crud.table-wrapper title="{{ $store ? 'Activity in '.$store->name : 'All Activity' }}" searchPlaceholder="Search activity (action, user, details...)" :columns="4">
+        {{-- Activity Data Table (read-only audit trail). A bound :title — the wrapper echoes it itself, and an
+             echo here as well escaped a store's name twice. --}}
+        <x-crud.table-wrapper :title="$store ? 'Activity in '.$store->name : 'All Activity'" searchPlaceholder="Search activity (action, user, details...)" :columns="4">
             <x-slot name="head">
                 <th class="px-5 py-3 text-left font-semibold">When</th>
                 <th class="px-5 py-3 text-left font-semibold">Who</th>

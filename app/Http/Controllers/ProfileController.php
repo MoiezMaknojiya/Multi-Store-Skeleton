@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\ConfirmsPassword;
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\ActivityLog;
 use App\Models\Store;
+use App\Models\User;
 use App\Services\StoreTeam;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -130,7 +131,7 @@ class ProfileController extends Controller
     }
 
     /** The last Owner of a store cannot go (rule 21) — the message names the stores to hand on first. */
-    private function refuseWhileSoleOwner(StoreTeam $team, $user): void
+    private function refuseWhileSoleOwner(StoreTeam $team, User $user): void
     {
         $soleOwned = $team->storesSolelyOwnedBy($user);
 

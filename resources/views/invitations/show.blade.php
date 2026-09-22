@@ -1,10 +1,7 @@
 {{-- The page an invitation link opens. Four states (docs/STORE-ORGANIZATION-SPEC.md rule 16):
      register (no account yet), login (an account exists), accept (signed in as the invitee),
-     mismatch (signed in as somebody else). --}}
-@php
-    $place = $invitation->isForPlatform() ? 'the '.config('app.name').' team' : $invitation->store->name;
-@endphp
-
+     mismatch (signed in as somebody else). $place — the store, or the platform team — comes from
+     InvitationResponseController::placeName, the same words its log lines and welcome use. --}}
 <x-guest-layout>
     <div dusk="invitation-page" data-state="{{ $state }}">
         <span class="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">

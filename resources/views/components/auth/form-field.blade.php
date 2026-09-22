@@ -16,6 +16,10 @@
 
 @php($fieldId = $id ?? $name)
 @php($fieldErrors = $errors->getBag($bag))
+{{-- The value flashed back after a failed submit is whatever shape the request had: email[]=x comes back
+     as an array, and echoing an array is a TypeError — a 500 on the very page that should have shown the
+     validation error. Only one plain value is ever put back in the field. --}}
+@php($fieldValue = old($name, $value))
 
 <div>
     <label for="{{ $fieldId }}" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{{ $label }}@if($required) <span class="text-red-500">*</span>@endif</label>
@@ -28,7 +32,7 @@
         {{ $slot }}
     @else
         {{-- Default text input --}}
-        <input id="{{ $fieldId }}" type="{{ $type }}" name="{{ $name }}" value="{{ old($name, $value) }}" placeholder="{{ $placeholder }}"
+        <input id="{{ $fieldId }}" type="{{ $type }}" name="{{ $name }}" value="{{ is_scalar($fieldValue) ? $fieldValue : '' }}" placeholder="{{ $placeholder }}"
             {{ $attributes->class(['form-input-auth', '!border-red-500' => $fieldErrors->has($name)]) }}>
     @endif
 

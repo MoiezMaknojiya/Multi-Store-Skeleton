@@ -32,7 +32,6 @@ beforeEach(function () {
     $this->superAdmin = createSuperAdmin();
     $this->alpha = Store::factory()->create(['name' => 'Alpha Mart']);
     $this->beta = Store::factory()->create(['name' => 'Beta Deli']);
-    registerPermissionGates();
 });
 
 /** Give a starter store role these permissions on top of what it holds (and register their gates). */
@@ -62,20 +61,19 @@ function checklistFor(User $viewer, array $query = [], ?Store $store = null): Co
 */
 
 test('a store role is offered what works inside a store — and nothing else is even listed', function () {
-    grantPermissions([...Permission::PLATFORM, ...Permission::SUPER_ADMIN_ONLY]);
-
     $checklist = checklistFor($this->superAdmin, ['role' => Role::owner()->id]);
 
     expect($checklist->keys()->sort()->values()->all())
         ->toBe(Permission::pluck('name')->filter(fn (string $name) => Permission::belongsToStores($name))->sort()->values()->all())
         ->and($checklist->keys())->toContain('store-destroy', 'channel-store', 'activity-view', 'media-view')
-        ->not->toContain('user-view', 'user-destroy', 'activity-destroy', 'permission-view')
+        ->not->toContain('user-view')
+        ->not->toContain('user-destroy')
+        ->not->toContain('activity-destroy')
+        ->not->toContain('permission-view')
         ->and($checklist->first())->not->toHaveKey('unavailable');
 });
 
 test('a platform role is offered everything but the catalogue', function () {
-    grantPermissions([...Permission::PLATFORM, ...Permission::SUPER_ADMIN_ONLY]);
-
     $checklist = checklistFor($this->superAdmin, ['type' => 'platform']);
 
     expect($checklist)->toHaveCount(Permission::count() - count(Permission::SUPER_ADMIN_ONLY))
@@ -102,7 +100,10 @@ test('the super admin gives a store role what works inside a store — and nothi
         ->assertStatus(422)
         ->assertJsonValidationErrors(['permissions' => 'Permission management belongs to the Super-Admin role alone.']);
 
-    expect($owner->fresh()->permissions->pluck('name'))->not->toContain('activity-destroy', 'user-destroy', 'permission-view');
+    expect($owner->fresh()->permissions->pluck('name'))
+        ->not->toContain('activity-destroy')
+        ->not->toContain('user-destroy')
+        ->not->toContain('permission-view');
 });
 
 test('a permission made on the Permissions page stays off store roles', function () {
@@ -120,7 +121,10 @@ test('inside a store a member gives a custom role only what they hold — its pl
 
     // The Owner starts with store-destroy, so it is theirs to hand on; channel-view is not, and the accounts never are.
     $offered = checklistFor($owner, store: $this->alpha);
-    expect($offered->keys())->toContain('store-destroy')->not->toContain('channel-view', 'user-view', 'activity-destroy');
+    expect($offered->keys())->toContain('store-destroy')
+        ->not->toContain('channel-view')
+        ->not->toContain('user-view')
+        ->not->toContain('activity-destroy');
 
     $this->actingAs($owner)->withSession(['current_store_id' => $this->alpha->id])->postJson('/roles', [
         'name' => 'Closer',
@@ -162,7 +166,7 @@ test('the Owner starts with store-destroy; without it even an Owner cannot delet
     // Given to Admins instead.
     grantToStoreRole(Role::ADMIN, ['store-destroy']);
     $this->actingAs($admin)->withSession(['current_store_id' => $this->alpha->id])
-        ->get('/settings/store')->assertOk()->assertSee('Delete Store')->assertDontSee('Transfer Ownership');
+        ->get('/settings/store')->assertOk()->assertSee('Delete Store');
     $this->actingAs($admin)->withSession(['current_store_id' => $this->alpha->id])
         ->delete('/settings/store', ['confirm_name' => 'Alpha Mart', 'password' => 'password'])->assertRedirect(route('dashboard'));
 
@@ -363,8 +367,9 @@ test('a store role with activity-view reads its own store\'s history and nothing
     $this->actingAs($owner)->withSession(['current_store_id' => $this->alpha->id])->get('/activity')
         ->assertOk()->assertSee('Activity in Alpha Mart')->assertDontSee('Run Yearly Maintenance');
 
-    // The platform reads every store's history, and its own.
-    expect($this->actingAs($this->superAdmin)->withSession([])->getJson('/activity/data')->json('total'))->toBe(4);
+    // The platform reads every store's history, and its own — with Alpha no longer in the session.
+    $this->flushSession();
+    expect($this->actingAs($this->superAdmin)->getJson('/activity/data')->assertOk()->json('total'))->toBe(4);
 });
 
 test('an entry belongs to the store its subject belongs to — or the store named for a delete; personal and platform work to none', function () {

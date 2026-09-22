@@ -32,6 +32,15 @@ test('every people endpoint wants a signed-in person', function () {
 
     $this->get('/members')->assertRedirect(route('login'));
     $this->get('/settings/store')->assertRedirect(route('login'));
+
+    // And every other route of the people pages, read from the route table — so one added later is asked too.
+    $routes = collect(['members', 'users', 'roles', 'settings', 'profile'])->flatMap(fn (string $prefix) => routesUnder($prefix));
+
+    expect($routes)->not->toBeEmpty();
+
+    foreach ($routes as [$method, $uri]) {
+        expect($this->json($method, $uri)->status())->toBe(401, "{$method} {$uri}");
+    }
 });
 
 test('the invitation link is open to guests — accepting still needs an account', function () {

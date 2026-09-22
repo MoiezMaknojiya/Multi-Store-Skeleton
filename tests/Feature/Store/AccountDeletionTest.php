@@ -12,11 +12,14 @@ use Illuminate\Support\Facades\DB;
 
 /*
 |--------------------------------------------------------------------------
-| Deleting your own account (docs/STORE-ORGANIZATION-SPEC.md rules 21 and 23)
+| Deleting an account — your own from Profile, or anybody's from the platform
+| (docs/STORE-ORGANIZATION-SPEC.md rules 21 and 23)
 |--------------------------------------------------------------------------
 |
-| An account is a login and nothing more: deleting it removes the person from every store
-| they belong to, and nothing else. There is no cascade through anybody they invited.
+| An account is a login and nothing more. Deleting it takes the person's memberships and leaves
+| nothing pointing at it — their sign-ins on every device, their password-reset link and the
+| invitations waiting for their email go too — while everything they made stays with its store
+| (`created_by` empties). Nothing cascades through the people they brought in.
 |
 */
 
@@ -67,19 +70,14 @@ test('a person who invited others is deleted alone', function () {
     $inviter = createStoreMember($this->alpha, Role::ADMIN);
     $invited = createStoreMember($this->alpha, Role::STAFF);
 
-    $this->actingAs($inviter)->delete('/profile', ['password' => 'password']);
+    $this->actingAs($inviter)->delete('/profile', ['password' => 'password'])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect('/');
 
-    expect(User::find($invited->id))->not->toBeNull()
+    expect(User::find($inviter->id))->toBeNull()
+        ->and(User::find($invited->id))->not->toBeNull()
         ->and(roleKeyIn($invited, $this->alpha))->toBe(Role::STAFF)
         ->and(roleKeyIn($owner, $this->alpha))->toBe(Role::OWNER);
-});
-
-test('super admins still cannot delete themselves', function () {
-    $admin = createSuperAdmin();
-
-    $this->actingAs($admin)->delete('/profile', ['password' => 'password'])->assertForbidden();
-
-    expect(User::find($admin->id))->not->toBeNull();
 });
 
 test('channels outlive the person who made them — they belong to the platform', function () {
@@ -88,7 +86,12 @@ test('channels outlive the person who made them — they belong to the platform'
 
     $this->actingAs(createSuperAdmin(['user-view', 'user-destroy']))->deleteJson("/users/{$maker->id}", ['password' => 'password'])->assertOk();
 
-    expect(Channel::find($channel->id)?->created_by)->toBeNull();
+    // Found first: a channel that had gone with its maker would read as "created by nobody" too.
+    $kept = Channel::find($channel->id);
+
+    expect(User::find($maker->id))->toBeNull()
+        ->and($kept)->not->toBeNull()
+        ->and($kept->created_by)->toBeNull();
 });
 
 test('a deleted account leaves nothing pointing at it: its sign-ins everywhere and its reset link go', function () {

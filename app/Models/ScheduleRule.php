@@ -101,8 +101,11 @@ class ScheduleRule extends Model
         $daypart = $this->daypart;
 
         if ($daypart === null) {
-            // The daypart was deleted out from under the rule. Silently playing all
-            // day would be the opposite of what was asked for, so play never.
+            // A daypart id with nothing behind it — gone after this rule was read, or
+            // never there — plays never: all day would be the opposite of the window it
+            // asked for. Deleting a daypart in the database is another matter: the
+            // foreign key empties daypart_id, which reads as the whole day (above), and
+            // that is why a daypart still in use is retired, never deleted.
             return false;
         }
 

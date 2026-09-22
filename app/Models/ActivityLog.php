@@ -22,6 +22,11 @@ class ActivityLog extends Model
      * channel), or when $storeId names one: pass it wherever the subject is gone (a delete) or is a
      * person (a member's role changed). An account's own sign-in, profile or password, and the platform's
      * own work, belong to no store.
+     *
+     * The name and the description are cut to their columns (255 and 1000 characters). A person may have a
+     * first and a last name of 255 each, and a playlist copied to thirty screens names them all: on MySQL
+     * in strict mode the longer value is an error, and the log line that fails is the sign-out's — the
+     * person could never sign out.
      */
     public static function record(string $action, ?Model $subject = null, string $description = '', ?User $actor = null, ?int $storeId = null): void
     {
@@ -29,12 +34,12 @@ class ActivityLog extends Model
 
         static::create([
             'actor_id' => $actor?->id,
-            'actor_name' => $actor->name ?? 'System',
+            'actor_name' => mb_substr($actor->name ?? 'System', 0, 255),
             'store_id' => $storeId ?? self::storeOf($subject),
             'action' => $action,
             'subject_type' => $subject ? class_basename($subject) : null,
             'subject_id' => $subject?->getKey(),
-            'description' => $description,
+            'description' => mb_substr($description, 0, 1000),
         ]);
     }
 

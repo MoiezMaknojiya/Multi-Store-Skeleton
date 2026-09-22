@@ -8,7 +8,6 @@ use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
 
@@ -43,19 +42,16 @@ class PlatformButtonsFlowTest extends DuskTestCase
             $this->assertSame(Role::owner()->id, $invitation->role_id, 'the invitation is for the Owner role');
 
             // Offered only while the store has no Owner: once it does, the button is gone.
-            $owner = $this->storeMember($store, Role::OWNER, 'owner@example.com');
+            $this->storeMember($store, Role::OWNER, 'owner@example.com');
             $browser->visit('/stores');
             $this->waitForAlpine($browser);
             $browser->waitForText('Gamma Shop')->assertMissing('@invite-owner-'.$store->id);
-            $this->assertTrue($owner->exists);
         });
     }
 
     public function test_taking_a_platform_role_asks_for_the_password_and_then_takes_it(): void
     {
-        $primary = $this->seedSuperAdmin();
-        // The seeded admin gets its password from the environment, so say what it is here instead.
-        $primary->forceFill(['password' => Hash::make('Str0ng-Password!')])->save();
+        $primary = $this->seedSuperAdmin(); // SEED_ADMIN_PASSWORD is "test" (phpunit.dusk.xml)
         $support = User::factory()->create(['email' => 'support@example.com']);
         $supportRole = Role::create(['name' => 'Support', 'is_global' => true]);
         $support->stores()->attach(0, ['role_id' => $supportRole->id]);
@@ -72,14 +68,14 @@ class PlatformButtonsFlowTest extends DuskTestCase
                 fn (Browser $b) => $b->waitFor('@remove-platform-role-confirm', 3)
             );
 
-            // A wrong password changes nothing…
+            // A wrong password changes nothing — and the server's refusal comes back under the field.
             $this->jsType($browser, '@remove-platform-role-password', 'not-the-password');
             $this->jsClick($browser, '@remove-platform-role-confirm');
-            $browser->pause(700);
+            $browser->waitForText('The password is incorrect.');
             $this->assertTrue(DB::table('store_user')->where('user_id', $support->id)->where('store_id', 0)->exists());
 
             // …the right one does.
-            $this->jsType($browser, '@remove-platform-role-password', 'Str0ng-Password!');
+            $this->jsType($browser, '@remove-platform-role-password', 'test');
             $this->jsClick($browser, '@remove-platform-role-confirm');
             $browser->waitUntilMissing('@remove-platform-role-confirm', 8);
 

@@ -2,6 +2,7 @@
 
 namespace Tests\Browser;
 
+use App\Models\ActivityLog;
 use App\Models\Invitation;
 use App\Models\Media;
 use App\Models\Permission;
@@ -9,9 +10,7 @@ use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
 use App\Models\Store;
-use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
-use Illuminate\Support\Facades\Hash;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
 
@@ -112,34 +111,9 @@ class SecondaryButtonsTest extends DuskTestCase
         });
     }
 
-    public function test_users_stores_offers_the_assign_form_with_that_stores_own_roles(): void
-    {
-        $admin = $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $this->storeMember($store, Role::OWNER);
-        $outsider = User::factory()->create(['email' => 'outsider@example.com']);
-
-        $this->browse(function (Browser $browser) use ($admin, $outsider, $store) {
-            $this->freshSession($browser);
-            $browser->loginAs($admin)->visit('/users');
-            $this->waitForAlpine($browser);
-            $browser->waitForText('outsider@example.com');
-
-            // Users → Stores: the form that puts somebody in a store, straight in, nobody invited.
-            $this->clickAndAwait($browser, '@manage-stores-'.$outsider->id, fn (Browser $b) => $b->waitFor('@assign-store-form', 3));
-
-            // The role list waits for a store to be chosen, and then offers that store's own roles.
-            $browser->select('@assign-store', (string) $store->id)
-                ->waitUntil("document.querySelector('[dusk=assign-role]').options.length > 1")
-                ->assertSeeIn('@assign-role', 'Owner')
-                ->assertVisible('@assign-store-save');
-        });
-    }
-
     public function test_the_platform_confirmations_nothing_else_presses(): void
     {
-        $primary = $this->seedSuperAdmin();
-        $primary->forceFill(['password' => Hash::make('Str0ng-Password!')])->save();
+        $primary = $this->seedSuperAdmin(); // SEED_ADMIN_PASSWORD is "test" (phpunit.dusk.xml)
 
         $role = Role::create(['name' => 'Support', 'is_global' => true]);
         [$invitation] = Invitation::open(null, 'teammate@example.com', $role, $primary);
@@ -150,9 +124,11 @@ class SecondaryButtonsTest extends DuskTestCase
             $browser->loginAs($primary);
 
             /* ── A platform invitation is revoked ─────────────────────────── */
+            // The team's invitations are a card of their own on the Users page, fetched on
+            // their own request — so wait for the row inside that card.
             $browser->visit('/users');
             $this->waitForAlpine($browser);
-            $this->clickAndAwait($browser, '@platform-invitations', fn (Browser $b) => $b->waitForText('teammate@example.com'));
+            $browser->waitForTextIn('@platform-invitations', 'teammate@example.com');
 
             $this->clickAndAwait(
                 $browser,
@@ -173,21 +149,23 @@ class SecondaryButtonsTest extends DuskTestCase
                 '@delete-permission-'.$spare->id,
                 fn (Browser $b) => $b->waitFor('@confirm-permission-deletion-confirm', 3)
             );
-            $this->jsType($browser, '@delete-permission-password', 'Str0ng-Password!');
+            $this->jsType($browser, '@delete-permission-password', 'test');
             $this->jsClick($browser, '@confirm-permission-deletion-confirm');
 
             $browser->waitUsing(10, 200, fn () => Permission::find($spare->id) === null);
 
-            /* ── Yearly maintenance can be pressed without breaking the page ─ */
+            /* ── Yearly maintenance runs, and says what it did ────────────── */
             $browser->visit('/activity');
             $this->waitForAlpine($browser);
             $this->clickAndAwait($browser, '@activity-maintain-button', fn (Browser $b) => $b->waitFor('@activity-maintain-confirm', 3));
             $this->jsClick($browser, '@activity-maintain-confirm');
 
-            // Partitions only exist on MySQL, so what it answers here is beside the point: what
-            // matters is that pressing it neither breaks the page nor loses the log.
-            $browser->pause(1200)->assertDontSee('Server Error');
-            $this->assertTrue(User::whereKey($primary->id)->exists());
+            // Partitions only exist on MySQL; here the same job deletes the rows older than two
+            // years, and a log written today has none — so the page's own report is "nothing to
+            // do", which only a maintenance run that really came back can say.
+            $browser->waitForText('Maintenance complete — nothing to do');
+            $this->assertTrue(ActivityLog::where('action', 'activity.maintenance')->exists(),
+                'the maintenance run is in the log it maintains');
         });
     }
 }

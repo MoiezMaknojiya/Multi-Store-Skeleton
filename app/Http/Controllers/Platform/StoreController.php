@@ -11,6 +11,7 @@ use App\Models\Role;
 use App\Models\Store;
 use App\Models\User;
 use App\Services\StoreTeam;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -48,7 +49,7 @@ class StoreController extends Controller
         $query = Store::query()
             ->withCount([
                 'users as members_count',
-                'users as owners_count' => fn ($users) => $users->where('store_user.role_id', $ownerRoleId),
+                'users as owners_count' => fn (Builder $users) => $users->where('store_user.role_id', $ownerRoleId),
             ])
             ->orderBy('name');
 
@@ -57,7 +58,7 @@ class StoreController extends Controller
         if (Gate::allows('campaign-manage')) {
             $query->withCount([
                 'screens',
-                'screens as ad_screens_count' => fn ($q) => $q->where('accepts_network_ads', true),
+                'screens as ad_screens_count' => fn (Builder $q) => $q->where('accepts_network_ads', true),
             ]);
         }
 

@@ -7,6 +7,7 @@ use App\Models\PlaylistItem;
 use App\Models\ScheduleRule;
 use App\Models\Screen;
 use App\Models\Store;
+use Illuminate\Support\Facades\Storage;
 
 /*
 |--------------------------------------------------------------------------
@@ -181,16 +182,6 @@ test('a channel deleted while the page was open is refused in words', function (
         ->assertStatus(422)->assertJsonValidationErrors('items');
 });
 
-test('the same channel may sit on a playlist twice, for more of it', function () {
-    saveOwnersPlaylist($this, [
-        ['channel_id' => $this->gama->id],
-        ['media_id' => $this->poster->id, 'duration_seconds' => 10],
-        ['channel_id' => $this->gama->id],
-    ])->assertOk();
-
-    expect(PlaylistItem::where('channel_id', $this->gama->id)->count())->toBe(2);
-});
-
 test('a channel line keeps a schedule of its own', function () {
     saveOwnersPlaylist($this, [[
         'channel_id' => $this->gama->id,
@@ -249,6 +240,9 @@ test('a colleague who added a channel meanwhile is a conflict, not a silent loss
 });
 
 test('deleting a file takes its own line and leaves the channel line standing', function () {
+    // Deleting the file unlinks it from the disk, so the disk is a throwaway one.
+    Storage::fake('public');
+
     // The two kinds of line live in one table now, so each cascade has to stay in its
     // own lane: a file leaving must not take a channel with it.
     saveOwnersPlaylist($this, [

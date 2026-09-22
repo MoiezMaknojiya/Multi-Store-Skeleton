@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\ActivityLog;
+use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Daypart;
@@ -133,6 +135,44 @@ test('another store’s rows cannot be smuggled onto this store’s screen', fun
         ->and(Screen::find($this->alphaScreen->id)->default_media_id)->toBeNull();
 });
 
+test('the platform’s library and another store’s files stay out of this store’s channels, listings and screens', function () {
+    // docs/CHANNEL-CONTENT-SPEC.md: a channel holds library files by id, so an id is the thing to attack.
+    $platformFile = Media::factory()->platformOwned()->create(['title' => 'Platform promo']);
+    $platformChannel = Channel::factory()->create(['name' => 'GAMA']);
+    $alphaChannel = Channel::factory()->create(['store_id' => $this->alpha->id, 'name' => 'Alpha Specials']);
+    $mine = Media::factory()->create(['store_id' => $this->alpha->id, 'title' => 'Alpha poster']);
+
+    // Neither foreign file goes into this store's own channel — and the refusal does not say which one exists.
+    foreach ([$this->betaMedia, $platformFile] as $foreign) {
+        $this->postJson("/channels/{$alphaChannel->id}/ads", ['media_id' => $foreign->id, 'seconds' => 10])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['media_id' => "Choose a file from this channel's library."]);
+    }
+
+    // The channel's picker lists this store's library, whatever library is asked for.
+    foreach (['', '?library=platform', "?library={$this->beta->id}", '?type=html'] as $query) {
+        $expected = $query === '?type=html' ? [] : [$mine->id];
+        expect($this->getJson("/channels/{$alphaChannel->id}/library{$query}")->assertOk()->json('media.*.id'))->toBe($expected);
+    }
+
+    // The platform's channel is read from here, never added to — not even with this store's own file.
+    $this->postJson("/channels/{$platformChannel->id}/ads", ['media_id' => $mine->id, 'seconds' => 10])->assertNotFound();
+    $this->getJson("/channels/{$platformChannel->id}/library")->assertNotFound();
+
+    // The platform's file is in no listing here, and cannot be changed, deleted or played on this store's screen.
+    expect($this->getJson('/media/data?library=platform')->assertOk()->json('media.*.id'))->toBe([$mine->id]);
+    $this->putJson("/media/{$platformFile->id}", ['title' => 'Taken'])->assertNotFound();
+    $this->deleteJson("/media/{$platformFile->id}")->assertNotFound();
+    $version = $this->getJson("/screens/{$this->alphaScreen->id}/playlist")->assertOk()->json('version');
+    $this->putJson("/screens/{$this->alphaScreen->id}/playlist", [
+        'version' => $version, 'items' => [['media_id' => $platformFile->id, 'duration_seconds' => 10]],
+    ])->assertStatus(422);
+
+    expect(ChannelAd::whereIn('channel_id', [$alphaChannel->id, $platformChannel->id])->exists())->toBeFalse()
+        ->and($platformFile->fresh()->title)->toBe('Platform promo')
+        ->and(PlaylistItem::where('screen_id', $this->alphaScreen->id)->exists())->toBeFalse();
+});
+
 test('a role of another store cannot be handed out here, however it is posted', function () {
     $staff = createStoreMember($this->alpha, Role::STAFF);
 
@@ -155,8 +195,16 @@ test('the listings never leak another store’s rows, whatever is searched for',
     $roles = collect($this->getJson('/roles/data')->assertOk()->json('roles'))->pluck('id');
     expect($roles)->not->toContain($this->betaRole->id);
 
-    $activity = collect($this->getJson('/activity/data')->assertOk()->json('logs'))->pluck('store_id')->unique()->filter();
-    expect($activity->diff([$this->alpha->id]))->toBeEmpty();
+    // An entry in each store's history, so the log has something of Beta's to leak.
+    ActivityLog::record('screen.updated', $this->betaScreen, 'Renamed Beta TV', $this->betaOwner);
+    ActivityLog::record('screen.updated', $this->alphaScreen, 'Renamed Alpha TV', $this->attacker);
+
+    $activity = collect($this->getJson('/activity/data')->assertOk()->json('logs'));
+    expect($activity->pluck('description')->all())->toBe(['Renamed Alpha TV'])
+        ->and($activity->pluck('store_id')->unique()->all())->toBe([$this->alpha->id]);
+
+    // Searching for it by name finds nothing either.
+    expect($this->getJson('/activity/data?search=Beta')->assertOk()->json('logs'))->toBe([]);
 });
 
 test('with no store in the session a store member reaches nothing at all', function () {
@@ -188,4 +236,19 @@ test('a stale or invented store id in the session opens nothing and breaks nothi
     // Beta is exactly as it was.
     expect($this->betaScreen->fresh()->name)->toBe('Beta TV')
         ->and($this->betaMedia->fresh()->title)->toBe('Beta poster');
+});
+
+test('another store’s daypart, file or ad answers 404 before anything sent is checked', function () {
+    // A 422 would say the id exists — and for a daypart, "this store already has a daypart with that name"
+    // would read another store's names back one guess at a time.
+    $this->putJson("/dayparts/{$this->betaDaypart->id}", ['name' => 'Beta hours', 'start_time' => '07:00', 'end_time' => '11:00'])->assertNotFound();
+    $this->putJson("/dayparts/{$this->betaDaypart->id}", [])->assertNotFound();
+    $this->putJson("/media/{$this->betaMedia->id}", ['title' => ''])->assertNotFound();
+
+    $betaDesign = BuilderAd::factory()->create(['store_id' => $this->beta->id, 'name' => 'Beta sale']);
+    $this->putJson("/builder/{$betaDesign->id}", ['name' => '', 'document' => 'nonsense'])->assertNotFound();
+
+    expect($this->betaDaypart->fresh()->name)->toBe('Beta hours')
+        ->and($this->betaMedia->fresh()->title)->toBe('Beta poster')
+        ->and($betaDesign->fresh()->name)->toBe('Beta sale');
 });

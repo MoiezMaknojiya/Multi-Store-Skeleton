@@ -77,6 +77,14 @@
             display: block;
             background: #000;
         }
+
+        /* An ad from the Ad Builder is a page of its own: it fills the screen and scales its own
+           1920x1080 stage inside, so there is nothing to fit here. */
+        .media-layer iframe {
+            width: 100%; height: 100%;
+            border: 0; display: block;
+            background: #000;
+        }
     </style>
 </head>
 <body class="h-full">

@@ -18,23 +18,37 @@ test('super admin dashboard shows the real store count', function () {
 
     $response->assertOk();
     $response->assertViewHas('totalStores', 3);
-    $response->assertSee('3');
+    // The number on the Total Stores card itself — a bare "3" turns up all over a page.
+    expect($response->getContent())->toMatch('/>\s*3\s*<\/div>\s*<div[^>]*>\s*Total Stores\s*</');
 });
 
-test('the store selection page runs a bounded number of queries however many stores the user has', function () {
-    $role = Role::create(['name' => 'Owner']);
+test('the store selection page runs the same number of queries for ten stores as for two', function () {
     $user = User::factory()->create();
-    Store::factory()->count(8)->create()->each(
-        fn ($store) => $user->stores()->attach($store->id, ['role_id' => $role->id])
+    $join = fn (int $count) => Store::factory()->count($count)->create()->each(
+        fn (Store $store) => $user->stores()->attach($store->id, ['role_id' => Role::owner()->id])
     );
 
-    DB::enableQueryLog();
-    $this->actingAs($user)->get('/select-store')->assertOk();
-    $queryCount = count(DB::getQueryLog());
-    DB::disableQueryLog();
+    // A fresh instance each time, so both requests start with nothing remembered about the person.
+    $queriesFor = function () use ($user): int {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->actingAs($user->fresh())->get('/select-store')->assertOk();
+        DB::disableQueryLog();
 
-    // Role names for every card come from one batched query, not one per store.
-    expect($queryCount)->toBeLessThan(15);
+        return count(DB::getQueryLog());
+    };
+
+    $join(2);
+    $two = $queriesFor();
+
+    $join(8);
+    $ten = $queriesFor();
+
+    // Role names for every card come from one batched query, not one per store — so eight more
+    // stores cost nothing. A ceiling could not catch one query per store; only equality can.
+    expect($user->stores()->count())->toBe(10)
+        ->and($two)->toBeGreaterThan(0)
+        ->and($ten)->toBe($two);
 });
 
 test('a user with a custom global role sees the global stats dashboard, not the empty store list', function () {
@@ -116,4 +130,19 @@ test('the selection page redirects away when there is nothing to pick', function
     $global = User::factory()->create();
     $global->stores()->attach(0, ['role_id' => $globalRole->id]);
     $this->actingAs($global)->get('/select-store')->assertRedirect(route('dashboard'));
+});
+
+test('a name that starts with a letter of more than one byte gives its avatar that whole letter', function () {
+    // substr() cut the first BYTE of "علی", which is half a character: every page then carried an invalid
+    // UTF-8 byte in the header, the sidebar and the store picker (a "�" on screen).
+    $store = Store::factory()->create();
+    $person = createStoreUser($store, ['store-view'], 'Staff');
+    $person->update(['first_name' => 'علی', 'last_name' => 'Khan']);
+
+    foreach (['/dashboard', '/profile'] as $page) {
+        $html = $this->actingAs($person->fresh())->withSession(['current_store_id' => $store->id])->get($page)->assertOk()->getContent();
+
+        expect(mb_check_encoding($html, 'UTF-8'))->toBeTrue("{$page} is not valid UTF-8")
+            ->and($html)->toContain('ع');
+    }
 });

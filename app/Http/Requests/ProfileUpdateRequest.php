@@ -21,6 +21,7 @@ class ProfileUpdateRequest extends FormRequest
             'last_name' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'numeric', 'digits:10'],
             'email' => [
+                'bail',
                 'required',
                 'string',
                 'lowercase',

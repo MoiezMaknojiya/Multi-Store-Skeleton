@@ -34,11 +34,10 @@ beforeEach(function () {
     Notification::fake();
 
     // Keep the seeder from printing a generated admin password on every test.
-    putenv('SEED_ADMIN_PASSWORD=not-used-by-these-tests');
+    config(['app.seed_admin_password' => 'not-used-by-these-tests']);
 
     // The real thing: every permission row, the Super-Admin, and the four store roles.
     $this->seed();
-    registerPermissionGates();
 
     $this->admin = User::where('email', 'admin@gmail.com')->firstOrFail();
 
@@ -89,7 +88,10 @@ test('the seeded Owner runs their own shop', function () {
 |--------------------------------------------------------------------------
 */
 
-test('every platform page is shut to a store Owner', function () {
+test('every platform page is shut to a store Owner — and the channel and activity pages their role does not start with', function () {
+    // Channels and the activity log are not the platform's alone any more: a store's role may carry
+    // them, for its own store. The Owner role does not start with them, so they are shut here too —
+    // and a platform channel would stay out of reach even for a role that had them.
     $channel = Channel::factory()->create(['name' => 'GAMA']);
     $ad = ChannelAd::factory()->create(['channel_id' => $channel->id]);
 
@@ -128,7 +130,7 @@ test('network advertising cannot be switched on — not by the switch, not smugg
     $this->put('/settings/store', [
         'name' => 'Alpha Mart', 'street' => '1 Main', 'city' => 'Dallas', 'state' => 'TX', 'zip_code' => '75001', 'country' => 'USA',
         'accepts_network_ads' => true,
-    ])->assertRedirect();
+    ])->assertRedirect()->assertSessionHasNoErrors();
 
     expect($this->store->fresh()->accepts_network_ads)->toBeFalse()
         ->and($this->screen->fresh()->accepts_network_ads)->toBeFalse();

@@ -59,17 +59,8 @@
                         </td>
 
                         <td class="px-5 py-4">
-                            <div class="flex items-center justify-end gap-2">
-                                @can('daypart-update')
-                                <button @click="openFormModal(item)" x-bind:dusk="'edit-daypart-' + item.id"
-                                    class="btn-row-neutral">Edit</button>
-                                @endcan
-
-                                @can('daypart-destroy')
-                                <button @click="confirmDelete(item)" x-bind:dusk="'delete-daypart-' + item.id"
-                                    class="btn-row-danger">Delete</button>
-                                @endcan
-                            </div>
+                            <x-crud.table-actions editClick="openFormModal(item)" deleteClick="confirmDelete(item)"
+                                editCan="daypart-update" deleteCan="daypart-destroy" dusk="daypart" />
                         </td>
                     </tr>
                 </template>
@@ -148,7 +139,11 @@
                         <div class="mt-3 space-y-3">
                             <template x-for="(row, index) in form.exceptions" :key="index">
                                 <div>
-                                    <div class="flex flex-wrap items-center gap-2">
+                                    {{-- A row in error is painted like any other field in error (crud-field-error),
+                                         with the message below it. --}}
+                                    <div class="flex flex-wrap items-center gap-2"
+                                         x-bind:class="exceptionError(index, 'weekday') || exceptionError(index, 'start_time') || exceptionError(index, 'end_time')
+                                             ? 'crud-field-error' : ''">
                                         <select x-model="row.weekday" x-bind:dusk="'daypart-exception-day-' + index"
                                                 class="form-select w-36">
                                             @foreach ($weekdays as $value => $label)

@@ -43,12 +43,14 @@
 
         @if ($__onPlatform)
             {{-- Accounts, plus — for super admins — the platform's roles and the permission
-                 catalogue. Each link takes the same locks as its routes. --}}
+                 catalogue. Each link takes the same locks as its routes. A super admin always
+                 holds user-view (Gate::before in AppServiceProvider), so the group needs no
+                 super-admin case of its own. --}}
             @php($__superAdmin = auth()->user()->isSuperAdmin())
             @php($__canPermissions = $__superAdmin && auth()->user()->can('permission-view'))
-            @if (auth()->user()->can('user-view') || $__superAdmin)
+            @can('user-view')
             <x-sidebar.nav-group
-                href="{{ auth()->user()->can('user-view') ? route('users.view') : route('roles.view') }}"
+                href="{{ route('users.view') }}"
                 routeMatch="users.*"
                 :expand="['roles.*', 'permissions.*']"
                 label="Users"
@@ -60,7 +62,7 @@
                 <x-sidebar.nav-subitem href="{{ route('permissions.view') }}" routeMatch="permissions.*" label="Permissions" />
                 @endif
             </x-sidebar.nav-group>
-            @endif
+            @endcan
         @endif
 
         @can('screen-view')
@@ -87,6 +89,15 @@
             routeMatch="media.*"
             label="Media Library"
             icon="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        @endcan
+
+        {{-- The Ad Builder: design a 1920×1080 advert, publish it, and it joins the media a playlist plays. --}}
+        @can('ad-view')
+        <x-sidebar.nav-item
+            href="{{ route('builder.index') }}"
+            routeMatch="builder.*"
+            label="Ad Builder"
+            icon="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
         @endcan
 
         @unless ($__onPlatform)
@@ -148,7 +159,7 @@
         <a href="{{ route('profile.edit') }}" dusk="sidebar-settings" title="Settings"
            class="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 {{ request()->routeIs('profile.*', 'store-settings.*') ? 'bg-gray-100 dark:bg-gray-800' : '' }}">
             <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
-                {{ substr(auth()->user()->name ?? 'U', 0, 1) }}
+                {{ mb_strtoupper(mb_substr(auth()->user()->name ?: 'U', 0, 1)) }}
             </div>
             <div x-show="sidebarOpen" data-sidebar-label class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-gray-900 dark:text-white truncate">

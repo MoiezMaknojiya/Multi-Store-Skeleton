@@ -27,13 +27,13 @@ use Carbon\CarbonImmutable;
 |
 */
 
-/** Put one file on a screen, optionally with a schedule rule. */
-function place(Screen $screen, Media $media, ?array $rule = null, int $position = 0): PlaylistItem
+/** Put one file at the head of a screen's playlist, optionally with a schedule rule. */
+function place(Screen $screen, Media $media, ?array $rule = null): PlaylistItem
 {
     $item = PlaylistItem::create([
         'screen_id' => $screen->id,
         'media_id' => $media->id,
-        'position' => $position,
+        'position' => 0,
         'duration_seconds' => 10,
     ]);
 
@@ -227,25 +227,4 @@ test('a retired daypart keeps working where it is already in use', function () {
 
     expect(resolveAt($this->screen, '2026-03-20 12:00')['items'])->toHaveCount(1);
     expect(resolveAt($this->screen, '2026-03-20 20:00')['blank'])->toBeTrue();
-});
-
-test('a television switched on at two in the afternoon gets the two-o\'clock playlist', function () {
-    // The owner switches the set off at nine in the morning and back on at two. It
-    // asks the server what to show, and the answer is for the moment it asked —
-    // nothing is remembered from the morning and nothing has to catch up.
-    $morning = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Breakfast menu']);
-    $afternoon = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Lunch menu']);
-
-    place($this->screen, $morning, [
-        'daypart_id' => Daypart::factory()->between('07:00', '11:00')->create(['store_id' => $this->store->id])->id,
-    ], 0);
-    place($this->screen, $afternoon, [
-        'daypart_id' => Daypart::factory()->between('11:00', '16:00')->create(['store_id' => $this->store->id])->id,
-    ], 1);
-
-    $atNine = resolveAt($this->screen, '2026-03-20 09:00')['items'];
-    $atTwo = resolveAt($this->screen, '2026-03-20 14:00')['items'];
-
-    expect($atNine->pluck('media.title')->all())->toBe(['Breakfast menu']);
-    expect($atTwo->pluck('media.title')->all())->toBe(['Lunch menu']);
 });

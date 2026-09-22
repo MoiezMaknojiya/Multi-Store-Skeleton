@@ -57,7 +57,7 @@ class UserController extends Controller
 
         return $this->paginatedResponse(
             $request, $query, ['first_name', 'last_name', 'email'], 'users',
-            ['id', 'first_name', 'last_name', 'email', 'phone', 'created_at'],
+            ['id', 'first_name', 'last_name', 'email', 'created_at'],
             fn (Collection $users) => $this->attachAccess($users, $viewer)
         );
     }
@@ -134,12 +134,11 @@ class UserController extends Controller
         $rolePayload = fn (Role $role) => [
             'id' => $role->id,
             'name' => $role->name,
-            'is_owner_role' => $role->isOwner(),
             'description' => $role->description(),
         ];
 
         return response()->json([
-            'memberships' => $memberships->map(fn ($row) => [
+            'memberships' => $memberships->map(fn (object $row) => [
                 'store_id' => (int) $row->id,
                 'store_name' => $row->name,
                 'role_id' => (int) $row->role_id,
@@ -151,7 +150,7 @@ class UserController extends Controller
             // Keyed by store id — an object in JSON even when no store has a custom role yet.
             'custom_roles' => (object) Role::where('is_global', false)->whereNotNull('store_id')->with('permissions:id,name,label')->orderBy('name')->get()
                 ->groupBy('store_id')
-                ->map(fn ($roles) => $roles->map($rolePayload)->values())
+                ->map(fn (Collection $roles) => $roles->map($rolePayload)->values())
                 ->all(),
         ]);
     }
@@ -267,7 +266,8 @@ class UserController extends Controller
     /** A store's last Owner stays: the store is never left without one (rule 9). */
     private function refuseToLeaveOwnerless(User $user, Store $store): void
     {
-        if ($this->team->isOwner($user, $store) && $this->team->ownerCount($store) === 1) {
+        // The same question as leaving: the answer is "no" for a store's only Owner and "yes" for everybody else.
+        if (! $this->team->mayLeave($user, $store)) {
             abort(response()->json([
                 'message' => "{$user->name} is the only Owner of {$store->name}. Make someone else an Owner first.",
             ], 422));
@@ -308,7 +308,7 @@ class UserController extends Controller
         $users->each(function (User $user) use ($rows, $ownerCounts, $viewer, $primaryId, $viewerIsPrimary, $viewerIsSuperAdmin, $viewerMayDelete) {
             $mine = $rows->get($user->id, collect());
             $platform = $mine->firstWhere('store_id', 0);
-            $stores = $mine->filter(fn ($row) => (int) $row->store_id > 0 && $row->store_name !== null);
+            $stores = $mine->filter(fn (object $row) => (int) $row->store_id > 0 && $row->store_name !== null);
 
             $isYou = $user->id === $viewer->id;
             $isPrimary = $user->id === $primaryId;
@@ -318,14 +318,14 @@ class UserController extends Controller
             $user->is_you = $isYou;
             $user->is_primary = $isPrimary;
             $user->platform_role = $platform?->role_name;
-            $user->memberships = $stores->map(fn ($row) => [
+            $user->memberships = $stores->map(fn (object $row) => [
                 'store_id' => (int) $row->store_id,
                 'store_name' => $row->store_name,
                 'role_name' => $row->role_name,
                 'role_key' => $row->role_key,
             ])->values();
             $user->sole_owner_of = $stores
-                ->filter(fn ($row) => $row->role_key === Role::OWNER && (int) ($ownerCounts[$row->store_id] ?? 0) === 1)
+                ->filter(fn (object $row) => $row->role_key === Role::OWNER && (int) ($ownerCounts[$row->store_id] ?? 0) === 1)
                 ->pluck('store_name')
                 ->values();
             $user->can = [

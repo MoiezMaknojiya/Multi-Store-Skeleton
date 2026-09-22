@@ -16,7 +16,7 @@ return new class extends Migration
             $table->foreignId('playlist_item_id')->constrained()->cascadeOnDelete();
 
             // ── WHAT TIME, on a day this rule covers ──────────────────────────────
-            // NULL means the whole day, the whole day.
+            // NULL means the whole day.
             $table->foreignId('daypart_id')->nullable()->constrained()->nullOnDelete();
 
             // ── WHICH DAYS ────────────────────────────────────────────────────────

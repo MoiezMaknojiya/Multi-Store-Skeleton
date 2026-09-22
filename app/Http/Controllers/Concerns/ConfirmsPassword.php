@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
  * Re-confirming the password of the person pressing the button (owner's rule, 2026-09-16).
  *
  * Big deletes ask for it — a store, an account, a role, a platform role, a member, a channel, a campaign,
- * a permission — and so does changing your own password. A session left open on a shared computer must not
+ * a permission, an ad — and so does changing your own password. A session left open on a shared computer must not
  * be able to destroy or take over with two clicks.
  *
  * Call it AFTER every other refusal, so nobody types a password for something that would be refused

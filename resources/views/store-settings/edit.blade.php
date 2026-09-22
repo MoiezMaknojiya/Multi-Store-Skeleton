@@ -99,7 +99,8 @@
                                 Permanently deletes {{ $store->name }} and everything in it:
                                 {{ $contents['screens'] }} {{ str('screen')->plural($contents['screens']) }} (they stop playing at once),
                                 {{ $contents['media'] }} media {{ str('file')->plural($contents['media']) }}, playlists, dayparts, the roles made in it,
-                                the store's own channels, open invitations, and the access of all {{ $contents['members'] }} {{ str('member')->plural($contents['members']) }}.
+                                the store's own channels, its Ad Builder designs and the assets they are made from, open invitations,
+                                and the access of all {{ $contents['members'] }} {{ str('member')->plural($contents['members']) }}.
                                 The people's accounts are not deleted.
                             </p>
                         </header>
@@ -176,8 +177,10 @@
                             </p>
                         </div>
 
+                        {{-- A bound :label, not an echo inside label="": the component echoes its label itself,
+                             so an echo here escaped the name twice and "Joe's" read "Joe&#039;s". --}}
                         <x-auth.form-field name="confirm_name" id="confirm_name" bag="storeDeletion" :required="true"
-                            label="Type {{ $store->name }} to confirm" autocomplete="off" dusk="delete-store-name" />
+                            :label="'Type '.$store->name.' to confirm'" autocomplete="off" dusk="delete-store-name" />
 
                         <x-auth.form-field name="password" id="delete_password" label="Your password" type="password" bag="storeDeletion"
                             :required="true" autocomplete="current-password" dusk="delete-store-password" />

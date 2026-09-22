@@ -51,8 +51,9 @@ test('guests cannot reach any campaign endpoint', function () {
 });
 
 test('a store user cannot see or touch campaigns, whatever they hold', function () {
-    // Deliberately given every store permission there is — none of them opens this
-    // door, because campaign-manage is not a permission row at all.
+    // Deliberately given a broad hand-picked set — every screen and media permission,
+    // dayparts, the Stores tab, even the accounts and roles views — and none of it
+    // opens this door, because campaign-manage is not a permission row at all.
     $actor = createStoreUser($this->store, [
         'screen-view', 'screen-store', 'screen-update', 'screen-destroy', 'screen-playlist',
         'media-view', 'media-store', 'media-update', 'media-destroy',
@@ -232,4 +233,25 @@ test('the screen picker says WHY a screen cannot carry adverts', function () {
     expect($rows[$quiet->id]['carries_ads'])->toBeFalse();
     expect($rows[$quiet->id]['store_accepts'])->toBeTrue();
     expect($rows[$quiet->id]['screen_accepts'])->toBeFalse();      // this set said no
+});
+
+test('a screen that does not exist is refused before anything is stored', function () {
+    // Refused by the rules, not by the foreign key after the upload: the file must never be left behind.
+    $this->actingAs($this->admin)->postJson('/campaigns', campaignPayload([
+        'file' => UploadedFile::fake()->image('coke.jpg', 1920, 1080),
+        'screen_ids' => [$this->screen->id, 999999],
+    ]))->assertStatus(422)->assertJsonValidationErrors('screen_ids.1');
+
+    expect(Campaign::count())->toBe(0)
+        ->and(Storage::disk('public')->allFiles())->toBe([]);
+});
+
+test('a screen id that is not one plain number is refused, never read as screen 1', function () {
+    // intval() once read a nested array as 1 — the first screen in the database.
+    $this->actingAs($this->admin)->postJson('/campaigns', campaignPayload([
+        'file' => UploadedFile::fake()->image('coke.jpg', 1920, 1080),
+        'screen_ids' => [[$this->screen->id]],
+    ]))->assertStatus(422)->assertJsonValidationErrors('screen_ids.0');
+
+    expect(Campaign::count())->toBe(0);
 });

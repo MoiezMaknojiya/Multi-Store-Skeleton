@@ -36,6 +36,15 @@ test('guests cannot reach any store endpoint', function () {
     $this->putJson("/stores/{$store->id}", newStorePayload())->assertUnauthorized();
     $this->deleteJson("/stores/{$store->id}")->assertUnauthorized();
     $this->postJson('/stores/switch', ['store_id' => $store->id])->assertUnauthorized();
+
+    // And every other route under /stores, read from the route table — so one added later is asked too.
+    $routes = routesUnder('stores');
+
+    expect($routes)->not->toBeEmpty();
+
+    foreach ($routes as [$method, $uri]) {
+        expect($this->json($method, $uri)->status())->toBe(401, "{$method} {$uri}");
+    }
 });
 
 test('a super admin sees every store', function () {

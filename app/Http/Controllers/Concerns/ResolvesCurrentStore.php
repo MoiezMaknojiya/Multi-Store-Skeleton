@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Concerns;
 
 use App\Models\Store;
-use Illuminate\Support\Facades\DB;
+use App\Services\StoreTeam;
 
 /**
  * The store a signed-in member is working in, for pages that only make sense inside one.
@@ -19,12 +19,7 @@ trait ResolvesCurrentStore
         $storeId = (int) session('current_store_id');
         $store = $storeId > 0 ? Store::find($storeId) : null;
 
-        $isMember = $store !== null && DB::table('store_user')
-            ->where('store_id', $store->id)
-            ->where('user_id', auth()->id())
-            ->exists();
-
-        abort_unless($isMember, 404);
+        abort_unless($store !== null && app(StoreTeam::class)->isMember(auth()->user(), $store), 404);
 
         return $store;
     }

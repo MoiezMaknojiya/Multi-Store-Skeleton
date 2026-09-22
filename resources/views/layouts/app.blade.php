@@ -24,12 +24,11 @@
          after a delay. layoutHandler.init() (resources/js/core/layout.js) removes this class
          the moment Alpine takes over. --}}
     <script>
-        if (localStorage.getItem('sidebarOpen') === 'false') {
+        // On a small screen the sidebar always starts closed (layoutHandler says why).
+        if (localStorage.getItem('sidebarOpen') === 'false' || ! window.matchMedia('(min-width: 1024px)').matches) {
             document.documentElement.classList.add('sidebar-closed');
         }
     </script>
-
-    @stack('styles')
 </head>
 
 <body class="font-sans antialiased bg-gray-100 dark:bg-gray-900"
@@ -50,17 +49,7 @@
         <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
 
             {{-- Impersonation Banner --}}
-            @if(session('impersonating_original_id'))
-            <div class="flex-shrink-0 flex items-center justify-between gap-4 px-4 sm:px-6 py-2 bg-amber-500 text-white text-sm">
-                <span>You are viewing as <strong>{{ auth()->user()->name }}</strong> ({{ auth()->user()->email }}).</span>
-                <form method="POST" action="{{ route('impersonate.stop') }}">
-                    @csrf
-                    <button type="submit" class="font-semibold underline hover:no-underline whitespace-nowrap">
-                        Return to Super Admin
-                    </button>
-                </form>
-            </div>
-            @endif
+            <x-impersonation-banner />
 
             {{-- Header --}}
             <x-header>
@@ -74,28 +63,8 @@
         </div>
     </div>
 
-    {{-- Toast notifications (filled by window.toast() from any component) --}}
-    <div x-data class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-80 max-w-[calc(100vw-2rem)] space-y-2 pointer-events-none">
-        <template x-for="toast in $store.toasts.items" :key="toast.id">
-            <div x-transition.opacity.duration.300ms
-                class="pointer-events-auto rounded-md px-4 py-3 text-sm text-white shadow-lg flex items-start gap-2"
-                :class="toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'">
-                <span class="flex-1" x-text="toast.message"></span>
-                <button type="button" class="opacity-70 hover:opacity-100" @click="$store.toasts.dismiss(toast.id)">✕</button>
-            </div>
-        </template>
-    </div>
-
-    {{-- A flash message from a redirect ("Welcome to Alpha Mart!", "Switched to …") becomes a
-         success toast. The Profile page's own status keys are shown by its forms instead. --}}
-    @php($__flash = session('status'))
-    @if (is_string($__flash) && ! in_array($__flash, ['profile-updated', 'password-updated', 'store-updated'], true))
-        <script>
-            document.addEventListener('alpine:initialized', () => window.toast({{ Js::from($__flash) }}, 'success'));
-        </script>
-    @endif
-
-    @stack('scripts')
+    {{-- Toast notifications, and a redirect's flash message shown as one --}}
+    <x-toasts />
 </body>
 
 </html>

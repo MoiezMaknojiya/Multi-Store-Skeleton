@@ -20,7 +20,7 @@ return new class extends Migration
             $table->text('description')->nullable();
 
             // What the player needs to know to render it.
-            $table->string('type', 10);                 // image | video
+            $table->string('type', 10);                 // image | video | html (a published Ad Builder page)
             $table->string('mime_type', 150);
             $table->string('disk', 30)->default('public');
             $table->string('path');                     // original file
@@ -41,7 +41,7 @@ return new class extends Migration
 
             // The library is always read one store at a time, newest first.
             $table->index(['store_id', 'created_at']);
-            // Read by the schedule: a file outside this window never reaches a screen and the scheduling filter.
+            // And by expiry, when the library is sorted that way.
             $table->index(['store_id', 'expires_at']);
         });
     }

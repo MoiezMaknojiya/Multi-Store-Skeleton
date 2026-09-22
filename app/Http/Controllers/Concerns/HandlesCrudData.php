@@ -7,9 +7,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * The shared paginatedResponse() behind every listing in the panel — the activity log, campaigns, channels,
- * dayparts, media, permissions, screens, stores and accounts — so search, paging and the JSON shape are
- * written once.
+ * The shared paginatedResponse() behind the panel's paged listings — the activity log, campaigns, channels,
+ * dayparts, media, permissions, screens, stores, accounts, and the Ad Builder's ads and assets — so search,
+ * paging and the JSON shape are written once. (Members and roles are small enough to arrive whole.)
  */
 trait HandlesCrudData
 {
@@ -55,8 +55,9 @@ trait HandlesCrudData
         // Clamped so nobody can dump an entire table with ?per_page=999999.
         $perPage = min(max((int) self::plainValue($request->input('per_page'), (string) self::ROWS_PER_PAGE), 1), 100);
 
-        if ($search) {
-            $query->where(function ($q) use ($search, $searchColumns, $searchExtra) {
+        // Compared with '', not read as a boolean: a search for "0" is a search.
+        if ($search !== '') {
+            $query->where(function (Builder $q) use ($search, $searchColumns, $searchExtra) {
                 foreach ($searchColumns as $i => $col) {
                     $method = $i === 0 ? 'where' : 'orWhere';
                     $q->$method($col, 'like', "%{$search}%");

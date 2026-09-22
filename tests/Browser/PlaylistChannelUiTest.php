@@ -2,6 +2,7 @@
 
 namespace Tests\Browser;
 
+use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
@@ -9,6 +10,7 @@ use App\Models\PlaylistItem;
 use App\Models\Screen;
 use App\Models\Store;
 use App\Models\User;
+use App\Services\AdPublisher;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Dusk\Browser;
@@ -25,22 +27,6 @@ use Tests\DuskTestCase;
 class PlaylistChannelUiTest extends DuskTestCase
 {
     use DatabaseMigrations;
-
-    /** A real PNG on the (isolated) dusk disk, and the path it was written to. */
-    private function putImage(string $path, int $r, int $g, int $b): string
-    {
-        $image = imagecreatetruecolor(640, 360);
-        imagefilledrectangle($image, 0, 0, 640, 360, imagecolorallocate($image, $r, $g, $b));
-
-        ob_start();
-        imagepng($image);
-        $binary = (string) ob_get_clean();
-        imagedestroy($image);
-
-        Storage::disk('public')->put($path, $binary);
-
-        return $path;
-    }
 
     /** A shop owner who builds their own playlists. */
     private function owner(Store $store): User
@@ -60,8 +46,8 @@ class PlaylistChannelUiTest extends DuskTestCase
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $poster->id, 'position' => 0, 'duration_seconds' => 10]);
 
         $gama = Channel::factory()->perPass(1)->create(['name' => 'GAMA']);
-        ChannelAd::factory()->lasting(10)->create(['channel_id' => $gama->id, 'title' => 'Monster', 'position' => 0, 'thumbnail_path' => null]);
-        ChannelAd::factory()->lasting(15)->create(['channel_id' => $gama->id, 'title' => 'Coke', 'position' => 1, 'thumbnail_path' => null]);
+        ChannelAd::factory()->lasting(10)->showing(['thumbnail_path' => null])->create(['channel_id' => $gama->id, 'title' => 'Monster', 'position' => 0]);
+        ChannelAd::factory()->lasting(15)->showing(['thumbnail_path' => null])->create(['channel_id' => $gama->id, 'title' => 'Coke', 'position' => 1]);
 
         $this->browse(function (Browser $browser) use ($owner, $store, $screen, $gama) {
             $this->freshSession($browser);
@@ -149,15 +135,14 @@ class PlaylistChannelUiTest extends DuskTestCase
         ]);
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $poster->id, 'position' => 0, 'duration_seconds' => 2]);
 
+        // The platform's channel shows two files of the platform's own library.
         $gama = Channel::factory()->perPass(1)->create(['name' => 'GAMA']);
-        ChannelAd::factory()->lasting(2)->create([
-            'channel_id' => $gama->id, 'title' => 'Monster', 'position' => 0, 'mime_type' => 'image/png', 'thumbnail_path' => null,
-            'path' => $this->putImage("channels/{$gama->id}/monster.png", 30, 200, 60),
-        ]);
-        ChannelAd::factory()->lasting(2)->create([
-            'channel_id' => $gama->id, 'title' => 'Coke', 'position' => 1, 'mime_type' => 'image/png', 'thumbnail_path' => null,
-            'path' => $this->putImage("channels/{$gama->id}/coke.png", 220, 30, 40),
-        ]);
+        ChannelAd::factory()->lasting(2)->showing([
+            'mime_type' => 'image/png', 'thumbnail_path' => null, 'path' => $this->putImage('media/platform/monster.png', 30, 200, 60),
+        ])->create(['channel_id' => $gama->id, 'title' => 'Monster', 'position' => 0]);
+        ChannelAd::factory()->lasting(2)->showing([
+            'mime_type' => 'image/png', 'thumbnail_path' => null, 'path' => $this->putImage('media/platform/coke.png', 220, 30, 40),
+        ])->create(['channel_id' => $gama->id, 'title' => 'Coke', 'position' => 1]);
         PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $gama->id, 'position' => 1]);
 
         $this->browse(function (Browser $tv) {
@@ -189,6 +174,84 @@ class PlaylistChannelUiTest extends DuskTestCase
 
             // Only ever one picture per layer: nothing piles up as the ads rotate.
             $this->assertLessThanOrEqual(2, $tv->script('return document.querySelectorAll("#layer-a img, #layer-b img").length;')[0]);
+
+            // Leave the player, so its timers do not follow this browser into the next test.
+            $tv->visit('/login');
+            $tv->script('localStorage.clear();');
+        });
+    }
+
+    /**
+     * docs/CHANNEL-CONTENT-SPEC.md §7: a channel carrying a picture and a published Ad Builder ad plays both in
+     * turn — the ad in a frame of its own — and the ad published again while the set runs reaches the screen
+     * on its next poll, because the channel holds the library row and not a copy of it.
+     */
+    public function test_a_channel_plays_a_picture_and_an_ad_page_and_a_republished_ad_reaches_the_screen(): void
+    {
+        $store = Store::factory()->create(['name' => 'Alpha Mart']);
+        $screen = Screen::factory()->withToken('channel-page-token')->create(['store_id' => $store->id, 'name' => 'Counter TV']);
+
+        $poster = Media::factory()->create([
+            'store_id' => $store->id, 'title' => 'Burger', 'mime_type' => 'image/png', 'thumbnail_path' => null,
+            'path' => $this->putImage("media/{$store->id}/burger.png", 200, 120, 30),
+        ]);
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $poster->id, 'position' => 0, 'duration_seconds' => 2]);
+
+        // The shop's own channel: a picture of its library, then an ad its Ad Builder published into that library.
+        $deals = Channel::factory()->create(['name' => 'Alpha Deals', 'store_id' => $store->id]);
+        ChannelAd::factory()->lasting(2)->showing([
+            'mime_type' => 'image/png', 'thumbnail_path' => null, 'path' => $this->putImage("media/{$store->id}/monster.png", 30, 200, 60),
+        ])->create(['channel_id' => $deals->id, 'title' => 'Monster', 'position' => 0]);
+
+        $design = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $store->id, 'name' => 'Winter sale']);
+        $page = app(AdPublisher::class)->publish($design);
+        ChannelAd::factory()->lasting(3)->create(['channel_id' => $deals->id, 'media_id' => $page->id, 'title' => 'Winter sale', 'position' => 1]);
+        PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $deals->id, 'position' => 1]);
+
+        $this->browse(function (Browser $tv) use ($design, $page) {
+            $tv->visit('/login');
+            $tv->script("localStorage.clear(); localStorage.setItem('signage.device.token', 'channel-page-token');");
+            $tv->visit('/player');
+
+            // What the wall shows right now: a picture by its file name, or the ad page by its address.
+            $showing = fn (): string => (string) $tv->script(<<<'JS'
+                const frame = document.querySelector('#layer-a:not([hidden]) iframe, #layer-b:not([hidden]) iframe');
+                if (frame) return 'page ' + frame.getAttribute('src');
+                const picture = document.querySelector('#layer-a:not([hidden]) img, #layer-b:not([hidden]) img');
+                return picture ? 'picture ' + picture.src.split('/').pop() : '';
+            JS)[0];
+
+            // -- In turn: the shop's poster, the channel's picture, the channel's ad page ------
+            $seen = [];
+            $tv->waitUsing(45, 100, function () use ($showing, &$seen) {
+                $now = $showing();
+                if ($now !== '' && end($seen) !== $now) {
+                    $seen[] = $now;
+                }
+
+                return count($seen) >= 4;
+            });
+
+            $firstVersion = '?v='.$page->updated_at->getTimestamp();
+            $this->assertSame('picture burger.png', $seen[0] ?? null, 'seen: '.json_encode($seen));
+            $this->assertSame('picture monster.png', $seen[1] ?? null, 'seen: '.json_encode($seen));
+            $this->assertStringStartsWith('page ', $seen[2] ?? '', 'seen: '.json_encode($seen));
+            $this->assertStringContainsString($firstVersion, $seen[2], 'the frame is not showing the published page');
+            $this->assertSame('picture burger.png', $seen[3] ?? null, 'seen: '.json_encode($seen));
+
+            // -- Published again while the set runs: the next poll brings the new page --------
+            $document = $design->fresh()->document;
+            $document['elements'][0]['text'] = 'Spring sale';
+            $design->forceFill(['document' => $document])->save();
+            $republished = app(AdPublisher::class)->publish($design->fresh());
+
+            $this->assertSame($page->id, $republished->id, 'publishing again made a second library row');
+            $newVersion = '?v='.$republished->updated_at->getTimestamp();
+            $this->assertNotSame($firstVersion, $newVersion);
+            $this->assertStringContainsString('Spring sale', (string) Storage::disk('public')->get($republished->path));
+
+            // The playlist poll is every 30 seconds, and the page is up for 3 seconds of every 7.
+            $tv->waitUsing(80, 150, fn () => str_contains($showing(), $newVersion));
 
             // Leave the player, so its timers do not follow this browser into the next test.
             $tv->visit('/login');

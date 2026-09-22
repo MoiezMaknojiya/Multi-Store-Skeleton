@@ -6,19 +6,24 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * One ad inside a channel: a file, how long it shows, and the dates it runs.
+ * One ad inside a channel: WHICH file (a row of a media library, by id — docs/CHANNEL-CONTENT-SPEC.md), how
+ * long it shows, and the dates it runs.
+ *
+ * The file belongs to a library — the channel's shop's, or the platform's — never to the channel: taking the
+ * ad out leaves the file where it is, and a published Ad Builder ad re-published later is shown new here
+ * without a second copy anywhere. Everything about the file (its kind, its address, a video's own length) is
+ * read through the media row, under the names this model always had, so nothing that reads an ad changes.
  */
 class ChannelAd extends Model
 {
     use HasFactory;
 
     /**
-     * The longest an IMAGE may stay up in one go. A channel line sits inside a shop's
-     * own loop, and one still holding the wall for ten minutes is the channel
-     * swallowing the shop.
+     * The longest an IMAGE (or an ad page) may stay up in one go. A channel line sits inside a shop's own
+     * loop, and one still holding the wall for ten minutes is the channel swallowing the shop.
      */
     public const MAX_IMAGE_SECONDS = 300;
 
@@ -33,9 +38,7 @@ class ChannelAd extends Model
     public const UNMEASURED_VIDEO_SECONDS = 120;
 
     protected $fillable = [
-        'channel_id', 'title', 'type', 'mime_type', 'disk', 'path', 'thumbnail_path',
-        'size', 'width', 'height', 'orientation', 'media_duration_seconds',
-        'duration_seconds', 'position', 'starts_on', 'ends_on', 'created_by',
+        'channel_id', 'media_id', 'title', 'duration_seconds', 'position', 'starts_on', 'ends_on', 'created_by',
     ];
 
     protected $appends = ['url', 'thumbnail_url', 'play_seconds'];
@@ -43,15 +46,22 @@ class ChannelAd extends Model
     protected function casts(): array
     {
         return [
-            'size' => 'integer',
-            'width' => 'integer',
-            'height' => 'integer',
-            'media_duration_seconds' => 'integer',
             'duration_seconds' => 'integer',
             'position' => 'integer',
             'starts_on' => 'date',
             'ends_on' => 'date',
         ];
+    }
+
+    public function channel(): BelongsTo
+    {
+        return $this->belongsTo(Channel::class);
+    }
+
+    /** The library row this ad shows. */
+    public function media(): BelongsTo
+    {
+        return $this->belongsTo(Media::class);
     }
 
     /** Does this ad run on this local date? */
@@ -61,7 +71,10 @@ class ChannelAd extends Model
     }
 
     /**
-     * scheduled | running | ended, on one local date.
+     * draft | scheduled | running | ended, on one local date.
+     *
+     * A draft is an Ad Builder page whose ad was taken off the screens (Media::isDraft()): off the air, whatever
+     * its dates say, until it is published again.
      *
      * Whole dates with both ends included, read on each SCREEN's own calendar — an ad
      * ending on the 15th runs all of the 15th wherever the television stands. Compared
@@ -71,6 +84,10 @@ class ChannelAd extends Model
      */
     public function statusOn(CarbonInterface $localDay): string
     {
+        if ($this->media?->isDraft()) {
+            return 'draft';
+        }
+
         $date = CarbonImmutable::instance($localDay)->toDateString();
 
         if ($this->starts_on !== null && $this->starts_on->toDateString() > $date) {
@@ -84,35 +101,51 @@ class ChannelAd extends Model
         return 'running';
     }
 
+    /** image | video | html — the file's own kind. */
+    public function getTypeAttribute(): ?string
+    {
+        return $this->media?->type;
+    }
+
+    public function getMimeTypeAttribute(): ?string
+    {
+        return $this->media?->mime_type;
+    }
+
+    public function getOrientationAttribute(): ?string
+    {
+        return $this->media?->orientation;
+    }
+
     /**
-     * How long this ad holds the screen: an image for its seconds, a video to its own
-     * end as measured at upload.
+     * How long this ad holds the screen: an image or an ad page for the seconds the channel gave it, a video
+     * to its own end as measured at upload.
      */
     public function getPlaySecondsAttribute(): int
     {
         if ($this->type === Media::TYPE_VIDEO) {
-            return $this->media_duration_seconds ?: self::UNMEASURED_VIDEO_SECONDS;
+            return $this->media?->duration_seconds ?: self::UNMEASURED_VIDEO_SECONDS;
         }
 
         return $this->duration_seconds ?: PlaylistItem::DEFAULT_IMAGE_SECONDS;
     }
 
-    public function getUrlAttribute(): string
+    public function getUrlAttribute(): ?string
     {
-        return Storage::disk($this->disk)->url($this->path);
+        return $this->media?->url;
     }
 
     public function getThumbnailUrlAttribute(): ?string
     {
-        return $this->thumbnail_path
-            ? Storage::disk($this->disk)->url($this->thumbnail_path)
-            : null;
+        return $this->media?->thumbnail_url;
     }
 
-    /** A cache key for the player, the same idea as Media's: it changes whenever the
-     *  bytes behind this row could have. */
+    /**
+     * A cache key for the player, the same idea as Media's: it changes whenever what a screen should show
+     * for this ad could have — the ad pointed at another file, or the file itself replaced or re-published.
+     */
     public function cacheKey(): string
     {
-        return substr(hash('sha256', 'h'.$this->id.'|'.$this->size.'|'.$this->updated_at?->timestamp), 0, 20);
+        return substr(hash('sha256', 'h'.$this->id.'|'.$this->media_id.'|'.$this->media?->cacheKey()), 0, 20);
     }
 }

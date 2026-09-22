@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Channel;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Store;
@@ -67,13 +68,19 @@ test('a platform user who is not a super admin cannot make roles at all', functi
         ->assertForbidden();
 });
 
-test('the Super-Admin role is built in: it cannot be edited, and it holds them already', function () {
-    $superAdmin = Role::firstWhere('name', 'Super-Admin');
+test('the super admin needs no channel rows on the Super-Admin role to make, change and delete a channel', function () {
+    // A super admin holds every permission whatever the role's rows say. The rows the helper wrote onto
+    // the role are taken off first — otherwise this would only prove that the helper wrote them.
+    $superAdminRole = Role::find(Role::superAdminId());
+    $superAdminRole->permissions()->detach(Permission::where('name', 'like', 'channel-%')->pluck('id'));
+    expect($superAdminRole->permissions()->where('name', 'like', 'channel-%')->exists())->toBeFalse();
 
-    $this->actingAs($this->admin)->putJson("/roles/{$superAdmin->id}", [
-        'name' => 'Super-Admin',
-        'permissions' => [$this->channelView->id],
-    ])->assertForbidden();
+    $this->actingAs($this->admin)->postJson('/channels', ['name' => 'GAMA'])->assertOk();
+    $channel = Channel::firstWhere('name', 'GAMA');
 
-    expect($superAdmin->fresh()->permissions->pluck('name'))->toContain('channel-view');
+    $this->putJson("/channels/{$channel->id}", ['name' => 'GAMA Wholesale'])->assertOk();
+    expect($channel->fresh()->name)->toBe('GAMA Wholesale');
+
+    $this->deleteJson("/channels/{$channel->id}", ['password' => 'password'])->assertOk();
+    expect(Channel::find($channel->id))->toBeNull();
 });

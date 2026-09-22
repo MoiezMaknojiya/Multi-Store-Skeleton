@@ -39,9 +39,9 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
-        if (auth()->check()) {
-            ActivityLog::record('auth.logout', null, 'Signed out');
-        }
+        // The route sits behind `auth`, so somebody is always signed in here. Logged BEFORE the
+        // sign-out, while they are still the one acting.
+        ActivityLog::record('auth.logout', null, 'Signed out');
 
         Auth::guard('web')->logout();
 

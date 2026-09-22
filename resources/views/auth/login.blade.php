@@ -7,7 +7,8 @@
 
     <x-auth.session-status class="mb-4" :status="session('status')" />
 
-    <form method="POST" action="{{ route('login') }}" class="space-y-5">
+    <form method="POST" action="{{ route('login') }}" class="space-y-5"
+        x-data="loginForm()" @submit="handleSubmit($event)">
         @csrf
 
         <x-auth.form-field name="email" label="Email" type="email"
@@ -27,11 +28,9 @@
                        class="form-checkbox">
                 <span class="text-sm text-gray-600">Remember me</span>
             </label>
-            @if (Route::has('password.request'))
-                <a href="{{ route('password.request') }}" class="text-sm text-blue-600 hover:underline">
-                    Forgot password?
-                </a>
-            @endif
+            <a href="{{ route('password.request') }}" class="text-sm text-blue-600 hover:underline">
+                Forgot password?
+            </a>
         </div>
 
         <button type="submit" class="btn-primary-auth" dusk="login-submit">

@@ -1,13 +1,17 @@
 <?php
 
+use App\Models\BuilderAd;
 use App\Models\Channel;
+use App\Models\ChannelAd;
 use App\Models\Daypart;
 use App\Models\Media;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Screen;
 use App\Models\Store;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 /*
 |--------------------------------------------------------------------------
@@ -94,6 +98,62 @@ test('a daypart and a channel made inside a store belong to that store, never to
         ->and(Channel::firstWhere('name', 'Our Deals')->store_id)->toBe($this->store->id);
 });
 
+test('an upload joins the library of the store it is made in, whatever library the payload names', function () {
+    // Above the stores `store_id` picks the library an upload joins; inside a store it is never read.
+    Storage::fake('public');
+    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Our Deals']);
+
+    $this->postJson('/media', ['file' => UploadedFile::fake()->image('menu.jpg'), 'store_id' => $this->other->id])->assertOk();
+    $this->postJson("/channels/{$channel->id}/ads", [
+        'file' => UploadedFile::fake()->image('deal.jpg'), 'seconds' => 10, 'store_id' => $this->other->id,
+    ])->assertOk();
+
+    expect(Media::count())->toBe(2)
+        ->and(Media::pluck('store_id')->unique()->all())->toBe([$this->store->id]);
+});
+
+test('the library pickers and a channel ad\'s file take one shape only — never a 500', function () {
+    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Our Deals']);
+
+    // A listing forgives what it can (a page that is not a number is page 1) and refuses the rest.
+    foreach (['library[]=1', 'library=0', 'library=-1', 'library=1%20OR%201=1', 'type[]=image', 'type=pdf', 'search[]=x', 'page[]=1', 'per_page=999999'] as $query) {
+        $status = $this->getJson("/channels/{$channel->id}/library?{$query}")->status();
+        expect($status)->toBeIn([200, 422], "the channel picker's ?{$query} answered {$status}");
+    }
+
+    foreach (['library[]=1', 'library=0', 'library=platform%27--'] as $query) {
+        expect($this->getJson("/media/data?{$query}")->status())->toBe(422, "/media/data?{$query}");
+    }
+
+    foreach ([0, -1, '1 OR 1=1', [1], 1.5, 'abc', '99999999999'] as $id) {
+        $status = $this->postJson("/channels/{$channel->id}/ads", ['media_id' => $id, 'seconds' => 10])->status();
+        expect($status)->toBe(422, 'media_id '.json_encode($id).' answered '.$status);
+    }
+
+    expect(ChannelAd::count())->toBe(0);
+});
+
+test('an unpublished Ad Builder page never reaches a television, however its line is posted', function () {
+    // The pickers never offer an unpublished ad. A line posted by hand is taken — it keeps its place like any line
+    // waiting for its page — but nothing of it goes to a screen until the ad is published again (docs/AD-BUILDER-SPEC.md §9).
+    $design = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id]);
+    $this->postJson("/builder/{$design->id}/unpublish")->assertOk();
+    $screen = Screen::factory()->withToken('smuggled-token')->create(['store_id' => $this->store->id]);
+    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Our Deals']);
+    $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
+
+    $this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => [
+        ['media_id' => $design->media_id, 'duration_seconds' => 10],
+        ['channel_id' => $channel->id],
+    ]])->assertOk();
+    $this->postJson("/channels/{$channel->id}/ads", ['media_id' => $design->media_id, 'seconds' => 10])->assertOk();
+    $screen->forceFill(['default_media_id' => $design->media_id])->save();
+
+    // As a line, as a channel's ad, as the holding picture: none of it.
+    $manifest = $this->getJson('/device/playlist', ['Authorization' => 'Bearer smuggled-token'])->assertOk()->json();
+    expect($manifest['items'])->toBe([]);
+});
+
 test('ids that are not ids answer 422 or 404 — never a 500', function () {
     $media = Media::factory()->create(['store_id' => $this->store->id]);
     $screen = Screen::factory()->create(['store_id' => $this->store->id]);
@@ -127,10 +187,19 @@ test('a search that carries quotes, wildcards or SQL is treated as text', functi
     Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Burger deal']);
     Media::factory()->create(['store_id' => $this->other->id, 'title' => 'Beta poster']);
 
-    foreach (["' OR '1'='1", "'; DROP TABLE media; --", '%', '_', '\\', '"', '100%%', 'ünïcödé', str_repeat('a', 500)] as $search) {
-        $response = $this->getJson('/media/data?search='.urlencode($search))->assertOk();
-        $titles = collect($response->json('media'))->pluck('title');
-        expect($titles)->not->toContain('Beta poster', "search [{$search}] leaked another store's row");
+    // Words no title here contains. Read as SQL, the first would match every row; read as text, nothing.
+    foreach (["' OR '1'='1", "'; DROP TABLE media; --", '"', '\\', '100%%', 'ünïcödé', str_repeat('a', 500)] as $search) {
+        $titles = collect($this->getJson('/media/data?search='.urlencode($search))->assertOk()->json('media'))->pluck('title');
+
+        expect($titles->all())->toBe([], "search [{$search}] matched a title that does not contain it");
+    }
+
+    // A LIKE wildcard still matches everything it can — but only ever inside this store.
+    foreach (['%', '_'] as $search) {
+        $titles = collect($this->getJson('/media/data?search='.urlencode($search))->assertOk()->json('media'))->pluck('title');
+
+        expect($titles->contains('Beta poster'))->toBeFalse("search [{$search}] leaked another store's row")
+            ->and($titles->all())->toBe(['Burger deal']);
     }
 
     // The table is still there, and so are its rows.
@@ -173,12 +242,17 @@ test('a name the length of a book, or full of control characters, is refused rat
 
 test('a script tag in a name is stored as text and printed as text', function () {
     $payload = '<script>alert("xss")</script>';
+    $daypartName = '<script>alert("daypart-xss")</script>';     // its own words, to be found on a page by
 
-    $this->postJson('/dayparts', ['name' => $payload, 'start_time' => '07:00', 'end_time' => '08:00']);
+    // Kept exactly as typed — never stripped, never refused for looking like code.
+    $this->postJson('/dayparts', ['name' => $daypartName, 'start_time' => '07:00', 'end_time' => '08:00'])->assertOk();
     $this->put('/settings/store', [
         'name' => $payload, 'street' => '1 Main St', 'city' => 'Dallas', 'state' => 'TX',
         'zip_code' => '75001', 'country' => 'USA',
-    ]);
+    ])->assertRedirect(route('store-settings.edit'));
+
+    expect(Daypart::sole()->name)->toBe($daypartName)
+        ->and($this->store->fresh()->name)->toBe($payload);
 
     $page = $this->get('/settings/store')->assertOk();
     $page->assertDontSee($payload, false);
@@ -187,6 +261,15 @@ test('a script tag in a name is stored as text and printed as text', function ()
     // The dashboard and the members page print the store's name too.
     $this->get('/dashboard')->assertOk()->assertDontSee($payload, false);
     $this->get('/members')->assertOk()->assertDontSee($payload, false);
+
+    // A screen's page hands the store's dayparts to its schedule editor inside an attribute, where one raw
+    // quote or tag would break out of it: the daypart's name is on the page, but only ever encoded.
+    $screen = Screen::factory()->create(['store_id' => $this->store->id]);
+
+    $this->get("/screens/{$screen->id}")->assertOk()
+        ->assertSee('daypart-xss', false)
+        ->assertDontSee($daypartName, false)
+        ->assertDontSee('"daypart-xss', false);
 });
 
 test('an email field takes an address, not a header injection or a list', function () {
@@ -204,4 +287,14 @@ test('an email field takes an address, not a header injection or a list', functi
     }
 
     expect(DB::table('invitations')->count())->toBe(0);
+});
+
+test('a search for "0" is a search, not "no search"', function () {
+    // PHP reads "0" as false; the listings once did too, and showed everything.
+    Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Menu 2020']);
+    Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Burger deal']);
+
+    $titles = collect($this->getJson('/media/data?search=0')->assertOk()->json('media'))->pluck('title')->all();
+
+    expect($titles)->toBe(['Menu 2020']);
 });

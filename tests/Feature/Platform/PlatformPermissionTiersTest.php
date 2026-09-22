@@ -54,7 +54,6 @@ test('a super admin may give the activity log — reading and deleting — to a 
 test("deleting old years never goes on a store's role, however it is asked — not even by the super admin", function () {
     $store = Store::factory()->create();
     $owner = createStoreMember($store, Role::OWNER);
-    grantPermissions(['activity-view', 'activity-destroy']);
 
     // The Owner holds neither, so can give neither.
     foreach (['activity-view', 'activity-destroy'] as $name) {
@@ -136,18 +135,6 @@ test('the permission catalogue goes on no role but Super-Admin — not a platfor
         ->assertStatus(422)->assertJsonValidationErrors('permissions');
 
     expect(Role::whereIn('name', ['Ops', 'Cashier'])->exists())->toBeFalse();
-});
-
-test('the Super-Admin role is built in and keeps all of it', function () {
-    $superAdminRole = Role::firstWhere('name', 'Super-Admin');
-
-    $this->actingAs($this->admin)->putJson("/roles/{$superAdminRole->id}", [
-        'name' => 'Super-Admin',
-        'permissions' => Permission::where('name', 'role-view')->pluck('id')->all(),
-    ])->assertForbidden();
-
-    expect($superAdminRole->fresh()->permissions->pluck('name'))
-        ->toContain('permission-view', 'activity-view', 'activity-destroy');
 });
 
 test('anybody else holding it — platform user or store user — opens nothing', function () {

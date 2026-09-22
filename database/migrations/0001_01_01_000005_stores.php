@@ -9,9 +9,9 @@ return new class extends Migration
     /**
      * Run the migrations.
      *
-     * A store is the organization: it owns its members, custom roles, invitations, screens, media, dayparts and
-     * its own channels. Deleting one takes all of that with it, for good (Store::purgeContents) — never the
-     * people's accounts.
+     * A store is the organization: it owns its members, custom roles, invitations, screens, media, dayparts,
+     * its own channels, and its Ad Builder designs with the shelf of pictures and videos they are built from.
+     * Deleting one takes all of that with it, for good (Store::purgeContents) — never the people's accounts.
      */
     public function up(): void
     {

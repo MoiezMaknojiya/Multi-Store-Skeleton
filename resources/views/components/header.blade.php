@@ -4,23 +4,26 @@
            bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700
            flex-shrink-0">
 
-    <div class="flex items-center gap-3">
-        <button @click="toggleSidebar()"
+    {{-- The title side gives way (min-w-0) and the controls never do (flex-shrink-0): on a phone a long page
+         title is cut short instead of pushing the store switcher and the user menu off the screen. --}}
+    <div class="flex min-w-0 flex-1 items-center gap-3">
+        {{-- Icon-only buttons carry their name in aria-label, bound to what a press would do next. --}}
+        <button @click="toggleSidebar()" :aria-label="sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'"
             class="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
-            <svg data-sidebar-icon="closed" :class="sidebarOpen ? 'hidden' : 'block'" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg data-sidebar-icon="closed" :class="sidebarOpen ? 'hidden' : 'block'" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
             </svg>
-            <svg data-sidebar-icon="open" :class="sidebarOpen ? 'block' : 'hidden'" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg data-sidebar-icon="open" :class="sidebarOpen ? 'block' : 'hidden'" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8" />
             </svg>
         </button>
         @isset($header)
-            <div class="text-gray-800 dark:text-white font-semibold">
+            <div class="min-w-0 flex-1 truncate text-gray-800 dark:text-white font-semibold">
                 {{ $header }}</div>
         @endisset
     </div>
 
-    <div class="flex items-center gap-1" x-data="header()">
+    <div class="flex flex-shrink-0 items-center gap-1" x-data="header()">
         {{-- Store switcher: store-tier users only (global users / super admins span
              every store and never switch). One query for the user's stores. --}}
         @php
@@ -32,12 +35,14 @@
         @endphp
         @if($__showSwitcher && $__stores->isNotEmpty())
             <div class="relative mr-1" x-data="{ storeMenu: false }">
-                <button @click="storeMenu = !storeMenu" dusk="store-switcher"
+                <button @click="storeMenu = !storeMenu" dusk="store-switcher" aria-label="Switch store — {{ $__currentStore['name'] ?? 'Select store' }}"
                     class="flex items-center gap-2 px-3 py-1.5 rounded-xs border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-sm">
                     <svg class="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                     </svg>
-                    <span class="max-w-[9rem] truncate font-medium text-gray-700 dark:text-gray-300">
+                    {{-- On a phone the button is the icon alone, so the page title keeps some room; the
+                         open menu still marks the current store. --}}
+                    <span class="hidden max-w-[9rem] truncate font-medium text-gray-700 dark:text-gray-300 sm:block">
                         {{ $__currentStore['name'] ?? 'Select store' }}
                     </span>
                     <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -69,13 +74,13 @@
         @endif
 
         {{-- Theme Toggle --}}
-        <button @click="toggleDark()"
+        <button @click="toggleDark()" :aria-label="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
             class="p-2 rounded-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
-            <svg data-theme-icon="dark" :class="darkMode ? 'block' : 'hidden'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg data-theme-icon="dark" :class="darkMode ? 'block' : 'hidden'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
             </svg>
-            <svg data-theme-icon="light" :class="darkMode ? 'hidden' : 'block'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg data-theme-icon="light" :class="darkMode ? 'hidden' : 'block'" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
             </svg>
@@ -83,10 +88,10 @@
 
         {{-- User Dropdown --}}
         <div class="relative">
-            <button @click="toggle()" dusk="user-menu" class="flex items-center gap-2 px-2 py-1.5 rounded-xs hover:bg-gray-100 dark:hover:bg-gray-800">
+            <button @click="toggle()" dusk="user-menu" aria-label="Account menu — {{ auth()->user()->name }}" class="flex items-center gap-2 px-2 py-1.5 rounded-xs hover:bg-gray-100 dark:hover:bg-gray-800">
                 <div
                     class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-semibold">
-                    {{ substr(auth()->user()->name ?? 'U', 0, 1) }}
+                    {{ mb_strtoupper(mb_substr(auth()->user()->name ?: 'U', 0, 1)) }}
                 </div>
                 <span
                     class="hidden sm:block text-sm font-medium text-gray-700 dark:text-gray-300">{{ auth()->user()->name ?? 'User' }}</span>

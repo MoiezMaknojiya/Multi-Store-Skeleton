@@ -139,7 +139,8 @@ test('saving twice from one page works — the save hands back a fresh version',
 
 test('an identical save is not a conflict — nothing was lost', function () {
     $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-view', 'screen-playlist']);
+    $ali = createStoreUser($store, ['screen-view', 'screen-playlist'], 'Ali Role');
+    $sana = createStoreUser($store, ['screen-view', 'screen-playlist'], 'Sana Role');
     $screen = Screen::factory()->create(['store_id' => $store->id]);
     $media = Media::factory()->create(['store_id' => $store->id]);
 
@@ -148,13 +149,26 @@ test('an identical save is not a conflict — nothing was lost', function () {
         'position' => 0, 'duration_seconds' => 10,
     ]);
 
-    // Somebody else saved the very same list in between. The content did not
-    // change, so there is nothing to warn anyone about.
-    $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
-        ->putJson("/screens/{$screen->id}/playlist", [
-            'version' => $screen->playlistFingerprint(),
-            'items' => [['media_id' => $media->id, 'duration_seconds' => 10]],
-        ])->assertOk();
+    // Both open the page and are handed the same version of the same list.
+    $versionBothSaw = $screen->playlistFingerprint();
+    $sameList = [['media_id' => $media->id, 'duration_seconds' => 10]];
+
+    // Ali saves it without changing anything. The content is what it was, so the
+    // version is too…
+    $this->actingAs($ali)->withSession(['current_store_id' => $store->id])
+        ->putJson("/screens/{$screen->id}/playlist", ['version' => $versionBothSaw, 'items' => $sameList])
+        ->assertOk()
+        ->assertJsonPath('version', $versionBothSaw);
+
+    $this->flushSession();
+
+    // …so Sana, saving the very same list from the version she was handed before
+    // Ali's save, has lost nothing and is told nothing.
+    $this->actingAs($sana)->withSession(['current_store_id' => $store->id])
+        ->putJson("/screens/{$screen->id}/playlist", ['version' => $versionBothSaw, 'items' => $sameList])
+        ->assertOk();
+
+    expect(PlaylistItem::where('screen_id', $screen->id)->pluck('duration_seconds')->all())->toBe([10]);
 });
 
 test('the version the API reports is the one the model computes', function () {

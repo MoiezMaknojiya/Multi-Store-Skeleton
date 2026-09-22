@@ -10,7 +10,6 @@ use App\Models\User;
 use App\Services\MediaStorage;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -33,7 +32,8 @@ class PlaylistFlowTest extends DuskTestCase
      * Remove a test's uploads and prove they are gone.
      *
      * The database rolls back after each test; the disk does not, so anything a
-     * test puts in storage/app/public it has to take out again.
+     * test puts on the Dusk disk (storage/app/dusk-public, served at /dusk-storage)
+     * it has to take out again.
      *
      * The order matters, and it cost real megabytes to learn: the TV has to be
      * OFF the player page first. A <video> streams its file and holds it open,
@@ -58,25 +58,10 @@ class PlaylistFlowTest extends DuskTestCase
             foreach (array_filter([$item->path, $item->thumbnail_path]) as $path) {
                 $this->assertFalse(
                     Storage::disk('public')->exists($path),
-                    "left {$path} on disk — a Dusk run must not litter storage/app/public"
+                    "left {$path} on disk — a Dusk run must not litter storage/app/dusk-public"
                 );
             }
         }
-    }
-
-    /** A real PNG for the upload step, so the TV has something genuine to render. */
-    private function fixtureImage(string $name, int $r, int $g, int $b): string
-    {
-        $directory = storage_path('framework/testing');
-        File::ensureDirectoryExists($directory);
-        $path = $directory.DIRECTORY_SEPARATOR.$name;
-
-        $image = imagecreatetruecolor(800, 450);
-        imagefilledrectangle($image, 0, 0, 800, 450, imagecolorallocate($image, $r, $g, $b));
-        imagepng($image, $path);
-        imagedestroy($image);
-
-        return $path;
     }
 
     /**
@@ -172,7 +157,8 @@ class PlaylistFlowTest extends DuskTestCase
             'store_id' => $store->id, 'name' => 'Counter TV',
         ]);
 
-        // Real files on the real disk, or the browser has nothing to render.
+        // Real files on the Dusk disk (storage/app/dusk-public, served at /dusk-storage),
+        // or the browser has nothing to render.
         $media = [];
         $palette = [
             ['loop-a.png', 220, 40, 40],
@@ -219,16 +205,23 @@ class PlaylistFlowTest extends DuskTestCase
             // Every file in turn, in the order the playlist was saved — then round
             // again to the first. Nobody touches anything; the TV does it alone.
             $expected = array_map(fn (Media $item) => basename($item->path), $media);
-            $seen = [basename($media[0]->path)];
             $this->assertStringContainsString($expected[0], $srcOf());
 
-            foreach ([1, 2, 3, 0] as $next) {
-                $tv->waitUsing(20, 150, fn () => str_contains($srcOf(), $expected[$next]));
-                $seen[] = $expected[$next];
-            }
+            // Read the wall as it changes, one name each time the picture does: the order
+            // is what the TV really showed, recorded as it happened, never assumed.
+            $seen = [];
+            $tv->waitUsing(45, 100, function () use ($srcOf, &$seen) {
+                $name = basename((string) parse_url($srcOf(), PHP_URL_PATH));
+
+                if ($name !== '' && end($seen) !== $name) {
+                    $seen[] = $name;
+                }
+
+                return count($seen) >= 5;
+            });
 
             // a, b, c, d, then a again.
-            $this->assertSame([...$expected, $expected[0]], $seen);
+            $this->assertSame([...$expected, $expected[0]], array_slice($seen, 0, 5));
 
             $this->removeUploads($tv, ...$media);
         });
@@ -341,13 +334,15 @@ class PlaylistFlowTest extends DuskTestCase
             'duration_seconds' => 10,
         ]);
 
-        // image, broken video, image
+        // image, broken video, image. The video's line is a minute long on purpose: its
+        // backstop is that minute and five seconds more, so the screen can only reach the
+        // next image in the time allowed below by noticing the file will not play.
         foreach ([$images[0], $broken, $images[1]] as $position => $item) {
             PlaylistItem::create([
                 'screen_id' => $screen->id,
                 'media_id' => $item->id,
                 'position' => $position,
-                'duration_seconds' => 2,
+                'duration_seconds' => $item->is($broken) ? 60 : 2,
             ]);
         }
 
@@ -355,6 +350,20 @@ class PlaylistFlowTest extends DuskTestCase
             $tv->visit('/login');
             $tv->script("localStorage.clear(); localStorage.setItem('signage.device.token', 'mixed-token');");
             $tv->visit('/player');
+
+            // Everything that is put on screen, whatever it is — an <img> or a <video> —
+            // recorded the moment its layer is shown. A look at one instant could only
+            // ever see whatever happened to be up at that instant.
+            $tv->script(<<<'JS'
+                window.__shown = [];
+                ['layer-a', 'layer-b'].forEach((id) => {
+                    const layer = document.getElementById(id);
+                    new MutationObserver(() => {
+                        const node = layer.firstElementChild;
+                        if (! layer.hidden && node) window.__shown.push(node.tagName + ' ' + (node.getAttribute('src') || ''));
+                    }).observe(layer, { attributes: true, attributeFilter: ['hidden'] });
+                });
+            JS);
 
             $visible = '#layer-a:not([hidden]) img, #layer-b:not([hidden]) img';
             $srcOf = fn () => $tv->script("return (document.querySelector('{$visible}') || {}).src || '';")[0];
@@ -364,16 +373,22 @@ class PlaylistFlowTest extends DuskTestCase
             $this->assertStringContainsString(basename($images[0]->path), $srcOf());
 
             // The broken video is skipped, and the screen lands on the next image
-            // rather than sitting on a black frame.
-            $tv->waitUsing(30, 150, fn () => str_contains($srcOf(), basename($images[1]->path)));
+            // rather than sitting on a black frame. Two seconds of the first image and a
+            // moment's breathing room over the bad file (BROKEN_ITEM_PAUSE_MS) fit easily
+            // in twelve; waiting out the video's own backstop would take over a minute.
+            $tv->waitUsing(12, 150, fn () => str_contains($srcOf(), basename($images[1]->path)));
             $this->assertStringContainsString(basename($images[1]->path), $srcOf());
 
             // And the loop keeps turning: back round to the first.
             $tv->waitUsing(30, 150, fn () => str_contains($srcOf(), basename($images[0]->path)));
             $this->assertStringContainsString(basename($images[0]->path), $srcOf());
 
-            // The bad file never became the thing on screen.
-            $this->assertStringNotContainsString('broken-clip', $srcOf());
+            // The bad file never became the thing on screen, at any moment.
+            $shown = $tv->script('return window.__shown;')[0];
+            $this->assertNotEmpty($shown, 'nothing was recorded going on screen');
+            foreach ($shown as $onScreen) {
+                $this->assertStringNotContainsString('broken-clip', $onScreen, 'the file that will not play was put on screen');
+            }
 
             $this->removeUploads($tv, ...[...$images, $broken]);
         });
@@ -540,15 +555,24 @@ class PlaylistFlowTest extends DuskTestCase
             // A video takes its own length; an image takes the default.
             $browser->assertSee('45 secs');   // 10 + 10 + 25
 
-            // -- Reorder: move the third item up --------------------------------
+            // The list the page will save, read from the component itself: what is sent is
+            // this array, so a move that only redrew the rows would still save the old order.
+            $order = fn () => $browser->script(
+                'return Alpine.$data(document.querySelector(\'[x-data^="screenPlaylist"]\')).items.map(i => i.media_id);'
+            )[0];
+            $this->assertSame([$one->id, $two->id, $clip->id], $order());
+
+            // -- Reorder: the first goes down one, then the last comes up one ----
+            // one, two, clip → two, one, clip → two, clip, one. Both buttons change the
+            // list in their click handler, so it can be read straight after each.
             $this->jsClick($browser, '@playlist-down-0');
-            $browser->pause(300);
+            $this->assertSame([$two->id, $one->id, $clip->id], $order());
             $this->jsClick($browser, '@playlist-up-2');
-            $browser->pause(300);
+            $this->assertSame([$two->id, $clip->id, $one->id], $order());
 
             // -- Retime an image -------------------------------------------------
+            // Poster Two is first now, so this is its line.
             $this->jsType($browser, '@playlist-duration-0', '20');
-            $browser->pause(300);
 
             // -- Save -------------------------------------------------------------
             $this->jsClick($browser, '@playlist-save');
@@ -556,19 +580,15 @@ class PlaylistFlowTest extends DuskTestCase
 
             $saved = PlaylistItem::where('screen_id', $screen->id)->orderBy('position')->get();
             $this->assertSame([0, 1, 2], $saved->pluck('position')->all());
-            $this->assertSame(3, $saved->count());
-            // Whatever ended up first is what was saved first, at the new duration.
+            $this->assertSame([$two->id, $clip->id, $one->id], $saved->pluck('media_id')->all());
+            // The first line kept the new duration through the move.
             $this->assertSame(20, $saved->first()->duration_seconds);
 
             // -- The order survives a reload -------------------------------------
-            $expectedOrder = $saved->pluck('media_id')->all();
             $browser->refresh();
             $this->waitForAlpine($browser);
             $browser->waitForText('3 items');
-            $this->assertSame(
-                $expectedOrder,
-                PlaylistItem::where('screen_id', $screen->id)->orderBy('position')->pluck('media_id')->all()
-            );
+            $this->assertSame([$two->id, $clip->id, $one->id], $order());
 
             // -- Search the picker ------------------------------------------------
             $this->jsType($browser, '@media-picker-search', 'Promo');

@@ -289,8 +289,12 @@
                             <select x-model="form.default_media_id" dusk="screen-edit-default-media"
                                     class="form-select block w-full">
                                 <option value="">Nothing &mdash; leave the screen black</option>
+                                {{-- The options arrive after the modal opens, and x-model does not go back
+                                     to pick one out of a list that grew later — so each option says itself
+                                     whether it is the screen's (as on the Members and Users pages). --}}
                                 <template x-for="media in mediaOptions" :key="media.id">
-                                    <option x-bind:value="media.id" x-text="media.title"></option>
+                                    <option x-bind:value="media.id" x-text="media.title"
+                                            x-bind:selected="String(media.id) === String(form.default_media_id)"></option>
                                 </template>
                             </select>
                         </x-crud.form-field>

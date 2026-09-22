@@ -3,6 +3,7 @@
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Store;
+use App\Models\User;
 
 /*
 |--------------------------------------------------------------------------
@@ -39,6 +40,7 @@ test('the rules that are not permissions still stand for a super admin', functio
     $this->actingAs($superAdmin)->deleteJson('/roles/'.Role::superAdminId(), ['password' => 'password'])->assertForbidden();
     $this->actingAs($superAdmin)->deleteJson('/roles/'.Role::starter(Role::OWNER)->id, ['password' => 'password'])->assertForbidden();
     $this->actingAs($superAdmin)->delete('/profile', ['password' => 'password'])->assertForbidden();
+    expect(User::find($superAdmin->id))->not->toBeNull();
 
     // Somebody else holding every permission row is still not a super admin.
     $support = createPlatformUser(Permission::pluck('name')->all());

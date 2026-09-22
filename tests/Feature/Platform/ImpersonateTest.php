@@ -88,14 +88,18 @@ test('stopping impersonation attributes the audit row to the returning super adm
 });
 
 test('a non-super-admin cannot impersonate anyone', function () {
-    $store = Store::factory()->create();
-    $viewer = createStoreUser($store, []);
-    $target = User::factory()->create();
+    // A platform team member passes the route's global-tier lock, so the refusal has to come from the
+    // controller's own super-admin check — the one this test is about. (A store member would be turned
+    // away at the lock and never reach it.)
+    $support = createPlatformUser(['user-view']);
+    $target = createStoreMember(Store::factory()->create(), Role::STAFF);
 
-    $response = $this->actingAs($viewer)->post("/users/{$target->id}/impersonate");
+    $this->actingAs($support)->postJson("/users/{$target->id}/impersonate")
+        ->assertForbidden()
+        ->assertJsonPath('message', 'Only Super Admins can impersonate.');
 
-    $response->assertForbidden();
-    expect(auth()->id())->toBe($viewer->id);
+    expect(auth()->id())->toBe($support->id)
+        ->and(session('impersonating_original_id'))->toBeNull();
 });
 
 test('a super admin cannot impersonate another super admin', function () {
@@ -181,4 +185,17 @@ test('the users list offers "Log in as" for everyone but super admins and yourse
         ->and($users[$otherAdmin->id]['can']['impersonate'])->toBeFalse()
         ->and($users[$admin->id]['can']['impersonate'])->toBeFalse()
         ->and($users[$regular->id]['can']['impersonate'])->toBeTrue();
+});
+
+test('the way back is offered on the store picker too, where a member of several stores lands', function () {
+    $admin = createSuperAdmin();
+    $target = User::factory()->create();
+
+    foreach (Store::factory()->count(2)->create() as $store) {
+        $target->stores()->attach($store->id, ['role_id' => Role::owner()->id]);
+    }
+
+    $this->actingAs($admin)->post("/users/{$target->id}/impersonate")->assertRedirect(route('dashboard'));
+
+    $this->get('/select-store')->assertOk()->assertSee('Return to Super Admin');
 });

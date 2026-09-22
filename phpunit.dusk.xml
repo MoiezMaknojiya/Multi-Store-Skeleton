@@ -21,6 +21,8 @@
         <!-- Relative on purpose: resolved from the project root, so renaming or
              moving the project folder can never point this at the wrong database. -->
         <env name="DB_DATABASE" value="database/dusk.sqlite" force="true"/>
+        <!-- A DB_URL anywhere in the environment would override DB_CONNECTION and DB_DATABASE above. -->
+        <env name="DB_URL" value="" force="true"/>
         <env name="SESSION_DRIVER" value="file" force="true"/>
         <env name="CACHE_STORE" value="file" force="true"/>
         <env name="QUEUE_CONNECTION" value="sync" force="true"/>

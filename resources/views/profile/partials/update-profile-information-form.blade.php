@@ -20,7 +20,11 @@
             <x-auth.form-field name="last_name" label="Last Name" :required="true" :value="$user->last_name" autocomplete="family-name" />
         </div>
 
-        <div x-data="{ phone: '{{ old('phone', $user->phone) }}' }">
+        {{-- The phone reaches Alpine through Js::from, never inside hand-written quotes (an apostrophe or a
+             backslash would break the whole component), and only as one plain value: a flashed phone[]=x
+             is an array, and an array here was a 500 on the profile page. --}}
+        @php($phone = old('phone', $user->phone))
+        <div x-data="{ phone: {{ Js::from(is_scalar($phone) ? (string) $phone : '') }} }">
             <x-auth.form-field name="phone" label="Phone (10 digits)" type="tel" :required="true" :value="$user->phone"
                 placeholder="1234567890" x-model="phone" x-on:input="phone = phone.replace(/\D/g, '').slice(0, 10)" />
         </div>

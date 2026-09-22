@@ -239,12 +239,15 @@ test('the manifest version changes when the playlist changes, and not otherwise'
 });
 
 test('the manifest carries the server clock so a wrong TV clock cannot matter', function () {
+    // Frozen, so the answer can be compared to the second: "within a few seconds" would also pass for a
+    // clock read from anywhere else, and a signed difference passes for any time in the past.
+    $this->travelTo('2026-03-20 18:04:05');
     Screen::factory()->withToken('tok')->create(['store_id' => Store::factory()]);
 
     $serverTime = $this->withHeader('Authorization', 'Bearer tok')
         ->getJson('/device/playlist')->assertOk()->json('server_time');
 
-    expect(now()->diffInSeconds($serverTime))->toBeLessThan(5);
+    expect($serverTime)->toBe('2026-03-20T18:04:05+00:00');
 });
 
 test('a screen only ever receives its own playlist', function () {

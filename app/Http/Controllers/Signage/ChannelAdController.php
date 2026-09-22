@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Signage;
 
+use App\Http\Controllers\Concerns\HandlesCrudData;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Signage\ChannelAdRequest;
 use App\Models\ActivityLog;
@@ -11,32 +12,37 @@ use App\Models\Media;
 use App\Models\PlaylistItem;
 use App\Services\MediaStorage;
 use Closure;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
- * The ads inside one channel.
+ * The ads inside one channel (docs/CHANNEL-CONTENT-SPEC.md).
  *
- * Adding, editing, reordering and removing an ad are all EDITS of the channel, so all
- * of them answer to `channel-update`; deleting the channel itself is the only thing
- * `channel-destroy` guards.
+ * An ad is a row of a media library held by id — the channel keeps no files of its own. It comes from the
+ * library, from the Ad Builder (a published ad IS a library row), or from a fresh upload, which joins the
+ * channel's library first: the shop's for a shop's channel, the platform's for the platform's. Taking an ad
+ * out leaves its file in the library.
  *
- * Files are posted as FormData and a video is measured in the browser, exactly like
- * the media library and the campaigns — there is no ffmpeg on the server.
+ * Adding, editing, reordering and removing an ad are all EDITS of the channel, so all of them answer to
+ * `channel-update`; deleting the channel itself is the only thing `channel-destroy` guards.
  */
 class ChannelAdController extends Controller implements HasMiddleware
 {
+    use HandlesCrudData;
+
     public function __construct(private readonly MediaStorage $storage) {}
 
     /**
-     * Every action here reaches one channel, and only a channel within reach (Channel::visibleTo): inside a
-     * store, the platform's channels and other stores' are not found. Checked before anything else runs —
-     * an upload is not even validated against a channel out of reach.
+     * Every action here reaches one channel, and only a channel within reach — checked before anything else
+     * runs, so an upload is not even validated against a channel out of reach. Reading its ads is open to
+     * every channel the person may look at (a shop reads the platform's channels too); every change needs a
+     * channel they may manage (Channel::visibleTo), and anything else is not found.
      *
      * @return array<int, Closure>
      */
@@ -45,8 +51,13 @@ class ChannelAdController extends Controller implements HasMiddleware
         return [
             function (Request $request, Closure $next) {
                 $channel = $request->route('channel');
+                $reading = $request->isMethod('GET') && $request->route()?->getName() === 'channels.ads.index';
 
-                abort_unless($channel instanceof Channel && Channel::visibleTo($request->user())->whereKey($channel->id)->exists(), 404);
+                $reach = $reading
+                    ? Channel::listableIn($request->user())
+                    : Channel::visibleTo($request->user());
+
+                abort_unless($channel instanceof Channel && $reach->whereKey($channel->id)->exists(), 404);
 
                 return $next($request);
             },
@@ -59,18 +70,56 @@ class ChannelAdController extends Controller implements HasMiddleware
         return response()->json(['ads' => $this->adsPayload($channel)]);
     }
 
+    /**
+     * The library rows this channel may show, for the Add-ad pickers: a shop's channel, that shop's library; the
+     * platform's channel, its own library by default or a shop's (`library`). `type=html` is the Ad Builder's
+     * published ads, `type=files` the pictures and videos. A permission of its own reach: it does not need
+     * `media-view`, so it answers with what a tile shows and nothing more — like the playlist's picker.
+     */
+    public function library(Request $request, Channel $channel): JsonResponse
+    {
+        $filters = $request->validate([
+            'type' => ['nullable', Rule::in([Media::TYPE_IMAGE, Media::TYPE_VIDEO, Media::TYPE_HTML, 'files'])],
+            'library' => ['nullable', 'string', 'regex:/^(platform|[1-9][0-9]{0,9})$/'],
+            'search' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        // Never an Ad Builder page taken off the screens (unpublished): nobody picks one until it is published again.
+        $query = Media::query()
+            ->withoutDrafts()
+            ->when($channel->isPlatformChannel(),
+                fn (Builder $query) => ($filters['library'] ?? 'platform') === 'platform'
+                    ? $query->platformOwned()
+                    : $query->where('store_id', (int) $filters['library']),
+                fn (Builder $query) => $query->where('store_id', $channel->store_id))
+            ->when($filters['type'] ?? null, fn (Builder $query, string $type) => $type === 'files'
+                ? $query->whereIn('type', [Media::TYPE_IMAGE, Media::TYPE_VIDEO])
+                : $query->where('type', $type))
+            ->latest();
+
+        return $this->paginatedResponse($request, $query, ['title'], 'media', ['*'],
+            fn (Collection $files) => $files->transform(fn (Media $media) => [
+                'id' => $media->id,
+                'title' => $media->title,
+                'type' => $media->type,
+                'orientation' => $media->orientation,
+                'duration_seconds' => $media->duration_seconds,
+                'thumbnail_url' => $media->thumbnail_url,
+            ]));
+    }
+
     public function store(ChannelAdRequest $request, Channel $channel): JsonResponse
     {
         $validated = $request->validated();
-        $upload = $request->file('file');
 
-        $ad = DB::transaction(function () use ($validated, $upload, $channel) {
-            $file = $this->storage->storeChannelFile($upload, $channel->id, $validated);
+        $ad = DB::transaction(function () use ($request, $validated, $channel) {
+            $media = $request->hasFile('file') ? $this->uploadIntoLibrary($request, $channel) : $request->chosenMedia();
 
             return ChannelAd::create([
-                ...$this->fileAttributes($file, $validated),
                 'channel_id' => $channel->id,
-                'title' => filled($validated['title'] ?? null) ? $validated['title'] : $this->titleFromFilename($upload),
+                'media_id' => $media->id,
+                'title' => filled($validated['title'] ?? null) ? $validated['title'] : $media->title,
+                'duration_seconds' => $this->secondsFor($media, $validated),
                 'starts_on' => $validated['starts_on'] ?? null,
                 'ends_on' => $validated['ends_on'] ?? null,
                 // A new ad joins the end of the channel.
@@ -84,37 +133,28 @@ class ChannelAdController extends Controller implements HasMiddleware
         return response()->json(['message' => 'Ad added', 'ads' => $this->adsPayload($channel)]);
     }
 
-    /** Retitle, re-time or re-date an ad — and optionally swap the file itself. */
+    /**
+     * Retitle, re-time or re-date an ad — and optionally show another file in it. The file it showed before stays
+     * in its library: it was never the channel's to delete.
+     */
     public function update(ChannelAdRequest $request, Channel $channel, ChannelAd $ad): JsonResponse
     {
         $validated = $request->validated();
-        $upload = $request->file('file');
 
-        DB::transaction(function () use ($validated, $upload, $channel, $ad) {
-            $attributes = [
+        DB::transaction(function () use ($request, $validated, $channel, $ad) {
+            $media = match (true) {
+                $request->hasFile('file') => $this->uploadIntoLibrary($request, $channel),
+                filled($validated['media_id'] ?? null) => $request->chosenMedia(),
+                default => $ad->media,
+            };
+
+            $ad->update([
+                'media_id' => $media->id,
                 'title' => filled($validated['title'] ?? null) ? $validated['title'] : $ad->title,
+                'duration_seconds' => $this->secondsFor($media, $validated, $ad->duration_seconds),
                 'starts_on' => $validated['starts_on'] ?? null,
                 'ends_on' => $validated['ends_on'] ?? null,
-            ];
-
-            if ($upload !== null) {
-                $old = [$ad->disk, $ad->path, $ad->thumbnail_path];
-                $attributes = [
-                    ...$attributes,
-                    ...$this->fileAttributes($this->storage->storeChannelFile($upload, $channel->id, $validated), $validated),
-                ];
-            } elseif ($ad->type === Media::TYPE_IMAGE) {
-                $attributes['duration_seconds'] = (int) ($validated['seconds'] ?? $ad->duration_seconds);
-            }
-
-            $ad->update($attributes);
-
-            // The replaced file goes only once the row is committed as pointing at the
-            // new one: a stale file on disk is harmless, a row pointing at a deleted
-            // file is a black rectangle on somebody's wall.
-            if (isset($old)) {
-                DB::afterCommit(fn () => $this->storage->deleteFiles(...$old));
-            }
+            ]);
         });
 
         ActivityLog::record('channel.ad_updated', $channel, "Updated ad {$ad->title} in channel {$channel->name}");
@@ -122,15 +162,12 @@ class ChannelAdController extends Controller implements HasMiddleware
         return response()->json(['message' => 'Ad updated', 'ads' => $this->adsPayload($channel)]);
     }
 
+    /** Take an ad out of the channel. Its file stays in its library. */
     public function destroy(Channel $channel, ChannelAd $ad): JsonResponse
     {
         $title = $ad->title;
-        $files = [$ad->disk, $ad->path, $ad->thumbnail_path];
 
-        DB::transaction(function () use ($ad, $files) {
-            $ad->delete();
-            DB::afterCommit(fn () => $this->storage->deleteFiles(...$files));
-        });
+        $ad->delete();
 
         ActivityLog::record('channel.ad_removed', $channel, "Removed ad {$title} from channel {$channel->name}");
 
@@ -148,11 +185,11 @@ class ChannelAdController extends Controller implements HasMiddleware
     {
         $validated = $request->validate([
             'ad_ids' => ['present', 'array'],
-            'ad_ids.*' => ['integer', 'distinct'],
+            'ad_ids.*' => ['integer', 'min:1', 'distinct'],
         ]);
 
-        $posted = collect($validated['ad_ids'])->map(fn ($id) => (int) $id)->values();
-        $current = ChannelAd::where('channel_id', $channel->id)->pluck('id')->map(fn ($id) => (int) $id);
+        $posted = collect($validated['ad_ids'])->map(fn (int|string $id) => (int) $id)->values();
+        $current = ChannelAd::where('channel_id', $channel->id)->pluck('id')->map(fn (int|string $id) => (int) $id);
 
         if ($posted->sort()->values()->all() !== $current->sort()->values()->all()) {
             throw ValidationException::withMessages([
@@ -172,42 +209,39 @@ class ChannelAdController extends Controller implements HasMiddleware
     }
 
     /**
-     * The columns an ad keeps about its file.
-     *
-     * An image gets the seconds it was given. A video gets none — it runs to its own
-     * end, which is the length the browser measured.
-     *
-     * @param  array<string, mixed>  $file
-     * @param  array<string, mixed>  $validated
-     * @return array<string, mixed>
+     * A file uploaded inside a channel joins the channel's library first — the shop's for a shop's channel, the
+     * platform's for the platform's — exactly as an upload on the Media page does, and shows up there after.
      */
-    private function fileAttributes(array $file, array $validated): array
+    private function uploadIntoLibrary(ChannelAdRequest $request, Channel $channel): Media
     {
-        $isVideo = $file['type'] === Media::TYPE_VIDEO;
+        $media = $this->storage->addToLibrary(
+            $request->file('file'),
+            $channel->store_id,
+            $request->only(['duration_seconds', 'width', 'height', 'poster']),
+            $request->validated('title'),
+            auth()->id(),
+        );
 
-        return [
-            'type' => $file['type'],
-            'mime_type' => $file['mime_type'],
-            'disk' => $file['disk'],
-            'path' => $file['path'],
-            'thumbnail_path' => $file['thumbnail_path'],
-            'size' => $file['size'],
-            'width' => $file['width'],
-            'height' => $file['height'],
-            'orientation' => $file['orientation'],
-            'media_duration_seconds' => $isVideo ? $file['duration_seconds'] : null,
-            // The rules demand seconds for an image, so they are always here — with a
-            // fallback anyway, because the alternative to a default is a 500 on an upload.
-            'duration_seconds' => $isVideo ? null : (int) ($validated['seconds'] ?? PlaylistItem::DEFAULT_IMAGE_SECONDS),
-        ];
+        ActivityLog::record('media.uploaded', $media, "Uploaded {$media->type} {$media->title} for channel {$channel->name}"
+            .($media->isPlatformOwned() ? " to the platform's library" : ''));
+
+        return $media;
     }
 
-    /** "coke-2l-deal.jpg" becomes "coke-2l-deal", when nobody typed a title. */
-    private function titleFromFilename(UploadedFile $upload): string
+    /**
+     * An image or an ad page shows for the seconds it was given; a video has none — it runs to its own end.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function secondsFor(Media $media, array $validated, ?int $current = null): ?int
     {
-        $name = trim(pathinfo($upload->getClientOriginalName(), PATHINFO_FILENAME));
+        if ($media->type === Media::TYPE_VIDEO) {
+            return null;
+        }
 
-        return $name !== '' ? Str::limit($name, 255, '') : 'Ad';
+        // The rules demand seconds for anything but a video, so they are always here — with a fallback anyway,
+        // because the alternative to a default is a 500 on a save.
+        return (int) ($validated['seconds'] ?? $current ?? PlaylistItem::DEFAULT_IMAGE_SECONDS);
     }
 
     /** @return array<int, array<string, mixed>> */
@@ -216,11 +250,13 @@ class ChannelAdController extends Controller implements HasMiddleware
         $today = now();
 
         return ChannelAd::where('channel_id', $channel->id)
+            ->with(['media.store:id,name', 'media.builderAd'])
             ->orderBy('position')
             ->orderBy('id')
             ->get()
             ->map(fn (ChannelAd $ad) => [
                 'id' => $ad->id,
+                'media_id' => $ad->media_id,
                 'title' => $ad->title,
                 'type' => $ad->type,
                 'orientation' => $ad->orientation,
@@ -230,6 +266,8 @@ class ChannelAdController extends Controller implements HasMiddleware
                 'play_seconds' => $ad->play_seconds,
                 'starts_on' => $ad->starts_on?->toDateString(),
                 'ends_on' => $ad->ends_on?->toDateString(),
+                // Whose library the file is in — "Platform", or the shop's name.
+                'library' => $ad->media?->isPlatformOwned() ? 'Platform' : $ad->media?->store?->name,
                 // Against the server's own date: this list is read by one person at a
                 // desk, not by a screen standing in some other timezone.
                 'status' => $ad->statusOn($today),

@@ -1,39 +1,31 @@
 <x-guest-layout>
-    <form method="POST" action="{{ route('password.store') }}" dusk="reset-password-form">
+    {{-- The page the emailed link opens (NewPasswordController::create). A plain POST form on the auth track,
+         like sign-in and sign-up: x-auth.form-field for the fields, the eye toggle for the passwords. $email
+         arrives as a plain string (?email[]=x reads as none), so the link cannot break the page. --}}
+    <form method="POST" action="{{ route('password.store') }}" class="space-y-5" dusk="reset-password-form"
+        x-data="resetPasswordForm()" @submit="handleSubmit($event)">
         @csrf
 
-        <!-- Password Reset Token -->
-        <input type="hidden" name="token" value="{{ $request->route('token') }}">
+        {{-- The token from the link travels with the form. --}}
+        <input type="hidden" name="token" value="{{ $token }}">
 
-        <!-- Email Address -->
-        <div>
-            <x-input-label for="email" :value="__('Email')" :required="true" />
-            <x-text-input id="email" class="block mt-1 w-full {{ $errors->has('email') ? '!border-red-500' : '' }}" type="email" name="email" :value="old('email', $request->email)" required autofocus autocomplete="username" />
-            <x-input-error :messages="$errors->get('email')" class="mt-2" />
-        </div>
+        <x-auth.form-field name="email" label="Email" type="email" :value="$email"
+            autofocus autocomplete="username" :required="true" />
 
-        <!-- Password -->
-        <div class="mt-4">
-            <x-input-label for="password" :value="__('Password')" :required="true" />
-            <x-text-input id="password" class="block mt-1 w-full {{ $errors->has('password') ? '!border-red-500' : '' }}" type="password" name="password" required autocomplete="new-password" />
-            <x-input-error :messages="$errors->get('password')" class="mt-2" />
-        </div>
+        <x-auth.form-field name="password" label="Password" :required="true">
+            <x-slot name="input">
+                <x-auth.password-input name="password" placeholder="Choose a new password" autocomplete="new-password" />
+            </x-slot>
+        </x-auth.form-field>
 
-        <!-- Confirm Password -->
-        <div class="mt-4">
-            <x-input-label for="password_confirmation" :value="__('Confirm Password')" :required="true" />
+        <x-auth.form-field name="password_confirmation" label="Confirm Password" :required="true">
+            <x-slot name="input">
+                <x-auth.password-input name="password_confirmation" placeholder="Confirm your new password" autocomplete="new-password" />
+            </x-slot>
+        </x-auth.form-field>
 
-            <x-text-input id="password_confirmation" class="block mt-1 w-full {{ $errors->has('password_confirmation') ? '!border-red-500' : '' }}"
-                                type="password"
-                                name="password_confirmation" required autocomplete="new-password" />
-
-            <x-input-error :messages="$errors->get('password_confirmation')" class="mt-2" />
-        </div>
-
-        <div class="flex items-center justify-end mt-4">
-            <x-primary-button dusk="reset-password-submit">
-                {{ __('Reset Password') }}
-            </x-primary-button>
-        </div>
+        <button type="submit" class="btn-primary-auth" dusk="reset-password-submit">
+            {{ __('Reset Password') }}
+        </button>
     </form>
 </x-guest-layout>

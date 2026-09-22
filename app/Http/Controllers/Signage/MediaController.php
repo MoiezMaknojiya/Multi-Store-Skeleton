@@ -7,12 +7,15 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Signage\StoreMediaRequest;
 use App\Http\Requests\Signage\UpdateMediaRequest;
 use App\Models\ActivityLog;
+use App\Models\BuilderAd;
 use App\Models\Media;
+use App\Models\Store;
 use App\Services\MediaStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -31,22 +34,42 @@ class MediaController extends Controller
         'expiry_desc' => ['expires_at', 'desc'],
     ];
 
-    /** Render the media library page */
-    public function index(): View
+    /**
+     * The media library page. Above the stores it reads one library at a time — the platform's own, or a
+     * shop's — and the chooser decides where an upload lands as well (docs/CHANNEL-CONTENT-SPEC.md §3).
+     */
+    public function index(Request $request): View
     {
-        return view('media.index');
+        return view('media.index', [
+            'libraries' => $request->user()->globalRole() !== null
+                ? Store::orderBy('name')->get(['id', 'name'])->toArray()
+                : null,
+        ]);
     }
 
-    /** Return paginated, searchable media as JSON, scoped to the current store. */
+    /**
+     * Return paginated, searchable media as JSON, scoped to where the person stands. Above the stores the page
+     * reads one library at a time — `library=platform` for the platform's own, or a shop's id — and with no
+     * `library` every library within reach; inside a store there is only the store's, whatever is sent.
+     */
     public function data(Request $request): JsonResponse
     {
         $filters = $request->validate([
-            'type' => ['nullable', 'in:image,video'],
+            'type' => ['nullable', Rule::in([Media::TYPE_IMAGE, Media::TYPE_VIDEO, Media::TYPE_HTML])],
             'orientation' => ['nullable', 'in:landscape,portrait'],
             'sort' => ['nullable', 'string'],
+            'library' => ['nullable', 'string', 'regex:/^(platform|[1-9][0-9]{0,9})$/'],
         ]);
 
-        $query = Media::visibleTo(auth()->user());
+        // An Ad Builder page taken off the screens (unpublished) is in no library until it is published again (owner,
+        // 2026-09-21): the Ad Builder is where a draft lives.
+        $query = Media::visibleTo(auth()->user())->withoutDrafts()->with('store:id,name');
+
+        if (auth()->user()->globalRole() !== null && filled($filters['library'] ?? null)) {
+            $filters['library'] === 'platform'
+                ? $query->platformOwned()
+                : $query->where('store_id', (int) $filters['library']);
+        }
 
         if (! empty($filters['type'])) {
             $query->where('type', $filters['type']);
@@ -59,54 +82,30 @@ class MediaController extends Controller
         [$column, $direction] = self::SORTS[$filters['sort'] ?? 'newest'] ?? self::SORTS['newest'];
         $query->orderBy($column, $direction);
 
-        return $this->paginatedResponse($request, $query, ['title', 'description'], 'media');
+        return $this->paginatedResponse($request, $query, ['title', 'description'], 'media', ['*'],
+            // Why a file may not be deleted yet, so the panel says it before anybody confirms (spec §5).
+            function (Collection $files) {
+                $refusals = Media::stillInChannelsMessages($files->pluck('id')->all());
+
+                $files->each(fn (Media $media) => $media->setAttribute('in_channels_message', $refusals[$media->id] ?? null));
+            });
     }
 
-    /** Upload a file into the current store's library. */
+    /** Upload a file into a library: the current store's, or — above the stores — the one the page chose. */
     public function store(StoreMediaRequest $request, MediaStorage $storage): JsonResponse
     {
-        $storeId = $this->currentStoreId();
-        $file = $request->file('file');
+        $media = $storage->addToLibrary(
+            $request->file('file'),
+            $this->uploadTarget($request),
+            $request->only(['duration_seconds', 'width', 'height', 'poster']),
+            $request->validated('title'),
+            auth()->id(),
+        );
 
-        $title = $this->titleFor($request->input('title'), $file);
-
-        $attributes = $storage->store($file, $storeId, $request->only(['duration_seconds', 'width', 'height', 'poster']));
-
-        $media = Media::create([
-            ...$attributes,
-            'title' => $title,
-            'created_by' => auth()->id(),
-        ]);
-
-        ActivityLog::record('media.uploaded', $media, "Uploaded {$media->type} {$media->title}");
+        ActivityLog::record('media.uploaded', $media, "Uploaded {$media->type} {$media->title}"
+            .($media->isPlatformOwned() ? " to the platform's library" : ''));
 
         return response()->json(['message' => 'File uploaded successfully', 'media' => $media]);
-    }
-
-    /**
-     * What to call the file: the owner's own words, or the file's name.
-     *
-     * The typed title is already capped at 255 by StoreMediaRequest. The FALLBACK
-     * is not, and it must be treated as untrusted: a filename arrives in the
-     * multipart header and a client can put anything of any length there, real
-     * filesystem limits or not. Left alone it reaches a varchar(255) column and a
-     * shop owner gets a 500 instead of a file in their library.
-     *
-     * Two other shapes worth handling rather than storing: a title of nothing but
-     * spaces, and a file called ".jpg", whose name-without-extension is empty.
-     * Both would otherwise leave a blank row that nobody can identify.
-     */
-    private function titleFor(?string $typed, UploadedFile $file): string
-    {
-        $title = trim((string) $typed);
-
-        if ($title === '') {
-            $title = trim(pathinfo((string) $file->getClientOriginalName(), PATHINFO_FILENAME));
-        }
-
-        $title = mb_substr($title, 0, 255);
-
-        return $title === '' ? 'Untitled' : $title;
     }
 
     /** Rename a file, describe it, or set its schedule window. */
@@ -129,11 +128,24 @@ class MediaController extends Controller
         $media = Media::visibleTo(auth()->user())->findOrFail($media->id);
         $title = $media->title;
 
-        // The row goes first: a stale file on disk is harmless, a row pointing at a
-        // deleted file is a broken thumbnail on every screen that lists it.
-        DB::transaction(function () use ($media, $storage) {
+        // A channel showing this file would lose the ad without anybody deciding so: refused, naming them.
+        if (($inUse = $media->stillInAChannelMessage()) !== null) {
+            throw ValidationException::withMessages(['file' => $inUse]);
+        }
+
+        // A published ad's row published before each got a poster of its own still names the design's
+        // poster: that file belongs to the design, which outlives this row, so it stays.
+        $thumbnail = $media->type === Media::TYPE_HTML
+            && BuilderAd::where('thumbnail_path', $media->thumbnail_path)->exists()
+                ? null
+                : $media->thumbnail_path;
+
+        // The row goes first and the files only once that has committed: a stale file on disk is
+        // harmless, a row pointing at a deleted file is a broken thumbnail on every screen that lists it.
+        DB::transaction(function () use ($media, $storage, $thumbnail) {
             $media->delete();
-            $storage->delete($media);
+
+            DB::afterCommit(fn () => $storage->deleteFiles($media->disk, $media->path, $thumbnail));
         });
 
         ActivityLog::record('media.deleted', null, "Deleted media {$title}", storeId: $media->store_id);
@@ -141,19 +153,33 @@ class MediaController extends Controller
         return response()->json(['message' => 'Media deleted successfully']);
     }
 
-    /** Media always belongs to a store, so an upload needs a store context. Super
-     *  admins and global users work above the stores and have none — they can read
-     *  every library but must step into a store to add to one. */
-    private function currentStoreId(): int
+    /**
+     * Whose library an upload joins. A store's person: the store they are working in — with none selected
+     * the upload is refused, there being no library of their own to put it in. The platform team: the shop
+     * chosen on the page, or with none chosen the platform's own library (null).
+     */
+    private function uploadTarget(StoreMediaRequest $request): ?int
     {
-        $storeId = (int) session('current_store_id');
+        if (auth()->user()->globalRole() === null) {
+            $storeId = (int) session('current_store_id');
 
-        if (! $storeId) {
+            if (! $storeId) {
+                throw ValidationException::withMessages([
+                    'file' => 'Select a store before uploading — media belongs to the store it is uploaded in.',
+                ]);
+            }
+
+            return $storeId;
+        }
+
+        $storeId = (int) ($request->validated('store_id') ?? 0);
+
+        if ($storeId !== 0 && ! Store::whereKey($storeId)->exists()) {
             throw ValidationException::withMessages([
-                'file' => 'Select a store before uploading — media belongs to the store it is uploaded in.',
+                'file' => 'That shop no longer exists. Reload the page and choose again.',
             ]);
         }
 
-        return $storeId;
+        return $storeId === 0 ? null : $storeId;
     }
 }

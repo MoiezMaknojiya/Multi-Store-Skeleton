@@ -4,6 +4,7 @@ namespace App\Http\Requests\Signage;
 
 use App\Models\Channel;
 use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -53,8 +54,8 @@ class ChannelRequest extends FormRequest
 
                 $taken = Channel::query()
                     ->where('name', $value)
-                    ->when($this->route('channel'), fn ($query, Channel $channel) => $query->whereKeyNot($channel->id))
-                    ->where(fn ($query) => $storeId === null
+                    ->when($this->route('channel'), fn (Builder $query, Channel $channel) => $query->whereKeyNot($channel->id))
+                    ->where(fn (Builder $query) => $storeId === null
                         ? $query->whereNull('store_id')
                         : $query->whereNull('store_id')->orWhere('store_id', $storeId))
                     ->exists();

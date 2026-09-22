@@ -112,7 +112,7 @@
         <div x-show="tab === 'invitations'" x-cloak class="card" dusk="invitations-table">
             <div class="card-header">
                 <h3 class="text-subheading">Pending invitations</h3>
-                <p class="text-xs text-gray-500 dark:text-gray-400">Links are valid for 7 days. Resending sends a new link.</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Links are valid for {{ \App\Models\Invitation::LIFETIME_DAYS }} days. Resending sends a new link.</p>
             </div>
             <div class="overflow-x-auto">
                 <table class="table-base">
@@ -169,7 +169,7 @@
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Invite a member</h2>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        They'll get an email with a link to join {{ $store->name }}. The link works for 7 days.
+                        They'll get an email with a link to join {{ $store->name }}. The link works for {{ \App\Models\Invitation::LIFETIME_DAYS }} days.
                     </p>
                 </div>
 

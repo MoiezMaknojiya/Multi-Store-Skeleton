@@ -14,6 +14,7 @@ import { registerProfileInfo }       from './pages/profile-info.js';
 import { registerDeleteAccountForm } from './pages/delete-account.js';
 import { registerFormGuard }         from './core/form-guard.js';
 import { registerRegisterForm }      from './pages/register-form.js';
+import { registerAuthForms }         from './pages/auth-forms.js';
 import { registerStoreSettings }     from './pages/store-settings.js';
 import { registerMembersPage }       from './pages/members-page.js';
 
@@ -30,6 +31,11 @@ import { registerDaypartsTable }     from './tables/dayparts-table.js';
 import { registerCampaignsTable }    from './tables/campaigns-table.js';
 import { registerChannelsTable }     from './tables/channels-table.js';
 import { registerChannelAds }        from './pages/channel-ads.js';
+
+/* The Ad Builder: its two listings and the editor itself */
+import { registerAdsTable }           from './tables/ads-table.js';
+import { registerBuilderAssetsTable } from './tables/builder-assets-table.js';
+import { registerAdEditor }           from './builder/editor.js';
 
 window.Alpine = Alpine;
 
@@ -61,6 +67,7 @@ registerPasswordForm(Alpine);
 registerProfileInfo(Alpine);
 registerDeleteAccountForm(Alpine);
 registerRegisterForm(Alpine);
+registerAuthForms(Alpine);
 registerStoreSettings(Alpine);
 registerMembersPage(Alpine);
 
@@ -77,5 +84,10 @@ registerDaypartsTable(Alpine);
 registerCampaignsTable(Alpine);
 registerChannelsTable(Alpine);
 registerChannelAds(Alpine);
+
+/* Register the Ad Builder */
+registerAdsTable(Alpine);
+registerBuilderAssetsTable(Alpine);
+registerAdEditor(Alpine);
 
 Alpine.start();

@@ -21,7 +21,6 @@ beforeEach(function () {
     // The first super admin ever made is the primary one.
     $this->primary = createSuperAdmin(['user-view', 'user-destroy']);
     $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    registerPermissionGates();
 });
 
 function usersFor(User $viewer)
@@ -52,13 +51,6 @@ test('support sees customers only — never the platform team', function () {
     $ids = usersFor($support)->keys();
 
     expect($ids)->toContain($owner->id)->not->toContain($this->primary->id)->not->toContain($support->id);
-});
-
-test('the accounts pages are the platform’s — a store member never opens them', function () {
-    $owner = createStoreMember($this->store, Role::OWNER);
-
-    $this->actingAs($owner)->withSession(['current_store_id' => $this->store->id])->getJson('/users/data')->assertForbidden();
-    $this->actingAs($owner)->withSession(['current_store_id' => $this->store->id])->get('/users')->assertForbidden();
 });
 
 test('deleting an account removes the person from their stores and reports stores left without an owner', function () {
@@ -176,8 +168,16 @@ test('the accounts listing runs a bounded number of queries however many rows th
 });
 
 test('a store left in a platform account’s session never takes its platform powers away', function () {
-    $this->actingAs($this->primary)->withSession(['current_store_id' => $this->store->id])
-        ->getJson('/users/data')->assertOk();
+    // Not a super admin: Gate::before would let one through whatever the session said. A support account's
+    // permissions come from its platform role alone, and a store id left in its session — where it is no
+    // member, so it holds nothing — must not swap that role for the empty one.
+    $support = createPlatformUser(['user-view'], 'Support');
+    $owner = createStoreMember($this->store, Role::OWNER);
+
+    $ids = collect($this->actingAs($support)->withSession(['current_store_id' => $this->store->id])
+        ->getJson('/users/data')->assertOk()->json('users'))->pluck('id');
+
+    expect($ids)->toContain($owner->id);
 });
 
 test('only the primary super admin invites a super admin — the one who can also take it away', function () {

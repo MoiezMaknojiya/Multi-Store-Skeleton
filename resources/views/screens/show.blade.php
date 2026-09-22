@@ -1,13 +1,27 @@
+@php
+    // The repeat picker reads "Repeat every [2] [week(s)]", so it names the UNIT. The model's own labels
+    // (ScheduleRule::TYPES) begin with "Every" and would say it twice. A type added there later still
+    // shows, under its own label, until it is given a unit here.
+    $repeatUnits = [
+        'daily' => 'day(s)',
+        'weekly' => 'week(s)',
+        'monthly_day' => 'month(s), on a date',
+        'monthly_weekday' => 'month(s), on a weekday',
+        'yearly' => 'year(s)',
+    ];
+@endphp
+
 <x-app-layout>
     <x-slot name="header">
-        <div class="flex items-center gap-3">
-            <a href="{{ route('screens.view') }}" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" dusk="back-to-screens">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="flex min-w-0 items-center gap-3">
+            <a href="{{ route('screens.view') }}" class="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" dusk="back-to-screens"
+               aria-label="Back to screens">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
             </a>
-            <h2 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ $screen->name }}</h2>
-            <span class="text-sm text-gray-400">{{ $orientations[$screen->orientation] ?? $screen->orientation }}</span>
+            <h2 class="min-w-0 truncate font-semibold text-xl text-gray-800 dark:text-white leading-tight" title="{{ $screen->name }}">{{ $screen->name }}</h2>
+            <span class="hidden flex-shrink-0 text-sm text-gray-400 sm:inline">{{ $orientations[$screen->orientation] ?? $screen->orientation }}</span>
         </div>
     </x-slot>
 
@@ -18,12 +32,13 @@
             'canEdit' => auth()->user()->can('screen-playlist'),
             'dayparts' => $dayparts,
             'weekdays' => $weekdays,
-            'recurrenceTypes' => $recurrenceTypes,
             'ordinals' => $ordinals,
          ]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8">
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {{-- Two columns only when there is a second one: the library and the channels are drawn for
+             someone who may change the playlist, and anybody else gets the playlist at full width. --}}
+        <div @class(['grid grid-cols-1 gap-6', 'lg:grid-cols-2' => auth()->user()->can('screen-playlist')])>
 
             {{-- ── Playlist ─────────────────────────────────────────────── --}}
             <div class="card">
@@ -35,8 +50,11 @@
                     @can('screen-playlist')
                     <div class="flex items-center gap-2">
                         {{-- Copying REPLACES the target's playlist, so it is deliberately
-                             the quieter button of the two and asks before it acts. --}}
-                        <button @click="openCopyModal()" dusk="playlist-copy-open" class="btn-secondary">
+                             the quieter button of the two and asks before it acts. It copies the
+                             SAVED playlist, so it waits until what is on the page has been saved. --}}
+                        <button @click="openCopyModal()" dusk="playlist-copy-open" class="btn-secondary"
+                            x-bind:disabled="dirty || saving"
+                            x-bind:title="dirty ? 'Save your changes first: copying sends the saved playlist' : ''">
                             Copy to other screens
                         </button>
                         <button @click="save()" x-bind:disabled="!dirty || saving" dusk="playlist-save"
@@ -47,19 +65,26 @@
                     @endcan
                 </div>
 
-                <div class="p-4 space-y-2">
+                {{-- A container, so a line's controls move under its title when the column is too
+                     narrow for both — at 1280 px they once squeezed every title to nothing. --}}
+                <div class="@container p-4 space-y-2">
                     <template x-if="loading">
                         <p class="text-center text-muted-soft py-6">Loading...</p>
                     </template>
 
                     <template x-if="!loading && items.length === 0">
                         <p class="text-center text-muted-soft py-10" dusk="playlist-empty">
-                            Nothing here yet. Add files from the library on the right &mdash; or a channel, below it.
+                            Nothing here yet.
+                            @can('screen-playlist')
+                                Add files from the library on the right &mdash; or a channel, below it.
+                            @endcan
                         </p>
                     </template>
 
                     <template x-for="(item, index) in items" :key="item.key">
-                        <div class="flex items-center gap-3 p-2 rounded-md border border-gray-200 dark:border-gray-700">
+                        {{-- A line that is not playing — an Ad Builder page taken off the screens (unpublished) — is drawn faded. --}}
+                        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 p-2 rounded-md border border-gray-200 dark:border-gray-700"
+                             x-bind:class="item.is_draft ? 'opacity-60' : ''">
                             <span class="w-6 text-xs text-gray-400 text-center" x-text="index + 1"></span>
 
                             <div class="w-20 h-12 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
@@ -67,16 +92,19 @@
                                     <img :src="item.thumbnail_url" :alt="item.title" class="w-full h-full object-cover">
                                 </template>
                                 <template x-if="!item.thumbnail_url">
-                                    <span class="text-[10px] text-gray-400" x-text="item.type"></span>
+                                    <span class="text-[10px] text-gray-400" x-text="typeLabel(item)"></span>
                                 </template>
                             </div>
 
                             <div class="flex-1 min-w-0">
                                 <p class="text-sm font-medium text-gray-800 dark:text-white truncate" x-text="item.title"></p>
                                 <p class="text-xs text-gray-400">
-                                    <span class="capitalize" x-text="item.type"></span>
+                                    <span x-text="typeLabel(item)"></span>
                                     <span x-show="item.expires_at" class="text-amber-600 dark:text-amber-400"
                                           x-text="' - expires ' + new Date(item.expires_at).toLocaleDateString()"></span>
+                                    {{-- It keeps its place, and plays again once the ad is published. --}}
+                                    <span x-show="item.is_draft" x-cloak class="text-amber-600 dark:text-amber-400"
+                                          x-bind:dusk="'playlist-draft-' + index">&middot; Draft &mdash; not playing until it is published in the Ad Builder</span>
                                     {{-- A channel line says what it will actually play — and says so
                                          plainly when that is nothing: paused, or no ads running. --}}
                                     <template x-if="item.type === 'channel'">
@@ -96,46 +124,53 @@
                                 </p>
                             </div>
 
-                            {{-- Images are timed; a video runs to its own end; a channel lasts as long
-                                 as the ads it plays that day, which nobody sets here. --}}
-                            <div class="flex items-center gap-1">
-                                <template x-if="item.type === 'image'">
-                                    <span class="flex items-center gap-1">
-                                        <input type="number" min="1" max="86400" x-model.number="item.duration_seconds"
-                                            @input="dirty = true" x-bind:dusk="'playlist-duration-' + index"
-                                            x-bind:disabled="!canEdit"
-                                            class="form-input w-20 text-sm text-right">
-                                        <span class="text-xs text-gray-400">secs</span>
-                                    </span>
-                                </template>
-                                <template x-if="item.type !== 'image'">
-                                    <span class="text-sm text-right text-gray-500 whitespace-nowrap"
-                                          x-bind:dusk="'playlist-length-' + index"
-                                          x-text="(item.type === 'channel' ? '~' : '') + formatDuration(lineSeconds(item))"></span>
-                                </template>
-                            </div>
+                            {{-- The line's own controls: beside the title when there is room, on a
+                                 line of their own under it when there is not. --}}
+                            <div class="flex w-full flex-wrap items-center justify-end gap-x-3 gap-y-2 @xl:w-auto">
+                                {{-- Images and ad pages are timed; a video runs to its own end; a channel
+                                     lasts as long as the ads it plays that day, which nobody sets here. --}}
+                                <div class="flex items-center gap-1">
+                                    <template x-if="isTimed(item)">
+                                        <span class="flex items-center gap-1">
+                                            <input type="number" min="1" max="86400" x-model.number="item.duration_seconds"
+                                                @input="dirty = true" x-bind:dusk="'playlist-duration-' + index"
+                                                x-bind:disabled="!canEdit"
+                                                class="form-input w-20 text-sm text-right">
+                                            <span class="text-xs text-gray-400">secs</span>
+                                        </span>
+                                    </template>
+                                    <template x-if="!isTimed(item)">
+                                        <span class="text-sm text-right text-gray-500 whitespace-nowrap"
+                                              x-bind:dusk="'playlist-length-' + index"
+                                              x-text="(item.type === 'channel' ? '~' : '') + formatDuration(lineSeconds(item))"></span>
+                                    </template>
+                                </div>
 
-                            @can('screen-playlist')
-                            <div class="flex items-center gap-1">
-                                <button @click="openSchedule(index)" x-bind:dusk="'playlist-schedule-' + index"
-                                    class="btn-row-neutral whitespace-nowrap" title="When this item plays">Schedule</button>
-                                <button @click="moveUp(index)" x-bind:disabled="index === 0"
-                                    x-bind:dusk="'playlist-up-' + index"
-                                    class="btn-row-neutral disabled:opacity-30" title="Move up">&uarr;</button>
-                                <button @click="moveDown(index)" x-bind:disabled="index === items.length - 1"
-                                    x-bind:dusk="'playlist-down-' + index"
-                                    class="btn-row-neutral disabled:opacity-30" title="Move down">&darr;</button>
-                                <button @click="removeItem(index)" x-bind:dusk="'playlist-remove-' + index"
-                                    class="btn-row-danger" title="Remove">&times;</button>
+                                @can('screen-playlist')
+                                <div class="flex items-center gap-1">
+                                    <button @click="openSchedule(index)" x-bind:dusk="'playlist-schedule-' + index"
+                                        class="btn-row-neutral whitespace-nowrap" title="When this item plays">Schedule</button>
+                                    <button @click="moveUp(index)" x-bind:disabled="index === 0"
+                                        x-bind:dusk="'playlist-up-' + index"
+                                        class="btn-row-neutral disabled:opacity-30" title="Move up">&uarr;</button>
+                                    <button @click="moveDown(index)" x-bind:disabled="index === items.length - 1"
+                                        x-bind:dusk="'playlist-down-' + index"
+                                        class="btn-row-neutral disabled:opacity-30" title="Move down">&darr;</button>
+                                    <button @click="removeItem(index)" x-bind:dusk="'playlist-remove-' + index"
+                                        class="btn-row-danger" title="Remove">&times;</button>
+                                </div>
+                                @endcan
                             </div>
-                            @endcan
                         </div>
                     </template>
                 </div>
             </div>
 
             {{-- The right-hand column: the shop's own files, and below them the channels it
-                 may carry — the same kind of box, so adding either one reads the same. --}}
+                 may carry — the same kind of box, so adding either one reads the same. Both are
+                 for adding to the playlist, and their lists answer screen-playlist alone, so
+                 somebody who may only look at the playlist is not shown two boxes that stay empty. --}}
+            @can('screen-playlist')
             <div class="space-y-6">
 
             {{-- ── Library picker ───────────────────────────────────────── --}}
@@ -162,14 +197,14 @@
                                     <img :src="media.thumbnail_url" :alt="media.title" class="w-full h-full object-cover">
                                 </template>
                                 <template x-if="!media.thumbnail_url">
-                                    <span class="text-[10px] text-gray-400" x-text="media.type"></span>
+                                    <span class="text-[10px] text-gray-400" x-text="typeLabel(media)"></span>
                                 </template>
                             </div>
 
                             <div class="flex-1 min-w-0">
                                 <p class="text-sm font-medium text-gray-800 dark:text-white truncate" x-text="media.title"></p>
                                 <p class="text-xs text-gray-400">
-                                    <span class="capitalize" x-text="media.type"></span>
+                                    <span x-text="typeLabel(media)"></span>
                                     <span x-text="media.orientation ? ' - ' + media.orientation : ''"></span>
                                 </p>
                             </div>
@@ -257,6 +292,7 @@
             </div>
 
             </div>
+            @endcan
         </div>
 
         {{-- ── When one item plays ──────────────────────────────────────── --}}
@@ -283,8 +319,8 @@
                                  facts, and folding them together is what forces the
                                  competing product into two different modals. --}}
                             <div class="flex flex-wrap items-center gap-2">
-                                <label class="form-label mb-0 w-16">Days</label>
-                                <select x-model="rule.day_mode" @change="refreshPreview()"
+                                <label class="form-label mb-0 w-16" x-bind:for="'rule-day-mode-' + ruleIndex">Days</label>
+                                <select x-model="rule.day_mode" @change="refreshPreview()" x-bind:id="'rule-day-mode-' + ruleIndex"
                                         x-bind:dusk="'rule-day-mode-' + ruleIndex" class="form-select w-44">
                                     <option value="always">Every day</option>
                                     <option value="range">Between dates</option>
@@ -315,7 +351,7 @@
                                         <select x-model="rule.recurrence_type" @change="refreshPreview()"
                                                 x-bind:dusk="'rule-type-' + ruleIndex" class="form-select w-56">
                                             @foreach ($recurrenceTypes as $value => $label)
-                                                <option value="{{ $value }}">{{ $label }}</option>
+                                                <option value="{{ $value }}">{{ $repeatUnits[$value] ?? $label }}</option>
                                             @endforeach
                                         </select>
                                     </div>
@@ -377,18 +413,24 @@
                                 </div>
                             </template>
 
-                            {{-- WHAT TIME, on a day the rule covers. --}}
+                            {{-- WHAT TIME, on a day the rule covers. The store's live dayparts, and a
+                                 retired one only on the rule that already uses it (daypartsFor). --}}
                             <div class="flex flex-wrap items-center gap-2">
-                                <label class="form-label mb-0 w-16">Time</label>
-                                <select x-model="rule.daypart_id" @change="refreshPreview()"
+                                <label class="form-label mb-0 w-16" x-bind:for="'rule-daypart-' + ruleIndex">Time</label>
+                                <select x-model="rule.daypart_id" @change="refreshPreview()" x-bind:id="'rule-daypart-' + ruleIndex"
                                         x-bind:dusk="'rule-daypart-' + ruleIndex" class="form-select w-72">
                                     <option value="">All day</option>
-                                    <template x-for="daypart in dayparts" :key="daypart.id">
-                                        <option x-bind:value="daypart.id" x-text="daypartLabel(daypart)"></option>
+                                    <template x-for="daypart in daypartsFor(rule)" :key="daypart.id">
+                                        <option x-bind:value="daypart.id" x-text="daypartLabel(daypart)"
+                                                x-bind:selected="String(daypart.id) === String(rule.daypart_id)"></option>
                                     </template>
                                 </select>
+                                {{-- It opens the Dayparts page (daypart-view) to make one there (daypart-store),
+                                     so it is offered to somebody who holds both. --}}
+                                @can(['daypart-view', 'daypart-store'])
                                 <a href="{{ route('dayparts.view') }}" target="_blank" rel="noopener"
                                    class="text-xs text-blue-600 dark:text-blue-400 hover:underline">New daypart</a>
+                                @endcan
                             </div>
 
                             <div class="flex items-start justify-between gap-3 pt-1">

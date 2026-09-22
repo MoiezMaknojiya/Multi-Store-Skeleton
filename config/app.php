@@ -123,4 +123,17 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Seeded Super Admin Password
+    |--------------------------------------------------------------------------
+    |
+    | Read by DatabaseSeeder when it creates the first super admin (or when set,
+    | to reset that password). Kept here rather than read with env() in the
+    | seeder, because env() answers null once the configuration is cached.
+    |
+    */
+
+    'seed_admin_password' => env('SEED_ADMIN_PASSWORD'),
+
 ];

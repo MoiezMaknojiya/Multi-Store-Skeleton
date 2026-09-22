@@ -64,7 +64,7 @@ export function registerMembersPage(Alpine) {
         },
 
         initials(name) {
-            return (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join('');
+            return (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((part) => Array.from(part)[0].toUpperCase()).join('');
         },
 
         roleBadgeClass(role) {

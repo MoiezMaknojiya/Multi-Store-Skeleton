@@ -58,7 +58,7 @@ class ActivityLogController extends Controller
     }
 
     /** Return paginated, searchable activity data as JSON (newest first). An entry is never edited; whole
-     *  years are dropped by the yearly maintenance below, and nothing else deletes one. */
+     *  years are dropped by the yearly maintenance above (maintainPartitions), and nothing else deletes one. */
     public function data(Request $request): JsonResponse
     {
         // Accepts either a full ISO-8601 instant (what the UI sends — the viewer's local day boundaries

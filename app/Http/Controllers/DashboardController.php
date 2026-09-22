@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Role;
 use App\Models\Store;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
@@ -34,8 +35,12 @@ class DashboardController extends Controller
             return view('dashboard.index', ['view' => 'empty']);
         }
 
-        // Smart default: auto-select a single store; several stores need a pick.
+        // Smart default: auto-select a single store; several stores need a pick. A flash that came
+        // here with a redirect ("Invitation declined.", a deleted store's goodbye) is kept for one
+        // more request, so the picker shows it instead of it vanishing on the way through.
         if ($this->resolveCurrentStore($stores) === null) {
+            session()->reflash();
+
             return redirect()->route('stores.select');
         }
 
@@ -57,7 +62,7 @@ class DashboardController extends Controller
             return redirect()->route('dashboard');
         }
 
-        $stores = $user->stores()->withPivot('role_id')->get();
+        $stores = $user->stores()->get();
 
         if ($stores->count() <= 1) {
             return redirect()->route('dashboard');
@@ -65,7 +70,7 @@ class DashboardController extends Controller
 
         $roleNames = Role::whereIn('id', $stores->pluck('pivot.role_id')->filter())->pluck('name', 'id');
 
-        $myStores = $stores->map(fn ($store) => [
+        $myStores = $stores->map(fn (Store $store) => [
             'id' => $store->id,
             'name' => $store->name,
             'slug' => $store->slug,
@@ -82,8 +87,10 @@ class DashboardController extends Controller
      * Resolve the store in session context, applying the smart default: a single
      * store is auto-selected (and remembered) so the user never has to pick.
      * Returns null only when several stores exist and none is chosen yet.
+     *
+     * @param  Collection<int, Store>  $stores
      */
-    private function resolveCurrentStore($stores): ?Store
+    private function resolveCurrentStore(Collection $stores): ?Store
     {
         $currentId = session('current_store_id');
 

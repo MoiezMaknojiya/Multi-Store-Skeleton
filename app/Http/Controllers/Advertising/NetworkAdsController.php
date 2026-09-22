@@ -66,7 +66,7 @@ class NetworkAdsController extends Controller
     {
         $validated = $request->validate([
             'screen_ids' => ['required', 'array', 'min:1'],
-            'screen_ids.*' => ['integer'],
+            'screen_ids.*' => ['integer', 'min:1'],
             'accepts' => ['required', 'boolean'],
         ]);
 
@@ -116,7 +116,7 @@ class NetworkAdsController extends Controller
     {
         $validated = $request->validate([
             'store_ids' => ['required', 'array', 'min:1'],
-            'store_ids.*' => ['integer'],
+            'store_ids.*' => ['integer', 'min:1'],
             'accepts' => ['required', 'boolean'],
         ]);
 
@@ -156,7 +156,10 @@ class NetworkAdsController extends Controller
         ]);
     }
 
-    /** The shop being worked in. Impersonation always lands inside one. */
+    /**
+     * The shop being worked in. "Log in as" starts with none chosen (ImpersonateController clears it, and the
+     * dashboard then picks the person's only store or asks which), so a session with no store is told so.
+     */
     private function currentStore(): Store
     {
         $storeId = (int) session('current_store_id');

@@ -10,17 +10,16 @@
     'editCan' => null,
     'deleteCan' => null,
     'dusk' => null,
-    'idExpr' => 'item.id',
 ])
 
 <div class="flex items-center justify-end gap-2">
     @if($editClick && (! $editCan || auth()->user()->can($editCan)))
     <button @click="{{ $editClick }}" class="btn-row-neutral"
-            @if($dusk) x-bind:dusk="'edit-{{ $dusk }}-' + {{ $idExpr }}" @endif>Edit</button>
+            @if($dusk) x-bind:dusk="'edit-{{ $dusk }}-' + item.id" @endif>Edit</button>
     @endif
 
     @if($deleteClick && (! $deleteCan || auth()->user()->can($deleteCan)))
     <button @click="{{ $deleteClick }}" class="btn-row-danger"
-            @if($dusk) x-bind:dusk="'delete-{{ $dusk }}-' + {{ $idExpr }}" @endif>Delete</button>
+            @if($dusk) x-bind:dusk="'delete-{{ $dusk }}-' + item.id" @endif>Delete</button>
     @endif
 </div>

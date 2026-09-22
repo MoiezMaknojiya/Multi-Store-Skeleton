@@ -1,12 +1,16 @@
 /**
  * Media library Alpine component.
  *
- * Two differences from the other CRUD tables:
+ * Differences from the other CRUD tables:
  *  - creating a row means uploading a FILE, so it posts FormData from its own
  *    modal instead of the base's JSON create path;
  *  - a video's duration, dimensions and poster frame are measured HERE, in the
  *    browser, because the server has no ffmpeg. The values are sent along with
- *    the upload and re-validated server-side (see StoreMediaRequest).
+ *    the upload and re-validated server-side (see StoreMediaRequest);
+ *  - above the stores the page reads one library at a time — the platform's own
+ *    or a shop's — and an upload joins the one chosen (docs/CHANNEL-CONTENT-SPEC.md);
+ *  - a file a channel shows is refused before the delete is confirmed: the row
+ *    carries the server's own words for it.
  */
 import axios from 'axios';
 import { createCrudTable } from '../core/crud-table-base.js';
@@ -41,8 +45,10 @@ export function registerMediaTable(Alpine) {
         deleteModalName: 'confirm-media-deletion',
 
         extraState: {
-            // Uploads need a store context; the banner in the modal uses this.
-            hasStore: config.hasStore ?? false,
+            // Above the stores, every shop [{id, name}] and the library shown: 'platform' or a shop's id.
+            // Inside a store there is only the store's own, and no choosing (null).
+            libraries: config.libraries ?? null,
+            library: 'platform',
             filterType: '',
             filterOrientation: '',
             sort: 'newest',
@@ -68,7 +74,17 @@ export function registerMediaTable(Alpine) {
                     type: this.filterType,
                     orientation: this.filterOrientation,
                     sort: this.sort,
+                    ...(this.libraries !== null ? { library: this.library } : {}),
                 };
+            },
+
+            /** Where an upload from this page goes, in words. */
+            libraryName() {
+                if (this.library === 'platform') return 'the platform\'s library';
+
+                const shop = (this.libraries ?? []).find((each) => String(each.id) === String(this.library));
+
+                return shop ? `${shop.name}'s library` : 'the chosen library';
             },
 
             applyFilters() {
@@ -101,6 +117,8 @@ export function registerMediaTable(Alpine) {
                 this.selectedFile = file;
                 this.clientMeta = {};
                 this.formErrors = {};
+                // Whatever an earlier pick was still measuring no longer matters.
+                this.preparing = false;
                 if (!file) return;
 
                 const error = fileError(file);
@@ -113,17 +131,19 @@ export function registerMediaTable(Alpine) {
                 if (file.type.startsWith('video/')) {
                     this.preparing = true;
                     try {
-                        this.clientMeta = await readVideoMeta(file);
+                        const meta = await readVideoMeta(file);
+                        // Another file was chosen while this one was measured: its numbers are
+                        // not that file's, and must not ride along with its upload.
+                        if (this.selectedFile === file) this.clientMeta = meta;
                     } finally {
-                        this.preparing = false;
+                        if (this.selectedFile === file) this.preparing = false;
                     }
                 }
             },
 
-
-
             async uploadFile() {
-                if (this.saving) return;
+                // Not while a video is still being measured: it would go without its length and poster.
+                if (this.saving || this.preparing) return;
 
                 if (!this.selectedFile) {
                     this.formErrors = { file: ['Choose a file to upload.'] };
@@ -136,6 +156,8 @@ export function registerMediaTable(Alpine) {
                     const payload = new FormData();
                     payload.append('file', this.selectedFile);
                     if (this.uploadForm.title) payload.append('title', this.uploadForm.title);
+                    // Above the stores: the shop chosen, or — with none — the platform's own library.
+                    if (this.libraries !== null && this.library !== 'platform') payload.append('store_id', this.library);
                     Object.entries(this.clientMeta).forEach(([key, value]) => {
                         if (value !== null && value !== undefined) payload.append(key, value);
                     });
@@ -197,7 +219,25 @@ export function registerMediaTable(Alpine) {
                 }
             },
 
+            /* ── Delete ────────────────────────────────────────────────── */
+            /** A file a channel shows cannot be deleted (the server refuses it too): said at once, rather
+             *  than after a confirmation that could never succeed. */
+            askToDelete(item) {
+                if (item.in_channels_message) {
+                    window.toast(item.in_channels_message);
+                    return;
+                }
+
+                this.confirmDelete(item);
+            },
+
             /* ── Display helpers ───────────────────────────────────────── */
+            /** What a person calls the file. A page published from the Ad Builder is stored as
+             *  type "html", which is nobody's word for it — and it is not an image either. */
+            typeLabel(item) {
+                return { image: 'Image', video: 'Video', html: 'Ad page' }[item.type] ?? item.type;
+            },
+
             formatSize(bytes) {
                 if (!bytes) return '-';
                 const units = ['B', 'KB', 'MB', 'GB'];

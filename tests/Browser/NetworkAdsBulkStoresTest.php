@@ -84,8 +84,10 @@ class NetworkAdsBulkStoresTest extends DuskTestCase
             $this->jsClick($browser, '@select-all-stores');
             $this->jsClick($browser, '@stores-ads-off');
 
-            $browser->waitForText('Switch advertising off for')
-                ->pause(200);
+            // The whole count, not just the start of the sentence: it proves the page-wide
+            // tick picked up both shops, and their four televisions, before anything is pressed.
+            $browser->waitForText('Switch advertising off for 2 shops?')
+                ->assertSee('4 screens');
             $this->jsClick($browser, '@confirm-store-ads');
 
             $browser->waitForTextIn('@store-ads-'.$alpha->id, 'Off');

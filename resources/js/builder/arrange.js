@@ -1,0 +1,336 @@
+/**
+ * Arranging what is selected (docs/AD-BUILDER-SPEC.md §10a): align, distribute, stacking order, the
+ * clipboard — copy, cut, paste, and Elementor's "paste style" — and the right-click menu that offers them.
+ *
+ * Spread into the editor's component, so data and plain methods only — no getters (see the Alpine gotcha
+ * in the project conventions).
+ */
+import { clampName, newId, renumberDepth } from './document.js';
+import { alignTo, boundsOf, distribute } from './geometry.js';
+import { clone } from './history.js';
+
+/** Where the clipboard lives: the browser's storage, so it carries from one ad to another. */
+export const CLIPBOARD_KEY = 'ad-builder.clipboard';
+
+/** The style keys each kind of element takes from another when a style is pasted. */
+const STYLE_KEYS = {
+    text: [
+        'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'color', 'align', 'verticalAlign', 'lineHeight',
+        'letterSpacing', 'wordSpacing', 'textTransform', 'textDecoration', 'padding', 'background', 'radius',
+        'textShadow', 'textStroke', 'border', 'blend',
+    ],
+    picture: ['fit', 'position', 'radius', 'border', 'shadow', 'filters', 'flipX', 'flipY', 'blend'],
+    shape: ['shape', 'fill', 'gradient', 'radius', 'border', 'shadow', 'blend'],
+};
+
+function kindOf(element) {
+    if (element.type === 'text') return 'text';
+
+    return element.type === 'shape' ? 'shape' : 'picture';
+}
+
+/** The clipboard's elements, or an empty list when there is none (or storage cannot be read). */
+export function readClipboard() {
+    try {
+        const stored = JSON.parse(localStorage.getItem(CLIPBOARD_KEY) ?? 'null');
+
+        return Array.isArray(stored?.elements) ? stored.elements : [];
+    } catch {
+        return [];
+    }
+}
+
+function writeClipboard(elements) {
+    try {
+        localStorage.setItem(CLIPBOARD_KEY, JSON.stringify({ version: 1, elements }));
+
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+export function arrangePanel() {
+    return {
+        /** How many elements the clipboard holds — kept here so the menu and the panel can say so. */
+        clipboardSize: readClipboard().length,
+
+        /** Each paste lands a little further on, so copies never hide the original or each other. */
+        pasteCount: 0,
+
+        /** The right-click menu: where it opened and what it may offer, or null. */
+        contextMenu: null,
+
+        /* ── Align & distribute ─────────────────────────────────────────── */
+
+        /** One element lines up on the stage; several line up on the box around them. */
+        alignSelection(edge) {
+            const items = this.selection().filter((element) => !element.locked);
+
+            if (items.length === 0) return;
+
+            const frame = items.length === 1
+                ? { x: 0, y: 0, w: this.stage.width, h: this.stage.height }
+                : boundsOf(items);
+
+            alignTo(items, frame, edge).forEach((place, index) => Object.assign(items[index], place));
+            this.commit('Align');
+        },
+
+        /** Even gaps across ('x') or down ('y') — three elements or more. */
+        distributeSelection(axis) {
+            const items = this.selection().filter((element) => !element.locked);
+
+            if (items.length < 3) return;
+
+            distribute(items, axis).forEach((position, index) => {
+                items[index][axis === 'x' ? 'x' : 'y'] = position;
+            });
+            this.commit('Distribute');
+        },
+
+        /* ── Stacking order ─────────────────────────────────────────────── */
+
+        /**
+         * 'front' and 'back' move the selection to the top or the bottom of the stack; 'forward' and
+         * 'backward' move it one place past the nearest element that is not selected. The selection keeps
+         * its own order throughout.
+         */
+        reorder(mode) {
+            const chosen = new Set(this.selectedIds);
+
+            if (chosen.size === 0) return;
+
+            const ordered = [...this.elementsByDepth];
+            let result = ordered;
+
+            if (mode === 'front') {
+                result = [...ordered.filter((el) => !chosen.has(el.id)), ...ordered.filter((el) => chosen.has(el.id))];
+            } else if (mode === 'back') {
+                result = [...ordered.filter((el) => chosen.has(el.id)), ...ordered.filter((el) => !chosen.has(el.id))];
+            } else if (mode === 'forward') {
+                for (let i = result.length - 2; i >= 0; i--) {
+                    if (chosen.has(result[i].id) && !chosen.has(result[i + 1].id)) {
+                        [result[i], result[i + 1]] = [result[i + 1], result[i]];
+                    }
+                }
+            } else if (mode === 'backward') {
+                for (let i = 1; i < result.length; i++) {
+                    if (chosen.has(result[i].id) && !chosen.has(result[i - 1].id)) {
+                        [result[i], result[i - 1]] = [result[i - 1], result[i]];
+                    }
+                }
+            }
+
+            result.forEach((element, index) => {
+                element.z = index;
+            });
+
+            const labels = { front: 'Bring to front', back: 'Send to back', forward: 'Bring forward', backward: 'Send backward' };
+
+            this.commit(labels[mode] ?? 'Order');
+        },
+
+        bringToFront() {
+            this.reorder('front');
+        },
+
+        sendToBack() {
+            this.reorder('back');
+        },
+
+        /* ── Clipboard ──────────────────────────────────────────────────── */
+
+        copySelection() {
+            const items = this.selection();
+
+            if (items.length === 0) return;
+
+            if (!writeClipboard(items.map((element) => clone(element)))) {
+                window.toast('This browser would not let the editor keep a copy.');
+
+                return;
+            }
+
+            this.clipboardSize = items.length;
+            this.pasteCount = 0;
+            window.toast(items.length === 1 ? 'Copied' : `Copied ${items.length} elements`, 'success');
+        },
+
+        cutSelection() {
+            const items = this.selection().filter((element) => !element.locked);
+
+            if (items.length === 0) return;
+
+            // Nothing leaves the stage unless it really reached the clipboard: a cut that could not be
+            // kept would simply be a delete.
+            if (!writeClipboard(items.map((element) => clone(element)))) {
+                window.toast('This browser would not let the editor keep a copy, so nothing was cut.');
+
+                return;
+            }
+
+            this.clipboardSize = items.length;
+            this.pasteCount = 0;
+            this.removeSelection('Cut');
+        },
+
+        /**
+         * Paste copies on top, a little further on each time, selected. An element whose picture is not on
+         * this shop's shelf is left out — it would be an empty box here, and the television would drop it.
+         * The shelf is the ad's own shop's, the same one the picker offers: above the stores the editor
+         * holds every shop's pictures, and another shop's is not this ad's to use.
+         */
+        pasteClipboard() {
+            const copied = readClipboard();
+
+            if (copied.length === 0) return;
+
+            const shelf = new Set(this.assets.filter((asset) => this.onThisShelf(asset)).map((asset) => asset.id));
+            const usable = copied.filter((element) => !element.assetId || shelf.has(element.assetId));
+            const skipped = copied.length - usable.length;
+
+            if (usable.length === 0) {
+                window.toast('Those pictures are not on this shop\'s shelf, so there was nothing to paste.');
+
+                return;
+            }
+
+            if (this.doc.elements.length + usable.length > this.maxElements) {
+                window.toast(`An ad may hold at most ${this.maxElements} elements.`);
+
+                return;
+            }
+
+            this.stopPreview();
+            this.pasteCount += 1;
+
+            const offset = 32 * this.pasteCount;
+            const ids = [];
+
+            [...usable]
+                .sort((a, b) => (a.z ?? 0) - (b.z ?? 0))
+                .forEach((element) => {
+                    const copy = clone(element);
+
+                    copy.id = newId();
+                    copy.x = Math.round((Number(copy.x) || 0) + offset);
+                    copy.y = Math.round((Number(copy.y) || 0) + offset);
+                    copy.locked = false;
+                    copy.visible = copy.visible !== false;
+                    copy.z = this.doc.elements.length;
+
+                    // The clipboard is the browser's, not the server's: a name it carries is held to what
+                    // a save accepts.
+                    if (typeof copy.name === 'string') copy.name = clampName(copy.name);
+
+                    this.doc.elements.push(copy);
+                    ids.push(copy.id);
+                });
+
+            renumberDepth(this.doc);
+            this.selectedIds = ids;
+            this.commit('Paste');
+
+            if (skipped > 0) {
+                window.toast(`${skipped} ${skipped === 1 ? 'element was' : 'elements were'} left out: the picture is not on this shop's shelf.`);
+            }
+        },
+
+        /** The copied element's look, onto every selected element — the keys that make sense for each kind. */
+        pasteStyle() {
+            const source = readClipboard()[0];
+            const targets = this.selection().filter((element) => !element.locked);
+
+            if (!source || targets.length === 0) return;
+
+            const from = kindOf(source);
+
+            targets.forEach((target) => {
+                const to = kindOf(target);
+                const keys = from === to ? STYLE_KEYS[to] : STYLE_KEYS[to].filter((key) => STYLE_KEYS[from].includes(key));
+                const style = { ...(target.style ?? {}) };
+
+                keys.forEach((key) => {
+                    if (source.style?.[key] === undefined || source.style?.[key] === null) {
+                        delete style[key];
+                    } else {
+                        style[key] = clone(source.style[key]);
+                    }
+                });
+
+                target.style = style;
+            });
+
+            this.commit('Paste style');
+        },
+
+        /** The copied element's entrance, loop and exit, onto every selected element. */
+        pasteAnimation() {
+            const source = readClipboard()[0];
+            const targets = this.selection().filter((element) => !element.locked);
+
+            if (!source || targets.length === 0) return;
+
+            targets.forEach((target) => {
+                target.animations = clone(source.animations ?? {});
+            });
+
+            this.commit('Paste animation');
+            this.previewElement(this.selected);
+        },
+
+        /* ── The right-click menu ───────────────────────────────────────── */
+
+        /**
+         * Open the menu on an element (selecting it first unless it is already part of the selection), on
+         * a locked element (which only offers Unlock), or on the empty stage (which clears the selection).
+         */
+        openContextMenu(event, element = null) {
+            event.preventDefault();
+
+            if (this.previewing === 'all') return;
+
+            let locked = null;
+
+            if (element?.locked) {
+                locked = element;
+                this.selectedIds = [];
+            } else if (element) {
+                if (!this.selectedIds.includes(element.id)) this.selectedIds = [element.id];
+            } else {
+                this.clearSelection();
+            }
+
+            this.clipboardSize = readClipboard().length;
+            this.contextMenu = {
+                x: Math.min(event.clientX, window.innerWidth - 240),
+                y: Math.min(event.clientY, window.innerHeight - 440),
+                locked,
+            };
+        },
+
+        closeContextMenu() {
+            this.contextMenu = null;
+        },
+
+        /** Run a menu item by name, closing the menu first so the action sees the page as it is. */
+        runMenu(action) {
+            const locked = this.contextMenu?.locked;
+
+            this.closeContextMenu();
+
+            if (action === 'unlock' && locked) {
+                this.toggleLock(locked);
+
+                return;
+            }
+
+            this[action]?.();
+        },
+
+        contextMenuStyle() {
+            return this.contextMenu ? { left: this.contextMenu.x + 'px', top: this.contextMenu.y + 'px' } : {};
+        },
+    };
+}

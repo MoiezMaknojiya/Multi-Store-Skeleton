@@ -294,8 +294,9 @@ class PlatformConsoleFlowTest extends DuskTestCase
     }
 
     /**
-     * A store, an account and a role are big deletes: each modal asks for the super admin's password,
-     * says so when it is missing or wrong, and deletes only once it is right.
+     * A store, an account and a role are big deletes: each modal asks for the super admin's password
+     * and deletes once it is right — and the store's, taken first, says so when the password is
+     * missing or wrong and deletes nothing until it is right.
      */
     public function test_big_deletes_on_the_platform_ask_for_the_password(): void
     {

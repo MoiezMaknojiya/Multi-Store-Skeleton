@@ -1,6 +1,8 @@
 <?php
 
+use App\Models\ActivityLog;
 use App\Models\Store;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
@@ -95,6 +97,8 @@ test('store switching and password reset via email link are logged', function ()
 });
 
 test('the activity listing can be bounded by a date range (partition-friendly)', function () {
+    // A fixed clock: "today" must not turn into tomorrow between writing an entry and asking for it.
+    $this->travelTo('2026-06-16 12:00:00');
     $admin = createSuperAdmin(['activity-view']);
     $today = now()->format('Y-m-d');
 
@@ -128,21 +132,25 @@ test('the activity listing can be bounded by a date range (partition-friendly)',
 
 test('a log made just after UTC midnight is still visible to a viewer whose local day is behind UTC', function () {
     // Regression for the real timezone bug: server stores UTC, the UI computes the
-    // range from the viewer's LOCAL day. A viewer in the US (UTC-5) at 19:30 local
-    // sees "today" as the previous UTC date — the log sits just past UTC midnight.
-    // Because the UI sends local-end-of-day AS a UTC instant, the log stays in range.
+    // range from the viewer's LOCAL day. A viewer in the US (UTC-5) at 19:30 on
+    // 15 June is already on 16 June by UTC, so a log made at 00:19 UTC sits on the
+    // next UTC date — yet it happened on the viewer's 15 June. Because the UI sends
+    // the local day's ends AS UTC instants, the log stays in range. A fixed clock,
+    // so the scenario is always this one.
+    $this->travelTo('2026-06-16 00:30:00');
     $admin = createSuperAdmin(['activity-view']);
-    insertLogAt(now()->startOfDay()->addMinutes(19)->format('Y-m-d H:i:s'), 'user.created');
+    insertLogAt('2026-06-16 00:19:00', 'user.created');
+    // 05:30 UTC is already the viewer's 16 June: outside the day they asked for.
+    insertLogAt('2026-06-16 05:30:00', 'user.updated');
 
-    // Local-day-end for a UTC-5 viewer whose local "today" is yesterday's UTC date,
-    // expressed as the UTC instant the browser would send (local 23:59:59 → +5h UTC).
-    $localDayEndUtc = now()->startOfDay()->subMinutes(1)->addDay()->addHours(5)->toIso8601String();
-    $localDayStartUtc = now()->startOfDay()->subDay()->addHours(5)->toIso8601String();
+    // The viewer's 15 June, 00:00 to 23:59:59 local, as the UTC instants the browser sends.
+    $localDayStartUtc = '2026-06-15T05:00:00+00:00';
+    $localDayEndUtc = '2026-06-16T04:59:59+00:00';
 
     $actions = collect($this->actingAs($admin)
         ->getJson('/activity/data?from='.urlencode($localDayStartUtc).'&to='.urlencode($localDayEndUtc))
         ->assertOk()->json('logs'))->pluck('action');
-    expect($actions)->toContain('user.created');
+    expect($actions)->toContain('user.created')->not->toContain('user.updated');
 });
 
 test('yearly maintenance deletes logs older than 2 years and keeps the recent ones', function () {
@@ -187,6 +195,21 @@ test('the activity listing returns entries newest first and survives actor delet
     $logs = collect($this->actingAs($admin)->getJson('/activity/data')->assertOk()->json('logs'));
 
     expect($logs->pluck('action')->first())->toBe('user.deleted');
-    // …still names them after they are gone.
-    expect($logs->firstWhere('action', 'store.switched')['actor_name'])->toBe($name);
+    // …still names them after they are gone — and no longer points at their id, which a later account
+    // could otherwise be mistaken for (on MySQL the partitioned log has no foreign key to empty it).
+    expect($logs->firstWhere('action', 'store.switched')['actor_name'])->toBe($name)
+        ->and(ActivityLog::where('action', 'store.switched')->value('actor_id'))->toBeNull();
+});
+
+test('a long name or description is cut to its column instead of failing the action', function () {
+    // Two 200-character names make a 401-character full name; a column of 255 in MySQL's strict mode would
+    // refuse it, and the log line that fails first is the sign-out's.
+    $person = User::factory()->create(['first_name' => str_repeat('a', 200), 'last_name' => str_repeat('b', 200)]);
+
+    ActivityLog::record('test.long', null, str_repeat('x', 1500), $person);
+
+    $entry = ActivityLog::latest('id')->first();
+
+    expect(mb_strlen($entry->actor_name))->toBe(255)
+        ->and(mb_strlen($entry->description))->toBe(1000);
 });

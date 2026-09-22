@@ -65,8 +65,9 @@ class ScheduleResolver
         $instant = CarbonImmutable::instance($at ?? now());
         $local = $screen->localTime($instant);
 
+        // A page's design comes along: an Ad Builder page taken off the screens (unpublished) is not played (Media::isDraft()).
         $playlist = $screen->playlistItems()
-            ->with(['media', 'channel.ads', 'scheduleRules.daypart.exceptions'])
+            ->with(['media.builderAd', 'channel.ads', 'scheduleRules.daypart.exceptions'])
             ->get()
             // A line whose file or channel no longer exists is simply not there.
             ->filter(fn (PlaylistItem $item) => $item->media !== null || $item->channel !== null);

@@ -3,23 +3,19 @@
         {{ __('Forgot your password? No problem. Just let us know your email address and we will email you a password reset link that will allow you to choose a new one.') }}
     </div>
 
-    <!-- Session Status -->
     <x-auth.session-status class="mb-4" :status="session('status')" />
 
-    <form method="POST" action="{{ route('password.email') }}" dusk="forgot-password-form">
+    {{-- A plain POST form, so it is on the auth track like the sign-in page: x-auth.form-field paints the
+         red border and the message under the field, and old() comes back only as one plain value. --}}
+    <form method="POST" action="{{ route('password.email') }}" class="space-y-5" dusk="forgot-password-form"
+        x-data="forgotPasswordForm()" @submit="handleSubmit($event)">
         @csrf
 
-        <!-- Email Address -->
-        <div>
-            <x-input-label for="email" :value="__('Email')" :required="true" />
-            <x-text-input id="email" class="block mt-1 w-full {{ $errors->has('email') ? '!border-red-500' : '' }}" type="email" name="email" :value="old('email')" required autofocus />
-            <x-input-error :messages="$errors->get('email')" class="mt-2" />
-        </div>
+        <x-auth.form-field name="email" label="Email" type="email" placeholder="Enter your email"
+            autofocus autocomplete="username" :required="true" />
 
-        <div class="flex items-center justify-end mt-4">
-            <x-primary-button dusk="forgot-password-submit">
-                {{ __('Email Password Reset Link') }}
-            </x-primary-button>
-        </div>
+        <button type="submit" class="btn-primary-auth" dusk="forgot-password-submit">
+            {{ __('Email Password Reset Link') }}
+        </button>
     </form>
 </x-guest-layout>
