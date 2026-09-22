@@ -202,17 +202,19 @@ class NetworkAdBreakTest extends DuskTestCase
 
             $tv->waitUsing(30, 200, fn () => $tv->script("return !!document.querySelector('{$onScreen}');")[0]);
 
-            // -- Let the FIRST break go by ----------------------------------------
-            // The break is armed the moment the manifest lands, so it can arrive while
-            // the video is still its first fraction of a second in — and "resumed at
-            // 0.11 rather than 0.00" proves very little. Waiting for the second one
-            // means the video is several seconds in when it is interrupted, and the
-            // difference between carrying on and starting again is unmistakable.
-            $tv->waitUsing(30, 200, fn () => $tv->script('return !document.getElementById("layer-ad").hidden;')[0]);
-            $tv->waitUsing(30, 200, fn () => $tv->script('return document.getElementById("layer-ad").hidden;')[0]);
+            // -- Interrupted, with the clip properly under way ---------------------
+            // Which break catches the clip mid-play is luck: the break is armed when the
+            // manifest lands, and the clip (16 s) starts again every time it ends, so a
+            // break can arrive in the moment it has just restarted — and "resumed at 0.11
+            // rather than 0.00" would prove nothing. So take the first break that finds
+            // the clip past its opening fraction, rather than the first break there is.
+            $tv->waitUsing(90, 200, function () use ($tv, $onScreen) {
+                if (! $tv->script('return !document.getElementById("layer-ad").hidden;')[0]) {
+                    return false;
+                }
 
-            // -- Interrupted ------------------------------------------------------
-            $tv->waitUsing(30, 200, fn () => $tv->script('return !document.getElementById("layer-ad").hidden;')[0]);
+                return (float) $tv->script("return document.querySelector('{$onScreen}')?.currentTime ?? 0;")[0] > 0.2;
+            });
 
             $paused = $tv->script("return document.querySelector('{$onScreen}')?.paused;")[0];
             $pausedAt = (float) $tv->script("return document.querySelector('{$onScreen}')?.currentTime ?? 0;")[0];
