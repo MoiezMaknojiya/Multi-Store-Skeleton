@@ -1,0 +1,9 @@
+# The signage panel's MySQL 8.4 settings (deploy/README.md), for a 4 GB server (Hetzner CPX22 / CX23) shared
+# with PHP. Only the panel on this server talks to it; the database is small at launch, and 1 GB of cache
+# holds all of it for a long time.
+[mysqld]
+bind-address = 127.0.0.1
+mysqlx = OFF
+innodb_buffer_pool_size = 1G
+innodb_redo_log_capacity = 256M
+max_connections = 60

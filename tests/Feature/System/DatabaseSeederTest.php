@@ -57,6 +57,35 @@ test('running the seeder twice in a row does not error or duplicate data', funct
     expect(User::where('email', 'admin@gmail.com')->count())->toBe(1);
 });
 
+test("on a live server the first super admin is the owner's own email", function () {
+    // A "forgot password" link goes to this inbox, so a live server must never keep the development address.
+    config(['app.seed_admin_email' => 'owner@example.com']);
+
+    $this->seed();
+
+    expect(User::where('email', 'owner@example.com')->firstOrFail()->isSuperAdmin())->toBeTrue()
+        ->and(User::where('email', 'admin@gmail.com')->exists())->toBeFalse();
+});
+
+test('an empty SEED_ADMIN_EMAIL is no email at all: the development one stands', function () {
+    // .env.example carries the key empty, and env() reads "SEED_ADMIN_EMAIL=" as "" rather than as missing.
+    $configuredWith = function (string $value): string {
+        putenv("SEED_ADMIN_EMAIL={$value}");
+        $_ENV['SEED_ADMIN_EMAIL'] = $_SERVER['SEED_ADMIN_EMAIL'] = $value;
+
+        try {
+            return (require config_path('app.php'))['seed_admin_email'];
+        } finally {
+            putenv('SEED_ADMIN_EMAIL');
+            unset($_ENV['SEED_ADMIN_EMAIL'], $_SERVER['SEED_ADMIN_EMAIL']);
+        }
+    };
+
+    // The key is really read here — so the empty one below is really read as empty.
+    expect($configuredWith('owner@example.com'))->toBe('owner@example.com')
+        ->and($configuredWith(''))->toBe('admin@gmail.com');
+});
+
 test('re-seeding keeps what the super admin changed on a starter store role', function () {
     $this->seed();
 

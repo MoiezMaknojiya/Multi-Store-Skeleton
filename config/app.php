@@ -136,4 +136,19 @@ return [
 
     'seed_admin_password' => env('SEED_ADMIN_PASSWORD'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Seeded Super Admin Email
+    |--------------------------------------------------------------------------
+    |
+    | Whose inbox the first super admin's account is — on a live server the
+    | owner's own, because a "forgot password" link goes there. The default is
+    | the development one the tests and browser tests sign in with — also for a
+    | key left empty (`SEED_ADMIN_EMAIL=`, as .env.example has it), which env()
+    | reads as "" rather than as missing.
+    |
+    */
+
+    'seed_admin_email' => env('SEED_ADMIN_EMAIL') ?: 'admin@gmail.com',
+
 ];

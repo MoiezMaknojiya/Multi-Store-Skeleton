@@ -44,8 +44,8 @@ class DatabaseSeeder extends Seeder
             $owner->permissions()->sync(Permission::whereIn('name', Role::starterPermissions(Role::OWNER))->pluck('id'));
         }
 
-        // 4. The Super Admin account.
-        $superAdmin = User::firstOrNew(['email' => 'admin@gmail.com']);
+        // 4. The Super Admin account — the owner's own email on a live server (SEED_ADMIN_EMAIL).
+        $superAdmin = User::firstOrNew(['email' => config('app.seed_admin_email')]);
         $superAdmin->fill([
             'first_name' => 'Admin',
             'last_name' => 'Momin',
