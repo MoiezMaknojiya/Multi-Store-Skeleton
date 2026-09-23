@@ -344,7 +344,9 @@ class AdBuilderFlowTest extends DuskTestCase
             /* ── 6. The television plays it ─────────────────────────────── */
             $tv->waitUntil('!!document.querySelector("#layer-a iframe, #layer-b iframe")', 45);
 
-            $source = $tv->script('return document.querySelector("#layer-a iframe, #layer-b iframe").getAttribute("src");')[0];
+            // The page is fetched through the worker and put in the frame as srcdoc (docs §15); the frame
+            // remembers where it came from.
+            $source = $tv->script('return document.querySelector("#layer-a iframe, #layer-b iframe").dataset.src;')[0];
             $this->assertStringContainsString('/builder/', $source, 'the frame is showing the published page');
             $tv->waitUntilMissingText('No content');
         });

@@ -105,6 +105,14 @@ class DeviceController extends Controller
         // to go wrong on a cheap box.
         $adBreak = $ads->breakFor($screen);
 
+        // The holding picture travels alongside the items too (docs/AD-BUILDER-SPEC.md
+        // §15): a television working from a cached manifest, once everything in it has
+        // expired, falls back to it the way the server would have.
+        $fallback = $screen->defaultMedia;
+        $fallback = $fallback?->isPlayableNow() ? $this->manifestItem(
+            0, $fallback, $fallback->duration_seconds ?: PlaylistItem::DEFAULT_IMAGE_SECONDS
+        ) : null;
+
         return response()->json([
             'screen' => [
                 'id' => $screen->id,
@@ -115,6 +123,10 @@ class DeviceController extends Controller
             'blank' => $resolved['blank'],
             'version' => $this->playlistVersion($screen, $items, $resolved['blank'], $adBreak),
             'items' => $items,
+            'fallback' => $fallback,
+            // Every file this screen may need, due now or not, so a set can hold the whole
+            // playlist before the internet goes — and drop what is no longer on it (§15).
+            'assets' => $this->assetsFor($screen, $adBreak),
             'ad_break' => [
                 // Counted from the moment the player started, not from the clock —
                 // the owner's choice, so two shops that booted at different times do
@@ -140,12 +152,43 @@ class DeviceController extends Controller
             'id' => $id,
             'type' => $media->type,
             'url' => $media->url,
-            // A cache key, so a future native shell can tell whether the file it
-            // already has on disk is still the right one.
+            // A cache key: the player's service worker files each copy under it, so a
+            // republished page or a replaced file is a new address and never shown stale.
             'checksum' => $media->cacheKey(),
             'duration' => $duration,
             'mime' => $media->mime_type,
+            // When the file itself stops being current, so a television working from a
+            // cached manifest can stop showing it at the right moment (§15). The schedule
+            // rules and dayparts are the server's alone and are not re-judged offline.
+            'expires_at' => $media->expires_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * Every file this screen could be asked to show — each line's file whether due now or not, every
+     * ad of every channel on the playlist, the holding picture and the network adverts — as address +
+     * cache key, for the set to warm its cache with and to prune it by (docs/AD-BUILDER-SPEC.md §15).
+     * Never a draft: an unpublished page is on no screen.
+     *
+     * @param  Collection<int, Campaign>  $adBreak
+     * @return array<int, array{url: string, checksum: string, type: string}>
+     */
+    private function assetsFor(Screen $screen, Collection $adBreak): array
+    {
+        $lines = $screen->playlistItems()->with(['media.builderAd', 'channel.ads.media.builderAd'])->get();
+
+        $files = $lines->map(fn (PlaylistItem $item) => $item->media)
+            ->merge($lines->flatMap(fn (PlaylistItem $item) => ($item->channel?->ads ?? collect())->map(fn (ChannelAd $ad) => $ad->media)))
+            ->push($screen->defaultMedia)
+            ->filter(fn (?Media $media) => $media !== null && ! $media->isDraft())
+            ->unique('id')
+            ->map(fn (Media $media) => ['url' => $media->url, 'checksum' => $media->cacheKey(), 'type' => $media->type]);
+
+        $adverts = $adBreak->map(fn (Campaign $campaign) => [
+            'url' => $campaign->url, 'checksum' => $campaign->cacheKey(), 'type' => $campaign->type,
+        ]);
+
+        return $files->merge($adverts)->values()->all();
     }
 
     /**

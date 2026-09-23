@@ -213,12 +213,15 @@ class PlaylistChannelUiTest extends DuskTestCase
             $tv->script("localStorage.clear(); localStorage.setItem('signage.device.token', 'channel-page-token');");
             $tv->visit('/player');
 
-            // What the wall shows right now: a picture by its file name, or the ad page by its address.
+            // What the wall shows right now: a picture by its file name, or the ad page by its address (the
+            // page is fetched through the worker and put in the frame as srcdoc — docs §15 — and the frame
+            // remembers where it came from).
             $showing = fn (): string => (string) $tv->script(<<<'JS'
                 const frame = document.querySelector('#layer-a:not([hidden]) iframe, #layer-b:not([hidden]) iframe');
-                if (frame) return 'page ' + frame.getAttribute('src');
+                if (frame) return 'page ' + (frame.dataset.src || '');
                 const picture = document.querySelector('#layer-a:not([hidden]) img, #layer-b:not([hidden]) img');
-                return picture ? 'picture ' + picture.src.split('/').pop() : '';
+                // A file's address carries its cache key (?c=…); the name is what the test knows it by.
+                return picture ? 'picture ' + picture.src.split('/').pop().split('?')[0] : '';
             JS)[0];
 
             // -- In turn: the shop's poster, the channel's picture, the channel's ad page ------

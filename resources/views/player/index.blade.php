@@ -6,6 +6,13 @@
     <meta name="robots" content="noindex, nofollow">
     <title>{{ config('app.name') }} Player</title>
 
+    {{-- A progressive web app (docs/AD-BUILDER-SPEC.md §15): a television or an Android box can install
+         the player and open it full screen with no browser bar, and its worker keeps it playing offline. --}}
+    <link rel="manifest" href="{{ route('player.manifest') }}">
+    <meta name="theme-color" content="#000000">
+    <link rel="icon" type="image/png" sizes="192x192" href="/player-icons/icon-192.png">
+    <link rel="apple-touch-icon" href="/player-icons/icon-192.png">
+
     {{-- Deliberately no CSRF token and no session: this page authenticates with
          the device token it was handed at pairing, never with a cookie. --}}
     @vite(['resources/css/app.css', 'resources/js/player.js'])

@@ -14,6 +14,13 @@
  * native shell for offline caching, the shell injects window.SignagePlayer and
  * the item URLs below are the single place that has to consult it — nothing else
  * about this file changes.
+ *
+ * Offline (docs/AD-BUILDER-SPEC.md §15): where the browser has a service worker,
+ * public/player-sw.js keeps the page, the last manifest and every file the
+ * manifest names, and this page plays on from them when the line drops — what
+ * has not expired, then the holding picture, then black — and warms the cache
+ * with everything the screen may need after every live manifest. Anywhere else
+ * the player is online only, exactly as before.
  */
 
 const TOKEN_KEY = 'signage.device.token';
@@ -32,6 +39,10 @@ const POLL_MS = 30000;
 const PLAYLIST_MS = 30000;   // how often to ask what to show
 const HEARTBEAT_MS = 60000;  // how often to say "alive"
 const BROKEN_ITEM_PAUSE_MS = 1000;  // breathing room before skipping a file that will not play
+const WORKER_UPDATE_MS = 3600000;   // a television never reloads its page, so it asks for a new worker itself
+const WORKER_PATH = '/player-sw.js';
+const WORKER_SCOPE = '/player';
+const CACHE_PARAM = 'c';            // a file's address carries its cache key, so a new version is a new address
 
 /* localStorage throws in some kiosk configurations; never let that kill the page. */
 const store = {
@@ -116,6 +127,14 @@ const state = {
     itemStartedAt: 0,
     itemDurationMs: 0,
 
+    // Offline (§15): whether the manifest on screen came from the worker's cache, the
+    // set's clock corrected by the last live manifest's server time (so expiry is judged
+    // by the right hours however wrong the box's clock is), and the last live manifest —
+    // warmed again when a worker takes the page over after it loaded.
+    offline: false,
+    clockOffset: 0,
+    lastLive: null,
+
     // Network advertising. The shop's content pauses, the advert plays over it, and
     // the shop's content carries on from where it stopped.
     ad: {
@@ -180,6 +199,9 @@ function resetToPairing(message = null) {
     store.remove(CODE_EXPIRES_KEY);
     state.token = null;
     state.version = null;
+    state.lastLive = null;
+    // The manifest kept for the screen this set was is nobody's now.
+    tellWorker({ type: 'forget' });
     if (message) el('pairing-note').textContent = message;
     startPairing();
 }
@@ -342,15 +364,149 @@ async function fetchPlaylist() {
         if (token !== state.token) return;
         applyOrientation(data.screen?.orientation);
 
-        // Nothing changed: leave whatever is on screen alone rather than
-        // re-rendering and making the TV flicker every poll.
-        if (data.version === state.version) return;
-        state.version = data.version;
-
-        render(data);
+        // The worker marks an answer it served from its cache because the server could
+        // not be reached (§15): the set is offline, and judges expiry for itself.
+        applyManifest(data, response.headers.get('X-Signage-Cached') === '1');
     } catch {
         /* Keep showing the last thing that worked. */
     }
+}
+
+/**
+ * A manifest, live or from memory. A live one resets the clock offset and warms the cache
+ * with everything the screen may need; a cached one is played the way the owner decided —
+ * what has not expired plays on, and once everything has, the holding picture or black.
+ */
+function applyManifest(data, fromCache) {
+    state.offline = fromCache;
+    document.body.dataset.source = fromCache ? 'cache' : 'live';
+    // Which items a cached manifest has dropped as expired — nothing on the glass says so (the owner's
+    // rule); it is on the page for whoever checks a set.
+    document.body.dataset.dropped = '';
+
+    if (!fromCache) {
+        const serverTime = Date.parse(data.server_time);
+
+        if (Number.isFinite(serverTime)) state.clockOffset = serverTime - Date.now();
+
+        state.lastLive = data;
+        warmCache(data);
+    }
+
+    const shown = fromCache ? fromMemory(data) : data;
+
+    if (fromCache) document.body.dataset.dropped = shown.dropped;
+
+    // Nothing changed: leave whatever is on screen alone rather than
+    // re-rendering and making the TV flicker every poll. A cached manifest whose
+    // filtering changed — a file expiring mid-outage — is a change, though its
+    // version did not move.
+    const key = shown.version + (fromCache ? '|cache|' + shown.dropped : '');
+
+    if (key === state.version) return;
+    state.version = key;
+
+    render(shown);
+}
+
+/** A cached manifest as it should play NOW: expired files dropped, then the fallback, then black. */
+function fromMemory(data) {
+    const now = Date.now() + state.clockOffset;
+    const expired = (item) => item.type !== 'channel' && item.expires_at && Date.parse(item.expires_at) <= now;
+    const items = (data.items ?? []).filter((item) => !expired(item));
+    const dropped = (data.items ?? []).filter(expired).map((item) => item.id);
+
+    if (items.length > 0 || (data.items ?? []).length === 0) {
+        return { ...data, items, dropped: dropped.join(',') };
+    }
+
+    // Everything in it has expired: the holding picture if there is one — unless that too has
+    // expired — and otherwise black, which is what the server would have answered.
+    const fallback = data.fallback && !expired(data.fallback) ? [data.fallback] : [];
+
+    return { ...data, items: fallback, blank: fallback.length === 0, dropped: dropped.join(',') };
+}
+
+/* ── The worker and its cache (§15) ─────────────────────────────────────── */
+
+function registerWorker() {
+    if (!('serviceWorker' in navigator)) return;
+
+    navigator.serviceWorker.register(WORKER_PATH, { scope: WORKER_SCOPE })
+        .then((registration) => {
+            setInterval(() => registration.update().catch(() => {}), WORKER_UPDATE_MS);
+        })
+        .catch(() => {
+            /* A browser without one, or a page not on https: online only, as before. */
+        });
+
+    // A worker that took the page over after it loaded missed the manifest the page fetched on its own:
+    // ask again through the worker, so it keeps a copy — and warms the files — before any line drops.
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (state.token) fetchPlaylist();
+    });
+
+    // The worker says when a warm-up is done, and how many files it could not fetch. Kept on the
+    // page for whoever checks a set (nothing on the glass says so — the owner's rule).
+    navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data?.type === 'warmed') {
+            document.body.dataset.warmed = String(Date.now());
+            document.body.dataset.warmMissing = String(event.data.missing ?? 0);
+        }
+    });
+}
+
+function tellWorker(message) {
+    try {
+        navigator.serviceWorker?.controller?.postMessage(message);
+    } catch {
+        /* No worker: nothing to tell. */
+    }
+}
+
+/**
+ * Everything this screen may need, named to the worker: the files on the playlist whether due now or
+ * not, the holding picture, the channel ads, the network adverts, the ad pages and what those pages
+ * load. The worker fetches what it lacks and drops what is no longer named.
+ */
+async function warmCache(data) {
+    if (!navigator.serviceWorker?.controller) return;
+
+    const files = [
+        ...(data.assets ?? []),
+        ...(data.items ?? []).flatMap((item) => (item.type === 'channel' ? item.ads ?? [] : [item])),
+        ...(data.fallback ? [data.fallback] : []),
+        ...(data.ad_break?.items ?? []),
+    ].filter((file) => file && file.url);
+
+    const urls = new Set(files.map((file) => assetUrl(file)));
+
+    // An ad page's own pictures, videos and scripts: the page is fetched through the worker (which
+    // keeps it) and read for the addresses it loads.
+    for (const file of files.filter((file) => file.type === 'html')) {
+        try {
+            const html = await (await fetch(assetUrl(file))).text();
+
+            for (const match of html.matchAll(/(?:\b(?:src|href)="([^"]+)"|url\(["']?([^"')]+)["']?\))/g)) {
+                const found = match[1] ?? match[2];
+
+                if (!found || found.startsWith('data:')) continue;
+
+                const address = new URL(found, window.location.href);
+
+                if (address.origin === window.location.origin) urls.add(address.href);
+            }
+        } catch {
+            /* The line dropped again, or a page is not there: the worker keeps what it has. */
+        }
+    }
+
+    tellWorker({ type: 'keep', urls: [...urls] });
+    tellWorker({ type: 'warm', urls: [...urls] });
+    tellWorker({
+        type: 'shell',
+        urls: [...document.querySelectorAll('script[src], link[rel="stylesheet"]')].map((node) => node.src || node.href),
+    });
 }
 
 async function sendHeartbeat() {
@@ -442,13 +598,27 @@ function stopPlayback() {
 
 function buildElement(item) {
     /* An ad built in the Ad Builder is a whole page: it brings its own layout, its own fonts and its
-     * own animations, so it gets a frame rather than a tag. `sandbox="allow-scripts"` lets that page
-     * run itself and nothing else — it cannot reach this one, even though we wrote both. */
+     * own animations, so it gets a frame rather than a tag. The page is fetched here — through the
+     * worker, which keeps it — and put in the frame as `srcdoc`, so the frame's own document is the
+     * cached page even with no line; `allow-same-origin` is what lets the worker serve the pictures
+     * and scripts that page loads (a frame with an origin of its own is controlled by no worker). The
+     * page is our own compiled output with nothing a person typed written as code (docs §9, §15); the
+     * sandbox still forbids forms, popups and navigating the television away. */
     if (item.type === 'html') {
         const frame = document.createElement('iframe');
-        frame.src = assetUrl(item);
+        const url = assetUrl(item);
+
+        frame.dataset.src = url;
         frame.setAttribute('scrolling', 'no');
-        frame.setAttribute('sandbox', 'allow-scripts');
+        frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+
+        fetch(url)
+            .then((response) => (response.ok ? response.text() : Promise.reject(new Error('page ' + response.status))))
+            .then((html) => {
+                if (frame.isConnected) frame.srcdoc = html;
+            })
+            .catch(() => frame.dispatchEvent(new Event('error')));
+
         return frame;
     }
 
@@ -471,14 +641,18 @@ function buildElement(item) {
 /**
  * The single place that decides where a file comes from. A native shell that
  * caches assets injects window.SignagePlayer and answers with a local path;
- * with no shell present this is just the server URL.
+ * with no shell present this is the server URL carrying the file's cache key
+ * (§15): the worker files each copy under it, so a republished page or a
+ * replaced file is a new address and the old copy is never shown stale.
  */
 function assetUrl(item) {
     const shell = window.SignagePlayer;
     if (shell && typeof shell.localUrl === 'function') {
         return shell.localUrl(item.url, item.checksum) || item.url;
     }
-    return item.url;
+    if (!item.checksum) return item.url;
+
+    return item.url + (item.url.includes('?') ? '&' : '?') + CACHE_PARAM + '=' + encodeURIComponent(item.checksum);
 }
 
 function playCurrent() {
@@ -893,11 +1067,18 @@ function showError(message) {
 
 /* ── Boot ──────────────────────────────────────────────────────────────── */
 
+registerWorker();
+
 if (state.token) {
     startPlayback();
 } else {
     startPairing();
 }
+
+// The line is back: ask at once rather than at the next poll.
+window.addEventListener('online', () => {
+    if (state.token) fetchPlaylist();
+});
 
 // Best effort on TVs that honour it; the shop also disables sleep on the set.
 if ('wakeLock' in navigator) {

@@ -37,6 +37,24 @@ Route::get('/', function () {
 // -----------------------------------------------------------------------
 Route::view('/player', 'player.index')->name('player');
 
+// The player's web-app manifest (docs/AD-BUILDER-SPEC.md §15): a route rather than a file in public/, so it
+// carries the app's own name. Its icons and its service worker (public/player-sw.js) are plain files.
+Route::get('/player.webmanifest', fn () => response()->json([
+    'name' => config('app.name').' Player',
+    'short_name' => 'Player',
+    'description' => 'What a television shows: paired once, then playing its playlist — with or without a line.',
+    'start_url' => '/player',
+    'scope' => '/player',
+    'display' => 'fullscreen',
+    'orientation' => 'any',
+    'background_color' => '#000000',
+    'theme_color' => '#000000',
+    'icons' => [
+        ['src' => '/player-icons/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any'],
+        ['src' => '/player-icons/icon-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any maskable'],
+    ],
+])->header('Content-Type', 'application/manifest+json'))->name('player.manifest');
+
 // -----------------------------------------------------------------------
 // Invitations  (the link in the email — open to guests on purpose: the
 // person may not have an account yet. The token is the only key; the

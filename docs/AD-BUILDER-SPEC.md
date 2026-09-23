@@ -728,3 +728,127 @@ wrapper, origin offset, hidden subtree, unreachable elements, group animations i
 follow), resized from a corner (children and their type scale), rotated (children turn), entered with a
 double-click and a child edited, left with Esc, duplicated, ungrouped, and a group animation previewed and
 published — the television's frame shows the wrapper animating its children as one.
+
+---
+
+## 14. Lines (owner, 2026-09-23: "Line shape … yeh chiya" — no arrowheads)
+
+**What it is.** A third kind of shape beside the rectangle and the ellipse: a **line** — the rule under a
+heading, the dotted leader between a dish and its price, a divider between two columns. It is a shape
+element with `style.shape = "line"`, so it already has a box, a place in the stack, an angle, an opacity,
+a blend mode and animations like everything else; three keys of its own say how it is drawn:
+`style.lineWidth` (its thickness, 1–200 px, `AdCompiler::LIMITS`), `style.lineStyle` (`solid`, `dashed`
+or `dotted`, `AdCompiler::LINE_STYLES`) and `style.fill` (its colour — the same key a rectangle fills with).
+The box is the line's reach: it runs the full width of the box, through its vertical middle; its height is
+only room to grab it by, and turning the box turns the line. No arrowheads (owner's rule), no gradient, no
+corners, no frame and no shadow: those belong to filled shapes, and the panel does not offer them for a line.
+
+**Drawn the same twice.** The compiler (`AdCompiler::shapeStyle`) and the editor (`styles.js` `shapeCss`)
+both draw a line as a `border-top` of the chosen width, style and colour on a stroke laid across the middle
+of the box — `border-top` because a dashed or dotted line is the browser's own dash pattern, and nothing
+else draws it identically everywhere. The fill of the box itself stays transparent.
+
+**The editor.** **Line** beside Text, Image and Shape on the Add panel (a 600 × 40 box, 6 px white, solid);
+the Shape panel's kind buttons gain *Line*, and for a line the panel shows thickness, style and colour only.
+Everything else — move, turn, duplicate, group, animate, align — is what any element has.
+
+**Tests.** Pest: the three keys come back from a save, a width past the limit and a style nobody offers are
+refused (the attack suite too), the page writes the stroke and nothing a filled shape would. Dusk
+(`AdLineFlowTest`): a line added, made thicker, dashed and gold, turned, saved and published — the stage
+draws the stroke the way the page will, and the page carries it.
+
+---
+
+## 15. Offline playback — the player as a progressive web app (owner, 2026-09-23: "screen ko Offline cache bhi karo, progressive banao")
+
+**What it is.** A television keeps playing when the shop's internet drops: the last playlist it was given,
+every file on it — pictures, videos and Ad Builder pages with what they hold — from a cache on the set
+itself, and back to live the moment the line returns. Nothing on the television says so (owner's rule: the
+panel says a screen is offline, from its missed heartbeats — `Screen::OFFLINE_AFTER_MINUTES` — and the TV
+just keeps working). It works wherever the browser has a service worker (every Chromium-based television
+browser and Android box, Chrome and Edge on a stick); anywhere else the player is exactly what it was —
+online only — because every step below is behind `'serviceWorker' in navigator`.
+
+**Three pieces.**
+
+1. **The service worker, `public/player-sw.js`** (plain ES5 like the ad runtime, never built by Vite, so its
+   address never changes and the browser can update it in place; registered by the player at scope
+   `/player`, so it controls the player page and the frames inside it and nothing of the panel opened in
+   the same browser). It touches only what the player needs and hands everything else to the network:
+   - **`/device/playlist` — network first, the last answer kept.** The network is tried with a short
+     patience (`MANIFEST_TIMEOUT_MS`, 8 s); a good answer is kept as the last manifest; when the network
+     fails, times out or answers 5xx, the kept one is served with the header `X-Signage-Cached: 1`, so the
+     player knows it is working from memory. A refusal (401: the screen was removed) goes through untouched
+     — it is the server's word. `/device/register`, `/device/pair-status` and `/device/heartbeat` are never
+     cached: a heartbeat that cannot get out is exactly what tells the panel the screen is offline.
+   - **Media — cache first, by versioned address.** Every file the manifest names is asked for with its
+     `checksum` in the query (`?c=…`, appended by the player's `assetUrl()`, the one place a file's address is
+     decided), so a republished ad page or a replaced file is a new address and the old copy is never shown
+     stale; `/storage/*` (and Dusk's `/dusk-storage/*`), the pictures and videos inside an Ad Builder page,
+     and the ad runtime (`/ad-runtime/*`, matched ignoring its version query) are served from the cache when
+     they are there and fetched and kept — whole — when they are not. A slice the browser asks for (a
+     video's range request) is cut from the cached whole as a 206; a partial answer from the network is
+     never kept.
+   - **The player itself — network first, cache as fallback.** `/player` and its built assets under
+     `/build/` are kept as they load, so a set rebooting with no internet still gets its page; the assets
+     carry a hash in their name, so a new deploy simply loads new ones and the old are pruned.
+   - **Warming and pruning, on the player's word.** After every LIVE manifest the player posts the set of
+     addresses the screen may need — every file on the playlist whether due now or not (`assets[]`, sent
+     for exactly this), the holding picture, the channel ads, the network adverts, the ad pages and what
+     those pages load (read out of the fetched page) — and the worker fetches what it lacks, one after
+     another, and drops what is no longer named. So a lunch menu scheduled for noon is on the set at nine,
+     and a file taken off the playlist does not sit in the cache for ever. The worker answers `warmed`
+     with how many it could not fetch; the page keeps that on `<body data-warmed data-warm-missing>` for
+     whoever checks a set.
+   - The worker installs with `skipWaiting` and `clients.claim`, and the player asks for an update once an
+     hour (`registration.update()`), because a television never reloads its page on its own. When a worker
+     takes a page over after it loaded (the first visit), the player asks for the playlist again through
+     it, so the worker holds a copy before any line drops.
+2. **The manifest** (`DeviceController::playlist`) says a little more: each file item carries `expires_at`
+   (the file's own expiry, or null), the screen's holding picture travels as `fallback` whenever the shop
+   set one and it is still live — even while items are due — and `assets[]` lists every file the screen may
+   need (`assetsFor()`: each line's file, every ad of every channel on the playlist, the holding picture,
+   the network adverts; never a draft), each as address, cache key and type. The fingerprint (`version`)
+   is moved by none of this: it is a change to what plays that must.
+3. **The player** (`resources/js/player.js`), which registers the worker, versions every address, warms and
+   prunes, and plays from a cached manifest the way the owner decided (`fromMemory()`): what has not
+   expired plays on ("else last content"); once **everything** in it has expired, the holding picture if
+   there is one, otherwise black — the same answer the server would have given. The clock it judges expiry
+   by is the set's own, corrected by the offset between the last live manifest's `server_time` and the
+   set's clock at that moment, so a box with a wrong clock keeps the right hours for as long as it is
+   offline. Dayparts and schedule rules are resolved by the server alone (`ScheduleResolver`) and are not
+   re-judged offline — the owner's accepted limit. A cached manifest whose filtering changes (a file
+   expiring mid-outage) is re-rendered even though its `version` did not move; `<body data-source>` says
+   `live` or `cache`. The `online` event asks for the playlist at once rather than at the next poll.
+
+**The frame changes two things.** An Ad Builder page is no longer navigated to: the player fetches it
+(through the worker, which keeps it under its versioned address) and puts it in the frame as `srcdoc`, the
+frame remembering where it came from in `data-src` — so the frame's own document is the cached page even
+with no line, and the worker never needs a scope wider than the player. And the frame is
+`sandbox="allow-scripts allow-same-origin"` now, where it was `allow-scripts` alone: a frame with an
+opaque origin is controlled by no service worker (Chromium skips the worker for sandboxed frames without
+`allow-same-origin`), so the pictures, videos and scripts inside the page could never come from the cache.
+The page is first-party output that the compiler writes from validated data with nothing a person typed
+ever written as code (§9, the attack suite), so a same-origin frame is the trade every web-based player
+makes; the sandbox still forbids forms, popups and navigating the television away, the fonts stay embedded
+(§7a), and the published file opened on its own is still served under `Content-Security-Policy: sandbox
+allow-scripts` by nginx — that header never reaches a `srcdoc` document.
+
+**The web-app manifest.** `/player.webmanifest` (a route, so it carries the app's own name: `start_url`
+`/player`, `display: fullscreen`, `orientation: any`, a dark theme, icons drawn by
+`scripts/draw-player-icons.php` into `public/player-icons/`) is linked from the player page, so a
+television or Android box can "install" the player and open it full screen with no browser bar — the
+progressive part of the request. nginx serves `player-sw.js` with `Cache-Control: no-cache`, so a set
+asking for a new worker is given it.
+
+**Tests.** Pest (`OfflineManifestTest`): each item's `expires_at`, the fallback travelling alongside due
+items (and gone when it has expired or was never set), `assets[]` naming every file whether due or not —
+the picture scheduled for next year, every channel ad, the holding picture, the network adverts, never a
+draft — and none of it moving the version; the web-app manifest route; the sweep knows it as a public door.
+Dusk (`OfflinePlayerTest`): a paired television plays a two-picture playlist; the worker takes the page
+over and reports the whole playlist warmed (the test reads the media cache itself); the server is put into
+maintenance — every request a 503, which is what an unreachable server looks like to the worker's
+network-first paths — and the set plays on from memory (the picture on the glass really loaded, with a
+server that answers nothing); the first picture expires and never comes back; the second expires and the
+holding picture takes the glass; the set is rebooted with no line and still has its page and its holding
+picture; maintenance ends and the set is live again on the server's own answer.

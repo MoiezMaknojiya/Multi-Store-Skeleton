@@ -98,6 +98,15 @@ bash deploy/deploy.sh deploy@SERVER_IP https://app.yourdomain.com --first
 Then sign in, and empty the password line again (`SEED_ADMIN_PASSWORD=`) in `shared/.env`. Prove the mail
 works: `ssh -i ~/.ssh/signage_deploy deploy@SERVER_IP "cd /var/www/signage/current && php artisan mail:test you@example.com"`.
 
+## The televisions
+
+A television opens `https://app.yourdomain.com/player` in its browser and shows a pairing code. The player is
+a progressive web app: on a Chromium-based set or Android box it can be installed full screen (the browser's
+"Add to home screen" / "Install app"), and its service worker keeps the page, the last playlist and every
+file on it, so the set keeps playing when the shop's internet drops and picks up the live playlist the
+moment it returns (docs/AD-BUILDER-SPEC.md §15). Nothing on the set says it is offline — the Screens page
+does, from its missed heartbeats. On a browser without service workers the player simply plays online.
+
 ## Every deploy after that
 
 Commit, then:
