@@ -313,53 +313,67 @@
                             Nothing on the stage yet.
                         </p>
 
-                        {{-- Front first. Drag a row to reorder; double-click a name to rename it. --}}
-                        <template x-for="layer in layers" :key="layer.id">
+                        {{-- Front first, a group's children indented beneath it (§13). Drag a row to reorder it
+                             — beside another row, or onto a group to put it inside; double-click a name to
+                             rename it. --}}
+                        <template x-for="row in layerRows()" :key="row.element.id">
                             <div class="group flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm"
                                  draggable="true"
                                  x-bind:class="[
-                                     isSelected(layer)
+                                     isSelected(row.element)
                                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200'
                                          : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700/50',
-                                     layerDropClass(layer),
+                                     layerDropClass(row.element),
                                  ]"
-                                 x-bind:dusk="'layer-' + layer.id"
-                                 @click="select(layer, $event)"
-                                 @contextmenu="openContextMenu($event, layer)"
-                                 @dragstart="layerDragStart($event, layer)"
-                                 @dragover.prevent="layerDragOver($event, layer)"
-                                 @drop.prevent="layerDrop($event, layer)"
+                                 x-bind:style="{ paddingLeft: (8 + row.depth * 14) + 'px' }"
+                                 x-bind:dusk="'layer-' + row.element.id"
+                                 @click="selectFromLayers(row.element, $event)"
+                                 @contextmenu="openContextMenu($event, row.element)"
+                                 @dragstart="layerDragStart($event, row.element)"
+                                 @dragover.prevent="layerDragOver($event, row.element)"
+                                 @drop.prevent="layerDrop($event, row.element)"
                                  @dragend="layerDragEnd()">
 
-                                <button type="button" class="text-gray-400 hover:text-gray-600"
-                                        @click.stop="toggleVisible(layer)"
-                                        x-bind:title="layer.visible === false ? 'Show' : 'Hide'"
-                                        x-bind:dusk="'layer-visible-' + layer.id"
-                                        x-text="layer.visible === false ? '◌' : '●'"></button>
-
-                                <template x-if="renamingId !== layer.id">
-                                    <span class="min-w-0 flex-1 truncate" x-text="layer.name ?? layer.type"
-                                          @dblclick.stop="startRename(layer)" x-bind:dusk="'layer-name-' + layer.id"></span>
+                                {{-- A group's folder: its chevron folds the children away. --}}
+                                <template x-if="row.group">
+                                    <button type="button" class="w-3 text-xs text-gray-400 hover:text-gray-600"
+                                            @click.stop="toggleCollapsed(row.element)"
+                                            x-bind:title="row.collapsed ? 'Show what is inside' : 'Fold'"
+                                            x-bind:dusk="'layer-fold-' + row.element.id"
+                                            x-text="row.collapsed ? '▸' : '▾'"></button>
                                 </template>
-                                <template x-if="renamingId === layer.id">
+
+                                <button type="button" class="text-gray-400 hover:text-gray-600"
+                                        @click.stop="toggleVisible(row.element)"
+                                        x-bind:title="row.element.visible === false ? 'Show' : 'Hide'"
+                                        x-bind:dusk="'layer-visible-' + row.element.id"
+                                        x-text="row.element.visible === false ? '◌' : '●'"></button>
+
+                                <span class="text-xs" x-show="row.group" title="Group" aria-hidden="true">▣</span>
+
+                                <template x-if="renamingId !== row.element.id">
+                                    <span class="min-w-0 flex-1 truncate" x-text="row.element.name ?? row.element.type"
+                                          @dblclick.stop="startRename(row.element)" x-bind:dusk="'layer-name-' + row.element.id"></span>
+                                </template>
+                                <template x-if="renamingId === row.element.id">
                                     <input type="text" class="form-input h-6 min-w-0 flex-1 px-1 text-sm" maxlength="120"
-                                           x-bind:value="layer.name ?? layer.type"
+                                           x-bind:value="row.element.name ?? row.element.type"
                                            x-init="$nextTick(() => { $el.focus(); $el.select(); })"
                                            @click.stop @dblclick.stop
-                                           @keydown.enter.prevent="finishRename(layer, $el.value)"
+                                           @keydown.enter.prevent="finishRename(row.element, $el.value)"
                                            @keydown.escape.prevent="renamingId = null"
-                                           @blur="finishRename(layer, $el.value)"
-                                           x-bind:dusk="'layer-rename-' + layer.id" />
+                                           @blur="finishRename(row.element, $el.value)"
+                                           x-bind:dusk="'layer-rename-' + row.element.id" />
                                 </template>
 
-                                <span class="text-xs text-purple-500" x-show="animates(layer)" title="Animated">✦</span>
+                                <span class="text-xs text-purple-500" x-show="animates(row.element)" title="Animated">✦</span>
 
                                 <button type="button" class="text-gray-400 transition hover:text-gray-600"
-                                        x-bind:class="layer.locked ? '' : 'opacity-0 group-hover:opacity-100'"
-                                        @click.stop="toggleLock(layer)"
-                                        x-bind:title="layer.locked ? 'Unlock' : 'Lock'"
-                                        x-bind:dusk="'layer-lock-' + layer.id"
-                                        x-text="layer.locked ? '🔒' : '🔓'"></button>
+                                        x-bind:class="row.element.locked ? '' : 'opacity-0 group-hover:opacity-100'"
+                                        @click.stop="toggleLock(row.element)"
+                                        x-bind:title="row.element.locked ? 'Unlock' : 'Lock'"
+                                        x-bind:dusk="'layer-lock-' + row.element.id"
+                                        x-text="row.element.locked ? '🔒' : '🔓'"></button>
                             </div>
                         </template>
 
@@ -420,48 +434,9 @@
                             </template>
                         </div>
 
-                        {{-- Elements, painted back to front. Each is the box (where it sits), then `.ad-anim`
-                             (what the animations move — the published page has the same two layers), then
-                             what it shows. --}}
-                        <template x-for="element in elementsByDepth" :key="element.id">
-                            <div class="absolute" x-bind:style="boxStyle(element)"
-                                 x-bind:dusk="'element-' + element.id"
-                                 x-bind:data-anim-id="element.id"
-                                 @pointerdown="startDrag($event, element)"
-                                 @contextmenu.stop="openContextMenu($event, element)"
-                                 @dblclick="startTextEdit(element)">
-
-                                <div class="ad-anim h-full w-full">
-                                    {{-- Text --}}
-                                    <template x-if="element.type === 'text'">
-                                        <div class="h-full w-full outline-none" dir="auto"
-                                             x-bind:style="textStyle(element)"
-                                             x-bind:contenteditable="editingTextId === element.id"
-                                             @blur="finishTextEdit($event, element)"
-                                             x-text="element.text"></div>
-                                    </template>
-
-                                    {{-- Image --}}
-                                    <template x-if="element.type === 'image'">
-                                        <img x-bind:src="assetUrl(element)" alt="" draggable="false"
-                                             class="pointer-events-none"
-                                             x-bind:style="pictureStyle(element)" />
-                                    </template>
-
-                                    {{-- Video: a still frame while designing; ▶ Play runs it. --}}
-                                    <template x-if="element.type === 'video'">
-                                        <video x-bind:src="assetUrl(element)" muted loop playsinline preload="metadata"
-                                               class="pointer-events-none"
-                                               x-bind:style="pictureStyle(element)"></video>
-                                    </template>
-
-                                    {{-- Shape --}}
-                                    <template x-if="element.type === 'shape'">
-                                        <div x-bind:style="shapeStyle(element)"></div>
-                                    </template>
-                                </div>
-                            </div>
-                        </template>
+                        {{-- Elements, painted back to front as the tree they are (§13): the stage's own here,
+                             a group's children inside its wrapper. --}}
+                        @include('builder.partials.stage-elements', ['depth' => 0, 'parent' => null])
                     </div>
 
                     {{-- Over the stage — never clipped by it, never in a poster or on a television: the rulers,
@@ -624,6 +599,21 @@
 
                         {{-- ── Style ─────────────────────────────────────── --}}
                         <div x-show="panelTab === 'style'" class="space-y-5">
+                            {{-- A group (§13): what it holds, and the way in and out of it. --}}
+                            <template x-if="isGroup(selected)">
+                                <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-700" dusk="group-panel">
+                                    <p class="text-sm text-gray-700 dark:text-gray-200">
+                                        <span class="font-medium" x-text="countInside(selected)" dusk="group-count"></span>
+                                        <span x-text="countInside(selected) === 1 ? 'element' : 'elements'"></span> in this group
+                                    </p>
+                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                        Double-click the group (or press Enter) to change what is inside; Esc comes back out.
+                                    </p>
+                                    <button type="button" class="btn-secondary mt-2 w-full text-xs" @click="ungroupSelection()"
+                                            title="Ungroup (Ctrl+Shift+G)" dusk="ungroup">Ungroup</button>
+                                </div>
+                            </template>
+
                             {{-- Text content --}}
                             <template x-if="selected.type === 'text'">
                                 <div>
@@ -655,7 +645,8 @@
                                         <input type="number" min="1" class="form-input mt-1 w-full text-sm" x-bind:value="selected.h"
                                                @change="$el.value = setBox('h', $el.value)" dusk="element-h" />
                                     </label>
-                                    <label class="text-xs text-gray-500 dark:text-gray-400">Rotation
+                                    {{-- A group has no angle of its own: turning it turns what is inside (§13). --}}
+                                    <label class="text-xs text-gray-500 dark:text-gray-400" x-show="!isGroup(selected)">Rotation
                                         <input type="number" min="-360" max="360" class="form-input mt-1 w-full text-sm" x-bind:value="selected.rotation ?? 0"
                                                @change="$el.value = setBox('rotation', $el.value)" dusk="element-rotation" />
                                     </label>

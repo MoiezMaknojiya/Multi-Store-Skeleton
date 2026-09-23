@@ -271,6 +271,7 @@ export function viewPanel() {
             this.stopPreview();
             this.doc = normaliseDocument(document);
             this.markChanged();
+            this.leaveMissingGroup();
             this.ensureSelectionExists();
         },
     };

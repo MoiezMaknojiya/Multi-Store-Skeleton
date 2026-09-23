@@ -22,6 +22,9 @@
         ['duplicate', 'Duplicate', 'Ctrl+D', 'menu-duplicate', 'selection'],
         ['remove', 'Delete', 'Del', 'menu-delete', 'selection'],
         '-',
+        ['groupSelection', 'Group', 'Ctrl+G', 'menu-group', 'group'],
+        ['ungroupSelection', 'Ungroup', 'Ctrl+Shift+G', 'menu-ungroup', 'ungroup'],
+        '-',
         ['bringToFront', 'Bring to front', 'Ctrl+Shift+]', 'menu-front', 'selection'],
         ['bringForward', 'Bring forward', 'Ctrl+]', 'menu-forward', 'selection'],
         ['sendBackward', 'Send backward', 'Ctrl+[', 'menu-backward', 'selection'],
@@ -40,6 +43,8 @@
                         'selection' => 'selectedIds.length === 0',
                         'clipboard' => 'clipboardSize === 0',
                         'both' => 'selectedIds.length === 0 || clipboardSize === 0',
+                        'group' => '!canGroup()',
+                        'ungroup' => '!canUngroup()',
                         default => 'false',
                     } }}"
                     @click="runMenu('{{ $item[0] }}')" dusk="{{ $item[3] }}">

@@ -17,8 +17,12 @@
  */
 import axios from 'axios';
 import { arrangePanel, CLIPBOARD_KEY, readClipboard } from './arrange.js';
-import { clampName, MAX_NAME, newId, normaliseDocument, readPreference, renumberDepth, writePreference } from './document.js';
-import { angleFromCentre, boundsOf, intersects, MIN_SIZE, resizeRotated, snapMove, stepAngle, toStage } from './geometry.js';
+import {
+    clampName, isGroup, MAX_NAME, newId, normaliseDocument, parentIdOf, readPreference, renumberDepth, syncGroupBounds,
+    writePreference,
+} from './document.js';
+import { angleFromCentre, boundsOf, intersects, MIN_SIZE, normaliseAngle, resizeRotated, snapMove, stepAngle, toStage } from './geometry.js';
+import { groupPanel } from './groups.js';
 import { clone, createHistory } from './history.js';
 import { motionPanel } from './motion.js';
 import { capturePoster } from './poster.js';
@@ -40,6 +44,7 @@ export function registerAdEditor(Alpine) {
             ...motionPanel(motion),
             ...arrangePanel(),
             ...viewPanel(),
+            ...groupPanel(),
 
             /* ── What is being edited ──────────────────────────────────── */
             adId: config.adId ?? null,
@@ -211,8 +216,15 @@ export function registerAdEditor(Alpine) {
                     : `${size} — a television screen`;
             },
 
-            /** Remember the document and mark it unsaved. Every change comes through here. */
+            /**
+             * Remember the document and mark it unsaved. Every change comes through here — so this is also
+             * where every group's box is made the box around what it holds, and a group left empty goes
+             * (§13), before the step is remembered.
+             */
             commit(label = null) {
+                syncGroupBounds(this.doc);
+                this.leaveMissingGroup();
+                this.ensureSelectionExists();
                 this.history.commit(this.doc, label);
                 this.markChanged();
             },
@@ -233,19 +245,24 @@ export function registerAdEditor(Alpine) {
                 return this.elementsByDepth.filter((element) => chosen.has(element.id));
             },
 
-            /** A click on a layer: Shift or Ctrl adds or removes it, a plain click selects it alone. */
+            /**
+             * A click: Shift or Ctrl adds or removes, a plain click selects alone. Anything inside a group
+             * selects the group, unless that group has been entered (§13).
+             */
             select(element, event = null) {
                 event?.stopPropagation();
 
-                if (!element || element.locked) return;
+                const target = this.resolveTarget(element);
+
+                if (!target || this.isLocked(target)) return;
 
                 if (event && (event.shiftKey || event.ctrlKey || event.metaKey)) {
-                    this.toggleInSelection(element);
+                    this.toggleInSelection(target);
 
                     return;
                 }
 
-                this.setSelection([element.id]);
+                this.setSelection([target.id]);
             },
 
             setSelection(ids) {
@@ -267,10 +284,10 @@ export function registerAdEditor(Alpine) {
                 this.editingTextId = null;
             },
 
-            /** Ctrl+A: every element that can be selected — shown and unlocked. */
+            /** Ctrl+A: everything at this level that can be selected — shown and unlocked. */
             selectAll() {
-                this.setSelection(this.elementsByDepth
-                    .filter((element) => element.visible !== false && !element.locked)
+                this.setSelection(this.levelItems()
+                    .filter((element) => this.isShown(element) && !this.isLocked(element))
                     .map((element) => element.id));
             },
 
@@ -279,7 +296,7 @@ export function registerAdEditor(Alpine) {
             },
 
             ensureSelectionExists() {
-                const live = new Set(this.doc.elements.filter((element) => !element.locked).map((element) => element.id));
+                const live = new Set(this.doc.elements.filter((element) => !this.isLocked(element)).map((element) => element.id));
 
                 this.selectedIds = this.selectedIds.filter((id) => live.has(id));
 
@@ -349,7 +366,10 @@ export function registerAdEditor(Alpine) {
                 this.place(element, 'Add ' + type);
             },
 
-            /** Put a new element on top of the others, select it and remember the step. */
+            /**
+             * Put a new element on top of the others — inside the group being worked in, if one is —
+             * select it and remember the step.
+             */
             place(element, label) {
                 if (this.doc.elements.length >= this.maxElements) {
                     window.toast(`An ad may hold at most ${this.maxElements} elements.`);
@@ -358,6 +378,7 @@ export function registerAdEditor(Alpine) {
                 }
 
                 this.stopPreview();
+                element.parentId = this.editingGroupId;
                 this.doc.elements.push(element);
                 renumberDepth(this.doc);
                 this.selectedIds = [element.id];
@@ -444,31 +465,41 @@ export function registerAdEditor(Alpine) {
             startDrag(event, element) {
                 if (event.button !== 0) return;
                 if (this.spaceHeld) return this.startPan(event);
-                if (element.locked || this.editingTextId === element.id) return;
+                if (this.editingTextId === element.id) return;
+
+                // Anything inside a group is the group, unless the group has been entered (§13).
+                const target = this.resolveTarget(element);
+
+                if (!target || this.isLocked(target)) return;
 
                 event.stopPropagation();
                 event.preventDefault();
 
                 if (event.shiftKey || event.ctrlKey || event.metaKey) {
-                    this.toggleInSelection(element);
+                    this.toggleInSelection(target);
 
                     return;
                 }
 
-                if (!this.selectedIds.includes(element.id)) this.setSelection([element.id]);
+                if (!this.selectedIds.includes(target.id)) this.setSelection([target.id]);
 
                 this.stopPreview();
 
-                const group = this.selection().filter((item) => !item.locked);
+                // A group moves with everything inside it: the subtree travels in the same gesture.
+                const chosen = this.selection().filter((item) => !this.isLocked(item));
+                const items = chosen.flatMap((item) => [item, ...this.descendantsOf(item)]);
 
                 this.beginGesture(event, {
                     kind: 'move',
-                    items: group.map((item) => ({ element: item, x: item.x, y: item.y })),
-                    bounds: boundsOf(group),
+                    items: items.map((item) => ({ element: item, x: item.x, y: item.y })),
+                    bounds: boundsOf(chosen),
                 });
             },
 
-            /** Pointer down on one of the eight handles (one element selected). */
+            /**
+             * Pointer down on one of the eight handles (one element selected). A group scales what it
+             * holds about its box; from a corner the shape is kept, from a side the boxes stretch (§13).
+             */
             startResize(event, element, handle) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -479,19 +510,26 @@ export function registerAdEditor(Alpine) {
                     handle,
                     start: { x: element.x, y: element.y, w: element.w, h: element.h, rotation: element.rotation ?? 0 },
                     element,
+                    subtree: isGroup(element) ? this.subtreeStart(element) : null,
+                    corner: handle.length === 2,
                 });
             },
 
-            /** Pointer down on the rotate handle. */
+            /** Pointer down on the rotate handle. A group turns everything inside it about its centre (§13). */
             startRotate(event, element) {
                 event.preventDefault();
                 event.stopPropagation();
                 this.stopPreview();
 
+                const point = this.toStagePoint(event.clientX, event.clientY);
+
                 this.beginGesture(event, {
                     kind: 'rotate',
                     start: { x: element.x, y: element.y, w: element.w, h: element.h, rotation: element.rotation ?? 0 },
                     element,
+                    subtree: isGroup(element) ? this.subtreeStart(element) : null,
+                    centre: { x: element.x + element.w / 2, y: element.y + element.h / 2 },
+                    startAngle: angleFromCentre(element, point.x, point.y),
                 });
             },
 
@@ -542,19 +580,32 @@ export function registerAdEditor(Alpine) {
 
                 if (gesture.kind === 'resize') {
                     // The handles turn with the element, so a turned one is resized along its own sides.
+                    // A group keeps its shape from a corner unless Shift asks to stretch it.
+                    const uniform = gesture.subtree ? gesture.corner !== event.shiftKey : event.shiftKey;
                     const box = resizeRotated(gesture.start, gesture.handle, dx, dy, gesture.start.rotation, {
-                        keepRatio: event.shiftKey,
+                        keepRatio: uniform,
                         fromCentre: event.altKey,
                     });
 
-                    Object.assign(gesture.element, box);
+                    if (gesture.subtree) {
+                        this.scaleGroupTo(gesture.element, box, gesture.subtree, uniform);
+                    } else {
+                        Object.assign(gesture.element, box);
+                    }
                 }
 
                 if (gesture.kind === 'rotate') {
                     const point = this.toStagePoint(event.clientX, event.clientY);
-                    const angle = angleFromCentre(gesture.element, point.x, point.y);
 
-                    gesture.element.rotation = event.shiftKey ? stepAngle(angle) : angle;
+                    if (gesture.subtree) {
+                        const delta = normaliseAngle(angleFromCentre(gesture.start, point.x, point.y) - gesture.startAngle);
+
+                        this.rotateGroupBy(gesture.element, gesture.subtree, gesture.centre, event.shiftKey ? stepAngle(delta) : delta);
+                    } else {
+                        const angle = angleFromCentre(gesture.element, point.x, point.y);
+
+                        gesture.element.rotation = event.shiftKey ? stepAngle(angle) : angle;
+                    }
                 }
             },
 
@@ -601,8 +652,9 @@ export function registerAdEditor(Alpine) {
 
                     this.marquee = box;
 
-                    const touched = this.doc.elements
-                        .filter((element) => element.visible !== false && !element.locked && intersects(box, element))
+                    // What is at this level — a group as one box, never the things inside it.
+                    const touched = this.levelItems()
+                        .filter((element) => this.isShown(element) && !this.isLocked(element) && intersects(box, element))
                         .map((element) => element.id);
 
                     this.selectedIds = [...new Set([...kept, ...touched])];
@@ -637,6 +689,22 @@ export function registerAdEditor(Alpine) {
 
                 if (key === 'w' || key === 'h') kept = Math.max(MIN_SIZE, kept);
 
+                // A group's numbers are its children's: a new place moves them, a new size stretches them
+                // (§13), and a group has no angle of its own.
+                if (isGroup(element)) {
+                    if (key === 'rotation') return 0;
+
+                    if (key === 'x' || key === 'y') {
+                        this.moveSubtree(element, key === 'x' ? kept - element.x : 0, key === 'y' ? kept - element.y : 0);
+                    } else {
+                        this.scaleGroupTo(element, { ...element, [key]: kept }, this.subtreeStart(element), false);
+                    }
+
+                    this.commit('Position');
+
+                    return kept;
+                }
+
                 element[key] = kept;
                 this.commit('Position');
 
@@ -658,7 +726,7 @@ export function registerAdEditor(Alpine) {
 
             /** One opacity for every selected element. */
             setSelectionOpacity(value) {
-                const items = this.selection().filter((element) => !element.locked);
+                const items = this.selection().filter((element) => !this.isLocked(element));
                 const kept = limit(this.limits, 'opacity', value, null);
 
                 if (kept === null || items.length === 0) return value;
@@ -706,7 +774,7 @@ export function registerAdEditor(Alpine) {
 
             /** Double-click on a text element edits it where it stands. */
             startTextEdit(element) {
-                if (element.type !== 'text' || element.locked) return;
+                if (element.type !== 'text' || this.isLocked(element)) return;
 
                 this.stopPreview();
                 this.selectedIds = [element.id];
@@ -781,7 +849,14 @@ export function registerAdEditor(Alpine) {
             toggleLock(element) {
                 element.locked = !element.locked;
 
-                if (element.locked) this.selectedIds = this.selectedIds.filter((id) => id !== element.id);
+                if (element.locked) {
+                    // Locking a group locks what is inside it too: nothing in there stays selected or open.
+                    const inside = new Set(this.descendantsOf(element).map((item) => item.id));
+
+                    this.selectedIds = this.selectedIds.filter((id) => id !== element.id && !inside.has(id));
+
+                    if (this.editingGroupId === element.id || inside.has(this.editingGroupId)) this.editingGroupId = parentIdOf(element);
+                }
 
                 this.commit(element.locked ? 'Lock' : 'Unlock');
             },
@@ -842,18 +917,29 @@ export function registerAdEditor(Alpine) {
                 event.dataTransfer.setData('text/plain', element.id);
             },
 
+            /**
+             * Over a row: the top and bottom parts mean "beside this row", the middle of a group's row
+             * means "inside this group" (§13).
+             */
             layerDragOver(event, element) {
                 if (!this.layerDrag || this.layerDrag.id === element.id) return;
 
                 const rect = event.currentTarget.getBoundingClientRect();
+                const at = (event.clientY - rect.top) / Math.max(1, rect.height);
+                const inside = isGroup(element) && at > 0.3 && at < 0.7;
 
                 this.layerDrag = {
                     ...this.layerDrag,
                     overId: element.id,
-                    place: event.clientY < rect.top + rect.height / 2 ? 'above' : 'below',
+                    place: inside ? 'inside' : (at < 0.5 ? 'above' : 'below'),
                 };
             },
 
+            /**
+             * Dropped beside a row, the element (with everything inside it) joins that row's group at its
+             * place; dropped onto a group, it goes in on top. Never into itself, and never deeper than
+             * groups go.
+             */
             layerDrop(event, target) {
                 const drag = this.layerDrag;
 
@@ -862,17 +948,29 @@ export function registerAdEditor(Alpine) {
                 if (!drag || drag.id === target.id) return;
 
                 const place = drag.place ?? 'above';
-                const order = this.elementsByDepth.filter((element) => element.id !== drag.id);
                 const moving = this.doc.elements.find((element) => element.id === drag.id);
-                const at = order.findIndex((element) => element.id === target.id);
 
-                if (!moving || at < 0) return;
+                if (!moving) return;
 
+                if (this.descendantsOf(moving).some((element) => element.id === target.id)) return;
+
+                const parentId = place === 'inside' ? target.id : parentIdOf(target);
+
+                if (!this.fitsUnder(parentId, [moving])) {
+                    window.toast('Groups can be three deep at most.');
+
+                    return;
+                }
+
+                moving.parentId = parentId;
                 // Back to front: above in the panel is AFTER in the stacking order.
-                order.splice(place === 'above' ? at + 1 : at, 0, moving);
-                order.forEach((element, index) => {
-                    element.z = index;
-                });
+                moving.z = place === 'inside'
+                    ? Math.max(target.z ?? 0, ...this.childrenOf(target.id).map((child) => child.z ?? 0)) + 0.5
+                    : (target.z ?? 0) + (place === 'above' ? 0.5 : -0.5);
+                renumberDepth(this.doc);
+
+                if (this.selectedIds.includes(moving.id) && parentId !== this.editingGroupId) this.editingGroupId = parentId;
+
                 this.commit('Reorder');
             },
 
@@ -883,7 +981,11 @@ export function registerAdEditor(Alpine) {
             layerDropClass(element) {
                 if (this.layerDrag?.overId !== element.id) return '';
 
-                return this.layerDrag.place === 'above' ? 'border-t-2 border-blue-500' : 'border-b-2 border-blue-500';
+                return {
+                    above: 'border-t-2 border-blue-500',
+                    below: 'border-b-2 border-blue-500',
+                    inside: 'ring-2 ring-inset ring-blue-500',
+                }[this.layerDrag.place] ?? '';
             },
 
             /* ── Duplicate and delete ──────────────────────────────────── */
@@ -902,20 +1004,21 @@ export function registerAdEditor(Alpine) {
 
                 this.stopPreview();
 
+                // A group is copied with everything inside it (§13); the copies sit beside their originals.
                 const suffix = ' copy';
-                const ids = items.map((element) => {
-                    const copy = clone(element);
+                const ids = [];
 
-                    copy.id = newId();
+                this.subtreeClones(items, parentIdOf(items[0])).forEach(({ original, copy, root }) => {
                     copy.x += 32;
                     copy.y += 32;
-                    copy.z = this.doc.elements.length;
-                    copy.locked = false;
+                    copy.z = this.doc.elements.length + (root ? 0.5 : 0.75);
+
                     // Room is made for the suffix, so a long name's copy is still one a save accepts.
-                    copy.name = clampName(element.name ?? element.type, MAX_NAME - suffix.length) + suffix;
+                    if (root) copy.name = clampName(original.name ?? original.type, MAX_NAME - suffix.length) + suffix;
+
                     this.doc.elements.push(copy);
 
-                    return copy.id;
+                    if (root) ids.push(copy.id);
                 });
 
                 renumberDepth(this.doc);
@@ -929,7 +1032,9 @@ export function registerAdEditor(Alpine) {
             },
 
             removeSelection(label = 'Delete') {
-                const going = new Set(this.selection().filter((element) => !element.locked).map((element) => element.id));
+                const chosen = this.selection().filter((element) => !this.isLocked(element));
+                // A group goes with everything inside it (§13).
+                const going = new Set(chosen.flatMap((element) => [element, ...this.descendantsOf(element)]).map((element) => element.id));
 
                 if (going.size === 0) return;
 
@@ -942,14 +1047,11 @@ export function registerAdEditor(Alpine) {
 
             /** Arrow keys move everything selected, a pixel at a time (ten with Shift). */
             nudge(dx, dy) {
-                const items = this.selection().filter((element) => !element.locked);
+                const items = this.selection().filter((element) => !this.isLocked(element));
 
                 if (items.length === 0) return;
 
-                items.forEach((element) => {
-                    element.x += dx;
-                    element.y += dy;
-                });
+                items.forEach((element) => this.moveSubtree(element, dx, dy));
                 this.commit('Move');
             },
 
@@ -963,6 +1065,7 @@ export function registerAdEditor(Alpine) {
                 this.stopPreview();
                 this.doc = normaliseDocument(document);
                 this.markChanged();
+                this.leaveMissingGroup();
                 this.ensureSelectionExists();
             },
 
@@ -974,6 +1077,7 @@ export function registerAdEditor(Alpine) {
                 this.stopPreview();
                 this.doc = normaliseDocument(document);
                 this.markChanged();
+                this.leaveMissingGroup();
                 this.ensureSelectionExists();
             },
 
@@ -1464,7 +1568,17 @@ export function registerAdEditor(Alpine) {
                     else if (this.historyOpen) this.historyOpen = false;
                     else if (this.publishMenuOpen || this.moreOpen) this.publishMenuOpen = this.moreOpen = false;
                     else if (this.previewing) this.stopPreview();
+                    // Inside a group, Esc steps back out to the group itself (§13).
+                    else if (this.editingGroupId !== null) this.exitGroup();
                     else this.clearSelection();
+
+                    return;
+                }
+
+                // Enter goes into the selected group, the way Figma does it; Esc comes back out.
+                if (event.key === 'Enter' && this.selected && isGroup(this.selected)) {
+                    event.preventDefault();
+                    this.enterGroup(this.selected);
 
                     return;
                 }
@@ -1488,6 +1602,7 @@ export function registerAdEditor(Alpine) {
                         z: () => (event.shiftKey ? this.redo() : this.undo()),
                         y: () => this.redo(),
                         d: () => this.duplicate(),
+                        g: () => (event.shiftKey ? this.ungroupSelection() : this.groupSelection()),
                         a: () => this.selectAll(),
                         c: () => this.copySelection(),
                         x: () => this.cutSelection(),
@@ -1572,8 +1687,20 @@ export function registerAdEditor(Alpine) {
 
             /* ── Drawing: the compiler's CSS, written the same way here ── */
 
-            boxStyle(element) {
-                return boxCss(element, this.limits);
+            /**
+             * An element's box as the stage paints it: against the stage, or against the group that holds
+             * it — every element keeps stage coordinates, so a child is simply offset by its group's origin
+             * (§13), exactly as the compiler writes it.
+             */
+            boxStyle(element, parent = null) {
+                const css = boxCss(element, this.limits);
+
+                if (parent) {
+                    css.left = limit(this.limits, 'x', element.x, 0) - parent.x + 'px';
+                    css.top = limit(this.limits, 'y', element.y, 0) - parent.y + 'px';
+                }
+
+                return css;
             },
 
             textStyle(element) {
@@ -1693,6 +1820,11 @@ export function registerAdEditor(Alpine) {
 function gestureChangedSomething(gesture) {
     if (gesture.kind === 'move') {
         return gesture.items.some((item) => item.element.x !== item.x || item.element.y !== item.y);
+    }
+
+    // A group's own box follows what is inside it, so what is inside is what is compared.
+    if (gesture.subtree) {
+        return gesture.subtree.some((start) => ['x', 'y', 'w', 'h', 'rotation'].some((key) => (start.element[key] ?? 0) !== (start[key] ?? 0)));
     }
 
     return ['x', 'y', 'w', 'h', 'rotation'].some((key) => (gesture.element[key] ?? 0) !== (gesture.start[key] ?? 0));

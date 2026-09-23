@@ -5,7 +5,7 @@
  * Spread into the editor's component, so data and plain methods only — no getters (see the Alpine gotcha
  * in the project conventions).
  */
-import { clampName, newId, renumberDepth } from './document.js';
+import { ancestorsOf, clampName, MAX_GROUP_DEPTH, newId, renumberDepth } from './document.js';
 import { alignTo, boundsOf, distribute } from './geometry.js';
 import { clone } from './history.js';
 
@@ -21,12 +21,14 @@ const STYLE_KEYS = {
     ],
     picture: ['fit', 'position', 'radius', 'border', 'shadow', 'filters', 'flipX', 'flipY', 'blend'],
     shape: ['shape', 'fill', 'gradient', 'radius', 'border', 'shadow', 'blend'],
+    // A group has no look of its own beyond how it mixes: the rest belongs to what it holds (§13).
+    group: ['blend'],
 };
 
 function kindOf(element) {
-    if (element.type === 'text') return 'text';
+    if (element.type === 'text' || element.type === 'shape' || element.type === 'group') return element.type;
 
-    return element.type === 'shape' ? 'shape' : 'picture';
+    return 'picture';
 }
 
 /** The clipboard's elements, or an empty list when there is none (or storage cannot be read). */
@@ -63,9 +65,12 @@ export function arrangePanel() {
 
         /* ── Align & distribute ─────────────────────────────────────────── */
 
-        /** One element lines up on the stage; several line up on the box around them. */
+        /**
+         * One element lines up on the stage; several line up on the box around them. A group moves with
+         * everything inside it (§13).
+         */
         alignSelection(edge) {
-            const items = this.selection().filter((element) => !element.locked);
+            const items = this.selection().filter((element) => !this.isLocked(element));
 
             if (items.length === 0) return;
 
@@ -73,18 +78,22 @@ export function arrangePanel() {
                 ? { x: 0, y: 0, w: this.stage.width, h: this.stage.height }
                 : boundsOf(items);
 
-            alignTo(items, frame, edge).forEach((place, index) => Object.assign(items[index], place));
+            alignTo(items, frame, edge).forEach((place, index) => {
+                this.moveSubtree(items[index], (place.x ?? items[index].x) - items[index].x, (place.y ?? items[index].y) - items[index].y);
+            });
             this.commit('Align');
         },
 
         /** Even gaps across ('x') or down ('y') — three elements or more. */
         distributeSelection(axis) {
-            const items = this.selection().filter((element) => !element.locked);
+            const items = this.selection().filter((element) => !this.isLocked(element));
 
             if (items.length < 3) return;
 
             distribute(items, axis).forEach((position, index) => {
-                items[index][axis === 'x' ? 'x' : 'y'] = position;
+                const key = axis === 'x' ? 'x' : 'y';
+
+                this.moveSubtree(items[index], key === 'x' ? position - items[index].x : 0, key === 'y' ? position - items[index].y : 0);
             });
             this.commit('Distribute');
         },
@@ -101,7 +110,10 @@ export function arrangePanel() {
 
             if (chosen.size === 0) return;
 
-            const ordered = [...this.elementsByDepth];
+            // Among its siblings: a selection is always at one level, and only that level's order is its
+            // place in the stack (§13). The numbering of the whole design follows from the tree.
+            const first = this.selection()[0];
+            const ordered = this.childrenOf(first ? (first.parentId ?? null) : null);
             let result = ordered;
 
             if (mode === 'front') {
@@ -125,6 +137,7 @@ export function arrangePanel() {
             result.forEach((element, index) => {
                 element.z = index;
             });
+            renumberDepth(this.doc);
 
             const labels = { front: 'Bring to front', back: 'Send to back', forward: 'Bring forward', backward: 'Send backward' };
 
@@ -141,12 +154,17 @@ export function arrangePanel() {
 
         /* ── Clipboard ──────────────────────────────────────────────────── */
 
+        /** The selection with everything its groups hold (§13): the tree travels, ids and all, and paste remakes it. */
+        clipboardItems(items) {
+            return items.flatMap((element) => [element, ...this.descendantsOf(element)]).map((element) => clone(element));
+        },
+
         copySelection() {
             const items = this.selection();
 
             if (items.length === 0) return;
 
-            if (!writeClipboard(items.map((element) => clone(element)))) {
+            if (!writeClipboard(this.clipboardItems(items))) {
                 window.toast('This browser would not let the editor keep a copy.');
 
                 return;
@@ -158,13 +176,13 @@ export function arrangePanel() {
         },
 
         cutSelection() {
-            const items = this.selection().filter((element) => !element.locked);
+            const items = this.selection().filter((element) => !this.isLocked(element));
 
             if (items.length === 0) return;
 
             // Nothing leaves the stage unless it really reached the clipboard: a cut that could not be
             // kept would simply be a delete.
-            if (!writeClipboard(items.map((element) => clone(element)))) {
+            if (!writeClipboard(this.clipboardItems(items))) {
                 window.toast('This browser would not let the editor keep a copy, so nothing was cut.');
 
                 return;
@@ -202,34 +220,54 @@ export function arrangePanel() {
                 return;
             }
 
+            // The tree comes back as it went (§13): a copied element's group is the copy of that group,
+            // and whatever was copied at the top lands at the level being worked on — depth permitting.
+            const copiedIds = new Set(usable.map((element) => element.id));
+            const roots = usable.filter((element) => !copiedIds.has(element.parentId ?? null));
+            const ids = new Map();
+            const depthBelow = (element) => (element.type === 'group'
+                ? 1 + Math.max(0, ...usable.filter((item) => item.parentId === element.id).map(depthBelow))
+                : 0);
+            const parent = this.editingGroupId ? this.doc.elements.find((element) => element.id === this.editingGroupId) : null;
+            const base = parent ? ancestorsOf(this.doc, parent).length + 1 : 0;
+
+            if (roots.some((element) => base + depthBelow(element) > MAX_GROUP_DEPTH)) {
+                window.toast(`Groups can be ${MAX_GROUP_DEPTH} deep at most.`);
+
+                return;
+            }
+
             this.stopPreview();
             this.pasteCount += 1;
 
             const offset = 32 * this.pasteCount;
-            const ids = [];
+            const selected = [];
 
             [...usable]
                 .sort((a, b) => (a.z ?? 0) - (b.z ?? 0))
                 .forEach((element) => {
                     const copy = clone(element);
 
-                    copy.id = newId();
+                    copy.id = newId(element.type === 'group' ? 'grp' : 'el');
+                    ids.set(element.id, copy.id);
                     copy.x = Math.round((Number(copy.x) || 0) + offset);
                     copy.y = Math.round((Number(copy.y) || 0) + offset);
                     copy.locked = false;
                     copy.visible = copy.visible !== false;
                     copy.z = this.doc.elements.length;
+                    copy.parentId = copiedIds.has(element.parentId ?? null) ? ids.get(element.parentId) : this.editingGroupId;
 
                     // The clipboard is the browser's, not the server's: a name it carries is held to what
                     // a save accepts.
                     if (typeof copy.name === 'string') copy.name = clampName(copy.name);
 
                     this.doc.elements.push(copy);
-                    ids.push(copy.id);
+
+                    if (!copiedIds.has(element.parentId ?? null)) selected.push(copy.id);
                 });
 
             renumberDepth(this.doc);
-            this.selectedIds = ids;
+            this.selectedIds = selected;
             this.commit('Paste');
 
             if (skipped > 0) {
@@ -240,7 +278,7 @@ export function arrangePanel() {
         /** The copied element's look, onto every selected element — the keys that make sense for each kind. */
         pasteStyle() {
             const source = readClipboard()[0];
-            const targets = this.selection().filter((element) => !element.locked);
+            const targets = this.selection().filter((element) => !this.isLocked(element));
 
             if (!source || targets.length === 0) return;
 
@@ -268,7 +306,7 @@ export function arrangePanel() {
         /** The copied element's entrance, loop and exit, onto every selected element. */
         pasteAnimation() {
             const source = readClipboard()[0];
-            const targets = this.selection().filter((element) => !element.locked);
+            const targets = this.selection().filter((element) => !this.isLocked(element));
 
             if (!source || targets.length === 0) return;
 
@@ -292,12 +330,14 @@ export function arrangePanel() {
             if (this.previewing === 'all') return;
 
             let locked = null;
+            // Anything inside a group is the group, unless the group has been entered (§13).
+            const target = element ? this.resolveTarget(element) : null;
 
-            if (element?.locked) {
-                locked = element;
+            if (target && this.isLocked(target)) {
+                locked = [target, ...ancestorsOf(this.doc, target)].find((node) => node.locked) ?? target;
                 this.selectedIds = [];
-            } else if (element) {
-                if (!this.selectedIds.includes(element.id)) this.selectedIds = [element.id];
+            } else if (target) {
+                if (!this.selectedIds.includes(target.id)) this.selectedIds = [target.id];
             } else {
                 this.clearSelection();
             }

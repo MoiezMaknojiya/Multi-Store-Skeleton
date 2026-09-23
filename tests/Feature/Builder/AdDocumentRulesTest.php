@@ -119,6 +119,19 @@ function everyKeyDocument(): array
                     ],
                 ],
             ],
+            // A group and what is inside it (§13) — last, so the indexes the tests above point at stay.
+            [
+                'id' => 'grp_row', 'type' => 'group', 'name' => 'Menu row', 'x' => 100, 'y' => 800, 'w' => 900, 'h' => 100,
+                'rotation' => 0, 'opacity' => 0.8, 'z' => 4, 'locked' => false, 'visible' => true,
+                'style' => ['blend' => 'screen'],
+                'animations' => ['in' => ['effect' => 'fade', 'direction' => 'up', 'distance' => 40, 'duration' => 0.6, 'delay' => 0.1, 'ease' => 'power1.out']],
+            ],
+            [
+                'id' => 'el_dish', 'type' => 'text', 'name' => 'Dish', 'parentId' => 'grp_row', 'x' => 100, 'y' => 800, 'w' => 700, 'h' => 100,
+                'rotation' => 0, 'opacity' => 1, 'z' => 5, 'locked' => false, 'visible' => true, 'text' => 'Chicken karahi',
+                'style' => ['fontSize' => 64, 'color' => '#ffffff'],
+                'animations' => ['out' => ['effect' => 'fade', 'direction' => 'down', 'distance' => 30, 'at' => 9, 'duration' => 0.5, 'ease' => 'power2.in']],
+            ],
         ],
     ];
 }

@@ -44,8 +44,11 @@ class BuilderAdRequest extends FormRequest
     /** Guides one stage may keep, across and down each. */
     public const MAX_GUIDES = 50;
 
-    /** Element kinds the compiler knows how to write. */
-    public const TYPES = ['text', 'image', 'video', 'shape'];
+    /** Element kinds the compiler knows how to write. A group holds other elements and shows nothing of its own. */
+    public const TYPES = ['text', 'image', 'video', 'shape', 'group'];
+
+    /** How many groups an element may be inside — Figma's and Canva's depth (docs/AD-BUILDER-SPEC.md §13). */
+    public const MAX_GROUP_DEPTH = 3;
 
     /** What a background layer may be. */
     public const LAYER_TYPES = ['color', 'gradient', 'image', 'video'];
@@ -122,11 +125,15 @@ class BuilderAdRequest extends FormRequest
             'document.guides.y' => ['nullable', 'list', 'max:'.self::MAX_GUIDES],
             'document.guides.y.*' => $this->limit('y', required: true),
 
-            'document.elements' => ['present', 'list', 'max:'.self::MAX_ELEMENTS],
+            // Checked as a tree before any element is (§13): a parent must be a group in this very list,
+            // never the element itself or something inside it, and nothing sits deeper than three groups.
+            'document.elements' => ['bail', 'present', 'list', 'max:'.self::MAX_ELEMENTS, $this->tree()],
             $element => ['array'],
             "{$element}.id" => ['required', 'string', 'max:40'],
             "{$element}.type" => ['required', Rule::in(self::TYPES)],
             "{$element}.name" => ['nullable', 'string', 'max:120'],
+            // The group this element is inside, or nothing for the top level (§13).
+            "{$element}.parentId" => ['nullable', 'string', 'max:40'],
 
             // The box. Off-stage values are allowed on purpose — a person may park something just
             // outside the frame, or animate it in from there — but not absurd ones.
@@ -286,12 +293,74 @@ class BuilderAdRequest extends FormRequest
         return "A {$orientation} ad is {$width} × {$height} — the size {$television} is. An ad's orientation is chosen when it is made.";
     }
 
+    /**
+     * The elements as a tree (docs/AD-BUILDER-SPEC.md §13). Shape-tolerant on purpose: it runs before the
+     * per-element rules, so an element that is not even an array, or a type that is not a word, must fail
+     * here in words rather than in a TypeError — the element's own rules refuse it again afterwards.
+     */
+    private function tree(): Closure
+    {
+        return function (string $attribute, mixed $elements, Closure $fail): void {
+            if (! is_array($elements)) {
+                return;
+            }
+
+            $groups = [];
+            $parents = [];
+
+            foreach ($elements as $element) {
+                if (! is_array($element) || ! is_string($element['id'] ?? null)) {
+                    continue;
+                }
+
+                if (($element['type'] ?? null) === 'group') {
+                    $groups[$element['id']] = true;
+                }
+
+                $parent = $element['parentId'] ?? null;
+
+                if ($parent !== null && $parent !== '') {
+                    $parents[$element['id']] = $parent;
+                }
+            }
+
+            foreach ($parents as $id => $parent) {
+                if (! is_string($parent) || ! isset($groups[$parent]) || $parent === $id) {
+                    $fail("An element's group must be a group in this design, and not the element itself.");
+
+                    return;
+                }
+
+                // Climb to the top: a chain that comes back to where it started is a cycle, and a chain
+                // longer than the depth a tool allows is a design nobody could draw.
+                $seen = [$id => true];
+                $depth = 0;
+
+                for ($ancestor = $parent; $ancestor !== null; $ancestor = $parents[$ancestor] ?? null) {
+                    if (isset($seen[$ancestor])) {
+                        $fail('A group cannot be inside itself.');
+
+                        return;
+                    }
+
+                    $seen[$ancestor] = true;
+
+                    if (++$depth > self::MAX_GROUP_DEPTH) {
+                        $fail('Groups can be '.self::MAX_GROUP_DEPTH.' deep at most.');
+
+                        return;
+                    }
+                }
+            }
+        };
+    }
+
     /** `style.textShadow.blur` → "text shadow blur", `animations.in.duration` → "entrance duration". */
     private function readable(string $path): string
     {
         $path = preg_replace(
-            ['/^animations\.in\./', '/^animations\.loop\./', '/^animations\.out\./', '/^style\./', '/\.\*\./', '/\./'],
-            ['entrance ', 'loop ', 'exit ', '', ' ', ' '],
+            ['/^animations\.in\./', '/^animations\.loop\./', '/^animations\.out\./', '/^style\./', '/\.\*\./', '/\./', '/^parentId$/'],
+            ['entrance ', 'loop ', 'exit ', '', ' ', ' ', 'group'],
             $path,
         ) ?? $path;
 

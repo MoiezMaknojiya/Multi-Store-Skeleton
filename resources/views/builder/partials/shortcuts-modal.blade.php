@@ -18,6 +18,8 @@
                     ['Ctrl+D', 'Duplicate'],
                     ['Delete', 'Delete'],
                     ['Double-click text', 'Edit the words where they are'],
+                    ['Ctrl+G · Ctrl+Shift+G', 'Group · Ungroup'],
+                    ['Double-click group · Enter', 'Work inside the group (Esc steps out)'],
                 ],
                 'Selecting and moving' => [
                     ['Click · Shift+click', 'Select · add or remove'],

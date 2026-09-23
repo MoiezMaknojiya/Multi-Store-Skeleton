@@ -12,6 +12,10 @@
         </div>
     </div>
 
+    {{-- Made one (§13): moved, resized, turned and animated together from then on. --}}
+    <button type="button" class="btn-primary w-full text-xs" @click="groupSelection()" x-bind:disabled="!canGroup()"
+            title="Group (Ctrl+G)" dusk="group-selection">Group</button>
+
     @include('builder.partials.align-controls', ['label' => 'Align to each other'])
 
     <div>

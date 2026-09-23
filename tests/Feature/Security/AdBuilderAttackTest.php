@@ -284,6 +284,33 @@ test('a document of the wrong shape is refused with a 422, never a 500', functio
     'a layer that is a string' => [['document' => attackDocument([], ['color'])]],
     'too many layers' => [['document' => attackDocument([], array_fill(0, 13, ['id' => 'l', 'type' => 'color']))]],
     'a stage of another size' => [['document' => [...attackDocument(), 'stage' => ['width' => 3840, 'height' => 2160, 'background' => ['layers' => []]]]]],
+    'a parent that is a list' => [['document' => attackDocument([['id' => 'a', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => ['g']]])]],
+    'a parent that is a number' => [['document' => attackDocument([['id' => 'a', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 7]])]],
+    'a parent that is nowhere' => [['document' => attackDocument([['id' => 'a', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 'ghost']])]],
+    'an element inside itself' => [['document' => attackDocument([['id' => 'g', 'type' => 'group', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 'g']])]],
+    'groups in a circle' => [['document' => attackDocument([
+        ['id' => 'g1', 'type' => 'group', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 'g2'],
+        ['id' => 'g2', 'type' => 'group', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 'g1'],
+    ])]],
+    'a group whose parent is a text' => [['document' => attackDocument([
+        ['id' => 't', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1],
+        ['id' => 'g', 'type' => 'group', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 't'],
+    ])]],
+    'an element whose parent has no type at all' => [['document' => attackDocument([
+        ['id' => 'x', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1],
+        ['id' => 'a', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 'x'],
+    ])]],
+    'an element that is a string beside a parent' => [['document' => attackDocument([
+        'not an element',
+        ['id' => 'a', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 'g'],
+    ])]],
+    'four groups deep' => [['document' => attackDocument([
+        ['id' => 'g1', 'type' => 'group', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1],
+        ['id' => 'g2', 'type' => 'group', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 'g1'],
+        ['id' => 'g3', 'type' => 'group', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 'g2'],
+        ['id' => 'g4', 'type' => 'group', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 'g3'],
+        ['id' => 'a', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 'g4'],
+    ])]],
     'a portrait stage on an ad that did not say so' => [['document' => BuilderAd::blankDocument('portrait')]],
     'a landscape stage on an ad that said portrait' => [['orientation' => 'portrait', 'document' => attackDocument()]],
     'an orientation that is a list' => [['orientation' => ['portrait'], 'document' => attackDocument()]],

@@ -57,7 +57,7 @@ one output.
   media row.
 - **Document** — the JSON the editor reads and writes: stage background layers + an ordered list of
   elements. The source of truth for editing.
-- **Element** — one thing on the stage: `text`, `image`, `video`, `shape`.
+- **Element** — one thing on the stage: `text`, `image`, `video`, `shape` — or a `group` of them (§13).
 - **Stage** — the frame itself — 1920×1080, or 1080×1920 for a portrait ad (§12) — with its own background layer stack.
 - **Asset** — an image or video uploaded for use inside ads (`builder_assets`), on the Builder's own shelf.
 - **Publish** — compile the document to a self-contained HTML file and write/refresh the `media` row that
@@ -219,7 +219,10 @@ through that scope (`visibleTo(…)->findOrFail()`), not through `ResolvesCurren
                  "shadow": { "x": 0, "y": 30, "blur": 60, "spread": 0, "color": "rgba(0,0,0,0.45)" },
                  "filters": { "brightness": 110, "saturate": 120 }, "blend": "normal" } },
     { "id": "el_c3", "type": "shape", "…": "the box keys",
-      "style": { "shape": "ellipse", "fill": "#2563eb", "gradient": null, "radius": 16, "border": null, "shadow": null } }
+      "style": { "shape": "ellipse", "fill": "#2563eb", "gradient": null, "radius": 16, "border": null, "shadow": null } },
+    { "id": "grp_d4", "type": "group", "name": "Menu row", "…": "the box keys — the box around its children, rotation 0",
+      "style": { "blend": "normal" }, "animations": { "in": { "effect": "fade", "…": "as any element" } } },
+    { "id": "el_e5", "type": "text", "parentId": "grp_d4", "…": "inside the group, in STAGE coordinates (§13)" }
   ]
 }
 ```
@@ -271,11 +274,14 @@ so the three can never disagree. **Every key is named in the rules**, because wh
   and blend, then Typography with Show more, or Shape, or Picture: replace, fit, focus point, corners,
   mirror, frame, shadow and eight filters) and *Animation* (below).
 - **Layers panel.** The list, front on top, drag to reorder, eye to hide, padlock to lock, double-click
-  to rename, right-click for the same menu as the canvas.
+  to rename, right-click for the same menu as the canvas. A group is a folder row with a chevron, its
+  children indented beneath it; dropping a row onto a group's middle puts it inside (§13).
 - **Right-click / shortcuts.** Cut `Ctrl+X`, Copy `Ctrl+C`, Paste `Ctrl+V`, Paste style `Ctrl+Shift+V`,
-  Paste animation `Ctrl+Alt+V`, Duplicate `Ctrl+D`, Delete, Bring forward / backward `Ctrl+]` / `Ctrl+[`, to
-  front / back with `Shift`, Lock `Ctrl+L`, Undo `Ctrl+Z`, Redo `Ctrl+Y`/`Ctrl+Shift+Z`, Save `Ctrl+S`, Play
-  `Ctrl+P`, Zoom `Ctrl+0/=/−` and `Shift+0/1`, align `Alt+A/H/D/W/V/S`, rulers `Shift+R` — all listed under `?`.
+  Paste animation `Ctrl+Alt+V`, Duplicate `Ctrl+D`, Delete, Group `Ctrl+G` / Ungroup `Ctrl+Shift+G` (§13),
+  Bring forward / backward `Ctrl+]` / `Ctrl+[`, to front / back with `Shift`, Lock `Ctrl+L`, Undo `Ctrl+Z`,
+  Redo `Ctrl+Y`/`Ctrl+Shift+Z`, Save `Ctrl+S`, Play `Ctrl+P`, Zoom `Ctrl+0/=/−` and `Shift+0/1`, align
+  `Alt+A/H/D/W/V/S`, rulers `Shift+R`, Enter to work inside a selected group and Esc to step out — all
+  listed under `?`.
 - **Undo/redo.** A history of document snapshots (50 deep) with a History list beside the buttons, like
   Elementor's; every mutation goes through one `commit(label)` so nothing can skip it, and a save does not
   clear it.
@@ -652,3 +658,73 @@ portrait poster is 360 × 640; the Ads tab keeps its 16:9 tiles and draws a port
 **Not changed.** The device manifest (the page fits itself, so `{type: 'html', url, checksum}` is still all a
 television needs), schedules, channels (a channel plays on any screen; its ads say their orientation in the
 pickers), the store wall, `builder:examples`, the draft/publish model and "Show in playlists".
+
+---
+
+## 13. Groups (owner, 2026-09-23: "2 3 text ko ek group mein dalna" — real groups, not a Layers cosmetic)
+
+**What it is.** Several elements made one: a menu row (name, dots, price), a badge with its words, a
+photograph with its caption. A group moves, resizes, rotates, duplicates, locks, hides and ANIMATES as one,
+sits in the Layers panel as a folder, is entered with a double-click to change what is inside, and is taken
+apart again with Ungroup. Groups nest three deep at most — the depth every real tool stops at (Figma, Canva).
+
+**The document (§6).** A group is an element like any other, `type: "group"`, with the box keys, `opacity`,
+`locked`, `visible`, `name`, `animations` and `style.blend` — and no text, picture or shape. What is inside it
+says so with **`parentId`** (a group's id; absent or null = the top level). Every element keeps **stage
+coordinates**, whatever it is inside: a group's own box is the bounds of its children (rotated corners
+counted), kept in step by the editor after every change (`syncGroupBounds`) and re-derived by the compiler,
+never trusted; a group's `rotation` is always 0 — turning a group turns its children, each about the group's
+centre, and their angles are what is stored. So nothing in the editor's geometry — snapping, guides, the
+marquee, the frame and its handles, align and distribute — ever has to translate between coordinate spaces,
+and a design with groups is still a flat list the rules, the fonts, the assets and the animations read as
+before. Paint order is the tree: siblings by `z`, a group's children inside its place in the stack;
+`renumberDepth` numbers every element in one pre-order walk, so `z` stays unique and sorted-by-`z` is still a
+valid order. **A group with nothing in it does not exist**: when its last child goes, it goes.
+
+**The rules (`BuilderAdRequest`).** `parentId` is a string of at most 40 characters; the elements list is
+checked as a tree before anything else (`bail`): a parent must be a group in the same document, never the
+element itself or one of its own descendants ("A group cannot be inside itself."), and no element may have
+more than `MAX_GROUP_DEPTH` (3) group ancestors ("Groups can be three deep at most."). Groups count towards
+the 200 elements.
+
+**The page (`AdCompiler`).** The elements are rendered as a tree from the top level down — anything a walk
+from the top never reaches is not written — and a group is one more `.ad-el` (its own `data-anim-id`, box,
+opacity, z-index and blend) whose `.ad-anim` holds its children, each positioned against the group's own
+origin (`left = x − group.x`). A positioned box with a z-index is a stacking context, so the children's
+z-indexes only order them among themselves. A hidden group takes its whole subtree off the page, and the
+fonts, animations and assets are collected from what was actually written. The runtime needs no change:
+`run()` already finds every `[data-anim-id]` and each one's FIRST `.ad-anim` — a group's own wrapper — so a
+group's entrance, loop and exit move its children as one, and a child's own animations run inside it.
+
+**The editor.**
+- **Selecting.** A click on anything inside a group selects the group (its top-most ancestor); a marquee
+  works at the current level too. **Double-click** a group to enter it (`editingGroupId`; Enter does the
+  same for a selected group): clicks then select its direct children, a double-click on a text inside edits
+  it, and Esc (or a click on empty stage) steps back out. Clicking a child's row in the Layers panel enters
+  its group for you. A locked or hidden group locks or hides everything in it (`isLocked`, `isShown` climb
+  the ancestors).
+- **Group / Ungroup.** Ctrl+G (the panel's and the menu's *Group*) makes a group of two or more selected
+  siblings, placed where the frontmost of them was and named "Group"; Ctrl+Shift+G (*Ungroup*) hands a
+  group's children back to its parent at its place and selects them. Either is refused with a toast when it
+  would nest deeper than three.
+- **As one.** Moving, nudging, aligning and distributing move a group's whole subtree by the same shift.
+  **Resizing** a group scales what is inside about the group's box — from a corner the shape is kept and
+  text sizes scale with it (Canva's rule); from a side the boxes stretch and type stays its size.
+  **Rotating** a group turns every element inside about the group's centre and adds the angle to each one's
+  own, then the group's box is re-derived (so a turned group's frame is the box around its turned
+  children — the frame does not turn). Opacity, blend and the Animation tab belong to the group itself.
+  Duplicate, Copy, Cut and Paste carry a group's whole subtree with fresh ids (the clipboard too); Delete
+  takes it.
+- **Layers panel.** A group is a folder row with a chevron to fold it, its children indented beneath; drag a
+  row above or below another to reorder it AND to put it beside that row (same parent), or onto a group's
+  middle to put it inside — a group can never be dropped into itself or deeper than three.
+- **The panel.** One group selected: its name, X/Y/W/H (no rotation), opacity, blend, alignment, how many
+  elements it holds, *Ungroup*, and the Animation tab. Several selected: *Group* beside Duplicate and Delete.
+
+**Tests.** Pest: every group key comes back from a save; the tree rules (a parent that is not a group, a
+missing one, self, a cycle, four deep — 422 never 500; the attack suite has the same); the compiler's
+wrapper, origin offset, hidden subtree, unreachable elements, group animations in the page's JSON. Dusk
+(`AdGroupsFlowTest`): three texts grouped from the panel, the folder in Layers, the group dragged (children
+follow), resized from a corner (children and their type scale), rotated (children turn), entered with a
+double-click and a child edited, left with Esc, duplicated, ungrouped, and a group animation previewed and
+published — the television's frame shows the wrapper animating its children as one.

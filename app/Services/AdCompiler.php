@@ -161,22 +161,20 @@ class AdCompiler
     {
         $document = is_array($ad->document) ? $ad->document : [];
         $stage = is_array($document['stage'] ?? null) ? $document['stage'] : [];
-        $elements = array_values(array_filter(
-            $document['elements'] ?? [],
-            fn (mixed $element) => is_array($element) && ($element['visible'] ?? true) !== false,
-        ));
+
+        // The elements as the tree they are painted as (§13): siblings by z, a group's children inside it.
+        // What a walk from the top never reaches — a hidden group's subtree, an element deeper than
+        // groups go — is not on the page, so its fonts, pictures and animations are not either.
+        $tree = $this->tree(is_array($document['elements'] ?? null) ? $document['elements'] : []);
+        $elements = $this->reachable($tree);
 
         // Asset ids are resolved against THIS AD'S STORE, never against the ids alone: a document
         // carrying another shop's asset id must compile to a missing picture, not a borrowed one.
         $assets = $this->assetsFor($ad, $elements, $stage);
 
-        usort($elements, fn (array $a, array $b) => ($a['z'] ?? 0) <=> ($b['z'] ?? 0));
-
         $animations = $this->animations->forElements($elements);
-        $body = implode("\n", array_map(
-            fn (array $element) => $this->element($element, $assets, $animations[AdAnimations::safeId($element['id'] ?? null)] ?? []),
-            $elements,
-        ));
+        $visited = [];
+        $body = $this->children($tree, null, $assets, $animations, ['x' => 0, 'y' => 0], 0, $visited);
         // The stage's own colour is the page's too: a screen of the other shape shows bars beside (or
         // above) the design, and they are then the ad's ground rather than black (§12).
         $colour = $this->stageColour($stage);
@@ -348,17 +346,207 @@ class AdCompiler
             : 'linear-gradient('.$this->limited('gradient.angle', $gradient['angle'] ?? 180).'deg, '.implode(', ', $stops).')';
     }
 
+    /* ── The tree ───────────────────────────────────────────────────────── */
+
+    /**
+     * The shown elements keyed by the group they are inside ('' for the top level), each list back to
+     * front. A parent that is not a group of this design — or is the element itself — counts as none: the
+     * request refuses such a document, and an older page must still compile rather than lose the element.
+     *
+     * @param  array<int, mixed>  $elements
+     * @return array<string, array<int, array<string, mixed>>>
+     */
+    private function tree(array $elements): array
+    {
+        $groups = [];
+
+        foreach ($elements as $element) {
+            if (is_array($element) && ($element['type'] ?? null) === 'group' && is_string($element['id'] ?? null)) {
+                $groups[$element['id']] = true;
+            }
+        }
+
+        $tree = [];
+
+        foreach ($elements as $element) {
+            if (! is_array($element) || ($element['visible'] ?? true) === false) {
+                continue;
+            }
+
+            $parent = $element['parentId'] ?? null;
+            $key = is_string($parent) && isset($groups[$parent]) && $parent !== ($element['id'] ?? null) ? $parent : '';
+
+            $tree[$key][] = $element;
+        }
+
+        foreach ($tree as &$siblings) {
+            usort($siblings, fn (array $a, array $b) => ($a['z'] ?? 0) <=> ($b['z'] ?? 0));
+        }
+
+        return $tree;
+    }
+
+    /**
+     * Every element the page will hold, in paint order: reached from the top, no id twice, and never
+     * inside more groups than the rules allow.
+     *
+     * @param  array<string, array<int, array<string, mixed>>>  $tree
+     * @return array<int, array<string, mixed>>
+     */
+    private function reachable(array $tree, ?string $parentId = null, int $depth = 0, array &$visited = []): array
+    {
+        $found = [];
+
+        foreach ($tree[$parentId ?? ''] ?? [] as $element) {
+            $id = $element['id'] ?? null;
+
+            if (! is_string($id) || isset($visited[$id])) {
+                continue;
+            }
+
+            $visited[$id] = true;
+            $found[] = $element;
+
+            if (($element['type'] ?? null) === 'group' && $depth < BuilderAdRequest::MAX_GROUP_DEPTH) {
+                array_push($found, ...$this->reachable($tree, $id, $depth + 1, $visited));
+            }
+        }
+
+        return $found;
+    }
+
+    /**
+     * The elements inside one group (or on the stage itself), written back to front, each placed against
+     * the group's own origin.
+     *
+     * @param  array<string, array<int, array<string, mixed>>>  $tree
+     * @param  array<string, array<string, array<string, mixed>>>  $animations  every element's, by safe id
+     * @param  array{x: float|int, y: float|int}  $origin
+     * @param  array<string, bool>  $visited
+     */
+    private function children(array $tree, ?string $parentId, Collection $assets, array $animations, array $origin, int $depth, array &$visited): string
+    {
+        $html = [];
+
+        foreach ($tree[$parentId ?? ''] ?? [] as $element) {
+            $id = $element['id'] ?? null;
+
+            if (! is_string($id) || isset($visited[$id])) {
+                continue;
+            }
+
+            $visited[$id] = true;
+            $html[] = $this->element($element, $assets, $animations[AdAnimations::safeId($id)] ?? [], $origin, $tree, $depth, $visited);
+        }
+
+        return implode("\n", array_filter($html));
+    }
+
+    /**
+     * A group's box is the box around what it holds — rotated corners counted, groups inside it by their
+     * own — never the numbers it carries: the editor keeps those in step, but a page is written from what
+     * is actually there. Null for a group with nothing shown in it.
+     *
+     * @param  array<string, array<int, array<string, mixed>>>  $tree
+     * @return array{x: float, y: float, w: float, h: float}|null
+     */
+    private function groupBox(array $tree, string $groupId, int $depth): ?array
+    {
+        if ($depth >= BuilderAdRequest::MAX_GROUP_DEPTH) {
+            return null;
+        }
+
+        $boxes = [];
+
+        foreach ($tree[$groupId] ?? [] as $child) {
+            $id = $child['id'] ?? null;
+
+            if (! is_string($id) || $id === $groupId) {
+                continue;
+            }
+
+            $box = ($child['type'] ?? null) === 'group' ? $this->groupBox($tree, $id, $depth + 1) : $this->visualBox($child);
+
+            if ($box !== null) {
+                $boxes[] = $box;
+            }
+        }
+
+        if ($boxes === []) {
+            return null;
+        }
+
+        $left = min(array_column($boxes, 'x'));
+        $top = min(array_column($boxes, 'y'));
+        $right = max(array_map(fn (array $box) => $box['x'] + $box['w'], $boxes));
+        $bottom = max(array_map(fn (array $box) => $box['y'] + $box['h'], $boxes));
+
+        return ['x' => $left, 'y' => $top, 'w' => $right - $left, 'h' => $bottom - $top];
+    }
+
+    /**
+     * The box around one element as it is seen: its own box turned by its rotation about its centre.
+     *
+     * @return array{x: float, y: float, w: float, h: float}
+     */
+    private function visualBox(array $element): array
+    {
+        $x = (float) $this->limited('x', $element['x'] ?? 0);
+        $y = (float) $this->limited('y', $element['y'] ?? 0);
+        $w = (float) $this->limited('w', $element['w'] ?? 100);
+        $h = (float) $this->limited('h', $element['h'] ?? 100);
+        $rotation = (float) $this->limited('rotation', $element['rotation'] ?? 0);
+
+        if (fmod($rotation, 360.0) === 0.0) {
+            return ['x' => $x, 'y' => $y, 'w' => $w, 'h' => $h];
+        }
+
+        $radians = deg2rad($rotation);
+        $cos = cos($radians);
+        $sin = sin($radians);
+        $centreX = $x + $w / 2;
+        $centreY = $y + $h / 2;
+        $xs = [];
+        $ys = [];
+
+        foreach ([[-$w / 2, -$h / 2], [$w / 2, -$h / 2], [$w / 2, $h / 2], [-$w / 2, $h / 2]] as [$dx, $dy]) {
+            $xs[] = $centreX + $dx * $cos - $dy * $sin;
+            $ys[] = $centreY + $dx * $sin + $dy * $cos;
+        }
+
+        return ['x' => min($xs), 'y' => min($ys), 'w' => max($xs) - min($xs), 'h' => max($ys) - min($ys)];
+    }
+
     /* ── Elements ───────────────────────────────────────────────────────── */
 
     /**
-     * One element: its box, the node its animations move, and what it shows.
+     * One element: its box, the node its animations move, and what it shows — or, for a group, what it
+     * holds, each child placed against the group's own origin (§13).
      *
      * @param  array<string, array<string, mixed>>  $animations  this element's, already sanitized
+     * @param  array{x: float|int, y: float|int}  $origin  the box this element is placed against
+     * @param  array<string, array<int, array<string, mixed>>>  $tree
+     * @param  array<string, bool>  $visited
      */
-    private function element(array $element, Collection $assets, array $animations): string
+    private function element(array $element, Collection $assets, array $animations, array $origin, array $tree, int $depth, array &$visited): string
     {
         $style = is_array($element['style'] ?? null) ? $element['style'] : [];
         $asset = $assets->get((int) ($element['assetId'] ?? 0));
+
+        if (($element['type'] ?? null) === 'group') {
+            $id = $element['id'];
+            $box = $this->groupBox($tree, $id, $depth);
+            $inner = $box === null ? '' : $this->children($tree, $id, $assets, [], ['x' => $box['x'], 'y' => $box['y']], $depth + 1, $visited);
+
+            // The children's own animations were handed out by the caller's table, not this empty one.
+            return $inner === '' ? '' : sprintf(
+                '<div class="ad-el%s" data-anim-id="%s" style="%s"><div class="ad-anim">%s</div></div>',
+                isset($animations['in']) ? ' ad-pending' : '',
+                e(AdAnimations::safeId($id)),
+                $this->boxStyle(['x' => $box['x'], 'y' => $box['y'], 'w' => $box['w'], 'h' => $box['h'], 'rotation' => 0, 'opacity' => $element['opacity'] ?? 1, 'z' => $element['z'] ?? 0], $style, false, $origin),
+                $inner,
+            );
+        }
 
         $content = match ($element['type'] ?? null) {
             'text' => $this->text($element, $style),
@@ -384,7 +572,7 @@ class AdCompiler
             '<div class="ad-el%s" data-anim-id="%s" style="%s"><div class="ad-anim">%s</div></div>',
             isset($animations['in']) ? ' ad-pending' : '',
             e(AdAnimations::safeId($element['id'] ?? null)),
-            $this->boxStyle($element, $style, ($animations['loop']['effect'] ?? null) === 'kenburns'),
+            $this->boxStyle($element, $style, ($animations['loop']['effect'] ?? null) === 'kenburns', $origin),
             $content,
         );
     }
@@ -599,17 +787,20 @@ class AdCompiler
     }
 
     /**
-     * Where the element sits, how big it is, which way up, how solid, and how it mixes.
+     * Where the element sits — against the origin of whatever holds it: the stage, or its group (§13) —
+     * how big it is, which way up, how solid, and how it mixes.
      *
      * A Ken Burns loop zooms a photograph INSIDE its frame, the way television does it, so that element's
      * box clips what it holds — along the picture's own rounded corners.
+     *
+     * @param  array{x: float|int, y: float|int}  $origin
      */
-    private function boxStyle(array $element, array $style, bool $clipsItsContent = false): string
+    private function boxStyle(array $element, array $style, bool $clipsItsContent, array $origin): string
     {
         $css = sprintf(
             'left:%spx;top:%spx;width:%spx;height:%spx;opacity:%s;z-index:%d;',
-            $this->limited('x', $element['x'] ?? 0),
-            $this->limited('y', $element['y'] ?? 0),
+            $this->number((float) $this->limited('x', $element['x'] ?? 0) - (float) $origin['x'], -40000, 40000),
+            $this->number((float) $this->limited('y', $element['y'] ?? 0) - (float) $origin['y'], -40000, 40000),
             $this->limited('w', $element['w'] ?? 100),
             $this->limited('h', $element['h'] ?? 100),
             $this->limited('opacity', $element['opacity'] ?? 1),

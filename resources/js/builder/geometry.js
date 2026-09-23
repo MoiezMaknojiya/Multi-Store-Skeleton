@@ -154,6 +154,46 @@ export function boundsOf(boxes) {
     return { x: left, y: top, w: right - left, h: bottom - top };
 }
 
+/**
+ * The box around an element as it is seen: its own box turned by its rotation about its centre — what a
+ * group's box is made of (§13), and what the compiler measures the same way.
+ */
+export function visualBounds(box) {
+    const rotation = Number(box.rotation) || 0;
+
+    if (rotation % 360 === 0) return { x: box.x, y: box.y, w: box.w, h: box.h };
+
+    const cx = box.x + box.w / 2;
+    const cy = box.y + box.h / 2;
+    const corners = [[-box.w / 2, -box.h / 2], [box.w / 2, -box.h / 2], [box.w / 2, box.h / 2], [-box.w / 2, box.h / 2]]
+        .map(([dx, dy]) => rotatePoint(cx + dx, cy + dy, cx, cy, rotation));
+    const xs = corners.map((point) => point.x);
+    const ys = corners.map((point) => point.y);
+
+    return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+}
+
+/** A point turned about another by some degrees (clockwise on screen, as CSS rotates). */
+export function rotatePoint(x, y, cx, cy, degrees) {
+    const radians = (degrees * Math.PI) / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    const dx = x - cx;
+    const dy = y - cy;
+
+    return { x: cx + dx * cos - dy * sin, y: cy + dx * sin + dy * cos };
+}
+
+/** An angle brought into (-180, 180], so a turn never reads as 350° when it is -10°. */
+export function normaliseAngle(degrees) {
+    let angle = degrees % 360;
+
+    if (angle > 180) angle -= 360;
+    if (angle <= -180) angle += 360;
+
+    return angle;
+}
+
 /** Whether two boxes overlap at all — touching counts, which is what a marquee means. */
 export function intersects(a, b) {
     return a.x <= b.x + b.w && b.x <= a.x + a.w && a.y <= b.y + b.h && b.y <= a.y + a.h;
