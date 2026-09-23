@@ -1,6 +1,6 @@
 # Ad Builder — spec
 
-> A visual builder for 1920×1080 television adverts. The owner asked for "an Elementor-like builder"
+> A visual builder for television adverts — 1920×1080, or 1080×1920 for a screen mounted upright (§12). The owner asked for "an Elementor-like builder"
 > (2026-09-17). This file is what gets built and why; `docs/STORE-ORGANIZATION-SPEC.md` still rules who
 > may do it, and `.claude/rules/02-project-conventions.md` still rules how the code is written.
 
@@ -14,7 +14,7 @@
 | How an ad reaches a screen | **It becomes a media row of `type = 'html'`.** The playlist picker, schedule rules, copy-playlist, the device manifest and the cache key then work unchanged. |
 | Where the Builder's images and videos live | **Its own shelf** (`builder/{store}/assets/…`), not the store's Media library. |
 | Delivery | **Staged**, with the owner looking at each stage before the next. |
-| Canvas | **1920×1080, fixed.** No other size, no aspect-ratio change, no responsive breakpoints. Content outside the frame is clipped. Re-confirmed by the owner on 2026-09-19, with the reason: every screen they sell to is Full HD or better — "is se kum ha hi nahi" — and a portrait canvas (1080×1920) was offered and declined, because a portrait television is a landscape panel turned on the wall and the player already turns the picture with it (`#stage[data-orientation]`). |
+| Canvas | **A television's, fixed: 1920×1080 landscape or 1080×1920 portrait**, chosen when the ad is made (§12). No other size, no aspect-ratio change, no responsive breakpoints. Content outside the frame is clipped. The reason, from the owner on 2026-09-19: every screen they sell to is Full HD or better — "is se kum ha hi nahi" — and a portrait television is that same panel turned on the wall, which the player turns the picture with (`#stage[data-orientation]`). A portrait canvas was declined that day and asked for on 2026-09-23, for menu boards ("Portrait Boards … lazmi"). |
 | Duration | The playlist line carries the seconds, exactly like an image. Animations are independent of it and loop for as long as the ad is on screen. |
 
 ---
@@ -58,7 +58,7 @@ one output.
 - **Document** — the JSON the editor reads and writes: stage background layers + an ordered list of
   elements. The source of truth for editing.
 - **Element** — one thing on the stage: `text`, `image`, `video`, `shape`.
-- **Stage** — the 1920×1080 frame itself, with its own background layer stack.
+- **Stage** — the frame itself — 1920×1080, or 1080×1920 for a portrait ad (§12) — with its own background layer stack.
 - **Asset** — an image or video uploaded for use inside ads (`builder_assets`), on the Builder's own shelf.
 - **Publish** — compile the document to a self-contained HTML file and write/refresh the `media` row that
   playlists use.
@@ -76,6 +76,7 @@ one output.
 ```
 builder_ads
   id, store_id → stores (cascade), name,
+  orientation     string (landscape) -- landscape 1920×1080 or portrait 1080×1920: chosen when the ad is made, fixed after (§12)
   document        json          -- the editable design
   thumbnail_path  string|null   -- poster captured in the browser at save
   media_id        → media|null  -- the published copy a playlist points at (nullOnDelete)
@@ -225,7 +226,8 @@ through that scope (`visibleTo(…)->findOrFail()`), not through `ResolvesCurren
 
 Rules the compiler and the editor both hold to: ids are opaque strings; `z` is the paint order and is
 normalised on every reorder; coordinates are **stage pixels** (not percentages) so what is designed is
-what a 1920×1080 television shows; anything outside the frame is clipped by the stage's `overflow:hidden`.
+what the television shows — the stage is 1920×1080, or 1080×1920 for a portrait ad (§12), and
+`BuilderAdRequest` refuses any other size; anything outside the frame is clipped by the stage's `overflow:hidden`.
 
 **Every number has one table.** `AdCompiler::LIMITS` (the box, type, frames, shadows, filters, gradients,
 layers) and `AdAnimations::NUMBERS` (each slot's numbers, with their defaults) are what the compiler clamps
@@ -383,8 +385,10 @@ Not built (said rather than half-built): typewriter, mask reveal and marquee.
   `scripts/copy-builder-vendor.mjs` on every `npm run build`, each addressed with a fingerprint of its
   contents so no screen keeps a stale copy. A still ad loads none of it.
 
-- The stage is `1920×1080` and the page scales it with a CSS transform to whatever the screen is, so a
-  1920×1080 television is pixel-exact and anything else is letterboxed rather than reflowed.
+- The stage is the ad's own size — `1920×1080`, or `1080×1920` for a portrait ad (§12) — and the page scales
+  it with a CSS transform to whatever the screen is, centred, so a television of that shape is pixel-exact
+  and anything else is letterboxed (or pillarboxed) rather than reflowed. The page's body takes the stage's
+  own colour, so those bars are the ad's ground, never black.
 - The file is written to `builder/{store}/ads/{ad}/index.html`; the ad's **media row** (`type = 'html'`,
   `mime_type = 'text/html'`, `path` = that file) is created or refreshed. Its `thumbnail_path` names a copy of
   its own, `builder/{store}/ads/{ad}/published.jpg`, which every publish rewrites from the design's poster
@@ -601,3 +605,50 @@ CSS box, no third-party embeds, no per-ad duration, no animation timeline scrubb
   the ad: watch televisions in Dusk (`AdExamplesOnTelevisionTest`). Two more traps: opening
   `localhost:8001` in the pane logs it out of `localhost:8000` (cookies ignore ports), and a player tab left
   open during a Dusk run gets 401s from the swapped `.env` and throws its token away.
+
+---
+
+## 12. Portrait ads (owner, 2026-09-23: "Portrait Boards … lazmi")
+
+**What it is.** A screen is a 1920×1080 panel; a portrait screen is that same panel mounted upright, and the
+player already turns the picture with it (`Screen::ORIENTATIONS`). Until now every ad was designed 1920×1080,
+so on a portrait screen it played fitted sideways — letterboxed to a third of the glass. An ad now says which
+way the screen it is for is mounted: **landscape, 1920 × 1080** or **portrait, 1080 × 1920** — the two
+shapes a television can be, and nothing else (no free sizes: a design for a size no screen has is nobody's).
+A portrait ad is what a menu board, a poster or a one-column price list wants.
+
+**Chosen when the ad is made, fixed afterwards** (owner: "ads banate waqt fix rakho… starting mein hi poch
+lo"). **New ad** on the Ads tab opens a chooser (`new-ad-orientation` modal; the empty gallery's "Build your
+first one" opens the same): two cards, Landscape and Portrait, each a link to `/builder/create?orientation=…`
+(anything but `portrait` reads as landscape — the page is forgiving, the save is not). The editor opens on a
+blank stage of that shape and says so under it ("1080 × 1920 — a portrait screen, a television mounted
+upright"), the first save posts `orientation`, and from then on the column is the truth: `BuilderAdRequest`
+refuses a document whose stage is not that orientation's size — 422 on `document.stage.width` / `height`,
+"A portrait ad is 1080 × 1920 — the size a television mounted upright is. An ad's orientation is chosen when
+it is made." — and on an update `orientation` in the payload is not read at all. Why fixed: every element's
+box is in stage pixels, so turning a 1920-wide design into a 1080-wide one is a new design, not a setting —
+and the tools the shops know (Yodeck, OptiSigns, Canva) ask the size up front for the same reason. A **copy**
+keeps the orientation; the examples are landscape.
+
+**Data.** `builder_ads.orientation` string(10) default `landscape` (`BuilderAd::LANDSCAPE` / `PORTRAIT`,
+`ORIENTATIONS` with their labels, `STAGE_SIZES`, `stageWidth()` / `stageHeight()`, `blankDocument($orientation)`).
+The media row a publish writes carries the ad's `width`, `height` and `orientation` (`AdPublisher`), so every
+picker that already says "portrait" for a photograph says it for an ad page the same way.
+
+**The page.** `AdCompiler` writes the stage at the ad's size and its fit script scales THAT to the viewport —
+`min(innerWidth / w, innerHeight / h)`, centred — and the page's body takes the stage's own colour, so the bars
+a mismatched screen shows are the ad's ground, not black. On a portrait screen the player's frame is
+1080 × 1920 (the rotated stage), so a portrait ad fills it pixel for pixel; on a landscape screen the same ad
+plays pillarboxed at 607 × 1080, and a landscape ad on a portrait screen letterboxed at 1080 × 607. That is
+the shop's mistake, not a rule to enforce (owner: "woo toh store owner ka masla ya galti ha"), so the panel
+SAYS it instead of refusing: the playlist page marks a line, or a picker row, whose orientation is not the
+screen's — "Portrait · shows with bars at the sides on this screen" — and every tile and row that names a
+type names the orientation beside it (the holding-picture list, the channel pickers and rows, the library).
+
+**Posters.** The editor captures the stage at its own size, 640 px along the longer edge (`poster.js`), so a
+portrait poster is 360 × 640; the Ads tab keeps its 16:9 tiles and draws a portrait poster inside one, whole
+(`object-contain`), with a **Portrait** badge on the tile.
+
+**Not changed.** The device manifest (the page fits itself, so `{type: 'html', url, checksum}` is still all a
+television needs), schedules, channels (a channel plays on any screen; its ads say their orientation in the
+pickers), the store wall, `builder:examples`, the draft/publish model and "Show in playlists".

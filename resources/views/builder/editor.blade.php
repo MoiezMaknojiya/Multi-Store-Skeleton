@@ -82,6 +82,9 @@
          x-data="adEditor({{ Js::from([
              'adId' => $ad?->id,
              'name' => $ad?->name ?? 'Untitled ad',
+             // Which way the screen is mounted (docs/AD-BUILDER-SPEC.md §12): chosen before the editor
+             // opened, posted with the first save, and never changed after.
+             'orientation' => $orientation,
              'document' => $document,
              'assets' => $assets,
              'storeId' => $platformUser ? ($ad?->store_id) : null,
@@ -123,6 +126,14 @@
                      only marks the ad unsaved. Narrower on a laptop, where the bar has to hold everything. --}}
                 <input type="text" x-model="name" @change="markChanged()" maxlength="120"
                        class="form-input h-9 w-36 text-sm font-medium xl:w-52" dusk="ad-name" aria-label="Ad name" />
+
+                {{-- The shape this ad is for, fixed when it was made (§12): said beside the name so nobody
+                     designs a menu board for the wrong wall. --}}
+                <span class="badge-neutral hidden shrink-0 sm:inline-flex" dusk="ad-orientation"
+                      x-bind:title="orientation === 'portrait'
+                          ? 'For a screen mounted upright (1080 × 1920). Chosen when the ad was made; it cannot change.'
+                          : 'For a screen the usual way round (1920 × 1080). Chosen when the ad was made; it cannot change.'"
+                      x-text="orientation === 'portrait' ? 'Portrait' : 'Landscape'"></span>
 
                 @if ($platformUser && ! $ad)
                     <select x-model.number="storeId" class="form-select h-9 w-44 text-sm" dusk="ad-store">
@@ -562,9 +573,10 @@
 
                 {{-- The frame's size, stated once, so nobody wonders what they are designing for. --}}
                 <p class="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-xs text-gray-500 dark:text-gray-400"
+                   dusk="stage-size-note"
                    x-text="previewing === 'all'
                        ? 'Playing — the way a screen shows it. Click the stage or press Esc to stop.'
-                       : '1920 × 1080 — a television screen · ? for shortcuts'"></p>
+                       : stageSizeNote() + ' · ? for shortcuts'"></p>
             </main>
 
             {{-- ── Right: the selected element(s), or the stage ──────── --}}

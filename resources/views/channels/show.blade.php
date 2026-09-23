@@ -82,6 +82,8 @@
                                x-bind:dusk="'channel-ad-title-' + ad.id" x-text="ad.title"></p>
                             <p class="text-xs text-gray-400">
                                 <span x-text="typeLabel(ad.type)"></span>
+                                {{-- A portrait file on a channel plays with bars on a landscape screen (§12): said here. --}}
+                                <span x-show="ad.orientation === 'portrait'" x-cloak x-bind:dusk="'channel-ad-orientation-' + ad.id">&middot; portrait</span>
                                 {{-- Whose library the file lives in. --}}
                                 <span x-show="ad.library" x-bind:dusk="'channel-ad-library-' + ad.id" x-text="' · ' + ad.library"></span>
                                 <span x-text="' · ' + datesLabel(ad)"></span>
@@ -199,7 +201,8 @@
                                     </div>
                                     <div class="px-2 py-1.5">
                                         <p class="truncate text-xs font-medium text-gray-800 dark:text-gray-100" x-text="item.title"></p>
-                                        <p class="text-[11px] text-gray-400" x-text="typeLabel(item.type)"></p>
+                                        <p class="text-[11px] text-gray-400"
+                                           x-text="typeLabel(item.type) + (item.orientation === 'portrait' ? ' · portrait' : '')"></p>
                                     </div>
                                 </button>
                             </template>

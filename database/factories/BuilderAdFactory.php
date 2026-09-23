@@ -47,12 +47,26 @@ class BuilderAdFactory extends Factory
         ]);
     }
 
+    /**
+     * For a screen mounted upright: a 1080 × 1920 stage (docs/AD-BUILDER-SPEC.md §12). The design made so
+     * far keeps its elements and background; only the frame turns.
+     */
+    public function portrait(): static
+    {
+        return $this->state(function (array $attributes) {
+            $document = $attributes['document'] ?? BuilderAd::blankDocument();
+            [$document['stage']['width'], $document['stage']['height']] = BuilderAd::stageSize(BuilderAd::PORTRAIT);
+
+            return ['orientation' => BuilderAd::PORTRAIT, 'document' => $document];
+        });
+    }
+
     /** An ad with one line of text on it, the smallest design worth testing against. */
     public function withText(string $text = 'Winter sale'): static
     {
-        return $this->state(fn () => [
+        return $this->state(fn (array $attributes) => [
             'document' => [
-                ...BuilderAd::blankDocument(),
+                ...BuilderAd::blankDocument($attributes['orientation'] ?? BuilderAd::LANDSCAPE),
                 'elements' => [[
                     'id' => 'el_text', 'type' => 'text', 'name' => 'Headline',
                     'x' => 160, 'y' => 240, 'w' => 1200, 'h' => 200,

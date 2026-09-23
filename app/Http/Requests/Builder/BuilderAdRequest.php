@@ -74,18 +74,25 @@ class BuilderAdRequest extends FormRequest
         $layer = 'document.stage.background.layers.*';
         $element = 'document.elements.*';
         $style = "{$element}.style";
+        [$width, $height] = BuilderAd::stageSize($this->orientation());
 
         return [
             'name' => ['bail', 'required', 'string', 'max:120'],
 
+            // Which way the screen is mounted (docs/AD-BUILDER-SPEC.md §12). Said once, when the ad is made;
+            // on a saved ad the column is the truth and this key is not read (see orientation()).
+            'orientation' => ['nullable', Rule::in(array_keys(BuilderAd::ORIENTATIONS))],
+
             'document' => ['required', 'array'],
             'document.version' => ['required', 'integer', 'in:1'],
 
-            // The frame is 1920×1080 and nothing may say otherwise (owner's rule): a television is that
-            // shape, so a document claiming another size would be designed for a screen that does not exist.
+            // The frame is the size a television is — 1920×1080, or 1080×1920 mounted upright — and the
+            // ad's orientation says which. Nothing may say otherwise: a document claiming another size would
+            // be designed for a screen that does not exist, and one claiming the OTHER television would be a
+            // different design wearing this ad's name.
             'document.stage' => ['required', 'array'],
-            'document.stage.width' => ['required', 'integer', 'in:'.BuilderAd::STAGE_WIDTH],
-            'document.stage.height' => ['required', 'integer', 'in:'.BuilderAd::STAGE_HEIGHT],
+            'document.stage.width' => ['required', 'integer', 'in:'.$width],
+            'document.stage.height' => ['required', 'integer', 'in:'.$height],
             'document.stage.background' => ['required', 'array'],
             'document.stage.background.color' => self::COLOUR,
 
@@ -213,10 +220,13 @@ class BuilderAdRequest extends FormRequest
      */
     public function messages(): array
     {
+        $size = $this->stageSizeInWords();
+
         return [
             'name.required' => 'Give the ad a name.',
-            'document.stage.width.in' => 'An ad is 1920 × 1080 — the size a television is.',
-            'document.stage.height.in' => 'An ad is 1920 × 1080 — the size a television is.',
+            'orientation.in' => 'An ad is landscape or portrait.',
+            'document.stage.width.in' => $size,
+            'document.stage.height.in' => $size,
             'document.elements.max' => 'An ad may hold at most '.self::MAX_ELEMENTS.' elements.',
             'document.stage.background.layers.max' => 'A background may stack at most '.self::MAX_LAYERS.' layers.',
             'document.guides.x.max' => 'A stage may keep at most '.self::MAX_GUIDES.' guides each way.',
@@ -245,6 +255,35 @@ class BuilderAdRequest extends FormRequest
         }
 
         return $names;
+    }
+
+    /**
+     * The orientation this document is measured against (docs/AD-BUILDER-SPEC.md §12): a saved ad's own —
+     * chosen when it was made, and the payload cannot change it — or, for a new ad, the one posted with it.
+     * Anything that is not an orientation (nothing, a word, an array) reads as landscape here, so a bad value
+     * is refused by its own rule rather than by a stage-size rule that had nothing to compare with.
+     */
+    public function orientation(): string
+    {
+        $ad = $this->route('ad');
+
+        if ($ad instanceof BuilderAd) {
+            return $ad->orientation;
+        }
+
+        $posted = $this->input('orientation');
+
+        return is_string($posted) && array_key_exists($posted, BuilderAd::ORIENTATIONS) ? $posted : BuilderAd::LANDSCAPE;
+    }
+
+    /** "A portrait ad is 1080 × 1920 — the size a television mounted upright is. An ad's orientation…" */
+    private function stageSizeInWords(): string
+    {
+        $orientation = $this->orientation();
+        [$width, $height] = BuilderAd::stageSize($orientation);
+        $television = $orientation === BuilderAd::PORTRAIT ? 'a television mounted upright' : 'a television';
+
+        return "A {$orientation} ad is {$width} × {$height} — the size {$television} is. An ad's orientation is chosen when it is made.";
     }
 
     /** `style.textShadow.blur` → "text shadow blur", `animations.in.duration` → "entrance duration". */

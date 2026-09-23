@@ -284,4 +284,35 @@ test('a document of the wrong shape is refused with a 422, never a 500', functio
     'a layer that is a string' => [['document' => attackDocument([], ['color'])]],
     'too many layers' => [['document' => attackDocument([], array_fill(0, 13, ['id' => 'l', 'type' => 'color']))]],
     'a stage of another size' => [['document' => [...attackDocument(), 'stage' => ['width' => 3840, 'height' => 2160, 'background' => ['layers' => []]]]]],
+    'a portrait stage on an ad that did not say so' => [['document' => BuilderAd::blankDocument('portrait')]],
+    'a landscape stage on an ad that said portrait' => [['orientation' => 'portrait', 'document' => attackDocument()]],
+    'an orientation that is a list' => [['orientation' => ['portrait'], 'document' => attackDocument()]],
+    'an orientation nobody offers' => [['orientation' => 'square', 'document' => attackDocument()]],
 ]);
+
+/* ── The orientation is fixed ────────────────────────────────────────── */
+
+test('a saved ad’s orientation cannot be changed by any payload — the design is measured against the column', function () {
+    $landscape = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id]);
+    $portrait = BuilderAd::factory()->portrait()->withText()->create(['store_id' => $this->store->id]);
+
+    // Saying it, with a design of the other shape: refused on the stage's size.
+    $this->putJson("/builder/{$landscape->id}", ['name' => 'Turned', 'orientation' => 'portrait', 'document' => BuilderAd::blankDocument('portrait')])
+        ->assertStatus(422)->assertJsonValidationErrors(['document.stage.width', 'document.stage.height']);
+
+    $this->putJson("/builder/{$portrait->id}", ['name' => 'Turned', 'orientation' => 'landscape', 'document' => BuilderAd::blankDocument()])
+        ->assertStatus(422)->assertJsonValidationErrors(['document.stage.width', 'document.stage.height']);
+
+    // Saying it with a design of the ad's own shape: saved, and the word is simply not read.
+    $this->putJson("/builder/{$landscape->id}", ['name' => 'Turned', 'orientation' => 'portrait', 'document' => BuilderAd::blankDocument()])
+        ->assertOk();
+    $this->putJson("/builder/{$portrait->id}", ['name' => 'Turned', 'orientation' => 'landscape', 'document' => BuilderAd::blankDocument('portrait')])
+        ->assertOk();
+
+    // A shape that is not a word is a malformed payload, refused like any other — never a 500.
+    $this->putJson("/builder/{$portrait->id}", ['name' => 'Turned', 'orientation' => ['landscape'], 'document' => BuilderAd::blankDocument('portrait')])
+        ->assertStatus(422)->assertJsonValidationErrors('orientation');
+
+    expect($landscape->fresh()->orientation)->toBe('landscape')
+        ->and($portrait->fresh()->orientation)->toBe('portrait');
+});

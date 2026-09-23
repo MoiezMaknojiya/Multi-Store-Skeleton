@@ -293,7 +293,10 @@
                                      to pick one out of a list that grew later — so each option says itself
                                      whether it is the screen's (as on the Members and Users pages). --}}
                                 <template x-for="media in mediaOptions" :key="media.id">
-                                    <option x-bind:value="media.id" x-text="media.title"
+                                    {{-- A portrait file is named as one: on a landscape screen it holds the
+                                         glass with bars at the sides (docs/AD-BUILDER-SPEC.md §12). --}}
+                                    <option x-bind:value="media.id"
+                                            x-text="media.title + (media.orientation === 'portrait' ? ' (portrait)' : '')"
                                             x-bind:selected="String(media.id) === String(form.default_media_id)"></option>
                                 </template>
                             </select>

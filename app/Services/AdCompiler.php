@@ -19,7 +19,8 @@ use Illuminate\Support\Collection;
  *
  * The page it writes, from the bottom up:
  *
- *   .ad-stage                  1920×1080, scaled as one piece to whatever the screen is
+ *   .ad-stage                  the ad's size — 1920×1080, or 1080×1920 for a portrait ad (§12) — scaled
+ *                              as one piece to whatever the screen is
  *     .ad-bg                   the stage's own colour, then its layers — colour, gradient, picture,
  *       .ad-layer …            video — each with its own opacity and blend mode
  *     .ad-el[data-anim-id]     one element: where it sits, how big, which way up, how solid
@@ -176,10 +177,18 @@ class AdCompiler
             fn (array $element) => $this->element($element, $assets, $animations[AdAnimations::safeId($element['id'] ?? null)] ?? []),
             $elements,
         ));
-        $background = $this->background($stage, $assets);
+        // The stage's own colour is the page's too: a screen of the other shape shows bars beside (or
+        // above) the design, and they are then the ad's ground rather than black (§12).
+        $colour = $this->stageColour($stage);
+        $background = $this->background($stage, $assets, $colour);
         $title = e($ad->name);
         $fonts = $this->fonts->styleFor($elements);
         $motion = $this->motionScripts($animations);
+
+        // The size comes from the ad's orientation, never from the document: the request holds the two to
+        // the same value, and the column is the one a picker and a media row are told.
+        $width = $ad->stageWidth();
+        $height = $ad->stageHeight();
 
         return <<<HTML
         <!doctype html>
@@ -190,9 +199,9 @@ class AdCompiler
         <title>{$title}</title>
         {$fonts}
         <style>
-        html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
-        .ad-stage { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; overflow: hidden;
-                    transform-origin: top left; background: #000; }
+        html, body { margin: 0; padding: 0; height: 100%; background: {$colour}; overflow: hidden; }
+        .ad-stage { position: absolute; top: 0; left: 0; width: {$width}px; height: {$height}px; overflow: hidden;
+                    transform-origin: top left; background: {$colour}; }
         .ad-bg, .ad-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         .ad-bg { z-index: 0; overflow: hidden; }
         video.ad-layer { object-fit: cover; }
@@ -213,14 +222,14 @@ class AdCompiler
         {$body}
         </div>
         <script>
-        /* A design is 1920x1080. A screen may not be, so the whole stage is scaled and centred as one
+        /* A design is {$width}x{$height}. A screen may not be, so the whole stage is scaled and centred as one
            piece, never reflowed: a reflowed advert is a different advert. */
         (function () {
             var stage = document.getElementById('ad-stage');
             function fit() {
-                var scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
-                var x = (window.innerWidth - 1920 * scale) / 2;
-                var y = (window.innerHeight - 1080 * scale) / 2;
+                var scale = Math.min(window.innerWidth / {$width}, window.innerHeight / {$height});
+                var x = (window.innerWidth - {$width} * scale) / 2;
+                var y = (window.innerHeight - {$height} * scale) / 2;
                 stage.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + scale + ')';
             }
             window.addEventListener('resize', fit);
@@ -235,11 +244,18 @@ class AdCompiler
 
     /* ── The stage's background ─────────────────────────────────────────── */
 
-    /** The stage's own colour, and its layers stacked on it — first layer furthest back. */
-    private function background(array $stage, Collection $assets): string
+    /** The stage's own colour — the ground under its layers, and the page's colour around it. */
+    private function stageColour(array $stage): string
     {
         $settings = is_array($stage['background'] ?? null) ? $stage['background'] : [];
-        $colour = $this->colour($settings['color'] ?? null) ?? '#000000';
+
+        return $this->colour($settings['color'] ?? null) ?? '#000000';
+    }
+
+    /** The stage's own colour, and its layers stacked on it — first layer furthest back. */
+    private function background(array $stage, Collection $assets, string $colour): string
+    {
+        $settings = is_array($stage['background'] ?? null) ? $stage['background'] : [];
         $layers = [];
 
         foreach ($settings['layers'] ?? [] as $layer) {

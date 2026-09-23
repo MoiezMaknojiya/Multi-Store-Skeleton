@@ -29,6 +29,9 @@
          close this attribute (see .claude/rules/02-project-conventions.md). --}}
     <div x-data="screenPlaylist({{ Js::from([
             'screenId' => $screen->id,
+            // Which way the panel is mounted, so a line or a picker row the other way round can say it
+            // will play with bars (docs/AD-BUILDER-SPEC.md §12) — the shop's to notice, not a refusal.
+            'screenOrientation' => str_starts_with($screen->orientation, 'portrait') ? 'portrait' : 'landscape',
             'canEdit' => auth()->user()->can('screen-playlist'),
             'dayparts' => $dayparts,
             'weekdays' => $weekdays,
@@ -105,6 +108,9 @@
                                     {{-- It keeps its place, and plays again once the ad is published. --}}
                                     <span x-show="item.is_draft" x-cloak class="text-amber-600 dark:text-amber-400"
                                           x-bind:dusk="'playlist-draft-' + index">&middot; Draft &mdash; not playing until it is published in the Ad Builder</span>
+                                    {{-- A file the other way round from the screen plays with bars: said, not refused. --}}
+                                    <span x-show="orientationNote(item)" x-cloak class="text-amber-600 dark:text-amber-400"
+                                          x-bind:dusk="'playlist-orientation-' + index" x-text="' · ' + orientationNote(item)"></span>
                                     {{-- A channel line says what it will actually play — and says so
                                          plainly when that is nothing: paused, or no ads running. --}}
                                     <template x-if="item.type === 'channel'">
@@ -205,7 +211,11 @@
                                 <p class="text-sm font-medium text-gray-800 dark:text-white truncate" x-text="media.title"></p>
                                 <p class="text-xs text-gray-400">
                                     <span x-text="typeLabel(media)"></span>
-                                    <span x-text="media.orientation ? ' - ' + media.orientation : ''"></span>
+                                    {{-- Which way the file is — or, when that is not the screen's way, why it matters:
+                                         it would play with bars (§12). One or the other, never "portrait · Portrait". --}}
+                                    <span x-show="media.orientation && !orientationNote(media)" x-text="' · ' + media.orientation"></span>
+                                    <span x-show="orientationNote(media)" x-cloak class="text-amber-600 dark:text-amber-400"
+                                          x-bind:dusk="'picker-orientation-' + media.id" x-text="' · ' + orientationNote(media)"></span>
                                 </p>
                             </div>
 

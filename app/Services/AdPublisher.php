@@ -51,9 +51,11 @@ class AdPublisher
             'path' => $path,
             'thumbnail_path' => $poster,
             'size' => strlen($html),
-            'width' => BuilderAd::STAGE_WIDTH,
-            'height' => BuilderAd::STAGE_HEIGHT,
-            'orientation' => 'landscape',
+            // The ad's own shape (docs/AD-BUILDER-SPEC.md §12), so every picker that says "portrait" for a
+            // photograph says it for this page the same way.
+            'width' => $ad->stageWidth(),
+            'height' => $ad->stageHeight(),
+            'orientation' => $ad->orientation,
             'created_by' => $media->exists ? $media->created_by : $actorId,
             'updated_at' => $now,
         ])->save();

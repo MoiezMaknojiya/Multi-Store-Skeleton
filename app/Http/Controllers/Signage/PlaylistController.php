@@ -626,6 +626,9 @@ class PlaylistController extends Controller
                 ...($item->channel !== null ? $this->channelSummary($item->channel, $today) : [
                     'title' => $item->media?->title,
                     'type' => $item->media?->type,
+                    // Which way the file is: the page says when it is not the screen's way, because that
+                    // plays with bars (docs/AD-BUILDER-SPEC.md §12) — the shop's to notice, not a refusal.
+                    'orientation' => $item->media?->orientation,
                     'thumbnail_url' => $item->media?->thumbnail_url,
                     // Both null means "always"; the player never sees an item whose
                     // window has closed, but the panel should say so.

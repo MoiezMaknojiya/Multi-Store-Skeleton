@@ -12,10 +12,11 @@
  */
 
 /**
- * The poster's width: a third of the stage — 640 × 360, the height following from the stage's own shape —
- * which is what every listing and picker shows at most.
+ * The poster's longer edge: a third of the stage — 640 × 360 for a landscape ad, 360 × 640 for a portrait
+ * one (§12), the other edge following from the stage's own shape — which is what every listing and picker
+ * shows at most.
  */
-const POSTER_WIDTH = 640;
+const POSTER_LONG_EDGE = 640;
 
 /**
  * Alpine's attributes off the copy. The picture is an SVG, which is XML, and `x-bind:style`, `:key` or
@@ -36,19 +37,19 @@ function withoutAlpineAttributes(node) {
 }
 
 /**
- * A JPEG data URI of the stage node (1920×1080, unscaled), or null when the picture could not be taken —
- * a missing poster is a nuisance, never a reason for a save to fail.
+ * A JPEG data URI of the stage node at the stage's own size (unscaled), or null when the picture could not
+ * be taken — a missing poster is a nuisance, never a reason for a save to fail.
  */
-export async function capturePoster(stage) {
+export async function capturePoster(stage, width = 1920, height = 1080) {
     if (!stage) return null;
 
     try {
         const { domToJpeg } = await import('modern-screenshot');
 
         return await domToJpeg(stage, {
-            width: 1920,
-            height: 1080,
-            scale: POSTER_WIDTH / 1920,
+            width,
+            height,
+            scale: POSTER_LONG_EDGE / Math.max(width, height),
             quality: 0.82,
             backgroundColor: '#000000',
             timeout: 8000,

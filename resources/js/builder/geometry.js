@@ -1,9 +1,10 @@
 /**
  * The arithmetic behind dragging, resizing and snapping on the Ad Builder's stage.
  *
- * Everything here works in STAGE pixels (0–1920 × 0–1080), never in screen pixels: the stage is drawn
- * at whatever zoom fits the window, and a design that changed with the zoom would be a design nobody
- * could trust. The caller converts a pointer's movement once, with `toStage`, and the rest is exact.
+ * Everything here works in STAGE pixels (0–1920 × 0–1080, or 0–1080 × 0–1920 for a portrait ad), never
+ * in screen pixels: the stage is drawn at whatever zoom fits the window, and a design that changed with
+ * the zoom would be a design nobody could trust. The caller converts a pointer's movement once, with
+ * `toStage`, and the rest is exact.
  */
 
 /** How close (in stage pixels) an edge has to be before it snaps. */

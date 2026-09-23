@@ -1,10 +1,11 @@
 /**
  * The Ad Builder's editor (docs/AD-BUILDER-SPEC.md §7, §10a).
  *
- * One fixed 1920×1080 stage, absolutely positioned elements, and a panel that edits whatever is
- * selected. Everything the person does happens to `doc` — the document — and every change goes through
- * `commit()`, which is what makes undo, the History panel, the dirty flag and autosave possible without a
- * single special case scattered through the handlers.
+ * One fixed stage — 1920×1080, or 1080×1920 for a portrait ad (§12), chosen before the editor opened —
+ * absolutely positioned elements, and a panel that edits whatever is selected. Everything the person does
+ * happens to `doc` — the document — and every change goes through `commit()`, which is what makes undo,
+ * the History panel, the dirty flag and autosave possible without a single special case scattered through
+ * the handlers.
  *
  * Stage pixels, never screen pixels: the stage is drawn at whatever zoom fits the window, so every
  * pointer movement is converted once and the design never depends on the zoom.
@@ -43,6 +44,9 @@ export function registerAdEditor(Alpine) {
             /* ── What is being edited ──────────────────────────────────── */
             adId: config.adId ?? null,
             name: config.name ?? 'Untitled ad',
+            /* Which way the screen is mounted (§12). Posted with the first save and fixed after: the
+             * server measures every later save against the ad's own orientation, never this value. */
+            orientation: config.orientation === 'portrait' ? 'portrait' : 'landscape',
             doc: normaliseDocument(clone(config.document)),
             assets: config.assets ?? [],
             storeId: config.storeId ?? null,
@@ -196,6 +200,15 @@ export function registerAdEditor(Alpine) {
 
             get zoomPercent() {
                 return Math.round(this.zoom * 100);
+            },
+
+            /** "1920 × 1080 — a television screen", or the portrait words, under the stage. */
+            stageSizeNote() {
+                const size = `${this.stage.width} × ${this.stage.height}`;
+
+                return this.orientation === 'portrait'
+                    ? `${size} — a portrait screen, a television mounted upright`
+                    : `${size} — a television screen`;
             },
 
             /** Remember the document and mark it unsaved. Every change comes through here. */
@@ -989,11 +1002,13 @@ export function registerAdEditor(Alpine) {
                     const payload = { name: this.name, document: clone(this.doc) };
 
                     if (this.storeId) payload.store_id = this.storeId;
+                    // Said once, with the first save: a saved ad's orientation is its own (§12).
+                    if (!this.adId) payload.orientation = this.orientation;
 
                     if (!auto) {
                         this.stopPreview();
 
-                        const poster = await capturePoster(this.$refs.stage);
+                        const poster = await capturePoster(this.$refs.stage, this.stage.width, this.stage.height);
 
                         if (poster) payload.thumbnail = poster;
                     }

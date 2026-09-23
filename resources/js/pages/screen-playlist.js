@@ -70,6 +70,9 @@ const ruleToServer = (rule) => {
 export function registerScreenPlaylist(Alpine) {
     Alpine.data('screenPlaylist', (config = {}) => ({
         screenId: config.screenId,
+        /* Which way the panel is mounted — landscape or portrait — so a line the other way round can say
+         * it will play with bars (docs/AD-BUILDER-SPEC.md §12). */
+        screenOrientation: config.screenOrientation === 'portrait' ? 'portrait' : 'landscape',
         canEdit: config.canEdit ?? false,
         /* Fixed lists handed down by the page — see ScreenController::show. */
         dayparts: config.dayparts ?? [],
@@ -181,6 +184,7 @@ export function registerScreenPlaylist(Alpine) {
                 media_id: media.id,
                 title: media.title,
                 type: media.type,
+                orientation: media.orientation ?? null,
                 thumbnail_url: media.thumbnail_url,
                 // An ad page and a picture both stay up for as long as the line says; only a video
                 // runs to its own end — its measured length, or a generous backstop for one the
@@ -511,6 +515,20 @@ export function registerScreenPlaylist(Alpine) {
          *  type "html", which is nobody's word for it. */
         typeLabel(item) {
             return { image: 'Image', video: 'Video', html: 'Ad page', channel: 'Channel' }[item.type] ?? item.type;
+        },
+
+        /**
+         * A file the other way round from the screen plays with bars — a portrait menu board on a landscape
+         * television at the sides, a landscape poster on a portrait one above and below (§12). Said on the
+         * line and in the picker, never refused: it is the shop's to notice. Nothing for a file whose way is
+         * unknown, one that matches, or a channel (its ads are many, each its own way).
+         */
+        orientationNote(item) {
+            if (! item.orientation || item.orientation === this.screenOrientation) return '';
+
+            return item.orientation === 'portrait'
+                ? 'Portrait — plays with bars at the sides on this screen'
+                : 'Landscape — plays with bars above and below on this screen';
         },
 
         /** Whether the line's seconds are set here: a picture and an ad page stay up for as

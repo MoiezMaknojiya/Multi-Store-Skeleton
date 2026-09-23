@@ -50,10 +50,13 @@ class AdBuilderFlowTest extends DuskTestCase
                 ->assertVisible('@builder-tab-assets')
                 ->waitFor('@ads-empty');
 
-            /* ── 2. A new ad: the stage is there, and it is a television's ─ */
-            $this->clickAndAwait($browser, '@new-ad', fn (Browser $b) => $b->waitFor('@ad-stage', 5));
+            /* ── 2. A new ad: which way is the screen? Then the stage, a television's ─ */
+            $this->jsClick($browser, '@new-ad');
+            $browser->waitFor('@new-ad-landscape')->assertVisible('@new-ad-portrait');
+            $this->clickAndAwait($browser, '@new-ad-landscape', fn (Browser $b) => $b->waitFor('@ad-stage', 5));
             $this->waitForAlpine($browser);
-            $browser->assertSee('1920 × 1080');
+            $browser->assertSee('1920 × 1080')
+                ->assertSeeIn('@ad-orientation', 'Landscape');
 
             $size = $browser->script('const s = document.querySelector(\'[dusk="ad-stage"]\'); return [s.style.width, s.style.height];')[0];
             $this->assertSame(['1920px', '1080px'], $size, 'the stage is the size a television is');

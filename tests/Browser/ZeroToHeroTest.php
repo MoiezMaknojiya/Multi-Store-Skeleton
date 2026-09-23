@@ -216,6 +216,11 @@ class ZeroToHeroTest extends DuskTestCase
             $this->assertSame([$second->id, $poster->id], $reordered->pluck('media_id')->all());
             $this->assertSame(4, $reordered->last()->duration_seconds, 'the retimed row did not follow its file');
 
+            // The rows are in the database before the answer reaches the page, and the page then redraws
+            // its list from that answer — a click made in between is redrawn away. Wait for the answer:
+            // the Save button goes quiet only once it has landed.
+            $panel->waitUntil('document.querySelector(\'[dusk="playlist-save"]\').disabled', 10);
+
             /* ── 10. Emptying the playlist puts the wall back to "No content" */
             $this->jsClick($panel, '@playlist-remove-0');
             $panel->waitForText('1 item');

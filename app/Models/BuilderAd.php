@@ -11,8 +11,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * One advert designed in the Ad Builder (docs/AD-BUILDER-SPEC.md): a 1920×1080 stage with layered
- * backgrounds and absolutely positioned text, pictures and video, each able to move on its own.
+ * One advert designed in the Ad Builder (docs/AD-BUILDER-SPEC.md): a stage the shape of a television —
+ * 1920×1080, or 1080×1920 for a screen mounted upright (§12) — with layered backgrounds and absolutely
+ * positioned text, pictures and video, each able to move on its own.
  *
  * The `document` is the design — what the editor reads and writes. Publishing compiles it into a
  * self-contained HTML file and writes a `media` row of type `html`, which is the only thing playlists,
@@ -23,14 +24,40 @@ class BuilderAd extends Model
 {
     use HasFactory;
 
-    /** A television's frame. Not a setting: a screen is 1920×1080 and the design is too (owner's rule). */
+    /** A television's frame the usual way round. Not a setting: a screen is 1920×1080 (owner's rule). */
     public const STAGE_WIDTH = 1920;
 
     public const STAGE_HEIGHT = 1080;
 
+    /**
+     * The two ways a screen can be mounted, which are the two shapes an ad can be (owner, 2026-09-23 —
+     * docs/AD-BUILDER-SPEC.md §12). Chosen when the ad is made and never changed after: every element's box
+     * is in stage pixels, so a design for the other shape is another design.
+     */
+    public const LANDSCAPE = 'landscape';
+
+    public const PORTRAIT = 'portrait';
+
+    /** Each orientation's label, in the order the chooser offers them. */
+    public const ORIENTATIONS = [
+        self::LANDSCAPE => 'Landscape',
+        self::PORTRAIT => 'Portrait',
+    ];
+
+    /** The stage each orientation designs on: the panel's own pixels, turned with it. */
+    public const STAGE_SIZES = [
+        self::LANDSCAPE => [self::STAGE_WIDTH, self::STAGE_HEIGHT],
+        self::PORTRAIT => [self::STAGE_HEIGHT, self::STAGE_WIDTH],
+    ];
+
     protected $fillable = [
-        'store_id', 'name', 'document', 'thumbnail_path', 'media_id', 'published_at', 'in_playlists',
-        'created_by', 'updated_by',
+        'store_id', 'name', 'orientation', 'document', 'thumbnail_path', 'media_id', 'published_at',
+        'in_playlists', 'created_by', 'updated_by',
+    ];
+
+    /** A row made before the column existed, or a model not yet saved, is landscape. */
+    protected $attributes = [
+        'orientation' => self::LANDSCAPE,
     ];
 
     protected $appends = ['thumbnail_url'];
@@ -217,14 +244,44 @@ class BuilderAd extends Model
         return "builder/{$this->store_id}/ads/{$this->id}";
     }
 
-    /** An empty stage: a dark background and nothing on it. */
-    public static function blankDocument(): array
+    /** Mounted upright: a 1080 × 1920 stage. */
+    public function isPortrait(): bool
     {
+        return $this->orientation === self::PORTRAIT;
+    }
+
+    /** The stage's width in pixels, from the ad's orientation — never from the document, which only mirrors it. */
+    public function stageWidth(): int
+    {
+        return self::stageSize($this->orientation)[0];
+    }
+
+    public function stageHeight(): int
+    {
+        return self::stageSize($this->orientation)[1];
+    }
+
+    /**
+     * [width, height] for an orientation; anything that is not one reads as landscape, the way every ad
+     * was before orientations existed.
+     *
+     * @return array{0: int, 1: int}
+     */
+    public static function stageSize(?string $orientation): array
+    {
+        return self::STAGE_SIZES[$orientation] ?? self::STAGE_SIZES[self::LANDSCAPE];
+    }
+
+    /** An empty stage of the given shape: a dark background and nothing on it. */
+    public static function blankDocument(string $orientation = self::LANDSCAPE): array
+    {
+        [$width, $height] = self::stageSize($orientation);
+
         return [
             'version' => 1,
             'stage' => [
-                'width' => self::STAGE_WIDTH,
-                'height' => self::STAGE_HEIGHT,
+                'width' => $width,
+                'height' => $height,
                 'background' => ['color' => '#0f172a', 'layers' => []],
             ],
             'elements' => [],

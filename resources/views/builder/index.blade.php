@@ -10,17 +10,20 @@
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex flex-wrap items-center gap-3">
                 @can('ad-store')
-                    <a href="{{ route('builder.create') }}" class="btn-primary-add" dusk="new-ad">
+                    {{-- An ad's shape is chosen before the editor opens and fixed after (docs/AD-BUILDER-SPEC.md
+                         §12), so New ad asks first. --}}
+                    <button type="button" class="btn-primary-add" dusk="new-ad"
+                            @click="$dispatch('open-modal', 'new-ad-orientation')">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                         </svg>
                         New ad
-                    </a>
+                    </button>
                 @endcan
 
                 <p class="text-sm text-gray-500 dark:text-gray-400" dusk="ads-scope-note">
-                    Every ad is 1920 × 1080 — the size of a television. Publish one and it joins the media a
-                    playlist can play.
+                    An ad is the size of a television — 1920 × 1080, or 1080 × 1920 for a screen mounted upright.
+                    Publish one and it joins the media a playlist can play.
                 </p>
             </div>
 
@@ -51,8 +54,8 @@
                     <div class="py-16 text-center" dusk="ads-empty">
                         <p class="text-sm text-gray-500 dark:text-gray-400">No ads yet.</p>
                         @can('ad-store')
-                            <a href="{{ route('builder.create') }}" class="mt-2 inline-block text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
-                               dusk="new-ad-empty">Build your first one</a>
+                            <button type="button" class="mt-2 inline-block text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+                                    dusk="new-ad-empty" @click="$dispatch('open-modal', 'new-ad-orientation')">Build your first one</button>
                         @endcan
                     </div>
                 </template>
@@ -65,22 +68,31 @@
 
                             {{-- The poster the editor captured when the ad was saved. It opens the editor — which
                                  is Update Ads — so it is a link only for somebody who may change the ad. --}}
+                            {{-- The tile stays a television's shape; a portrait poster is drawn inside it whole
+                                 (contained, never cropped) and the tile says which way the ad is (§12). --}}
                             <div class="relative">
                                 @can('ad-update')
                                     <a x-bind:href="'/builder/' + item.id" class="block aspect-video bg-gray-100 dark:bg-gray-900">
                                         <img x-show="item.thumbnail_url" x-cloak x-bind:src="item.thumbnail_url" alt=""
-                                             class="h-full w-full object-cover" x-bind:dusk="'ad-poster-' + item.id" />
+                                             class="h-full w-full" x-bind:class="item.orientation === 'portrait' ? 'object-contain' : 'object-cover'"
+                                             x-bind:dusk="'ad-poster-' + item.id" />
                                         <span x-show="!item.thumbnail_url" x-cloak
                                               class="flex h-full w-full items-center justify-center text-xs text-muted-soft">No preview yet</span>
                                     </a>
                                 @else
                                     <div class="aspect-video bg-gray-100 dark:bg-gray-900">
                                         <img x-show="item.thumbnail_url" x-cloak x-bind:src="item.thumbnail_url" alt=""
-                                             class="h-full w-full object-cover" x-bind:dusk="'ad-poster-' + item.id" />
+                                             class="h-full w-full" x-bind:class="item.orientation === 'portrait' ? 'object-contain' : 'object-cover'"
+                                             x-bind:dusk="'ad-poster-' + item.id" />
                                         <span x-show="!item.thumbnail_url" x-cloak
                                               class="flex h-full w-full items-center justify-center text-xs text-muted-soft">No preview yet</span>
                                     </div>
                                 @endcan
+
+                                <span x-show="item.orientation === 'portrait'" x-cloak
+                                      class="absolute left-2 top-2 rounded bg-black/60 px-2 py-1 text-xs font-medium text-white"
+                                      title="For a screen mounted upright — 1080 × 1920"
+                                      x-bind:dusk="'ad-orientation-' + item.id">Portrait</span>
 
                                 {{-- The saved design, full screen, the way a television would show it. --}}
                                 <a x-bind:href="'/builder/' + item.id + '/preview'" target="_blank" rel="noopener"
@@ -151,6 +163,40 @@
 
             <x-crud.pagination itemsVar="items" />
         </div>
+
+        {{-- Which way is the screen mounted? Asked before the editor opens, because it cannot change after
+             (docs/AD-BUILDER-SPEC.md §12): every element's box is in stage pixels, so a design for the other
+             shape is another design. Two links, so the editor opens on a stage of that shape. --}}
+        @can('ad-store')
+            <x-modal name="new-ad-orientation" :show="false" maxWidth="lg" focusable>
+                <div class="p-6">
+                    <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">New ad — which way is the screen?</h2>
+                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                        Chosen once, for this ad: it cannot be changed after.
+                    </p>
+
+                    <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <a href="{{ route('builder.create', ['orientation' => 'landscape']) }}" dusk="new-ad-landscape"
+                           class="group rounded-lg border-2 border-gray-200 p-4 text-center transition hover:border-blue-500 hover:bg-blue-50 focus:outline-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-gray-700 dark:hover:border-blue-400 dark:hover:bg-gray-700/50">
+                            <span class="mx-auto block h-[72px] w-32 rounded-md border-4 border-gray-700 bg-gray-900 group-hover:border-blue-600 dark:border-gray-300 dark:bg-gray-900" aria-hidden="true"></span>
+                            <span class="mt-3 block font-semibold text-gray-900 dark:text-gray-100">Landscape</span>
+                            <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">1920 × 1080 · a television the usual way round</span>
+                        </a>
+
+                        <a href="{{ route('builder.create', ['orientation' => 'portrait']) }}" dusk="new-ad-portrait"
+                           class="group rounded-lg border-2 border-gray-200 p-4 text-center transition hover:border-blue-500 hover:bg-blue-50 focus:outline-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-gray-700 dark:hover:border-blue-400 dark:hover:bg-gray-700/50">
+                            <span class="mx-auto block h-[72px] w-10 rounded-md border-4 border-gray-700 bg-gray-900 group-hover:border-blue-600 dark:border-gray-300 dark:bg-gray-900" aria-hidden="true"></span>
+                            <span class="mt-3 block font-semibold text-gray-900 dark:text-gray-100">Portrait</span>
+                            <span class="mt-1 block text-xs text-gray-500 dark:text-gray-400">1080 × 1920 · a television mounted upright — menu boards, posters</span>
+                        </a>
+                    </div>
+
+                    <div class="mt-6 flex justify-end">
+                        <x-secondary-button x-on:click="$dispatch('close-modal', 'new-ad-orientation')" dusk="new-ad-cancel">Cancel</x-secondary-button>
+                    </div>
+                </div>
+            </x-modal>
+        @endcan
 
         {{-- Deleting an ad takes its published copy off every playlist, so it asks for the password. --}}
         <x-modal name="confirm-ad-deletion" :show="false" maxWidth="md" focusable>

@@ -26,7 +26,7 @@ use Illuminate\View\View;
 
 /**
  * The Ad Builder (docs/AD-BUILDER-SPEC.md): three tabs — Create, Ads and Assets — around one editor that
- * draws a 1920×1080 advert.
+ * draws an advert the shape of a television: 1920×1080, or 1080×1920 for one mounted upright (§12).
  *
  * An ad belongs to a store, like everything else a shop makes, and the platform works above them all:
  * `BuilderAd::visibleTo` decides which, so a store's person never sees another shop's design and a super
@@ -76,14 +76,19 @@ class BuilderController extends Controller
     }
 
     /**
-     * The Create tab: the editor with an empty stage. Nothing is written until the first save. The platform
-     * team says which shop a new ad is for, so they are handed the shops to choose from.
+     * The Create tab: the editor with an empty stage of the shape the chooser asked for — portrait, or
+     * landscape for anything else, the way every ad was before (a page is forgiving; the save is not).
+     * Nothing is written until the first save. The platform team says which shop a new ad is for, so they
+     * are handed the shops to choose from.
      */
-    public function create(): View
+    public function create(Request $request): View
     {
+        $orientation = $request->query('orientation') === BuilderAd::PORTRAIT ? BuilderAd::PORTRAIT : BuilderAd::LANDSCAPE;
+
         return view('builder.editor', [
             'ad' => null,
-            'document' => BuilderAd::blankDocument(),
+            'orientation' => $orientation,
+            'document' => BuilderAd::blankDocument($orientation),
             'assets' => $this->assetsForEditor(),
             'stores' => $this->storesToFilterBy(),
         ]);
@@ -98,6 +103,7 @@ class BuilderController extends Controller
 
         return view('builder.editor', [
             'ad' => $ad,
+            'orientation' => $ad->orientation,
             'document' => $ad->document,
             'assets' => $this->assetsForEditor($ad->store_id),
         ]);
@@ -112,6 +118,8 @@ class BuilderController extends Controller
         $ad = BuilderAd::create([
             'store_id' => $storeId,
             'name' => $validated['name'],
+            // Said once, here; from now on the column decides what size a save may be (§12).
+            'orientation' => $request->orientation(),
             'document' => $validated['document'],
             'created_by' => auth()->id(),
             'updated_by' => auth()->id(),
@@ -119,7 +127,7 @@ class BuilderController extends Controller
 
         $this->savePoster($ad, $request->input('thumbnail'));
 
-        ActivityLog::record('ad.created', $ad, "Created ad {$ad->name}");
+        ActivityLog::record('ad.created', $ad, "Created {$ad->orientation} ad {$ad->name}");
 
         return response()->json([
             'message' => 'Ad saved',
@@ -169,6 +177,7 @@ class BuilderController extends Controller
         $copy = BuilderAd::create([
             'store_id' => $ad->store_id,
             'name' => $this->copyName($ad),
+            'orientation' => $ad->orientation,
             'document' => $ad->document,
             'created_by' => auth()->id(),
             'updated_by' => auth()->id(),
@@ -386,6 +395,7 @@ class BuilderController extends Controller
         return [
             'id' => $ad->id,
             'name' => $ad->name,
+            'orientation' => $ad->orientation,
             'thumbnail_url' => $ad->thumbnail_url,
             'is_published' => $ad->isPublished(),
             // draft | published | changed — changed: on the screens, with saved changes they do not show yet.

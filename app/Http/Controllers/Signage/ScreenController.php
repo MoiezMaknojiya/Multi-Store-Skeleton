@@ -101,7 +101,8 @@ class ScreenController extends Controller
             ->when($search !== '', fn (Builder $q) => $q->where('title', 'like', "%{$search}%"))
             ->orderBy('title')
             ->limit(100)
-            ->get(['id', 'title', 'type']);
+            // The orientation, so the list can say which files are the other way round from the screen.
+            ->get(['id', 'title', 'type', 'orientation']);
 
         return response()->json(['media' => $media]);
     }
