@@ -284,6 +284,8 @@ test('a document of the wrong shape is refused with a 422, never a 500', functio
     'a layer that is a string' => [['document' => attackDocument([], ['color'])]],
     'too many layers' => [['document' => attackDocument([], array_fill(0, 13, ['id' => 'l', 'type' => 'color']))]],
     'a stage of another size' => [['document' => [...attackDocument(), 'stage' => ['width' => 3840, 'height' => 2160, 'background' => ['layers' => []]]]]],
+    'a line style that is a list' => [['document' => attackDocument([['id' => 'a', 'type' => 'shape', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'style' => ['shape' => 'line', 'lineStyle' => ['dashed']]]])]],
+    'a line style nobody offers' => [['document' => attackDocument([['id' => 'a', 'type' => 'shape', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'style' => ['shape' => 'line', 'lineStyle' => 'wavy']]])]],
     'a parent that is a list' => [['document' => attackDocument([['id' => 'a', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => ['g']]])]],
     'a parent that is a number' => [['document' => attackDocument([['id' => 'a', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 7]])]],
     'a parent that is nowhere' => [['document' => attackDocument([['id' => 'a', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 'ghost']])]],

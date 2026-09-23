@@ -193,6 +193,21 @@ export function pictureCss(style = {}, limits, filterTable) {
 
 /** A rectangle or an ellipse: AdCompiler::shapeStyle(). `maxStops`: BuilderAdRequest::MAX_STOPS. */
 export function shapeCss(style = {}, limits, maxStops) {
+    // A line (§14): a stroke across the middle of the box — AdCompiler::shapeStyle() draws it the same way.
+    if (style.shape === 'line') {
+        const width = limit(limits, 'lineWidth', style.lineWidth, 6);
+        const dash = ['solid', 'dashed', 'dotted'].includes(style.lineStyle) ? style.lineStyle : 'solid';
+
+        return {
+            background: 'transparent',
+            height: width + 'px',
+            position: 'relative',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            borderTop: `${width}px ${dash} ${colour(style.fill) ?? '#ffffff'}`,
+        };
+    }
+
     const gradient = gradientCss(style.gradient, limits, maxStops);
 
     return {

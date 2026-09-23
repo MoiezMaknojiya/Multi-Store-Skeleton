@@ -42,7 +42,8 @@
     ]);
     $borderStyles = $choices(\App\Services\AdCompiler::BORDER_STYLES, []);
     $gradientKinds = $choices(\App\Services\AdCompiler::GRADIENTS, []);
-    $shapes = $choices(\App\Services\AdCompiler::SHAPES, ['rect' => '▭ Rectangle', 'ellipse' => '◯ Ellipse']);
+    $shapes = $choices(\App\Services\AdCompiler::SHAPES, ['rect' => '▭ Rectangle', 'ellipse' => '◯ Ellipse', 'line' => '— Line']);
+    $lineStyles = $choices(\App\Services\AdCompiler::LINE_STYLES, []);
     $axes = $choices(\App\Services\AdAnimations::AXES, ['y' => 'Up and down', 'x' => 'Side to side']);
     $filterLabels = [
         'blur' => 'Blur', 'brightness' => 'Brightness', 'contrast' => 'Contrast', 'saturate' => 'Saturation',
@@ -301,7 +302,8 @@
                     <div class="mt-3 grid grid-cols-2 gap-2">
                         <button type="button" class="btn-secondary text-sm" @click="addText()" dusk="add-text">Text</button>
                         <button type="button" class="btn-secondary text-sm" @click="openAssetPicker('element')" dusk="add-image">Image</button>
-                        <button type="button" class="btn-secondary col-span-2 text-sm" @click="addShape()" dusk="add-shape">Shape</button>
+                        <button type="button" class="btn-secondary text-sm" @click="addShape()" dusk="add-shape">Shape</button>
+                        <button type="button" class="btn-secondary text-sm" @click="addLine()" dusk="add-line">Line</button>
                     </div>
                 </div>
 

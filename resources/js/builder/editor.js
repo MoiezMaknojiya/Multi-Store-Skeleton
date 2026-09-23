@@ -335,6 +335,19 @@ export function registerAdEditor(Alpine) {
                 this.place(element, 'Add shape');
             },
 
+            /** A line (§14): a shape drawn as a stroke across its box — a rule, a divider, a dotted leader. */
+            addLine() {
+                const element = {
+                    ...this.newBox(600, 40),
+                    type: 'shape',
+                    name: 'Line',
+                    style: { shape: 'line', fill: '#ffffff', lineWidth: 6, lineStyle: 'solid' },
+                    animations: {},
+                };
+
+                this.place(element, 'Add line');
+            },
+
             /**
              * An asset from the shelf. Pictures keep their own proportions, so nothing arrives squashed — and
              * arrive whole: 1200 px wide at most, and never taller than the stage, so a portrait photograph

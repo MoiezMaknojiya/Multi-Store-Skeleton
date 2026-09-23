@@ -133,6 +133,30 @@ test('a shape is a rectangle or an ellipse, filled with a colour or a gradient',
         ->toContain('background-image:linear-gradient(90deg, #ffd60a 0%, #ffb703 100%);border-radius:50%;border:8px solid #ffffff;');
 });
 
+test('a line is a stroke across the middle of its box — its thickness, dash pattern and colour, nothing else', function () {
+    $html = compileFor($this->store, elements: [
+        ['id' => 'rule', 'type' => 'shape', 'x' => 100, 'y' => 200, 'w' => 900, 'h' => 40, 'z' => 0,
+            'style' => ['shape' => 'line', 'fill' => '#ffd166', 'lineWidth' => 8, 'lineStyle' => 'dashed',
+                // What a filled shape would draw, and a line never does.
+                'radius' => 30, 'gradient' => ['kind' => 'linear', 'angle' => 90, 'stops' => [['color' => '#000', 'at' => 0], ['color' => '#fff', 'at' => 100]]],
+                'border' => ['width' => 8, 'color' => '#ff0000'], 'shadow' => ['x' => 0, 'y' => 10, 'blur' => 20, 'color' => '#000000']]],
+        ['id' => 'plain', 'type' => 'shape', 'x' => 0, 'y' => 0, 'w' => 300, 'h' => 20, 'z' => 1,
+            'style' => ['shape' => 'line']],
+        ['id' => 'thick', 'type' => 'shape', 'x' => 0, 'y' => 0, 'w' => 300, 'h' => 20, 'z' => 2,
+            'style' => ['shape' => 'line', 'lineWidth' => 9999, 'lineStyle' => 'wavy', 'fill' => 'red']],
+    ]);
+
+    expect($html)->toContain('background:transparent;height:8px;position:relative;top:50%;transform:translateY(-50%);border-top:8px dashed #ffd166;')
+        ->not->toContain('border-radius:30px')
+        ->not->toContain('linear-gradient')
+        ->not->toContain('#ff0000')
+        ->not->toContain('box-shadow')
+        // A line with nothing said: six pixels, solid, white.
+        ->toContain('height:6px;position:relative;top:50%;transform:translateY(-50%);border-top:6px solid #ffffff;')
+        // Held at the limits: the thickness, the dash pattern nobody offers, a colour that is not one.
+        ->toContain('height:200px;position:relative;top:50%;transform:translateY(-50%);border-top:200px solid #ffffff;');
+});
+
 test('a Ken Burns loop zooms the picture inside its own frame', function () {
     $html = compileFor($this->store, elements: [[
         'id' => 'photo', 'type' => 'image', 'x' => 0, 'y' => 0, 'w' => 800, 'h' => 450, 'z' => 0, 'assetId' => $this->picture->id,

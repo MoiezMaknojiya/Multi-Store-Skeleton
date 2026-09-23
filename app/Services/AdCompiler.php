@@ -71,8 +71,11 @@ class AdCompiler
 
     public const BORDER_STYLES = ['solid', 'dashed', 'dotted', 'double'];
 
-    /** What a shape may be. */
-    public const SHAPES = ['rect', 'ellipse'];
+    /** What a shape may be: a filled rectangle or ellipse, or a line drawn across its box (§14). */
+    public const SHAPES = ['rect', 'ellipse', 'line'];
+
+    /** How a line is drawn — the browser's own dash patterns, so it looks the same everywhere. */
+    public const LINE_STYLES = ['solid', 'dashed', 'dotted'];
 
     /** The two kinds of gradient. */
     public const GRADIENTS = ['linear', 'radial'];
@@ -113,6 +116,9 @@ class AdCompiler
         'textShadow.y' => [-200, 200],
         'textShadow.blur' => [0, 200],
         'textStroke.width' => [0, 40],
+
+        // A line's thickness (§14).
+        'lineWidth' => [1, 200],
 
         // Frames, shadows and picture filters.
         'border.width' => [0, 200],
@@ -705,6 +711,17 @@ class AdCompiler
     /** A rectangle or an ellipse, filled with a colour or a gradient, with a frame and a shadow. */
     private function shapeStyle(array $style): string
     {
+        // A line (§14): a stroke across the middle of the box, `border-top` for the dash pattern, the box
+        // itself left clear. No fill, corners, frame or shadow — those belong to filled shapes.
+        if ($this->oneOf($style['shape'] ?? null, self::SHAPES, 'rect') === 'line') {
+            return sprintf(
+                'background:transparent;height:%1$spx;position:relative;top:50%%;transform:translateY(-50%%);border-top:%1$spx %2$s %3$s;',
+                $this->limited('lineWidth', $style['lineWidth'] ?? 6),
+                $this->oneOf($style['lineStyle'] ?? null, self::LINE_STYLES, 'solid'),
+                $this->colour($style['fill'] ?? null) ?? '#ffffff',
+            );
+        }
+
         $gradient = $this->gradient($style['gradient'] ?? null);
         $fill = $gradient !== null
             ? "background-image:{$gradient};"

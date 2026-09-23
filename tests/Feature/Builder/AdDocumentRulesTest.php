@@ -132,6 +132,13 @@ function everyKeyDocument(): array
                 'style' => ['fontSize' => 64, 'color' => '#ffffff'],
                 'animations' => ['out' => ['effect' => 'fade', 'direction' => 'down', 'distance' => 30, 'at' => 9, 'duration' => 0.5, 'ease' => 'power2.in']],
             ],
+            // A line (§14): a shape with a thickness and a dash pattern of its own.
+            [
+                'id' => 'el_rule', 'type' => 'shape', 'name' => 'Rule', 'x' => 100, 'y' => 200, 'w' => 900, 'h' => 40,
+                'rotation' => -3, 'opacity' => 1, 'z' => 6, 'locked' => false, 'visible' => true,
+                'style' => ['shape' => 'line', 'fill' => '#ffd166', 'lineWidth' => 8, 'lineStyle' => 'dashed'],
+                'animations' => ['in' => ['effect' => 'wipe', 'direction' => 'right', 'distance' => 80, 'duration' => 0.7, 'delay' => 0.4, 'ease' => 'power2.out']],
+            ],
         ],
     ];
 }
@@ -174,6 +181,7 @@ test('numbers outside what the compiler writes are refused, with a name a person
 })->with([
     'letter spacing' => ['elements.0.style.letterSpacing', 500, 'The letter spacing field must be between -100 and 100.'],
     'a shadow’s blur' => ['elements.1.style.shadow.blur', 9000, 'The shadow blur field must be between 0 and 500.'],
+    'a line’s thickness' => ['elements.6.style.lineWidth', 999, 'The line width field must be between 1 and 200.'],
     'a filter' => ['elements.1.style.filters.brightness', 999, 'The filters brightness field must be between 0 and 300.'],
     'a gradient stop' => ['elements.3.style.gradient.stops.1.at', 140, 'The gradient stops at field must be between 0 and 100.'],
     'a layer’s opacity' => ['stage.background.layers.0.opacity', 3, 'The background layer opacity field must be between 0 and 1.'],

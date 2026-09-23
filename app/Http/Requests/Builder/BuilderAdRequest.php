@@ -190,9 +190,11 @@ class BuilderAdRequest extends FormRequest
                 "{$style}.filters.{$key}" => $this->limit("filters.{$key}"),
             ])->all(),
 
-            // Shapes.
+            // Shapes — and a line's own thickness and dash pattern (§14).
             "{$style}.shape" => ['nullable', Rule::in(AdCompiler::SHAPES)],
             "{$style}.fill" => self::COLOUR,
+            "{$style}.lineWidth" => $this->limit('lineWidth'),
+            "{$style}.lineStyle" => ['nullable', Rule::in(AdCompiler::LINE_STYLES)],
             ...$this->gradient("{$style}.gradient"),
 
             // A frame and a shadow, for anything but text (which has its own shadow).
