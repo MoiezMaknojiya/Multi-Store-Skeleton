@@ -92,6 +92,29 @@ test('running it again restores the examples instead of duplicating them', funct
         ->and($winter->fresh()->media_id)->toBe($mediaId);        // republished in place: playlists keep it
 });
 
+test('an ad of an example’s name made upright is left as it is: its shape is fixed once made', function () {
+    $mine = BuilderAd::factory()->portrait()->withText('My own menu')->create([
+        'store_id' => $this->store->id,
+        'name' => 'Example · Winter Sale',
+        'orientation' => BuilderAd::PORTRAIT,
+    ]);
+    $before = $mine->document;
+
+    $this->artisan('builder:examples', ['store' => $this->store->id, '--no-fonts' => true])
+        ->expectsOutputToContain('it is a portrait ad, and the example is landscape')
+        ->assertSuccessful();
+
+    $mine->refresh();
+
+    expect($mine->orientation)->toBe(BuilderAd::PORTRAIT)
+        ->and($mine->document)->toBe($before)
+        ->and($mine->media_id)->toBeNull()
+        // The other three are made as ever — each landscape, with a landscape stage.
+        ->and(BuilderAd::where('id', '!=', $mine->id)->count())->toBe(3)
+        ->and(BuilderAd::where('id', '!=', $mine->id)->get()->every(fn (BuilderAd $ad) => $ad->orientation === BuilderAd::LANDSCAPE
+            && (int) $ad->document['stage']['width'] === 1920))->toBeTrue();
+});
+
 test('drafts, when asked', function () {
     $this->artisan('builder:examples', ['store' => $this->store->id, '--no-fonts' => true, '--no-publish' => true])->assertSuccessful();
 

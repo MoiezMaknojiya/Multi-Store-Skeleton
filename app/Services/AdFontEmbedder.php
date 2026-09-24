@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\Storage;
 /**
  * The fonts an advert is set in, carried INSIDE its page (docs/AD-BUILDER-SPEC.md §7a).
  *
- * A television plays the page in a sandboxed frame, and the draft preview is sandboxed too: both have an
- * opaque origin. A browser fetches a font with CORS, so from there every font file on our own server
+ * The draft preview is sandboxed into an opaque origin, and so is the page on a television no service worker
+ * keeps (docs/AD-BUILDER-SPEC.md §15). A browser fetches a font with CORS, so from there every font file on our own server
  * counted as another site's and was refused — the advert fell back to a system face on every screen.
  * A `data:` URL is never a CORS request, so the files are embedded instead: nothing to configure on
  * any web server, and nothing to fetch on the day the shop's network is down.

@@ -6,6 +6,7 @@ use App\Http\Requests\Builder\BuilderAdRequest;
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Turns a design into the page a television shows (docs/AD-BUILDER-SPEC.md §9).
@@ -88,6 +89,46 @@ class AdCompiler
      * editor's preview runs.
      */
     public const MOTION_SCRIPTS = ['ad-runtime/anime.min.js', 'ad-runtime/runtime.js'];
+
+    /**
+     * The boot script of an advert that moves (motionScripts()). A constant, because the page's policy names
+     * it by its digest (contentSecurityPolicy()): a byte of difference and it would not run.
+     */
+    private const BOOT_SCRIPT = <<<'JS'
+        /* Start the design's animations the moment the advert is really on screen. The player loads
+           the next item a beat early, behind the one showing, and an entrance played back there would
+           be over before anybody saw it — so the stage is watched, and the clock starts when it
+           appears (at once, when the page is opened on its own). Whatever happens, every element
+           ends up visible: a box that could not load the library shows the advert standing still
+           rather than half of it. */
+        (function () {
+            var stage = document.getElementById('ad-stage');
+            var pending = document.querySelectorAll('.ad-pending');
+            var started = false;
+            function reveal() {
+                for (var i = 0; i < pending.length; i++) pending[i].classList.remove('ad-pending');
+            }
+            function start() {
+                if (started) return;
+                started = true;
+                try {
+                    var config = JSON.parse(document.getElementById('ad-animations').textContent);
+                    window.AdRuntime.run(stage, config);
+                } catch (error) { /* fall through to reveal */ }
+                reveal();
+            }
+            if (!window.anime || !window.AdRuntime) { reveal(); return; }
+            if (!('IntersectionObserver' in window)) { start(); return; }
+            var observer = new IntersectionObserver(function (entries) {
+                for (var i = 0; i < entries.length; i++) {
+                    if (entries[i].isIntersecting) { observer.disconnect(); start(); return; }
+                }
+            });
+            observer.observe(stage);
+            /* A frame that never says it is visible still starts. */
+            setTimeout(function () { observer.disconnect(); start(); }, 4000);
+        })();
+        JS;
 
     /**
      * Every number a design may carry, as [min, max]. The compiler clamps to these, the request refuses
@@ -194,11 +235,19 @@ class AdCompiler
         $width = $ad->stageWidth();
         $height = $ad->stageHeight();
 
+        // Every script the page may run, named by its digest in the page's own policy (docs §15): the frame a
+        // television plays it in is same-origin with the panel, so nothing but these may run there.
+        $fit = $this->fitScript($width, $height);
+        $policy = $animations === []
+            ? $this->contentSecurityPolicy([$fit], false)
+            : $this->contentSecurityPolicy([$fit, self::BOOT_SCRIPT], true);
+
         return <<<HTML
         <!doctype html>
         <html lang="en">
         <head>
         <meta charset="utf-8">
+        {$policy}
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>{$title}</title>
         {$fonts}
@@ -225,21 +274,7 @@ class AdCompiler
         {$background}
         {$body}
         </div>
-        <script>
-        /* A design is {$width}x{$height}. A screen may not be, so the whole stage is scaled and centred as one
-           piece, never reflowed: a reflowed advert is a different advert. */
-        (function () {
-            var stage = document.getElementById('ad-stage');
-            function fit() {
-                var scale = Math.min(window.innerWidth / {$width}, window.innerHeight / {$height});
-                var x = (window.innerWidth - {$width} * scale) / 2;
-                var y = (window.innerHeight - {$height} * scale) / 2;
-                stage.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + scale + ')';
-            }
-            window.addEventListener('resize', fit);
-            fit();
-        })();
-        </script>
+        <script>{$fit}</script>
         {$motion}
         </body>
         </html>
@@ -442,7 +477,7 @@ class AdCompiler
             }
 
             $visited[$id] = true;
-            $html[] = $this->element($element, $assets, $animations[AdAnimations::safeId($id)] ?? [], $origin, $tree, $depth, $visited);
+            $html[] = $this->element($element, $assets, $animations, $origin, $tree, $depth, $visited);
         }
 
         return implode("\n", array_filter($html));
@@ -529,27 +564,33 @@ class AdCompiler
      * One element: its box, the node its animations move, and what it shows — or, for a group, what it
      * holds, each child placed against the group's own origin (§13).
      *
-     * @param  array<string, array<string, mixed>>  $animations  this element's, already sanitized
+     * @param  array<string, array<string, array<string, mixed>>>  $table  every element's animations, by safe id
      * @param  array{x: float|int, y: float|int}  $origin  the box this element is placed against
      * @param  array<string, array<int, array<string, mixed>>>  $tree
      * @param  array<string, bool>  $visited
      */
-    private function element(array $element, Collection $assets, array $animations, array $origin, array $tree, int $depth, array &$visited): string
+    private function element(array $element, Collection $assets, array $table, array $origin, array $tree, int $depth, array &$visited): string
     {
+        $animations = $table[AdAnimations::safeId($element['id'] ?? null)] ?? [];
         $style = is_array($element['style'] ?? null) ? $element['style'] : [];
         $asset = $assets->get((int) ($element['assetId'] ?? 0));
 
         if (($element['type'] ?? null) === 'group') {
             $id = $element['id'];
             $box = $this->groupBox($tree, $id, $depth);
-            $inner = $box === null ? '' : $this->children($tree, $id, $assets, [], ['x' => $box['x'], 'y' => $box['y']], $depth + 1, $visited);
+            $inner = $box === null ? '' : $this->children($tree, $id, $assets, $table, ['x' => $box['x'], 'y' => $box['y']], $depth + 1, $visited);
 
-            // The children's own animations were handed out by the caller's table, not this empty one.
             return $inner === '' ? '' : sprintf(
                 '<div class="ad-el%s" data-anim-id="%s" style="%s"><div class="ad-anim">%s</div></div>',
                 isset($animations['in']) ? ' ad-pending' : '',
                 e(AdAnimations::safeId($id)),
-                $this->boxStyle(['x' => $box['x'], 'y' => $box['y'], 'w' => $box['w'], 'h' => $box['h'], 'rotation' => 0, 'opacity' => $element['opacity'] ?? 1, 'z' => $element['z'] ?? 0], $style, false, $origin),
+                $this->boxStyle(
+                    ['x' => $box['x'], 'y' => $box['y'], 'w' => $box['w'], 'h' => $box['h'], 'rotation' => 0, 'opacity' => $element['opacity'] ?? 1, 'z' => $element['z'] ?? 0],
+                    $style,
+                    false,
+                    $origin,
+                    $this->groupIsolates($element, $style, $animations),
+                ),
                 $inner,
             );
         }
@@ -810,12 +851,17 @@ class AdCompiler
      * A Ken Burns loop zooms a photograph INSIDE its frame, the way television does it, so that element's
      * box clips what it holds — along the picture's own rounded corners.
      *
+     * A group that neither fades, blends nor moves is written WITHOUT a z-index (§13): it is then no stacking
+     * context, its children take their places in the stage's own — their z is the tree's pre-order, so the
+     * order is the same — and a child's blend mode still mixes with what is behind the group, the way
+     * Figma's "pass through" groups do. One that does any of those is a layer of its own, as it must be.
+     *
      * @param  array{x: float|int, y: float|int}  $origin
      */
-    private function boxStyle(array $element, array $style, bool $clipsItsContent, array $origin): string
+    private function boxStyle(array $element, array $style, bool $clipsItsContent, array $origin, bool $stacks = true): string
     {
         $css = sprintf(
-            'left:%spx;top:%spx;width:%spx;height:%spx;opacity:%s;z-index:%d;',
+            'left:%spx;top:%spx;width:%spx;height:%spx;opacity:%s;'.($stacks ? 'z-index:%d;' : ''),
             $this->number((float) $this->limited('x', $element['x'] ?? 0) - (float) $origin['x'], -40000, 40000),
             $this->number((float) $this->limited('y', $element['y'] ?? 0) - (float) $origin['y'], -40000, 40000),
             $this->limited('w', $element['w'] ?? 100),
@@ -838,6 +884,14 @@ class AdCompiler
         $blend = $this->oneOf($style['blend'] ?? null, self::BLENDS, 'normal');
 
         return $blend === 'normal' ? $css : $css."mix-blend-mode:{$blend};";
+    }
+
+    /** Does this group have to be a layer of its own — faded, blended or animated as one? */
+    private function groupIsolates(array $group, array $style, array $animations): bool
+    {
+        return (float) $this->limited('opacity', $group['opacity'] ?? 1) < 1
+            || $this->oneOf($style['blend'] ?? null, self::BLENDS, 'normal') !== 'normal'
+            || $animations !== [];
     }
 
     /* ── Motion ─────────────────────────────────────────────────────────── */
@@ -863,44 +917,92 @@ class AdCompiler
                 fn (string $path) => '<script src="'.e(self::scriptUrl($path)).'"></script>',
                 self::MOTION_SCRIPTS,
             ),
-            <<<'JS'
-            <script>
-            /* Start the design's animations the moment the advert is really on screen. The player loads
-               the next item a beat early, behind the one showing, and an entrance played back there would
-               be over before anybody saw it — so the stage is watched, and the clock starts when it
-               appears (at once, when the page is opened on its own). Whatever happens, every element
-               ends up visible: a box that could not load the library shows the advert standing still
-               rather than half of it. */
+            '<script>'.self::BOOT_SCRIPT.'</script>',
+        ]);
+    }
+
+    /**
+     * The script that fits the stage to whatever shows it: scaled and centred as one piece, never reflowed —
+     * a reflowed advert is a different advert.
+     */
+    private function fitScript(int $width, int $height): string
+    {
+        return <<<JS
+            /* A design is {$width}x{$height}. A screen may not be, so the whole stage is scaled and centred as one
+               piece, never reflowed: a reflowed advert is a different advert. */
             (function () {
                 var stage = document.getElementById('ad-stage');
-                var pending = document.querySelectorAll('.ad-pending');
-                var started = false;
-                function reveal() {
-                    for (var i = 0; i < pending.length; i++) pending[i].classList.remove('ad-pending');
+                function fit() {
+                    var scale = Math.min(window.innerWidth / {$width}, window.innerHeight / {$height});
+                    var x = (window.innerWidth - {$width} * scale) / 2;
+                    var y = (window.innerHeight - {$height} * scale) / 2;
+                    stage.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + scale + ')';
                 }
-                function start() {
-                    if (started) return;
-                    started = true;
-                    try {
-                        var config = JSON.parse(document.getElementById('ad-animations').textContent);
-                        window.AdRuntime.run(stage, config);
-                    } catch (error) { /* fall through to reveal */ }
-                    reveal();
-                }
-                if (!window.anime || !window.AdRuntime) { reveal(); return; }
-                if (!('IntersectionObserver' in window)) { start(); return; }
-                var observer = new IntersectionObserver(function (entries) {
-                    for (var i = 0; i < entries.length; i++) {
-                        if (entries[i].isIntersecting) { observer.disconnect(); start(); return; }
-                    }
-                });
-                observer.observe(stage);
-                /* A frame that never says it is visible still starts. */
-                setTimeout(function () { observer.disconnect(); start(); }, 4000);
+                window.addEventListener('resize', fit);
+                fit();
             })();
-            </script>
-            JS,
+            JS;
+    }
+
+    /**
+     * The page's own Content-Security-Policy (docs/AD-BUILDER-SPEC.md §15), first thing in its head.
+     *
+     * A television whose worker keeps it plays the page in a frame that is same-origin with the player — the
+     * only kind of frame a worker serves, and so the only way the page's pictures come from the set's cache
+     * with no line — so the page itself says what may run in it: its own inline scripts, named by digest, the
+     * animation runtime from its own folder when the page moves, and this app's pictures, videos and fonts;
+     * nothing else. No request of its own (connect-src), no frame, no plugin, no form, no base. The compiler
+     * already writes nothing a person typed as code; this is the wall behind that wall, so a page that somehow
+     * carried a script would still run none of it.
+     *
+     * @param  list<string>  $scripts  the exact text of every inline script the page carries
+     * @param  bool  $loadsRuntime  whether the page loads the animation runtime (MOTION_SCRIPTS)
+     */
+    private function contentSecurityPolicy(array $scripts, bool $loadsRuntime): string
+    {
+        // The app's own origins: where the runtime's address points (the request's, or APP_URL on the command
+        // line) and where the pictures live (the public disk's), which can differ behind a proxy.
+        $origins = collect([asset('/'), config('app.url'), Storage::disk('public')->url('/')])
+            ->map(fn (?string $url) => $this->originOf((string) $url))
+            ->filter()
+            ->unique()
+            ->implode(' ');
+
+        $hashes = collect($scripts)
+            ->map(fn (string $script) => "'sha256-".base64_encode(hash('sha256', $script, true))."'")
+            ->implode(' ');
+
+        // Scripts: the page's own inline ones by their digests and, for a page that moves, the runtime's own
+        // folder — where scriptUrl() points — and nowhere else on any origin. Nothing else can run.
+        $runtime = $loadsRuntime ? rtrim(asset(dirname(self::MOTION_SCRIPTS[0])), '/').'/ ' : '';
+
+        $policy = implode('; ', [
+            "default-src 'none'",
+            "script-src {$runtime}{$hashes}",
+            "style-src 'unsafe-inline'",
+            "img-src 'self' {$origins} data: blob:",
+            "media-src 'self' {$origins} blob:",
+            "font-src 'self' {$origins} data:",
+            "connect-src 'none'",
+            "object-src 'none'",
+            "frame-src 'none'",
+            "base-uri 'none'",
+            "form-action 'none'",
         ]);
+
+        return '<meta http-equiv="Content-Security-Policy" content="'.e($policy).'">';
+    }
+
+    /** "https://app.example.com" out of any address on it, or null for one that is not http(s). */
+    private function originOf(string $url): ?string
+    {
+        $parts = parse_url($url);
+
+        if (! isset($parts['scheme'], $parts['host']) || ! in_array(strtolower($parts['scheme']), ['http', 'https'], true)) {
+            return null;
+        }
+
+        return strtolower($parts['scheme']).'://'.strtolower($parts['host']).(isset($parts['port']) ? ':'.$parts['port'] : '');
     }
 
     /**

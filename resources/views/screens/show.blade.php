@@ -91,8 +91,10 @@
                             <span class="w-6 text-xs text-gray-400 text-center" x-text="index + 1"></span>
 
                             <div class="w-20 h-12 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                                {{-- An upright picture is shown whole, not cut to its middle (docs/AD-BUILDER-SPEC.md §12). --}}
                                 <template x-if="item.thumbnail_url">
-                                    <img :src="item.thumbnail_url" :alt="item.title" class="w-full h-full object-cover">
+                                    <img :src="item.thumbnail_url" :alt="item.title" class="w-full h-full"
+                                         x-bind:class="(item.thumbnail_orientation ?? item.orientation) === 'portrait' ? 'object-contain' : 'object-cover'">
                                 </template>
                                 <template x-if="!item.thumbnail_url">
                                     <span class="text-[10px] text-gray-400" x-text="typeLabel(item)"></span>
@@ -200,7 +202,8 @@
                         <div class="flex items-center gap-3 p-2 rounded-md border border-gray-200 dark:border-gray-700">
                             <div class="w-20 h-12 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
                                 <template x-if="media.thumbnail_url">
-                                    <img :src="media.thumbnail_url" :alt="media.title" class="w-full h-full object-cover">
+                                    <img :src="media.thumbnail_url" :alt="media.title" class="w-full h-full"
+                                         x-bind:class="media.orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                                 </template>
                                 <template x-if="!media.thumbnail_url">
                                     <span class="text-[10px] text-gray-400" x-text="typeLabel(media)"></span>
@@ -245,7 +248,8 @@
                             <div class="flex items-center gap-3 p-2">
                                 <div class="w-20 h-12 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
                                     <template x-if="channel.thumbnail_url">
-                                        <img :src="channel.thumbnail_url" :alt="channel.title" class="w-full h-full object-cover">
+                                        <img :src="channel.thumbnail_url" :alt="channel.title" class="w-full h-full"
+                                             x-bind:class="channel.thumbnail_orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                                     </template>
                                     <template x-if="!channel.thumbnail_url">
                                         <span class="text-[10px] text-gray-400">channel</span>
@@ -285,7 +289,8 @@
                                     <div class="text-xs min-w-0">
                                         <div class="aspect-video rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
                                             <template x-if="ad.thumbnail_url">
-                                                <img :src="ad.thumbnail_url" :alt="ad.title" class="w-full h-full object-cover">
+                                                <img :src="ad.thumbnail_url" :alt="ad.title" class="w-full h-full"
+                                                     x-bind:class="ad.orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                                             </template>
                                             <template x-if="!ad.thumbnail_url">
                                                 <span class="text-[10px] text-gray-400" x-text="ad.type"></span>
@@ -293,6 +298,9 @@
                                         </div>
                                         <p class="mt-1 truncate text-gray-700 dark:text-gray-200" x-text="ad.title"></p>
                                         <p class="text-gray-400" x-text="adLine(ad)"></p>
+                                        {{-- The other way round from this screen: it plays with bars, as a file on the list would. --}}
+                                        <p x-show="orientationNote(ad)" x-cloak class="text-amber-600 dark:text-amber-400"
+                                           x-bind:dusk="'channel-ad-orientation-' + ad.id" x-text="orientationNote(ad)"></p>
                                     </div>
                                 </template>
                             </div>

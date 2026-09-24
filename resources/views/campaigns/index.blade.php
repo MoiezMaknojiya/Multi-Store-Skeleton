@@ -43,8 +43,10 @@
                         <td class="px-5 py-4">
                             <div class="flex items-center gap-3">
                                 <div class="w-16 h-10 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                                    {{-- An upright advert is shown whole, not cut to its middle. --}}
                                     <template x-if="item.thumbnail_url">
-                                        <img :src="item.thumbnail_url" :alt="item.name" class="w-full h-full object-cover">
+                                        <img :src="item.thumbnail_url" :alt="item.name" class="w-full h-full"
+                                             x-bind:class="Number(item.height) > Number(item.width) ? 'object-contain' : 'object-cover'">
                                     </template>
                                     <template x-if="!item.thumbnail_url">
                                         <span class="text-[10px] text-gray-400" x-text="item.type"></span>

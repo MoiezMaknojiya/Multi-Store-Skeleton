@@ -304,8 +304,8 @@ so the three can never disagree. **Every key is named in the rules**, because wh
 - **The editor loads the family the moment it is picked** (a `<link>` added to the panel's own page), so the
   stage shows the real face rather than a promise.
 - **A published advert carries its fonts INSIDE the page** (`AdFontEmbedder`, 2026-09-19), as `data:` URLs —
-  never links. The television plays the page in a sandboxed frame and the draft preview is sandboxed too:
-  both have an opaque origin, a browser fetches a font with CORS, and so every font file on our own server
+  never links. The draft preview is sandboxed into an opaque origin, and so is the page on a television no
+  service worker keeps (§15); a browser fetches a font with CORS, and so every font file on our own server
   was refused ("blocked by CORS policy", checked in real Chrome) and the advert fell back to a system face
   on every screen. A `data:` URL is never a CORS request, and needs nothing from any web server. Only what
   the design can show travels: per family, the installed weight a browser would pick for each weight asked
@@ -517,7 +517,7 @@ version so no cache shows an old one. A copy gets its own poster file rather tha
 
 **Draft preview.** `GET /builder/{ad}/preview` (`ad-view` or `ad-update`, checked in the controller; the
 store wall) answers the page the compiler would publish, from the SAVED design, full screen in a new tab —
-with `Content-Security-Policy: sandbox allow-scripts` (it runs in an opaque origin, like the player's frame)
+with `Content-Security-Policy: sandbox allow-scripts` (it runs in an opaque origin, as the player's frame does on a set no worker keeps — §15)
 and `Cache-Control: no-store, private`. Nothing is written.
 
 **Platform listing.** Above the stores, the Ads and Assets tabs gain a shop filter (`?store_id=`); inside a
@@ -625,8 +625,10 @@ A portrait ad is what a menu board, a poster or a one-column price list wants.
 
 **Chosen when the ad is made, fixed afterwards** (owner: "ads banate waqt fix rakho… starting mein hi poch
 lo"). **New ad** on the Ads tab opens a chooser (`new-ad-orientation` modal; the empty gallery's "Build your
-first one" opens the same): two cards, Landscape and Portrait, each a link to `/builder/create?orientation=…`
-(anything but `portrait` reads as landscape — the page is forgiving, the save is not). The editor opens on a
+first one" opens the same), and the **Create** tab is the same choice on a page of its own (`builder.choose`:
+`/builder/create` with no orientation — or one nobody offers, or a list — lands there, so nobody reaches the
+editor without being asked): two cards from `builder/partials/orientation-choice.blade.php`, Landscape and
+Portrait, each a link to `/builder/create?orientation=landscape|portrait`. The editor opens on a
 blank stage of that shape and says so under it ("1080 × 1920 — a portrait screen, a television mounted
 upright"), the first save posts `orientation`, and from then on the column is the truth: `BuilderAdRequest`
 refuses a document whose stage is not that orientation's size — 422 on `document.stage.width` / `height`,
@@ -634,7 +636,8 @@ refuses a document whose stage is not that orientation's size — 422 on `docume
 it is made." — and on an update `orientation` in the payload is not read at all. Why fixed: every element's
 box is in stage pixels, so turning a 1920-wide design into a 1080-wide one is a new design, not a setting —
 and the tools the shops know (Yodeck, OptiSigns, Canva) ask the size up front for the same reason. A **copy**
-keeps the orientation; the examples are landscape.
+keeps the orientation; the examples are landscape, and `builder:examples` leaves alone an ad of an example's
+name that was made upright (its shape is somebody's design) rather than giving it a stage of the other shape.
 
 **Data.** `builder_ads.orientation` string(10) default `landscape` (`BuilderAd::LANDSCAPE` / `PORTRAIT`,
 `ORIENTATIONS` with their labels, `STAGE_SIZES`, `stageWidth()` / `stageHeight()`, `blankDocument($orientation)`).
@@ -650,6 +653,16 @@ the shop's mistake, not a rule to enforce (owner: "woo toh store owner ka masla 
 SAYS it instead of refusing: the playlist page marks a line, or a picker row, whose orientation is not the
 screen's — "Portrait · shows with bars at the sides on this screen" — and every tile and row that names a
 type names the orientation beside it (the holding-picture list, the channel pickers and rows, the library).
+The Channels box's "Show ads" tiles carry the same note, and the holding-picture list names a file the other
+way round from the screen as the form has it — either way — with a note under the list for the one chosen.
+An upright picture is shown **whole** in every list (`object-contain`, never cut to its middle band): the
+playlist rows and picker, the Channels box and its ads, a channel's ads and its Add-ad picker, the library, the
+campaigns and the Ad Builder's shelf.
+
+**Pasting between shapes.** The clipboard is shared between ads. Pasted elements that land wholly off the stage
+— the right half of a landscape ad pasted into a portrait one, or a paste pushed off by its offset — are
+brought onto it together, as near to where they were as fits (`bringOntoStage`); what still touches the stage
+stays where it is, since a design may bleed off an edge on purpose.
 
 **Posters.** The editor captures the stage at its own size, 640 px along the longer edge (`poster.js`), so a
 portrait poster is 360 × 640; the Ads tab keeps its 16:9 tiles and draws a portrait poster inside one, whole
@@ -657,7 +670,7 @@ portrait poster is 360 × 640; the Ads tab keeps its 16:9 tiles and draws a port
 
 **Not changed.** The device manifest (the page fits itself, so `{type: 'html', url, checksum}` is still all a
 television needs), schedules, channels (a channel plays on any screen; its ads say their orientation in the
-pickers), the store wall, `builder:examples`, the draft/publish model and "Show in playlists".
+pickers), the store wall, the draft/publish model and "Show in playlists".
 
 ---
 
@@ -673,8 +686,8 @@ apart again with Ungroup. Groups nest three deep at most — the depth every rea
 says so with **`parentId`** (a group's id; absent or null = the top level). Every element keeps **stage
 coordinates**, whatever it is inside: a group's own box is the bounds of its children (rotated corners
 counted), kept in step by the editor after every change (`syncGroupBounds`) and re-derived by the compiler,
-never trusted; a group's `rotation` is always 0 — turning a group turns its children, each about the group's
-centre, and their angles are what is stored. So nothing in the editor's geometry — snapping, guides, the
+never trusted; a group's `rotation` is always 0 — turning a group turns its children, and their angles are
+what is stored. So nothing in the editor's geometry — snapping, guides, the
 marquee, the frame and its handles, align and distribute — ever has to translate between coordinate spaces,
 and a design with groups is still a flat list the rules, the fonts, the assets and the animations read as
 before. Paint order is the tree: siblings by `z`, a group's children inside its place in the stack;
@@ -684,14 +697,23 @@ valid order. **A group with nothing in it does not exist**: when its last child 
 **The rules (`BuilderAdRequest`).** `parentId` is a string of at most 40 characters; the elements list is
 checked as a tree before anything else (`bail`): a parent must be a group in the same document, never the
 element itself or one of its own descendants ("A group cannot be inside itself."), and no element may have
-more than `MAX_GROUP_DEPTH` (3) group ancestors ("Groups can be three deep at most."). Groups count towards
-the 200 elements.
+more than `MAX_GROUP_DEPTH` (3) group ancestors ("Groups can be three deep at most."). Every element's parent
+is checked before any chain is climbed — an ancestor's parent that is a list once answered 500 — and element
+ids are `distinct`: a group is named by its id, and two answering to one made a circle the climb could not
+see. Groups count towards the 200 elements.
 
 **The page (`AdCompiler`).** The elements are rendered as a tree from the top level down — anything a walk
 from the top never reaches is not written — and a group is one more `.ad-el` (its own `data-anim-id`, box,
-opacity, z-index and blend) whose `.ad-anim` holds its children, each positioned against the group's own
-origin (`left = x − group.x`). A positioned box with a z-index is a stacking context, so the children's
-z-indexes only order them among themselves. A hidden group takes its whole subtree off the page, and the
+opacity and blend) whose `.ad-anim` holds its children, each positioned against the group's own origin
+(`left = x − group.x`). **A group that neither fades, blends nor moves is written with no z-index** — "pass
+through", in Figma's word: it is then no layer of its own, its children take their places in the stage's
+stacking order (their `z` is the tree's pre-order, so the order is the same) and a child's blend mode mixes
+with what is behind the group. One that fades, blends or moves is a layer of its own (a z-index: a stacking
+context, so its children's z-indexes order them among themselves), as it must be; the editor's `boxCss` draws
+both the same way (`groupIsolates`). Each child keeps its own animations inside a group — an entrance holds it
+hidden until it plays (`ad-pending`), a Ken Burns picture zooms inside its own frame — and a group's own Ken
+Burns is never clipped, on the stage or the page: what moves inside it would be cut at its edge. A hidden
+group takes its whole subtree off the page, and the
 fonts, animations and assets are collected from what was actually written. The runtime needs no change:
 `run()` already finds every `[data-anim-id]` and each one's FIRST `.ad-anim` — a group's own wrapper — so a
 group's entrance, loop and exit move its children as one, and a child's own animations run inside it.
@@ -700,30 +722,47 @@ group's entrance, loop and exit move its children as one, and a child's own anim
 - **Selecting.** A click on anything inside a group selects the group (its top-most ancestor); a marquee
   works at the current level too. **Double-click** a group to enter it (`editingGroupId`; Enter does the
   same for a selected group): clicks then select its direct children, a double-click on a text inside edits
-  it, and Esc (or a click on empty stage) steps back out. Clicking a child's row in the Layers panel enters
-  its group for you. A locked or hidden group locks or hides everything in it (`isLocked`, `isShown` climb
-  the ancestors).
+  it, and Esc (or a click on empty stage) steps back out. The group being worked in is outlined, dashed, with
+  its name ("Inside Group 1 · Esc to leave"). Its own box where it holds nothing is the empty stage of that
+  level — a press there starts a marquee over its children, never a jump out of it — and a double-click on a
+  group where it holds nothing enters it with nothing chosen. Shift and Ctrl add or take away within one level
+  only: anything of another level starts a fresh selection. Clicking — or right-clicking — a child's row in
+  the Layers panel enters its group for you and targets that very element. A locked or hidden group locks or
+  hides everything in it (`isLocked`, `isShown` climb the ancestors). Something added from the Add panel goes
+  to the top level, and the editor leaves the group being worked in.
 - **Group / Ungroup.** Ctrl+G (the panel's and the menu's *Group*) makes a group of two or more selected
-  siblings, placed where the frontmost of them was and named "Group"; Ctrl+Shift+G (*Ungroup*) hands a
-  group's children back to its parent at its place and selects them. Either is refused with a toast when it
-  would nest deeper than three.
-- **As one.** Moving, nudging, aligning and distributing move a group's whole subtree by the same shift.
-  **Resizing** a group scales what is inside about the group's box — from a corner the shape is kept and
-  text sizes scale with it (Canva's rule); from a side the boxes stretch and type stays its size.
-  **Rotating** a group turns every element inside about the group's centre and adds the angle to each one's
-  own, then the group's box is re-derived (so a turned group's frame is the box around its turned
-  children — the frame does not turn). Opacity, blend and the Animation tab belong to the group itself.
-  Duplicate, Copy, Cut and Paste carry a group's whole subtree with fresh ids (the clipboard too); Delete
+  siblings, placed where the frontmost of them was and named "Group N" (the next free number); Ctrl+Shift+G
+  (*Ungroup*) hands a group's children back to its parent at its place and selects them, keeping what was on
+  the glass as it was: a hidden group's children come back hidden, its opacity is multiplied into each, its
+  blend is given to those that had none — and its animation goes with it (a toast says so; Undo brings it
+  back). Either is refused with a toast when it would nest deeper than three.
+- **As one.** Moving, nudging, aligning and distributing move a group's whole subtree by the same shift;
+  a move snaps to neither the group's own ancestors nor anything hidden. **Resizing** a group scales what is
+  inside about the group's box — from a corner the shape is kept and the look scales with it (type, spacing,
+  corners, frames, shadows, a line's weight: Canva's rule); from a side, or a corner with Shift, the boxes
+  stretch and the look stays. Each child's centre moves with the scale and its own sides take it along the
+  way they point, so a child turned 90° that the group is widened grows taller, as it looks. **Rotating** a
+  group turns every element inside about the centroid of their centres — a point the turn leaves where it
+  was, so turning back by the same angle puts everything back (the centre of the group's box would not do:
+  the box around turned children is another box) — and adds the angle to each one's own, then the group's
+  box is re-derived (so a turned group's frame is the box around its turned children — the frame does not
+  turn). Coordinates are kept to two decimals. Opacity, blend and the Animation tab belong to the group
+  itself. Duplicate, Copy, Cut and Paste carry a group's whole subtree with fresh ids (the clipboard too) —
+  unlocked at the top, a lock inside kept — and count every element a copy brings against the 200; Delete
   takes it.
 - **Layers panel.** A group is a folder row with a chevron to fold it, its children indented beneath; drag a
   row above or below another to reorder it AND to put it beside that row (same parent), or onto a group's
-  middle to put it inside — a group can never be dropped into itself or deeper than three.
+  middle to put it inside. Just under an OPEN group's row is the top of what it holds (its first child's row
+  is the next one down), so a drop there goes inside it, in front — a group can never be dropped into itself
+  or deeper than three.
 - **The panel.** One group selected: its name, X/Y/W/H (no rotation), opacity, blend, alignment, how many
   elements it holds, *Ungroup*, and the Animation tab. Several selected: *Group* beside Duplicate and Delete.
 
 **Tests.** Pest: every group key comes back from a save; the tree rules (a parent that is not a group, a
-missing one, self, a cycle, four deep — 422 never 500; the attack suite has the same); the compiler's
-wrapper, origin offset, hidden subtree, unreachable elements, group animations in the page's JSON. Dusk
+missing one, self, a cycle, four deep, an ancestor whose parent is a list or a number, two elements with one
+id — 422 never 500; the attack suite has the same); the compiler's wrapper, origin offset, hidden subtree,
+unreachable elements, group animations in the page's JSON, a child's entrance and Ken Burns inside a group,
+and a pass-through group written with no z-index while a faded, blended or animated one keeps its own. Dusk
 (`AdGroupsFlowTest`): three texts grouped from the panel, the folder in Layers, the group dragged (children
 follow), resized from a corner (children and their type scale), rotated (children turn), entered with a
 double-click and a child edited, left with Esc, duplicated, ungrouped, and a group animation previewed and
@@ -761,78 +800,137 @@ draws the stroke the way the page will, and the page carries it.
 
 ## 15. Offline playback — the player as a progressive web app (owner, 2026-09-23: "screen ko Offline cache bhi karo, progressive banao")
 
-**What it is.** A television keeps playing when the shop's internet drops: the last playlist it was given,
-every file on it — pictures, videos and Ad Builder pages with what they hold — from a cache on the set
-itself, and back to live the moment the line returns. Nothing on the television says so (owner's rule: the
-panel says a screen is offline, from its missed heartbeats — `Screen::OFFLINE_AFTER_MINUTES` — and the TV
-just keeps working). It works wherever the browser has a service worker (every Chromium-based television
-browser and Android box, Chrome and Edge on a stick); anywhere else the player is exactly what it was —
-online only — because every step below is behind `'serviceWorker' in navigator`.
+**What it is.** A television keeps playing when the shop's internet drops: what its playlist says for every
+moment of the next three days — dayparts, dates and all — from a cache on the set itself, every file of it
+(pictures, videos, Ad Builder pages and what those pages load), and back to live the moment the line returns.
+Nothing on the television says so (owner's rule: the panel says a screen is offline, from its missed
+heartbeats — `Screen::OFFLINE_AFTER_MINUTES` — and the TV just keeps working). It works wherever the browser
+has a service worker (every Chromium-based television browser and Android box, Chrome and Edge on a stick);
+anywhere else the player is exactly what it was — online only — because every step below is behind
+`'serviceWorker' in navigator`.
 
-**Three pieces.**
+**Four pieces.**
 
 1. **The service worker, `public/player-sw.js`** (plain ES5 like the ad runtime, never built by Vite, so its
    address never changes and the browser can update it in place; registered by the player at scope
-   `/player`, so it controls the player page and the frames inside it and nothing of the panel opened in
-   the same browser). It touches only what the player needs and hands everything else to the network:
-   - **`/device/playlist` — network first, the last answer kept.** The network is tried with a short
-     patience (`MANIFEST_TIMEOUT_MS`, 8 s); a good answer is kept as the last manifest; when the network
-     fails, times out or answers 5xx, the kept one is served with the header `X-Signage-Cached: 1`, so the
-     player knows it is working from memory. A refusal (401: the screen was removed) goes through untouched
-     — it is the server's word. `/device/register`, `/device/pair-status` and `/device/heartbeat` are never
-     cached: a heartbeat that cannot get out is exactly what tells the panel the screen is offline.
-   - **Media — cache first, by versioned address.** Every file the manifest names is asked for with its
-     `checksum` in the query (`?c=…`, appended by the player's `assetUrl()`, the one place a file's address is
-     decided), so a republished ad page or a replaced file is a new address and the old copy is never shown
-     stale; `/storage/*` (and Dusk's `/dusk-storage/*`), the pictures and videos inside an Ad Builder page,
-     and the ad runtime (`/ad-runtime/*`, matched ignoring its version query) are served from the cache when
-     they are there and fetched and kept — whole — when they are not. A slice the browser asks for (a
-     video's range request) is cut from the cached whole as a 206; a partial answer from the network is
-     never kept.
-   - **The player itself — network first, cache as fallback.** `/player` and its built assets under
-     `/build/` are kept as they load, so a set rebooting with no internet still gets its page; the assets
-     carry a hash in their name, so a new deploy simply loads new ones and the old are pruned.
-   - **Warming and pruning, on the player's word.** After every LIVE manifest the player posts the set of
-     addresses the screen may need — every file on the playlist whether due now or not (`assets[]`, sent
-     for exactly this), the holding picture, the channel ads, the network adverts, the ad pages and what
-     those pages load (read out of the fetched page) — and the worker fetches what it lacks, one after
-     another, and drops what is no longer named. So a lunch menu scheduled for noon is on the set at nine,
-     and a file taken off the playlist does not sit in the cache for ever. The worker answers `warmed`
-     with how many it could not fetch; the page keeps that on `<body data-warmed data-warm-missing>` for
-     whoever checks a set.
+   `/player`, so it controls the player page and the frames inside it and nothing of the panel opened in the
+   same browser). It keeps four caches — `signage-shell`, `signage-manifest`, `signage-media`, `signage-parts`
+   — touches only what the player needs, and hands everything else to the network:
+   - **`/device/playlist` — network first, one kept per screen.** The network is tried with a short patience
+     (`MANIFEST_TIMEOUT_MS`, 8 s); a good answer is kept under a digest of the token the request carried
+     (never the token itself), so a set paired again, or a second player on the same box, is never handed
+     another screen's playlist. A refusal (401: the screen was removed) goes through untouched — it is the
+     server's word. Only a server that cannot answer counts as unreachable — no network, a timeout, a 5xx, or
+     an answer that is not JSON (a captive portal's or a hotel's login page answers 200 with HTML, and keeping
+     it would throw the last real playlist away) — and then the kept one is served with `X-Signage-Cached: 1`.
+     An answer that arrives after the patience ran out is kept all the same, for the next poll that cannot
+     wait either. `/device/register`, `/device/pair-status` and `/device/heartbeat` are never cached: a
+     heartbeat that cannot get out is exactly what tells the panel the screen is offline.
+   - **Files — cache first, by versioned address, matched exactly.** Every file the player plays is asked for
+     with its `checksum` in the query (`?c=…`, appended by `assetUrl()`, the one place a file's address is
+     decided), and the ad runtime with its own content version (`?v=`), so a republished page, a replaced
+     file or a deploy's new runtime is a new address — and the query is never ignored when matching, or a
+     deploy's runtime would never reach a set. `/storage/*` (Dusk's `/dusk-storage/*`) and `/ad-runtime/*`
+     are served from the cache when there and fetched and kept — whole — when not; a slice the browser asks
+     for (a video's range request) is cut from the cached whole as a 206, and a partial answer from the
+     network is never kept. With no line and no copy of the version asked for, the same file's previous
+     version (matched ignoring the query) plays instead of nothing.
+   - **Ad pages play inside the worker's scope.** The frame opens `/player/page?src=<the page's address>` —
+     no route on the server: the worker answers it, from the cache like any file, with headers of its own
+     (`frame-ancestors 'self'`, and no form, base, plugin, frame or request of its own), never the server's
+     `Content-Security-Policy: sandbox`, which would give the frame an origin of its own. The page is then
+     one of the worker's own documents, so what it loads comes from the cache too — on every browser that
+     has a worker at all. (The first design put the page in the frame as `srcdoc`; a `srcdoc` frame is a
+     worker's client only from Chrome 135 — the `ServiceWorkerSrcdocSupport` launch — which leaves out the
+     televisions the player is for: Samsung's sets run Chromium 94, 108 and 120, and Android boxes a frozen
+     WebView.) A frame a worker serves cannot have an origin of its own (a sandboxed frame without
+     `allow-same-origin` is controlled by no worker), so it is `sandbox="allow-scripts allow-same-origin"`;
+     the page is our own compiled output and carries its own policy (4, below). With no worker the frame
+     opens the page straight from the server as `sandbox="allow-scripts"`, as before. Either way the player
+     asks for the page first, so one that cannot be had — no line and no copy — is skipped like any broken
+     file, never the browser's error page on the glass; the frame says which page it holds in `data-src`.
+   - **The shell — the page and its files kept together, or not at all.** `/player` is network first (the
+     same patience), so a deploy reaches a set that is online; a good page replaces the kept one only once
+     every built file it names — scripts, styles, module preloads, read out of the page — is kept too, and
+     built files no kept page names are dropped. A set that reboots with no line therefore always has a page
+     whose scripts are there. The worker's install does the same for the very first visit, whose page loaded
+     before the worker existed. And the page carries a watchdog: a player whose script never ran (a deploy's
+     new script that could not be fetched, a browser that choked on it) is reloaded after a minute, and keeps
+     being reloaded until the line brings a working copy — nobody reloads a television.
+   - **Warming — one queue, most needed first, in pieces.** After every live manifest the player names the
+     files the next days may play, most needed first (3, below). However many times it is told, and however
+     many player tabs it serves, the worker runs ONE warm-up: one file at a time, the list read again after
+     each (a manifest that changed what is due reorders what is left), then the prune. A file comes
+     `PART_BYTES` (4 MB) at a time by range requests, each piece kept in `signage-parts` as it lands, so a
+     download that a reboot, a deploy or a dropped line cut short carries on where it stopped instead of
+     starting again (a 250 MB video on a slow line would otherwise never finish); a server that ignores
+     ranges sends the file whole, which is taken as it is. Each piece has a patience (`PART_TIMEOUT_MS`,
+     2 min; a whole answer `WHOLE_TIMEOUT_MS`), a piece with bytes missing or a file whose size changed
+     between pieces is started again, and the pieces are joined — read back from the cache, never held in
+     memory — into the one whole answer kept. A message's event is let go after `HOLD_MS` (4 min), since
+     Chrome ends a worker whose event is still open after five, and the downloads carry on meanwhile; the
+     player's next message holds it again. Only files and the runtime are ever fetched — nothing else a page
+     might name, a panel's address included — and never with cookies. The worker answers `warmed` with how
+     many it could not have; the page keeps that on `<body data-warmed data-warm-missing>`.
+   - **Pruning, after the warm-up.** What the player no longer names goes — except a file's older version,
+     kept until the version named is in (with no line, it is what plays in its place) — and so do the pieces
+     of a file no longer named.
    - The worker installs with `skipWaiting` and `clients.claim`, and the player asks for an update once an
      hour (`registration.update()`), because a television never reloads its page on its own. When a worker
-     takes a page over after it loaded (the first visit), the player asks for the playlist again through
-     it, so the worker holds a copy before any line drops.
-2. **The manifest** (`DeviceController::playlist`) says a little more: each file item carries `expires_at`
-   (the file's own expiry, or null), the screen's holding picture travels as `fallback` whenever the shop
-   set one and it is still live — even while items are due — and `assets[]` lists every file the screen may
-   need (`assetsFor()`: each line's file, every ad of every channel on the playlist, the holding picture,
-   the network adverts; never a draft), each as address, cache key and type. The fingerprint (`version`)
-   is moved by none of this: it is a change to what plays that must.
-3. **The player** (`resources/js/player.js`), which registers the worker, versions every address, warms and
-   prunes, and plays from a cached manifest the way the owner decided (`fromMemory()`): what has not
-   expired plays on ("else last content"); once **everything** in it has expired, the holding picture if
-   there is one, otherwise black — the same answer the server would have given. The clock it judges expiry
-   by is the set's own, corrected by the offset between the last live manifest's `server_time` and the
-   set's clock at that moment, so a box with a wrong clock keeps the right hours for as long as it is
-   offline. Dayparts and schedule rules are resolved by the server alone (`ScheduleResolver`) and are not
-   re-judged offline — the owner's accepted limit. A cached manifest whose filtering changes (a file
-   expiring mid-outage) is re-rendered even though its `version` did not move; `<body data-source>` says
-   `live` or `cache`. The `online` event asks for the playlist at once rather than at the next poll.
+     takes a page over after it loaded (the first visit), the player asks for the playlist again through it,
+     so the worker holds a copy before any line drops. The player also asks the browser to keep its storage
+     (`navigator.storage.persist()`), so a disk running low does not clear the one thing an offline set has.
+2. **The manifest** (`DeviceController::playlist`, one instant for all of it) says a little more than what
+   plays now: each file item carries `expires_at`; the holding picture travels as `fallback` whenever the
+   shop set one and it is still live, even while items are due; and **`timeline`** says what the screen shows
+   at every moment its answer changes over the next `TIMELINE_HOURS` (72) — a daypart opening or closing, a
+   new local day, a file starting or expiring, a campaign's window (`ScheduleResolver::changePoints`,
+   `NetworkAdResolver::changePoints`) — each worked out by the very resolver that answers online
+   (`resolveLoaded()` on the playlist loaded once; `NetworkAdResolver::breaksAt()`, one query per local
+   date), and kept only when it differs from the one before. Entries name their lines by key into one
+   `lines` map, so a line is sent once however many entries carry it: a 30-line, four-daypart menu board is
+   about 16 KB, 2 KB gzipped, and costs some 40 ms. The timeline is also every file the next days may play —
+   the player warms from it, and nothing further off reaches the device (a file outside its window never
+   does, rule 02); the `assets[]` list the first design sent is gone. The `version` is moved by none of
+   this: it is a change to what plays now that must. Each file's `checksum` moves only when its bytes may
+   have — every screen downloads the file again when it does: a picture's or a video's is the file itself
+   (id, size, path — every upload is a new file with a name of its own, so a new title or new dates cost no
+   download); an ad page, rewritten in place on every publish, adds its row's stamp; a channel ad's is its
+   file's own, so one file on a playlist and in a channel is one copy on the set; a campaign's is its file.
+3. **The player** (`resources/js/player.js`) registers the worker, versions every address, and after every
+   live manifest names to the worker, most needed first: what is due now (with what those ad pages load —
+   read by the browser's own parser, once per page version, its attributes and styles only, so words a
+   person typed into an ad are never taken for an address), the holding picture, the network adverts, then
+   every line the timeline brings later on. From a cached manifest it plays `fromMemory()`: the timeline's
+   entry for now (past its end, the last one), then any file that has expired since dropped, and when
+   nothing is left the holding picture, then black — the answer the server would have given. "Now" is the
+   set's clock corrected by the offset from the last live `server_time` — kept across reboots — and never
+   earlier than the moment the manifest was made, so a box whose clock went back to 2020 after a power cut
+   keeps playing the right day. The loop restarts only when what would be SHOWN changes, compared the same
+   way live or from memory: the line dropping or coming back with the same things due restarts nothing (a
+   video is not cut, a channel's rotation is not sent back to its start), while a new timeline entry
+   (lunch has begun) or a file expiring mid-outage does. What is on the glass and no longer on the list is
+   taken off at once when playing from memory, or once it has expired — black rather than yesterday's price
+   while the next item loads, or fails to with no line; online, the next item is a moment away and cutting
+   to black for that moment would be a flash. `<body data-source>` says `live` or `cache`, and from memory
+   `data-entry` and `data-dropped` say which entry and which lines it dropped. The `online` event asks for
+   the playlist at once rather than at the next poll.
+4. **The page's own policy** (`AdCompiler::contentSecurityPolicy`), first thing in its head after the
+   character set: `default-src 'none'`; scripts only its own inline ones, by their SHA-256 digests, and —
+   for a page that moves — the runtime's own folder (`/ad-runtime/`), nowhere else on any origin; pictures,
+   videos and fonts from the app's own origins (and `data:`, `blob:`); `connect-src`, `frame-src`,
+   `object-src`, `base-uri` and `form-action` all `'none'`. The compiler already writes nothing a person
+   typed as code (§9, the attack suite); this is the wall behind that wall, so a page played same-origin
+   with the player that somehow carried a script would run none of it and reach nothing. A page published
+   before the policy existed gets it — and whatever else the compiler has learnt since, the group fixes of
+   §13 among them — from **`php artisan builder:recompile`** (`--ad=` for some): each published page written
+   again from the version on the screens, never the draft (no screen is given anything its owner has not
+   published), and its row stamped so the screens fetch it anew; an ad published before versions were kept
+   (2026-09-21) is named and left for somebody to publish again from the editor.
 
-**The frame changes two things.** An Ad Builder page is no longer navigated to: the player fetches it
-(through the worker, which keeps it under its versioned address) and puts it in the frame as `srcdoc`, the
-frame remembering where it came from in `data-src` — so the frame's own document is the cached page even
-with no line, and the worker never needs a scope wider than the player. And the frame is
-`sandbox="allow-scripts allow-same-origin"` now, where it was `allow-scripts` alone: a frame with an
-opaque origin is controlled by no service worker (Chromium skips the worker for sandboxed frames without
-`allow-same-origin`), so the pictures, videos and scripts inside the page could never come from the cache.
-The page is first-party output that the compiler writes from validated data with nothing a person typed
-ever written as code (§9, the attack suite), so a same-origin frame is the trade every web-based player
-makes; the sandbox still forbids forms, popups and navigating the television away, the fonts stay embedded
-(§7a), and the published file opened on its own is still served under `Content-Security-Policy: sandbox
-allow-scripts` by nginx — that header never reaches a `srcdoc` document.
+**Text that is not UTF-8** is refused at the door for every route, the device API's included
+(`RejectMalformedText`, a 400): a browser never sends it, and it passed every `string` rule and then broke
+whatever turned it into JSON, a MySQL row or a limiter's key.
 
 **The web-app manifest.** `/player.webmanifest` (a route, so it carries the app's own name: `start_url`
 `/player`, `display: fullscreen`, `orientation: any`, a dark theme, icons drawn by
@@ -841,14 +939,25 @@ television or Android box can "install" the player and open it full screen with 
 progressive part of the request. nginx serves `player-sw.js` with `Cache-Control: no-cache`, so a set
 asking for a new worker is given it.
 
-**Tests.** Pest (`OfflineManifestTest`): each item's `expires_at`, the fallback travelling alongside due
-items (and gone when it has expired or was never set), `assets[]` naming every file whether due or not —
-the picture scheduled for next year, every channel ad, the holding picture, the network adverts, never a
-draft — and none of it moving the version; the web-app manifest route; the sweep knows it as a public door.
-Dusk (`OfflinePlayerTest`): a paired television plays a two-picture playlist; the worker takes the page
-over and reports the whole playlist warmed (the test reads the media cache itself); the server is put into
-maintenance — every request a 503, which is what an unreachable server looks like to the worker's
-network-first paths — and the set plays on from memory (the picture on the glass really loaded, with a
-server that answers nothing); the first picture expires and never comes back; the second expires and the
-holding picture takes the glass; the set is rebooted with no line and still has its page and its holding
-picture; maintenance ends and the set is live again on the server's own answer.
+**Tests.** Pest: `OfflineManifestTest` — each item's `expires_at`, the fallback travelling alongside due
+items (and gone when it has expired or was never set), the timeline naming every file the next days may play
+and nothing further off (tomorrow's picture in, next year's out, never a draft), the network advert under the
+campaign's own key, none of it moving the version; the cache keys — a picture and a video keep theirs through
+a new title and new dates, a new file moves it, a channel ad's is its file's (one copy on the set), a
+campaign's survives a new name; the web-app manifest route. `OfflineTimelineTest` — dayparts over three days,
+the first entry now, the holding picture in the dark hours, expiry and start instants, an overnight window
+with a closed Friday, a channel's ads day by day, campaign windows, thirty lines staying small, the version
+unmoved. `AdPagePolicyTest` — the policy's place, every inline script by its digest, scripts only from the
+runtime's folder (a still page from nowhere), nothing reachable, typed words never the policy.
+`RecompilePublishedAdsTest` — the published version written, never the draft, the row stamped, the rest left
+alone. `InputAbuseAttackTest` — text that is not UTF-8 anywhere a request carries it: 400, never 500.
+Dusk (`OfflinePlayerTest`): (1) a paired television's server is put into maintenance — every request a 503,
+which the worker's network-first paths treat as unreachable — and the set plays on from memory, its first
+picture expiring and never coming back, the holding picture after the second, through a reboot, until
+maintenance ends; (2) the line cut for real — the television served by a second server of its own (port 8002,
+`tests/Browser/support/range-router.php` answering range requests the way nginx does, since PHP's built-in
+server sends every file whole), which is killed, so nothing answers at all: live, everything is warmed and a
+file bigger than two pieces arrives in three and is kept whole with no piece left; the ad page plays in a frame
+opened inside the worker's scope; after the cut a fresh frame shows the page with its picture drawn and its
+runtime running, from the cache alone; a picture whose time comes while the line is down comes on (the
+timeline); the set reboots with no line and plays the page again; the server returns and the set is live.

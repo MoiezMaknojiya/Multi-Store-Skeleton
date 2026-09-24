@@ -288,6 +288,22 @@ test('a document of the wrong shape is refused with a 422, never a 500', functio
     'a line style nobody offers' => [['document' => attackDocument([['id' => 'a', 'type' => 'shape', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'style' => ['shape' => 'line', 'lineStyle' => 'wavy']]])]],
     'a parent that is a list' => [['document' => attackDocument([['id' => 'a', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => ['g']]])]],
     'a parent that is a number' => [['document' => attackDocument([['id' => 'a', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 7]])]],
+    // The element's own parent is a real group; the GROUP's parent is a list — read on the climb up.
+    'a parent whose own parent is a list' => [['document' => attackDocument([
+        ['id' => 'b', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 10, 'h' => 10, 'parentId' => 'g1'],
+        ['id' => 'g1', 'type' => 'group', 'x' => 0, 'y' => 0, 'w' => 10, 'h' => 10, 'parentId' => ['x']],
+    ])]],
+    'a parent whose own parent is a number' => [['document' => attackDocument([
+        ['id' => 'b', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 10, 'h' => 10, 'parentId' => 'g1'],
+        ['id' => 'g1', 'type' => 'group', 'x' => 0, 'y' => 0, 'w' => 10, 'h' => 10, 'parentId' => 12],
+    ])]],
+    // A circle (g in h, h in g) that a second "g" hides from the climb, which knows one parent per id.
+    'two elements with one id' => [['document' => attackDocument([
+        ['id' => 'x', 'type' => 'group', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1],
+        ['id' => 'g', 'type' => 'group', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 'h'],
+        ['id' => 'h', 'type' => 'group', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 'g'],
+        ['id' => 'g', 'type' => 'group', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 'x'],
+    ])]],
     'a parent that is nowhere' => [['document' => attackDocument([['id' => 'a', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 'ghost']])]],
     'an element inside itself' => [['document' => attackDocument([['id' => 'g', 'type' => 'group', 'x' => 0, 'y' => 0, 'w' => 1, 'h' => 1, 'parentId' => 'g']])]],
     'groups in a circle' => [['document' => attackDocument([

@@ -68,8 +68,10 @@
                              x-bind:dusk="'asset-card-' + item.id">
 
                             <div class="aspect-video bg-gray-100 dark:bg-gray-900">
+                                {{-- An upright picture is shown whole, not cut to its middle. --}}
                                 <img x-show="item.thumbnail_url" x-cloak x-bind:src="item.thumbnail_url" alt=""
-                                     class="h-full w-full object-cover" />
+                                     class="h-full w-full"
+                                     x-bind:class="Number(item.height) > Number(item.width) ? 'object-contain' : 'object-cover'" />
                                 <span x-show="!item.thumbnail_url" x-cloak
                                       class="flex h-full w-full items-center justify-center text-xs text-muted-soft"
                                       x-text="item.kind === 'video' ? 'Video' : 'Image'"></span>

@@ -169,7 +169,7 @@ class AdBuilderFlowTest extends DuskTestCase
                 ->assertSeeIn('@asset-usage-'.$asset->id, 'Not used yet');
 
             /* ── 2. Used in an ad, beside a shape ───────────────────────── */
-            $browser->visit('/builder/create');
+            $browser->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
             $browser->waitFor('@ad-stage');
 
@@ -344,8 +344,8 @@ class AdBuilderFlowTest extends DuskTestCase
             /* ── 6. The television plays it ─────────────────────────────── */
             $tv->waitUntil('!!document.querySelector("#layer-a iframe, #layer-b iframe")', 45);
 
-            // The page is fetched through the worker and put in the frame as srcdoc (docs §15); the frame
-            // remembers where it came from.
+            // The frame opens the page inside the worker's scope when a worker keeps the set, and straight from
+            // the server when none does (docs §15); either way it says which page it holds.
             $source = $tv->script('return document.querySelector("#layer-a iframe, #layer-b iframe").dataset.src;')[0];
             $this->assertStringContainsString('/builder/', $source, 'the frame is showing the published page');
             $tv->waitUntilMissingText('No content');

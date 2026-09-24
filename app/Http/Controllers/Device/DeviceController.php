@@ -11,6 +11,7 @@ use App\Models\Screen;
 use App\Services\DevicePairing;
 use App\Services\NetworkAdResolver;
 use App\Services\ScheduleResolver;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -21,6 +22,12 @@ use Illuminate\Support\Collection;
  */
 class DeviceController extends Controller
 {
+    /**
+     * How far ahead a manifest says what the screen should show (docs/AD-BUILDER-SPEC.md §15): a weekend
+     * with the shop's line down still follows its dayparts; after that, the last answer plays on.
+     */
+    public const TIMELINE_HOURS = 72;
+
     public function __construct(private readonly DevicePairing $pairing) {}
 
     /**
@@ -73,19 +80,72 @@ class DeviceController extends Controller
     {
         $screen = $request->attributes->get('screen');
 
+        // ONE instant answers the whole manifest — the items, the break, the timeline and server_time.
+        $now = CarbonImmutable::now();
+
         // The whole schedule — each file's own window and each item's rules — is
         // resolved HERE, not on the TV. A cheap box with a wrong clock still shows
         // the right thing, and nothing outside its window is even sent to the device.
         // This is also what makes a television switched on at two in the afternoon
         // show the two-o'clock playlist: it asks, and the answer is for right now.
-        $resolved = $resolver->resolve($screen);
+        $playlist = $resolver->load($screen);
+        $items = $this->itemsFor($resolver->resolveLoaded($screen, $playlist, $now));
 
+        // The network advertising break, if this screen carries any. Sent WITH the
+        // playlist rather than fetched separately: the television already asks this
+        // question every thirty seconds, and a second poll would be a second thing
+        // to go wrong on a cheap box.
+        $adBreak = $ads->breakFor($screen, $now);
+
+        // The holding picture travels alongside the items too (docs/AD-BUILDER-SPEC.md
+        // §15): a television working from a cached manifest, once everything in it has
+        // expired, falls back to it the way the server would have.
+        $fallback = $screen->defaultMedia;
+        $fallback = $fallback?->isPlayableNow($now) ? $this->manifestItem(
+            0, $fallback, $fallback->duration_seconds ?: PlaylistItem::DEFAULT_IMAGE_SECONDS
+        ) : null;
+
+        return response()->json([
+            'screen' => [
+                'id' => $screen->id,
+                'name' => $screen->name,
+                'orientation' => $screen->orientation,
+            ],
+            'server_time' => $now->toIso8601String(),
+            'blank' => $items['blank'],
+            'version' => $this->playlistVersion($screen, $items['items'], $items['blank'], $adBreak),
+            'items' => $items['items'],
+            'fallback' => $fallback,
+            'ad_break' => [
+                // Counted from the moment the player started, not from the clock —
+                // the owner's choice, so two shops that booted at different times do
+                // not cut to advertising at the same instant.
+                'every_seconds' => Campaign::breakEverySeconds(),
+                'items' => $adBreak->map(fn (Campaign $campaign) => $this->campaignItem($campaign))->values()->all(),
+            ],
+            // What this screen should show at every moment its answer changes over the next few days, so a
+            // television whose line drops keeps following its dayparts and dates from memory (§15) — and so
+            // it knows every file those days may play, to hold before the line goes, and nothing further off:
+            // a file outside its window never reaches the device. Moved by none of the version: it is a change
+            // to what plays NOW that must.
+            'timeline' => $this->timeline($screen, $playlist, $now, $resolver, $ads),
+        ]);
+    }
+
+    /**
+     * The items a resolved answer puts on the screen, and whether it is dark.
+     *
+     * @param  array{blank: bool, items: Collection<int, PlaylistItem>, fallback: ?Media}  $resolved
+     * @return array{items: list<array<string, mixed>>, blank: bool}
+     */
+    private function itemsFor(array $resolved): array
+    {
         $items = $resolved['items']
             ->map(fn (PlaylistItem $item) => $item->isChannel()
                 ? $this->channelEntry($item)
                 : $this->manifestItem(
                     $item->id, $item->media, $item->duration_seconds ?? PlaylistItem::DEFAULT_IMAGE_SECONDS
-                ))->all();
+                ))->values()->all();
 
         // Nothing due: the shop's own holding picture rather than a black rectangle
         // in the middle of the afternoon. It goes out as an ordinary item, so the
@@ -99,49 +159,92 @@ class DeviceController extends Controller
             )];
         }
 
-        // The network advertising break, if this screen carries any. Sent WITH the
-        // playlist rather than fetched separately: the television already asks this
-        // question every thirty seconds, and a second poll would be a second thing
-        // to go wrong on a cheap box.
-        $adBreak = $ads->breakFor($screen);
+        return ['items' => $items, 'blank' => $resolved['blank']];
+    }
 
-        // The holding picture travels alongside the items too (docs/AD-BUILDER-SPEC.md
-        // §15): a television working from a cached manifest, once everything in it has
-        // expired, falls back to it the way the server would have.
-        $fallback = $screen->defaultMedia;
-        $fallback = $fallback?->isPlayableNow() ? $this->manifestItem(
-            0, $fallback, $fallback->duration_seconds ?: PlaylistItem::DEFAULT_IMAGE_SECONDS
-        ) : null;
+    /**
+     * The next TIMELINE_HOURS of this screen, from memory's point of view (docs/AD-BUILDER-SPEC.md §15):
+     * the answer at now and at every moment it can change after — a daypart opening or closing, a new day,
+     * a file starting or expiring, a campaign's window — each only when it differs from the one before.
+     *
+     * Entries name their items by key into one `lines` map, so the same line is sent once however many
+     * entries carry it: a menu board changing four times a day stays a few kilobytes, gzipped.
+     *
+     * @param  Collection<int, PlaylistItem>  $playlist
+     * @return array{until: string, entries: list<array<string, mixed>>, lines: array<string, array<string, mixed>>}
+     */
+    private function timeline(Screen $screen, Collection $playlist, CarbonImmutable $now, ScheduleResolver $resolver, NetworkAdResolver $ads): array
+    {
+        $until = $now->addHours(self::TIMELINE_HOURS);
 
-        return response()->json([
-            'screen' => [
-                'id' => $screen->id,
-                'name' => $screen->name,
-                'orientation' => $screen->orientation,
-            ],
-            'server_time' => now()->toIso8601String(),
-            'blank' => $resolved['blank'],
-            'version' => $this->playlistVersion($screen, $items, $resolved['blank'], $adBreak),
-            'items' => $items,
-            'fallback' => $fallback,
-            // Every file this screen may need, due now or not, so a set can hold the whole
-            // playlist before the internet goes — and drop what is no longer on it (§15).
-            'assets' => $this->assetsFor($screen, $adBreak),
-            'ad_break' => [
-                // Counted from the moment the player started, not from the clock —
-                // the owner's choice, so two shops that booted at different times do
-                // not cut to advertising at the same instant.
-                'every_seconds' => Campaign::breakEverySeconds(),
-                'items' => $adBreak->map(fn (Campaign $campaign) => [
-                    'id' => 'c'.$campaign->id,
-                    'type' => $campaign->type,
-                    'url' => $campaign->url,
-                    'checksum' => $campaign->cacheKey(),
-                    'duration' => $campaign->play_seconds,
-                    'mime' => $campaign->mime_type,
-                ])->all(),
-            ],
-        ]);
+        $points = collect([$now])
+            ->merge($resolver->changePoints($screen, $playlist, $now, $until))
+            ->merge($ads->changePoints($screen, $now, $until))
+            ->unique(fn (CarbonImmutable $point) => $point->getTimestamp())
+            ->sortBy(fn (CarbonImmutable $point) => $point->getTimestamp())
+            ->values();
+
+        $breaks = $ads->breaksAt($screen, $points->all());
+        $lines = [];
+        $entries = [];
+        $last = null;
+        // Each line is described — url, cache key and all — once, not at every change point: a file line
+        // is the same at every moment, a channel line the same on every moment with the same ads.
+        $keys = [];
+
+        foreach ($points as $at) {
+            // Described at once: a channel line's ads for this moment ride on the line, and the next moment
+            // overwrites them. (Loops, not arrow functions: an arrow function works on a COPY of $lines.)
+            $resolved = $resolver->resolveLoaded($screen, $playlist, $at);
+            $entry = ['blank' => $resolved['blank'], 'items' => [], 'ads' => []];
+
+            foreach ($resolved['items'] as $line) {
+                $variant = $line->isChannel() ? 'p'.$line->id.':'.$line->liveAds->pluck('id')->implode(',') : 'f'.$line->id;
+                $entry['items'][] = $keys[$variant] ??= $this->lineKey($lines, $line->isChannel()
+                    ? $this->channelEntry($line)
+                    : $this->manifestItem($line->id, $line->media, $line->duration_seconds ?? PlaylistItem::DEFAULT_IMAGE_SECONDS));
+            }
+
+            // Nothing due: the holding picture, exactly as itemsFor() sends it now.
+            if ($entry['items'] === [] && $resolved['fallback']) {
+                $entry['items'][] = $keys['fallback:'.$resolved['fallback']->id] ??= $this->lineKey($lines, $this->itemsFor($resolved)['items'][0]);
+            }
+
+            foreach ($breaks[$at->getTimestamp()] as $campaign) {
+                $entry['ads'][] = $keys['c'.$campaign->id] ??= $this->lineKey($lines, $this->campaignItem($campaign));
+            }
+
+            if ($entry === $last) {
+                continue;
+            }
+
+            $last = $entry;
+            $entries[] = ['at' => $at->toIso8601String(), ...$entry];
+        }
+
+        return ['until' => $until->toIso8601String(), 'entries' => $entries, 'lines' => $lines];
+    }
+
+    /** A line kept once in the timeline's map, under a key made of what it is. */
+    private function lineKey(array &$lines, array $item): string
+    {
+        $key = substr(hash('sha256', json_encode($item)), 0, 16);
+        $lines[$key] = $item;
+
+        return $key;
+    }
+
+    /** One network advert as the player plays it. */
+    private function campaignItem(Campaign $campaign): array
+    {
+        return [
+            'id' => 'c'.$campaign->id,
+            'type' => $campaign->type,
+            'url' => $campaign->url,
+            'checksum' => $campaign->cacheKey(),
+            'duration' => $campaign->play_seconds,
+            'mime' => $campaign->mime_type,
+        ];
     }
 
     /** One entry in the manifest, whatever it was resolved from. The id identifies
@@ -162,33 +265,6 @@ class DeviceController extends Controller
             // rules and dayparts are the server's alone and are not re-judged offline.
             'expires_at' => $media->expires_at?->toIso8601String(),
         ];
-    }
-
-    /**
-     * Every file this screen could be asked to show — each line's file whether due now or not, every
-     * ad of every channel on the playlist, the holding picture and the network adverts — as address +
-     * cache key, for the set to warm its cache with and to prune it by (docs/AD-BUILDER-SPEC.md §15).
-     * Never a draft: an unpublished page is on no screen.
-     *
-     * @param  Collection<int, Campaign>  $adBreak
-     * @return array<int, array{url: string, checksum: string, type: string}>
-     */
-    private function assetsFor(Screen $screen, Collection $adBreak): array
-    {
-        $lines = $screen->playlistItems()->with(['media.builderAd', 'channel.ads.media.builderAd'])->get();
-
-        $files = $lines->map(fn (PlaylistItem $item) => $item->media)
-            ->merge($lines->flatMap(fn (PlaylistItem $item) => ($item->channel?->ads ?? collect())->map(fn (ChannelAd $ad) => $ad->media)))
-            ->push($screen->defaultMedia)
-            ->filter(fn (?Media $media) => $media !== null && ! $media->isDraft())
-            ->unique('id')
-            ->map(fn (Media $media) => ['url' => $media->url, 'checksum' => $media->cacheKey(), 'type' => $media->type]);
-
-        $adverts = $adBreak->map(fn (Campaign $campaign) => [
-            'url' => $campaign->url, 'checksum' => $campaign->cacheKey(), 'type' => $campaign->type,
-        ]);
-
-        return $files->merge($adverts)->values()->all();
     }
 
     /**

@@ -112,6 +112,10 @@ export function syncGroupBounds(doc) {
         .map((group) => ({ group, depth: groupDepthOf(doc, group) }))
         .sort((a, b) => b.depth - a.depth);
 
+    // Which groups have something on the glass, deepest first — what AdCompiler::groupBox() measures: a group
+    // whose every child is hidden counts for nothing in the box around it, on the stage as on the page.
+    const showsSomething = new Map();
+
     groups.forEach(({ group }) => {
         const children = childrenOf(doc, group.id);
 
@@ -122,7 +126,10 @@ export function syncGroupBounds(doc) {
             return;
         }
 
-        const shown = children.filter((child) => child.visible !== false);
+        const shown = children.filter((child) => child.visible !== false && (!isGroup(child) || showsSomething.get(child.id)));
+
+        showsSomething.set(group.id, shown.length > 0);
+
         const bounds = boundsOf((shown.length > 0 ? shown : children).map(visualBounds));
 
         group.x = tidy(bounds.x);

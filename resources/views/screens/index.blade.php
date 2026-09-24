@@ -293,14 +293,17 @@
                                      to pick one out of a list that grew later — so each option says itself
                                      whether it is the screen's (as on the Members and Users pages). --}}
                                 <template x-for="media in mediaOptions" :key="media.id">
-                                    {{-- A portrait file is named as one: on a landscape screen it holds the
-                                         glass with bars at the sides (docs/AD-BUILDER-SPEC.md §12). --}}
+                                    {{-- A file the other way round from this screen says so: it holds the glass
+                                         with bars (docs/AD-BUILDER-SPEC.md §12) — told by the screen's way as the
+                                         form has it, so turning the screen in this form turns the labels too. --}}
                                     <option x-bind:value="media.id"
-                                            x-text="media.title + (media.orientation === 'portrait' ? ' (portrait)' : '')"
+                                            x-text="holdingLabel(media)"
                                             x-bind:selected="String(media.id) === String(form.default_media_id)"></option>
                                 </template>
                             </select>
                         </x-crud.form-field>
+                        <p x-show="holdingNote()" x-cloak class="mt-1 text-xs text-amber-600 dark:text-amber-400"
+                           dusk="screen-edit-default-media-note" x-text="holdingNote()"></p>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                             Shown whenever nothing on this screen's playlist is due.
                             When to play each file is set on the file itself, inside the screen.

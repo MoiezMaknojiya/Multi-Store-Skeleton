@@ -69,8 +69,10 @@
                         <span class="w-6 text-xs text-gray-400 text-center" x-text="index + 1"></span>
 
                         <div class="w-20 h-12 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                            {{-- An upright picture is shown whole, not cut to its middle (docs/AD-BUILDER-SPEC.md §12). --}}
                             <template x-if="ad.thumbnail_url">
-                                <img :src="ad.thumbnail_url" :alt="ad.title" class="w-full h-full object-cover">
+                                <img :src="ad.thumbnail_url" :alt="ad.title" class="w-full h-full"
+                                     x-bind:class="ad.orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                             </template>
                             <template x-if="!ad.thumbnail_url">
                                 <span class="text-[10px] text-gray-400" x-text="typeLabel(ad.type)"></span>
@@ -154,7 +156,8 @@
                     <div x-show="source === 'keep'" x-cloak class="flex items-center gap-3 rounded-md border border-gray-200 p-2 dark:border-gray-700">
                         <div class="h-12 w-20 flex-shrink-0 overflow-hidden rounded bg-gray-100 dark:bg-gray-700">
                             <template x-if="editingAd?.thumbnail_url">
-                                <img :src="editingAd?.thumbnail_url" alt="" class="h-full w-full object-cover">
+                                <img :src="editingAd?.thumbnail_url" alt="" class="h-full w-full"
+                                     x-bind:class="editingAd?.orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                             </template>
                         </div>
                         <p class="min-w-0 truncate text-sm text-gray-700 dark:text-gray-200" x-text="editingAd?.title"></p>
@@ -196,7 +199,8 @@
                                             : 'border-gray-200 hover:border-gray-400 dark:border-gray-700'">
                                     <div class="aspect-video bg-gray-100 dark:bg-gray-700">
                                         <template x-if="item.thumbnail_url">
-                                            <img :src="item.thumbnail_url" alt="" class="h-full w-full object-cover" loading="lazy">
+                                            <img :src="item.thumbnail_url" alt="" class="h-full w-full" loading="lazy"
+                                                 x-bind:class="item.orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                                         </template>
                                     </div>
                                     <div class="px-2 py-1.5">

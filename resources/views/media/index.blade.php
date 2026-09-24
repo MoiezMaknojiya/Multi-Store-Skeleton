@@ -76,8 +76,10 @@
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                         <td class="px-5 py-4">
                             <div class="relative w-24 h-14 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                                {{-- An upright picture is shown whole, not cut to its middle (docs/AD-BUILDER-SPEC.md §12). --}}
                                 <template x-if="item.thumbnail_url">
-                                    <img :src="item.thumbnail_url" :alt="item.title" class="w-full h-full object-cover">
+                                    <img :src="item.thumbnail_url" :alt="item.title" class="w-full h-full"
+                                         x-bind:class="item.orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                                 </template>
                                 <template x-if="!item.thumbnail_url">
                                     <span class="text-xs text-gray-400" x-text="typeLabel(item)"></span>

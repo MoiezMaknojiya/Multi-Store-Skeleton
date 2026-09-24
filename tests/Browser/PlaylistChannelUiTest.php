@@ -214,8 +214,8 @@ class PlaylistChannelUiTest extends DuskTestCase
             $tv->visit('/player');
 
             // What the wall shows right now: a picture by its file name, or the ad page by its address (the
-            // page is fetched through the worker and put in the frame as srcdoc — docs §15 — and the frame
-            // remembers where it came from).
+            // frame opens the page inside the worker's scope when a worker keeps the set — docs §15 — and says
+            // which page it holds either way).
             $showing = fn (): string => (string) $tv->script(<<<'JS'
                 const frame = document.querySelector('#layer-a:not([hidden]) iframe, #layer-b:not([hidden]) iframe');
                 if (frame) return 'page ' + (frame.dataset.src || '');

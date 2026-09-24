@@ -199,3 +199,52 @@ test('a group with nothing shown inside it writes nothing, not an empty wrapper'
 
     expect(app(AdCompiler::class)->compile($ad))->not->toContain('data-anim-id="row"');
 });
+
+test('a child inside a group keeps its own animations on the page: it waits for its entrance, and a Ken Burns picture zooms inside its frame', function () {
+    $document = [
+        ...BuilderAd::blankDocument(),
+        'elements' => [
+            box('row', 'group', 100, 100, 900, 400, 0),
+            box('title', 'text', 100, 100, 900, 100, 1, ['parentId' => 'row', 'text' => 'Fresh today', 'animations' => ['in' => ['effect' => 'slide', 'duration' => 1]]]),
+            box('photo', 'shape', 100, 200, 900, 300, 2, ['parentId' => 'row', 'style' => ['fill' => '#ff0000', 'radius' => 12], 'animations' => ['loop' => ['effect' => 'kenburns', 'amount' => 12, 'duration' => 10]]]),
+        ],
+    ];
+
+    $html = app(AdCompiler::class)->compile(BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => $document]));
+
+    // The entrance hides the child until it plays — inside the group as on the stage.
+    expect($html)->toContain('class="ad-el ad-pending" data-anim-id="title"');
+
+    // The slow zoom stays inside the child's own frame.
+    expect($html)->toMatch('/data-anim-id="photo" style="[^"]*overflow:hidden;border-radius:12px;/');
+
+    // And both reach the runtime.
+    expect($html)->toContain('"title":{"in":')->toContain('"photo":{"loop":');
+});
+
+test('a group that neither fades, blends nor moves is no layer of its own; one that does is', function () {
+    $plain = [
+        ...BuilderAd::blankDocument(),
+        'elements' => [
+            box('row', 'group', 100, 100, 600, 100, 0),
+            box('dish', 'text', 100, 100, 600, 100, 1, ['parentId' => 'row', 'text' => 'Karahi', 'style' => ['blend' => 'multiply']]),
+        ],
+    ];
+
+    $html = app(AdCompiler::class)->compile(BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => $plain]));
+    $wrapper = preg_match('/data-anim-id="row" style="([^"]*)"/', $html, $match) === 1 ? $match[1] : null;
+
+    // Pass-through: no z-index on the wrapper, so its child takes its place in the stage's order and its
+    // blend mixes with what is behind the group (Figma's "pass through").
+    expect($wrapper)->not->toBeNull()->not->toContain('z-index')
+        ->and($html)->toMatch('/data-anim-id="dish" style="[^"]*z-index:2;[^"]*mix-blend-mode:multiply;/');
+
+    foreach ([['opacity' => 0.5], ['style' => ['blend' => 'screen']], ['animations' => ['in' => ['effect' => 'fade']]]] as $more) {
+        $isolated = $plain;
+        $isolated['elements'][0] = box('row', 'group', 100, 100, 600, 100, 0, $more);
+
+        $html = app(AdCompiler::class)->compile(BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => $isolated]));
+
+        expect($html)->toMatch('/data-anim-id="row" style="[^"]*z-index:1;/');
+    }
+});

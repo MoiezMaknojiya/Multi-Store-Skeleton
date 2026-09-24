@@ -56,7 +56,17 @@ class AdOrientationFlowTest extends DuskTestCase
             $screen = Screen::where('store_id', $store->id)->sole();
             $this->assertSame('portrait', $screen->orientation);
 
-            /* ── 2. New ad asks which way the screen is; Portrait opens an upright stage ── */
+            /* ── 2. The Create tab asks which way the screen is, before any editor opens… ── */
+            $panel->visit('/builder');
+            $this->waitForAlpine($panel);
+            $this->clickAndAwait($panel, '@builder-tab-create', fn (Browser $b) => $b->waitFor('@new-ad-choice', 5));
+            $panel->assertVisible('@new-ad-landscape')
+                ->assertVisible('@new-ad-portrait')
+                ->assertMissing('@ad-stage')
+                ->assertSee('which way is the screen')
+                ->screenshot('create-tab-orientation-choice');
+
+            /* ── …and so does New ad; Portrait opens an upright stage ── */
             $panel->visit('/builder');
             $this->waitForAlpine($panel);
             $panel->waitFor('@ads-empty');

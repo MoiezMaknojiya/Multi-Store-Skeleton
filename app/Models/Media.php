@@ -279,13 +279,17 @@ class Media extends Model
     }
 
     /**
-     * A cache key for the player, not a content digest: it changes whenever the
-     * bytes behind this row could have changed (a replaced file bumps size and
-     * updated_at), which is exactly what a caching shell needs to decide whether
-     * to re-download. Cheap enough to compute on every manifest request.
+     * A cache key for the player, not a content digest: it changes whenever the bytes behind this row could
+     * have (docs/AD-BUILDER-SPEC.md §15), and only then — every screen downloads the file again when it does.
+     * A picture or a video never changes under its name (every upload is a new file with a name of its own),
+     * so its key is the file itself: a new title or new dates send no television to fetch it again. An ad
+     * page is rewritten in place on every publish, which stamps the row, so that moment is part of its key.
+     * Cheap enough to compute on every manifest request.
      */
     public function cacheKey(): string
     {
-        return substr(hash('sha256', $this->id.'|'.$this->size.'|'.$this->updated_at?->timestamp), 0, 20);
+        $version = $this->type === self::TYPE_HTML ? (string) $this->updated_at?->timestamp : (string) $this->path;
+
+        return substr(hash('sha256', $this->id.'|'.$this->size.'|'.$version), 0, 20);
     }
 }

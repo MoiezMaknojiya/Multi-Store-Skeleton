@@ -129,7 +129,9 @@ class BuilderAdRequest extends FormRequest
             // never the element itself or something inside it, and nothing sits deeper than three groups.
             'document.elements' => ['bail', 'present', 'list', 'max:'.self::MAX_ELEMENTS, $this->tree()],
             $element => ['array'],
-            "{$element}.id" => ['required', 'string', 'max:40'],
+            // Unique: a group is named by its id, so two elements answering to one would make a tree that
+            // is not one (a circle the climb below could not see).
+            "{$element}.id" => ['required', 'string', 'max:40', 'distinct'],
             "{$element}.type" => ['required', Rule::in(self::TYPES)],
             "{$element}.name" => ['nullable', 'string', 'max:120'],
             // The group this element is inside, or nothing for the top level (§13).
@@ -326,13 +328,17 @@ class BuilderAdRequest extends FormRequest
                 }
             }
 
+            // Every parent is checked before any chain is climbed: a climb reads its ancestors' parents too,
+            // and one of those that is not a word (a list, a number) must be refused, not looked up.
             foreach ($parents as $id => $parent) {
                 if (! is_string($parent) || ! isset($groups[$parent]) || $parent === $id) {
                     $fail("An element's group must be a group in this design, and not the element itself.");
 
                     return;
                 }
+            }
 
+            foreach ($parents as $id => $parent) {
                 // Climb to the top: a chain that comes back to where it started is a cycle, and a chain
                 // longer than the depth a tool allows is a design nobody could draw.
                 $seen = [$id => true];

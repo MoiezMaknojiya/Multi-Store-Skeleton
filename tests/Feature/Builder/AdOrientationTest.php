@@ -47,18 +47,26 @@ function orientedDocument(string $orientation): array
     ];
 }
 
-test('the editor opens a landscape stage unless portrait is asked for — and reads anything else as landscape', function () {
+test('Create asks which way the screen is mounted before the editor opens — then opens a stage of that shape', function () {
+    // The Create tab: the choice, with both ways to go.
     $this->get('/builder/create')->assertOk()
+        ->assertViewIs('builder.choose')
+        ->assertSee(route('builder.create', ['orientation' => 'landscape']), false)
+        ->assertSee(route('builder.create', ['orientation' => 'portrait']), false);
+
+    $this->get('/builder/create?orientation=landscape')->assertOk()
+        ->assertViewIs('builder.editor')
         ->assertViewHas('orientation', 'landscape')
         ->assertViewHas('document', fn (array $document) => $document['stage']['width'] === 1920 && $document['stage']['height'] === 1080);
 
     $this->get('/builder/create?orientation=portrait')->assertOk()
+        ->assertViewIs('builder.editor')
         ->assertViewHas('orientation', 'portrait')
         ->assertViewHas('document', fn (array $document) => $document['stage']['width'] === 1080 && $document['stage']['height'] === 1920);
 
-    // A page is forgiving: a word nobody offers, or a shape that is not a word, is simply the usual way round.
-    $this->get('/builder/create?orientation=sideways')->assertOk()->assertViewHas('orientation', 'landscape');
-    $this->get('/builder/create?orientation[]=portrait')->assertOk()->assertViewHas('orientation', 'landscape');
+    // A page is forgiving: a word nobody offers, or a shape that is not a word, is no answer — the choice again.
+    $this->get('/builder/create?orientation=sideways')->assertOk()->assertViewIs('builder.choose');
+    $this->get('/builder/create?orientation[]=portrait')->assertOk()->assertViewIs('builder.choose');
 });
 
 test('a portrait ad is saved as one, with a 1080 × 1920 stage, and says so ever after', function () {

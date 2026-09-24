@@ -73,7 +73,17 @@ class BuilderExamples extends Command
             $ad = BuilderAd::firstOrNew(['store_id' => $store->id, 'name' => $name]);
             $created = ! $ad->exists;
 
-            $ad->fill(['document' => $validated['document']])->save();
+            // The examples are landscape. An ad of that name made upright is somebody's own design — its shape is
+            // fixed once made (docs/AD-BUILDER-SPEC.md §12) — so it is left as it is rather than given a stage of
+            // the other shape.
+            if (! $created && $ad->orientation !== BuilderAd::LANDSCAPE) {
+                $this->warn("Left {$name} (#{$ad->id}) as it is: it is a portrait ad, and the example is landscape.");
+                $rows[] = [$ad->id, $ad->name, 'left alone', 'portrait', route('builder.edit', $ad)];
+
+                continue;
+            }
+
+            $ad->fill(['orientation' => BuilderAd::LANDSCAPE, 'document' => $validated['document']])->save();
 
             ActivityLog::record($created ? 'ad.created' : 'ad.updated', $ad, ($created ? 'Created' : 'Restored')." example ad {$ad->name}");
 

@@ -107,18 +107,73 @@ class Daypart extends Model
     }
 
     /**
+     * Every clock time at which this daypart can open or close, on any weekday — its own two and every
+     * exception's — as "H:i". The moments a television's answer can change at (the offline timeline,
+     * docs/AD-BUILDER-SPEC.md §15), so a superset is harmless and a missing one is not.
+     *
+     * @return list<string>
+     */
+    public function clockTimes(): array
+    {
+        return collect([$this->start_time, $this->end_time])
+            ->merge($this->exceptions->flatMap(fn (DaypartException $exception) => [$exception->start_time, $exception->end_time]))
+            ->filter(fn (?string $time) => is_string($time) && $time !== '')
+            ->map(fn (string $time) => substr($time, 0, 5))
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
      * The window that opens on one ISO weekday (1 = Monday … 7 = Sunday), as
      * [start, end] in "H:i" — or null when the daypart is closed that day.
      */
     public function windowFor(int $isoWeekday): ?array
     {
+        if (array_key_exists($isoWeekday, $this->windows)) {
+            return $this->windows[$isoWeekday];
+        }
+
         $exception = $this->exceptions->firstWhere('weekday', $isoWeekday);
 
         if ($exception) {
-            return $exception->isClosed() ? null : [$exception->start_time, $exception->end_time];
+            return $this->windows[$isoWeekday] = $exception->isClosed() ? null : [$exception->start_time, $exception->end_time];
         }
 
-        return [$this->start_time, $this->end_time];
+        return $this->windows[$isoWeekday] = [$this->start_time, $this->end_time];
+    }
+
+    /**
+     * windowFor()'s and openWindowDay()'s answers, remembered on this very instance: a manifest's timeline
+     * asks the same daypart about the same minutes for every line that uses it (docs/AD-BUILDER-SPEC.md
+     * §15). Forgotten whenever an attribute or a relation changes.
+     *
+     * @var array<int, array{0: string, 1: string}|null>
+     */
+    private array $windows = [];
+
+    /** @var array<string, CarbonImmutable|null> */
+    private array $openDays = [];
+
+    public function setAttribute($key, $value)
+    {
+        $this->windows = $this->openDays = [];
+
+        return parent::setAttribute($key, $value);
+    }
+
+    public function setRelation($relation, $value)
+    {
+        $this->windows = $this->openDays = [];
+
+        return parent::setRelation($relation, $value);
+    }
+
+    public function unsetRelation($relation)
+    {
+        $this->windows = $this->openDays = [];
+
+        return parent::unsetRelation($relation);
     }
 
     /**
@@ -147,6 +202,17 @@ class Daypart extends Model
     public function openWindowDay(CarbonInterface $moment): ?CarbonImmutable
     {
         $at = CarbonImmutable::instance($moment);
+        $minute = $at->format('Y-m-d H:i e');
+
+        if (array_key_exists($minute, $this->openDays)) {
+            return $this->openDays[$minute];
+        }
+
+        return $this->openDays[$minute] = $this->findOpenWindowDay($at);
+    }
+
+    private function findOpenWindowDay(CarbonImmutable $at): ?CarbonImmutable
+    {
         $time = $at->format('H:i');
 
         $today = $this->windowFor($at->dayOfWeekIso);

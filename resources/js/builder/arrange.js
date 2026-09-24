@@ -5,8 +5,8 @@
  * Spread into the editor's component, so data and plain methods only — no getters (see the Alpine gotcha
  * in the project conventions).
  */
-import { ancestorsOf, clampName, MAX_GROUP_DEPTH, newId, renumberDepth } from './document.js';
-import { alignTo, boundsOf, distribute } from './geometry.js';
+import { ancestorsOf, clampName, MAX_GROUP_DEPTH, newId, parentIdOf, renumberDepth } from './document.js';
+import { alignTo, boundsOf, distribute, visualBounds } from './geometry.js';
 import { clone } from './history.js';
 
 /** Where the clipboard lives: the browser's storage, so it carries from one ad to another. */
@@ -20,7 +20,9 @@ const STYLE_KEYS = {
         'textShadow', 'textStroke', 'border', 'blend',
     ],
     picture: ['fit', 'position', 'radius', 'border', 'shadow', 'filters', 'flipX', 'flipY', 'blend'],
-    shape: ['shape', 'fill', 'gradient', 'radius', 'border', 'shadow', 'blend'],
+    // A line's thickness and dash pattern travel with its kind (§14): pasting a line's look onto a rectangle
+    // makes it that very line, not a line of some other weight.
+    shape: ['shape', 'fill', 'gradient', 'radius', 'border', 'shadow', 'blend', 'lineWidth', 'lineStyle'],
     // A group has no look of its own beyond how it mixes: the rest belongs to what it holds (§13).
     group: ['blend'],
 };
@@ -252,10 +254,11 @@ export function arrangePanel() {
                     ids.set(element.id, copy.id);
                     copy.x = Math.round((Number(copy.x) || 0) + offset);
                     copy.y = Math.round((Number(copy.y) || 0) + offset);
-                    copy.locked = false;
                     copy.visible = copy.visible !== false;
                     copy.z = this.doc.elements.length;
                     copy.parentId = copiedIds.has(element.parentId ?? null) ? ids.get(element.parentId) : this.editingGroupId;
+                    // What was pasted at the top comes unlocked, to be placed; a lock inside a copied group stays.
+                    if (!copiedIds.has(element.parentId ?? null)) copy.locked = false;
 
                     // The clipboard is the browser's, not the server's: a name it carries is held to what
                     // a save accepts.
@@ -266,6 +269,7 @@ export function arrangePanel() {
                     if (!copiedIds.has(element.parentId ?? null)) selected.push(copy.id);
                 });
 
+            this.bringOntoStage(this.doc.elements.slice(-usable.length));
             renumberDepth(this.doc);
             this.selectedIds = selected;
             this.commit('Paste');
@@ -273,6 +277,30 @@ export function arrangePanel() {
             if (skipped > 0) {
                 window.toast(`${skipped} ${skipped === 1 ? 'element was' : 'elements were'} left out: the picture is not on this shop's shelf.`);
             }
+        },
+
+        /**
+         * Pasted elements that landed wholly off the stage — copied from an ad of the other shape (the right half
+         * of a landscape ad is past a portrait stage's edge), or pushed there by the paste offset — are brought
+         * onto it, together, as close to where they were as fits (centred when they are bigger than the stage).
+         * What still touches the stage stays where it is: a design may bleed off an edge on purpose.
+         */
+        bringOntoStage(elements) {
+            const leaves = elements.filter((element) => element.type !== 'group');
+            const box = boundsOf((leaves.length > 0 ? leaves : elements).map(visualBounds));
+            const width = Number(this.doc.stage?.width) || 1920;
+            const height = Number(this.doc.stage?.height) || 1080;
+
+            if (box.x < width && box.y < height && box.x + box.w > 0 && box.y + box.h > 0) return;
+
+            const into = (start, size, room) => (size <= room ? Math.min(Math.max(start, 0), room - size) : (room - size) / 2) - start;
+            const dx = Math.round(into(box.x, box.w, width));
+            const dy = Math.round(into(box.y, box.h, height));
+
+            elements.forEach((element) => {
+                element.x += dx;
+                element.y += dy;
+            });
         },
 
         /** The copied element's look, onto every selected element — the keys that make sense for each kind. */
@@ -324,14 +352,24 @@ export function arrangePanel() {
          * Open the menu on an element (selecting it first unless it is already part of the selection), on
          * a locked element (which only offers Unlock), or on the empty stage (which clears the selection).
          */
-        openContextMenu(event, element = null) {
+        openContextMenu(event, element = null, fromLayers = false) {
             event.preventDefault();
 
             if (this.previewing === 'all') return;
 
+            // The group being worked in, pressed where it holds nothing, is the empty stage of that level.
+            if (element && element.id === this.editingGroupId && !fromLayers) element = null;
+
+            // A row of the Layers panel is that very element, at its own level — what a left-click on it
+            // selects (selectFromLayers). On the stage, anything inside a group is the group, unless the group
+            // has been entered (§13).
+            if (element && fromLayers && parentIdOf(element) !== this.editingGroupId) {
+                this.stopPreview();
+                this.editingGroupId = parentIdOf(element);
+            }
+
             let locked = null;
-            // Anything inside a group is the group, unless the group has been entered (§13).
-            const target = element ? this.resolveTarget(element) : null;
+            const target = element ? (fromLayers ? element : this.resolveTarget(element)) : null;
 
             if (target && this.isLocked(target)) {
                 locked = [target, ...ancestorsOf(this.doc, target)].find((node) => node.locked) ?? target;

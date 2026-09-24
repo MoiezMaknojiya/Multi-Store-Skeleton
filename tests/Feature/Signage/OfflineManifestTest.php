@@ -16,9 +16,10 @@ use App\Models\Store;
 |--------------------------------------------------------------------------
 |
 | docs/AD-BUILDER-SPEC.md §15. The manifest says a little more than what plays now: when each file stops
-| being current (`expires_at`), the holding picture alongside the items (`fallback`), and every file the
-| screen may need whether due now or not (`assets`), so the set's worker can warm and prune its cache.
-| None of it moves the version — it is a change to what plays that must.
+| being current (`expires_at`), the holding picture alongside the items (`fallback`), and what every
+| moment of the next days shows (`timeline`, OfflineTimelineTest) — which is also every file the set's
+| worker warms and keeps. None of it moves the version — it is a change to what plays that must. And each
+| file's cache key moves only when its bytes may have, so a new title or new dates cost no download.
 |
 */
 
@@ -90,9 +91,20 @@ test('the holding picture travels alongside the items, so a set can fall back to
     expect(manifestOf($this)['fallback'])->toBeNull();
 });
 
-test('assets name every file the screen may need — due now or not — and nothing it may not', function () {
+/** Every file address a manifest's timeline names — its file lines and its channel lines' ads. */
+function timelineUrls(array $manifest): array
+{
+    $lines = collect($manifest['timeline']['lines']);
+
+    return $lines->pluck('url')
+        ->merge($lines->pluck('ads')->filter()->flatten(1)->pluck('url'))
+        ->filter()->unique()->values()->all();
+}
+
+test('the timeline names every file the next days may play — and nothing further off, and no draft', function () {
     $now = picture($this->store, 'Now');
-    $later = picture($this->store, 'Tonight only');
+    $tomorrow = picture($this->store, 'Tomorrow only');
+    $nextYear = picture($this->store, 'Next year');
     $holding = picture($this->store, 'Holding');
     $draft = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id, 'name' => 'Draft page']);
     $draft->update(['published_at' => null]);   // unpublished: its page is on no screen
@@ -102,49 +114,110 @@ test('assets name every file the screen may need — due now or not — and noth
 
     $this->screen->update(['default_media_id' => $holding->id]);
     line($this->screen, $now, 0);
-    // Scheduled from next year: not due today, but the set should hold it already.
-    line($this->screen, $later, 1, ['recurrence_type' => ScheduleRule::DAILY, 'starts_on' => now()->addYear()->toDateString(), 'position' => 1]);
-    line($this->screen, $draft->media, 2);
-    line($this->screen, $channel, 3);
+    // From tomorrow: not due now, but inside the days a set holds — so it is on the set before the line drops.
+    line($this->screen, $tomorrow, 1, ['recurrence_type' => ScheduleRule::DAILY, 'starts_on' => now()->addDay()->toDateString(), 'position' => 1]);
+    // From next year: a file outside its window never reaches the device (rule 02), not even to be kept.
+    line($this->screen, $nextYear, 2, ['recurrence_type' => ScheduleRule::DAILY, 'starts_on' => now()->addYear()->toDateString(), 'position' => 2]);
+    line($this->screen, $draft->media, 3);
+    line($this->screen, $channel, 4);
 
     $manifest = manifestOf($this);
-    $assets = collect($manifest['assets']);
+    $urls = timelineUrls($manifest);
 
-    expect($assets->pluck('url')->all())->toContain($now->url, $later->url, $holding->url, $channelPicture->url)
-        ->and($assets->pluck('url')->all())->not->toContain($draft->media->url)
-        ->and($assets->firstWhere('url', $later->url)['checksum'])->toBe($later->cacheKey())
-        ->and($assets->firstWhere('url', $later->url)['type'])->toBe('image')
-        // Due now: the first picture alone (the second is scheduled for next year) — and the channel line,
-        // which rides along with it.
+    expect($manifest)->not->toHaveKey('assets')
+        ->and($urls)->toContain($now->url, $tomorrow->url, $channelPicture->url)
+        ->and($urls)->not->toContain($nextYear->url)
+        ->and($urls)->not->toContain($draft->media->url)
+        ->and($manifest['fallback']['url'])->toBe($holding->url)
+        // Due now: the first picture alone — and the channel line, which rides along with it.
         ->and(collect($manifest['items'])->where('type', '!=', 'channel')->pluck('url')->all())->toBe([$now->url])
         ->and(collect($manifest['items'])->where('type', 'channel'))->toHaveCount(1);
 });
 
-test('the network adverts are among the assets, with the campaign’s own cache key', function () {
+test('a network advert rides in the break and in the timeline, under the campaign’s own cache key', function () {
     $this->store->update(['accepts_network_ads' => true]);
     $this->screen->update(['accepts_network_ads' => true]);
     $campaign = Campaign::factory()->create(['name' => 'Cola']);
     $campaign->screens()->attach($this->screen);
     line($this->screen, picture($this->store, 'Menu'), 0);
 
-    $assets = collect(manifestOf($this)['assets']);
+    $manifest = manifestOf($this);
+    $advert = collect($manifest['timeline']['lines'])->firstWhere('url', $campaign->url);
 
-    expect($assets->firstWhere('url', $campaign->url)['checksum'])->toBe($campaign->cacheKey());
+    expect($manifest['ad_break']['items'][0]['checksum'])->toBe($campaign->cacheKey())
+        ->and($advert['checksum'])->toBe($campaign->cacheKey());
 });
 
-test('neither the fallback nor the assets move the version: it is what plays that does', function () {
+test('neither the fallback nor tomorrow’s files move the version: it is what plays now that does', function () {
     line($this->screen, picture($this->store, 'Menu'), 0);
     $before = manifestOf($this)['version'];
 
     $holding = picture($this->store, 'Holding');
     $this->screen->update(['default_media_id' => $holding->id]);
-    line($this->screen, picture($this->store, 'Next year'), 1, ['recurrence_type' => ScheduleRule::DAILY, 'starts_on' => now()->addYear()->toDateString(), 'position' => 1]);
+    line($this->screen, picture($this->store, 'Tomorrow'), 1, ['recurrence_type' => ScheduleRule::DAILY, 'starts_on' => now()->addDay()->toDateString(), 'position' => 1]);
 
     $after = manifestOf($this);
 
     expect($after['version'])->toBe($before)
         ->and($after['fallback'])->not->toBeNull()
-        ->and($after['assets'])->toHaveCount(3);
+        ->and(count($after['timeline']['entries']))->toBeGreaterThan(1);
+});
+
+/* ── What moves a cache key: the bytes, and nothing else ────────────────── */
+
+test('a picture keeps its cache key through a new title and new dates — only a new file moves it', function () {
+    $poster = picture($this->store, 'Poster', ['path' => 'media/1/01J8X0000000000000000000AA.jpg', 'size' => 1000]);
+    $key = $poster->cacheKey();
+
+    $this->travel(5)->minutes();
+    $poster->update(['title' => 'Poster, renamed', 'starts_at' => now()->subDay(), 'expires_at' => now()->addWeek()]);
+
+    expect($poster->fresh()->cacheKey())->toBe($key);
+
+    $poster->update(['path' => 'media/1/01J8X0000000000000000000BB.jpg']);
+
+    expect($poster->fresh()->cacheKey())->not->toBe($key);
+});
+
+test('a video keeps its cache key through a new title too', function () {
+    $video = picture($this->store, 'Promo', ['type' => Media::TYPE_VIDEO, 'mime_type' => 'video/mp4', 'path' => 'media/1/01J8X0000000000000000000CC.mp4']);
+    $key = $video->cacheKey();
+
+    $this->travel(5)->minutes();
+    $video->update(['title' => 'Promo, renamed']);
+
+    expect($video->fresh()->cacheKey())->toBe($key);
+});
+
+test('a channel ad is kept under its file’s own key: one file on a playlist and in a channel is one copy on the set', function () {
+    $picture = picture($this->store, 'Shared');
+    $channel = Channel::factory()->create(['store_id' => $this->store->id]);
+    $ad = ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $picture->id]);
+
+    line($this->screen, $picture, 0);
+    line($this->screen, $channel, 1);
+
+    $items = collect(manifestOf($this)['items']);
+    $file = $items->firstWhere('type', 'image');
+    $inChannel = $items->firstWhere('type', 'channel')['ads'][0];
+
+    expect($ad->cacheKey())->toBe($picture->cacheKey())
+        ->and($inChannel['url'])->toBe($file['url'])
+        ->and($inChannel['checksum'])->toBe($file['checksum']);
+});
+
+test('a campaign keeps its cache key through a new name — a replaced file moves it', function () {
+    $campaign = Campaign::factory()->create(['name' => 'Cola']);
+    $key = $campaign->cacheKey();
+
+    $this->travel(5)->minutes();
+    $campaign->update(['name' => 'Cola Zero']);
+
+    expect($campaign->fresh()->cacheKey())->toBe($key);
+
+    $campaign->update(['path' => 'campaigns/01J8X0000000000000000000DD.jpg']);
+
+    expect($campaign->fresh()->cacheKey())->not->toBe($key);
 });
 
 test('the player is a web app: its manifest names the app and opens the player full screen', function () {

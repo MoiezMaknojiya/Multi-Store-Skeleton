@@ -85,7 +85,7 @@ class AdGroupsFlowTest extends DuskTestCase
             $priceScaled = $this->element($browser, 'price');
             $this->assertEqualsWithDelta(140 + 700 * 1.5, $priceScaled['x'], 1, 'the price keeps its place in the row');
 
-            /* ── 4. Turned, every element inside turns about the row's centre ── */
+            /* ── 4. Turned, every element inside turns about the centroid of what it holds ── */
             $this->undo($browser);
             $this->assertEqualsWithDelta(600, $this->element($browser, 'dish')['w'], 1, 'undo puts the size back');
 
@@ -94,13 +94,33 @@ class AdGroupsFlowTest extends DuskTestCase
             $turned = $this->element($browser, 'dish');
             $this->assertEqualsWithDelta(90, $turned['rotation'], 1);
             $this->assertEqualsWithDelta(90, $this->element($browser, 'price')['rotation'], 1);
-            // The row's centre was (590, 410): the dish's centre (440, 370) turns to (630, 260).
-            $this->assertEqualsWithDelta(630, $turned['x'] + $turned['w'] / 2, 1);
-            $this->assertEqualsWithDelta(260, $turned['y'] + $turned['h'] / 2, 1);
+            // The centres are (440, 370), (940, 370) and (340, 470), so the row turns about (573⅓, 403⅓):
+            // the dish's centre turns to (606⅔, 270).
+            $this->assertEqualsWithDelta(606.67, $turned['x'] + $turned['w'] / 2, 1);
+            $this->assertEqualsWithDelta(270, $turned['y'] + $turned['h'] / 2, 1);
             $this->assertSame(0, (int) $this->groupOf($browser, 'dish')['rotation'], 'the group itself has no angle');
 
             $this->undo($browser);
             $this->assertEqualsWithDelta(0, $this->element($browser, 'dish')['rotation'], 0.01);
+
+            // Turned and turned back by hand — not undone — everything stands where it stood: the centroid is a
+            // point the turn leaves where it was. (About the box's centre it would not be: the box around turned
+            // children is another box, and turning back about ITS centre lands somewhere else.)
+            $before = $this->places($browser, ['dish', 'price', 'note']);
+            $this->rotateBy($browser, 30);
+            $this->assertEqualsWithDelta(30, $this->element($browser, 'note')['rotation'], 1);
+            $this->rotateBy($browser, -30);
+
+            foreach (['dish', 'price', 'note'] as $id) {
+                $back = $this->element($browser, $id);
+
+                $this->assertEqualsWithDelta(0, fmod($back['rotation'] + 360, 360) > 180 ? fmod($back['rotation'] + 360, 360) - 360 : fmod($back['rotation'] + 360, 360), 0.01, "{$id} is upright again");
+                $this->assertEqualsWithDelta($before[$id][0], $back['x'], 0.6, "{$id} is back where it stood across");
+                $this->assertEqualsWithDelta($before[$id][1], $back['y'], 0.6, "{$id} is back where it stood down");
+            }
+
+            // (No undo here: two turns made in a moment are one step of the history, as quick steps of one kind
+            // are — and they are back where they started anyway.)
 
             /* ── 5. Double-click goes inside: a child is selected and moved on its own; Esc steps out ── */
             $browser->script('document.querySelector(\'[dusk="element-price"]\').dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));');
@@ -121,7 +141,7 @@ class AdGroupsFlowTest extends DuskTestCase
             $browser->waitUntil(self::EDITOR.'.doc.elements.filter((e) => e.type === "group").length === 2', 5);
             $copy = $browser->script('return JSON.parse(JSON.stringify('.self::EDITOR.'.doc.elements.find((e) => e.type === "group" && e.id !== "'.$group['id'].'")));')[0];
             $this->assertSame(3, (int) $browser->script('return '.self::EDITOR.'.doc.elements.filter((e) => e.parentId === "'.$copy['id'].'").length;')[0]);
-            $this->assertSame('Group copy', $copy['name']);
+            $this->assertSame('Group 1 copy', $copy['name']);
 
             $this->key($browser, 'Delete');
             $browser->waitUntil(self::EDITOR.'.doc.elements.filter((e) => e.type === "group").length === 1', 5);
@@ -211,7 +231,157 @@ class AdGroupsFlowTest extends DuskTestCase
         });
     }
 
+    public function test_inside_a_group_the_gaps_turned_children_shift_the_layers_and_a_paste_do_what_they_show(): void
+    {
+        [$designer, $store, $ad] = $this->adWith([
+            $this->text('dish', 100, 300, 'Chicken karahi', 600, 100),
+            $this->text('price', 800, 300, '$12', 200, 100),
+            [...$this->text('bar', 100, 600, 'Rule', 400, 40), 'rotation' => 90],
+            $this->text('label', 400, 600, 'Daily', 300, 80),
+            $this->text('stray', 1400, 900, 'Loose', 300, 80),
+        ]);
+        $portrait = BuilderAd::factory()->portrait()->create(['store_id' => $store->id, 'name' => 'Board', 'orientation' => BuilderAd::PORTRAIT]);
+
+        $this->browse(function (Browser $browser) use ($designer, $store, $ad, $portrait) {
+            $this->openEditor($browser, $designer, $store, $ad);
+
+            /* ── 1. Two groups: the row (dish, price) and the rule with its label ── */
+            $this->selectLayers($browser, ['dish', 'price']);
+            $this->jsClick($browser, '@group-selection');
+            $browser->waitFor('@group-panel');
+            $row = $this->groupOf($browser, 'dish');
+            $this->assertSame('Group 1', $row['name'], 'a new group is named with the next free number');
+
+            // A group that neither fades, blends nor moves is no layer of its own on the stage either.
+            $this->assertSame('auto', $browser->script('return getComputedStyle(document.querySelector(\'[dusk="element-'.$row['id'].'"]\')).zIndex;')[0]);
+
+            $this->selectLayers($browser, ['bar', 'label']);
+            $this->jsClick($browser, '@group-selection');
+            $browser->waitFor('@group-panel');
+            $rule = $this->groupOf($browser, 'bar');
+            $this->assertSame('Group 2', $rule['name']);
+
+            /* ── 2. Inside the row, its own empty middle is empty stage: a drag draws a marquee ── */
+            $browser->script('document.querySelector(\'[dusk="element-price"]\').dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));');
+            $browser->waitUntil(self::EDITOR.'.editingGroupId === "'.$row['id'].'"', 5);
+            $browser->waitFor('@editing-group-frame')->assertSeeIn('@editing-group-label', 'Group 1');
+
+            $this->pressOnStage($browser, '@element-'.$row['id'], 750, 350, 1050, 420);
+            $this->assertSame($row['id'], $browser->script('return '.self::EDITOR.'.editingGroupId;')[0], 'still inside the row');
+            $this->assertEqualsCanonicalizing(['price'], $browser->script('return '.self::EDITOR.'.selectedIds;')[0], 'the marquee picked the child it crossed');
+            $this->assertSame([800, 300], $this->places($browser, ['price'])['price'], 'nothing was dragged');
+
+            // …and a plain click there is a click on empty stage: out of the group, nothing chosen.
+            $this->pressOnStage($browser, '@element-'.$row['id'], 750, 350, 750, 350);
+            $browser->waitUntil(self::EDITOR.'.editingGroupId === null', 5);
+            $this->assertSame([], $browser->script('return '.self::EDITOR.'.selectedIds;')[0]);
+
+            /* ── 3. Widened from a side, a child turned 90° grows thicker — the way it looks — not longer ── */
+            $this->jsClick($browser, '@layer-'.$rule['id']);
+            $browser->waitFor('@group-panel');
+            $box = $this->groupOf($browser, 'bar');
+            $this->assertSame([280, 420, 420, 400], [(int) $box['x'], (int) $box['y'], (int) $box['w'], (int) $box['h']]);
+
+            $this->dragHandle($browser, 'e', 210, 0);           // 420 → 630 wide: half as wide again
+
+            $bar = $this->element($browser, 'bar');
+            $this->assertEqualsWithDelta(400, $bar['w'], 1, 'the turned bar is as long as it was');
+            $this->assertEqualsWithDelta(60, $bar['h'], 1, 'and half as thick again, across the way it points');
+            $this->assertEqualsWithDelta(450, $this->element($browser, 'label')['w'], 1, 'the upright label is half as wide again');
+            $this->assertEqualsWithDelta(64, $this->element($browser, 'label')['style']['fontSize'], 0.01, 'from a side the type stays its size');
+            $this->undo($browser);
+
+            // With Shift held a side still stretches: the type keeps its size (it once scaled with Shift).
+            $this->dragHandle($browser, 'e', 210, 0, true);
+            $this->assertEqualsWithDelta(64, $this->element($browser, 'label')['style']['fontSize'], 0.01);
+            $this->assertEqualsWithDelta(80, $this->element($browser, 'label')['h'], 1);
+            $this->undo($browser);
+
+            // A corner keeps the shape and scales the look; with Shift it stretches instead.
+            $this->dragHandle($browser, 'se', 210, 0, true);
+            $this->assertEqualsWithDelta(64, $this->element($browser, 'label')['style']['fontSize'], 0.01, 'Shift on a corner stretches');
+            $this->undo($browser);
+
+            /* ── 4. Layers: just under an open group's row is inside it, in front ── */
+            $this->dropRow($browser, 'stray', $row['id'], 0.85);
+            $stray = $this->element($browser, 'stray');
+            $this->assertSame($row['id'], $stray['parentId'], 'dropped just under the open row, it went inside');
+            $this->assertGreaterThan($this->element($browser, 'price')['z'], $stray['z'], 'in front of what was there');
+            $this->undo($browser);
+            $this->assertArrayNotHasKey('parentId', array_filter($this->element($browser, 'stray'), fn ($value) => $value !== null));
+
+            // Folded, just under its row is beside it — behind it, at its level.
+            $this->jsClick($browser, '@layer-fold-'.$row['id']);
+            $browser->waitUntilMissing('@layer-dish');
+            $this->dropRow($browser, 'stray', $row['id'], 0.85);
+            $this->assertArrayNotHasKey('parentId', array_filter($this->element($browser, 'stray'), fn ($value) => $value !== null));
+            $this->assertLessThan($this->groupOf($browser, 'dish')['z'], $this->element($browser, 'stray')['z']);
+            $this->undo($browser);
+            $this->jsClick($browser, '@layer-fold-'.$row['id']);
+            $browser->waitFor('@layer-dish');
+
+            /* ── 5. A right-click on a child's row is that child, at its own level ── */
+            $browser->script('document.querySelector(\'[dusk="layer-price"]\').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 200, clientY: 200 }));');
+            $browser->waitFor('@context-menu');
+            $this->assertSame(['price'], $browser->script('return '.self::EDITOR.'.selectedIds;')[0]);
+            $this->assertSame($row['id'], $browser->script('return '.self::EDITOR.'.editingGroupId;')[0]);
+            $this->key($browser, 'Escape');
+
+            /* ── 6. Copied from far right of this landscape ad, pasted into a portrait one, it lands on the stage ── */
+            $this->key($browser, 'Escape');
+            $this->jsClick($browser, '@layer-stray');
+            $this->key($browser, 'c', ['ctrlKey' => true]);
+
+            $browser->visit('/builder/'.$portrait->id);
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@ad-stage');
+            $this->key($browser, 'v', ['ctrlKey' => true]);
+            $browser->waitUntil(self::EDITOR.'.doc.elements.length === 1', 5);
+
+            $pasted = $browser->script('return JSON.parse(JSON.stringify('.self::EDITOR.'.doc.elements[0]));')[0];
+            $this->assertGreaterThanOrEqual(0, $pasted['x']);
+            $this->assertLessThanOrEqual(1080, $pasted['x'] + $pasted['w'], 'the paste is on the 1080-wide stage, not off its edge');
+            $this->assertSame(932, (int) $pasted['y'], 'what already fitted down the stage stays where it was (900 + the paste offset)');
+        });
+    }
+
     /* ── Helpers ─────────────────────────────────────────────────────── */
+
+    /**
+     * A press on $selector at stage point (x, y), moved to (toX, toY) and let go — the pointer events the stage
+     * listens for. Where both points are the same, a plain click.
+     */
+    private function pressOnStage(Browser $browser, string $selector, int $x, int $y, int $toX, int $toY): void
+    {
+        $css = '[dusk="'.substr($selector, 1).'"]';
+
+        $browser->script(<<<JS
+            const editor = {$this->editor()};
+            const stage = document.querySelector('[dusk="ad-stage"]').getBoundingClientRect();
+            const at = (sx, sy) => ({ clientX: stage.left + sx * editor.zoom, clientY: stage.top + sy * editor.zoom });
+            const from = { bubbles: true, pointerId: 1, button: 0, ...at({$x}, {$y}) };
+            const to = { ...from, ...at({$toX}, {$toY}) };
+            document.querySelector('{$css}').dispatchEvent(new PointerEvent('pointerdown', from));
+            if ({$x} !== {$toX} || {$y} !== {$toY}) window.dispatchEvent(new PointerEvent('pointermove', to));
+            window.dispatchEvent(new PointerEvent('pointerup', to));
+        JS);
+    }
+
+    /** The Layers row of $id dragged onto $targetId's row, let go at $at of its height (0 top, 1 bottom). */
+    private function dropRow(Browser $browser, string $id, string $targetId, float $at): void
+    {
+        $browser->script(<<<JS
+            const row = document.querySelector('[dusk="layer-{$id}"]');
+            const target = document.querySelector('[dusk="layer-{$targetId}"]');
+            const box = target.getBoundingClientRect();
+            const transfer = new DataTransfer();
+            const point = { bubbles: true, cancelable: true, dataTransfer: transfer, clientX: box.left + 20, clientY: box.top + box.height * {$at} };
+            row.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: transfer }));
+            target.dispatchEvent(new DragEvent('dragover', point));
+            target.dispatchEvent(new DragEvent('drop', point));
+            row.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: transfer }));
+        JS);
+    }
 
     private function adWith(array $elements): array
     {
@@ -291,15 +461,17 @@ class AdGroupsFlowTest extends DuskTestCase
         JS);
     }
 
-    /** Drag one of the selection's resize handles by (dx, dy) stage pixels. */
-    private function dragHandle(Browser $browser, string $handle, int $dx, int $dy): void
+    /** Drag one of the selection's resize handles by (dx, dy) stage pixels — with Shift held, when asked. */
+    private function dragHandle(Browser $browser, string $handle, int $dx, int $dy, bool $shift = false): void
     {
+        $shiftKey = $shift ? 'true' : 'false';
+
         $browser->waitFor('@handle-'.$handle);
         $browser->script(<<<JS
             const editor = {$this->editor()};
             const node = document.querySelector('[dusk="handle-{$handle}"]');
             const box = node.getBoundingClientRect();
-            const from = { bubbles: true, pointerId: 1, button: 0, clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 };
+            const from = { bubbles: true, pointerId: 1, button: 0, clientX: box.left + box.width / 2, clientY: box.top + box.height / 2, shiftKey: {$shiftKey} };
             const to = { ...from, clientX: from.clientX + {$dx} * editor.zoom, clientY: from.clientY + {$dy} * editor.zoom };
             node.dispatchEvent(new PointerEvent('pointerdown', from));
             window.dispatchEvent(new PointerEvent('pointermove', to));
@@ -307,15 +479,22 @@ class AdGroupsFlowTest extends DuskTestCase
         JS);
     }
 
-    /** Drag the rotate handle so the selection turns by about `degrees` (clockwise), then let go. */
+    /**
+     * Drag the rotate handle so the selection turns by about `degrees` (clockwise), then let go — the pointer
+     * travelling round the point the editor turns it about: an element's centre, a group's centroid (§13).
+     */
     private function rotateBy(Browser $browser, int $degrees): void
     {
         $browser->waitFor('@handle-rotate');
         $browser->script(<<<JS
             const editor = {$this->editor()};
             const handle = document.querySelector('[dusk="handle-rotate"]');
-            const frame = document.querySelector('[dusk="selection-frame"]').getBoundingClientRect();
-            const centre = { x: frame.left + frame.width / 2, y: frame.top + frame.height / 2 };
+            const selected = editor.selected;
+            const pivot = selected.type === 'group'
+                ? editor.pivotOf(editor.subtreeStart(selected))
+                : { x: selected.x + selected.w / 2, y: selected.y + selected.h / 2 };
+            const stage = document.querySelector('[dusk="ad-stage"]').getBoundingClientRect();
+            const centre = { x: stage.left + pivot.x * editor.zoom, y: stage.top + pivot.y * editor.zoom };
             const box = handle.getBoundingClientRect();
             const from = { bubbles: true, pointerId: 1, button: 0, clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 };
             const radius = Math.hypot(from.clientX - centre.x, from.clientY - centre.y);

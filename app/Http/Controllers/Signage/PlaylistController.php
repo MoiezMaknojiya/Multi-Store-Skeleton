@@ -597,11 +597,15 @@ class PlaylistController extends Controller
     private function channelSummary(Channel $channel, CarbonInterface $today): array
     {
         $running = $channel->runningAdsOn($today);
+        $cover = $running->first() ?? $channel->ads->first();
 
         return [
             'title' => $channel->name,
             'type' => 'channel',
-            'thumbnail_url' => ($running->first() ?? $channel->ads->first())?->thumbnail_url,
+            'thumbnail_url' => $cover?->thumbnail_url,
+            // Which way that picture is, so an upright one is shown whole — never the channel's own shape: its
+            // ads may be either, and each says so where it is listed.
+            'thumbnail_orientation' => $cover?->orientation,
             'channel_active' => $channel->is_active,
             'ads_count' => $running->count(),
             'pass_ads' => $channel->adsPerPassOf($running),

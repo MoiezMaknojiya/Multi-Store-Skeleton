@@ -159,11 +159,12 @@ class Campaign extends Model
     }
 
     /**
-     * A cache key for the player, not a content digest — the same idea as Media's:
-     * it changes whenever the bytes behind this row could have.
+     * A cache key for the player, not a content digest — the same idea as Media's: a replaced file is a new
+     * file under a new name, so the key is the file itself, and a campaign renamed or given new dates sends no
+     * television to download its advert again.
      */
     public function cacheKey(): string
     {
-        return substr(hash('sha256', 'c'.$this->id.'|'.$this->size.'|'.$this->updated_at?->timestamp), 0, 20);
+        return substr(hash('sha256', 'c'.$this->id.'|'.$this->size.'|'.$this->path), 0, 20);
     }
 }

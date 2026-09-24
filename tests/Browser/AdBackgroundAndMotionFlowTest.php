@@ -41,7 +41,7 @@ class AdBackgroundAndMotionFlowTest extends DuskTestCase
             $browser->loginAs($designer);
             $this->switchToStore($browser, $store);
 
-            $browser->visit('/builder/create');
+            $browser->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
 
             /* ── 1. Nothing selected: the panel is the stage's background ── */
@@ -170,7 +170,7 @@ class AdBackgroundAndMotionFlowTest extends DuskTestCase
             $browser->loginAs($designer);
             $this->switchToStore($browser, $store);
 
-            $browser->visit('/builder/create');
+            $browser->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
             $browser->waitFor('@ad-stage');
 
@@ -264,14 +264,17 @@ class AdBackgroundAndMotionFlowTest extends DuskTestCase
             $this->assertStringContainsString('translate', $moving['style'], 'the text is floating');
 
             // Loaded behind the item that is showing — the way the player prepares the next one — it
-            // waits; the moment it is shown, it starts.
-            $browser->script(<<<'JS'
+            // waits; the moment it is shown, it starts. The frame is held by a page of the app's own, as the
+            // player holds it: the ad page's own policy lets it hold no frame at all (frame-src 'none', §15).
+            $page = json_encode(Storage::disk('public')->url(Media::sole()->path));
+            $browser->visit('/up');
+            $browser->script(<<<JS
                 const holder = document.createElement('div');
                 holder.id = 'behind-holder';
                 holder.style.display = 'none';
                 holder.innerHTML = '<iframe id="behind" style="width:960px;height:540px;border:0"></iframe>';
                 document.body.appendChild(holder);
-                document.getElementById('behind').src = location.href;
+                document.getElementById('behind').src = {$page};
             JS);
             $browser->waitUntil('document.getElementById("behind").contentDocument && document.getElementById("behind").contentDocument.readyState === "complete" && !!document.getElementById("behind").contentWindow.AdRuntime', 10);
             $browser->pause(1500);
@@ -361,7 +364,7 @@ class AdBackgroundAndMotionFlowTest extends DuskTestCase
             $browser->loginAs($designer);
             $this->switchToStore($browser, $store);
 
-            $browser->visit('/builder/create');
+            $browser->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
             $browser->waitFor('@stage-panel');
 

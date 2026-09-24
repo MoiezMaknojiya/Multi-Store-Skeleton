@@ -122,7 +122,28 @@ class ScheduleRule extends Model
      */
     public function coversDay(CarbonInterface $moment): bool
     {
-        $day = CarbonImmutable::parse(CarbonImmutable::instance($moment)->toDateString());
+        // Remembered per date on this very instance: a manifest's timeline asks the same rule about the same
+        // day at every change point (docs/AD-BUILDER-SPEC.md §15), and the answer depends on nothing else.
+        // A rule changed and saved is a new instance by the time anybody asks again.
+        $date = CarbonImmutable::instance($moment)->toDateString();
+
+        return $this->coveredDays[$date] ??= $this->computeCoversDay($date);
+    }
+
+    /** @var array<string, bool> coversDay()'s answers, by date */
+    private array $coveredDays = [];
+
+    /** A changed rule forgets what it used to cover. */
+    public function setAttribute($key, $value)
+    {
+        $this->coveredDays = [];
+
+        return parent::setAttribute($key, $value);
+    }
+
+    private function computeCoversDay(string $date): bool
+    {
+        $day = CarbonImmutable::parse($date);
 
         // The outer bounds first: cheap, and they end most calls.
         if ($this->starts_on && $day->lt($this->bareDate($this->starts_on))) {

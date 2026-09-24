@@ -55,6 +55,74 @@ class NetworkAdResolver
     }
 
     /**
+     * The break at each of many moments — the offline timeline (docs/AD-BUILDER-SPEC.md §15) — asking the
+     * database once per local DATE rather than once per moment: the dates are the query's, the window
+     * inside a day is wall clock and read here, exactly as breakFor() reads it.
+     *
+     * @param  list<CarbonImmutable>  $instants
+     * @return array<int, Collection<int, Campaign>> keyed by each instant's timestamp
+     */
+    public function breaksAt(Screen $screen, array $instants): array
+    {
+        $breaks = [];
+
+        if (! $this->screenCarriesAds($screen)) {
+            foreach ($instants as $instant) {
+                $breaks[$instant->getTimestamp()] = collect();
+            }
+
+            return $breaks;
+        }
+
+        $byDate = [];
+
+        foreach ($instants as $instant) {
+            $local = $screen->localTime($instant);
+            $date = $local->toDateString();
+
+            $byDate[$date] ??= $screen->campaigns()->liveOn($local)->orderBy('campaigns.id')->get();
+
+            $breaks[$instant->getTimestamp()] = $byDate[$date]
+                ->filter(fn (Campaign $campaign) => $campaign->isDueAt($local))
+                ->pipe(fn (Collection $due) => $this->trimToBreak($due));
+        }
+
+        return $breaks;
+    }
+
+    /**
+     * The moments between $from and $until at which this screen's break can change: every local midnight
+     * (a campaign's dates) and every clock time a campaign on this screen starts or stops at, each day.
+     *
+     * @return list<CarbonImmutable>
+     */
+    public function changePoints(Screen $screen, CarbonImmutable $from, CarbonImmutable $until): array
+    {
+        if (! $this->screenCarriesAds($screen)) {
+            return [];
+        }
+
+        $timezone = $screen->timezone ?: Screen::DEFAULT_TIMEZONE;
+        $times = $screen->campaigns()->get(['campaigns.start_time', 'campaigns.end_time'])
+            ->flatMap(fn (Campaign $campaign) => [$campaign->start_time, $campaign->end_time])
+            ->filter(fn (?string $time) => is_string($time) && $time !== '')
+            ->map(fn (string $time) => substr($time, 0, 5))
+            ->unique();
+
+        $points = [];
+
+        for ($day = $screen->localTime($from)->startOfDay(); $day->lte($screen->localTime($until)); $day = $day->addDay()) {
+            $points[] = $day;
+
+            foreach ($times as $time) {
+                $points[] = CarbonImmutable::createFromFormat('Y-m-d H:i:s', $day->toDateString().' '.$time.':00', $timezone);
+            }
+        }
+
+        return array_values(array_filter($points, fn (CarbonImmutable $point) => $point->gt($from) && $point->lte($until)));
+    }
+
+    /**
      * Has this television been cleared to carry advertising?
      *
      * The shop's answer and the screen's answer are both required. A shop may agree

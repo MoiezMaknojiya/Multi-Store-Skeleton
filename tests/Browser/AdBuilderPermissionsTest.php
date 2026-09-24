@@ -31,7 +31,7 @@ class AdBuilderPermissionsTest extends DuskTestCase
             $browser->loginAs($maker);
             $this->switchToStore($browser, $store);
 
-            $browser->visit('/builder/create');
+            $browser->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
 
             // Publishing changes a saved ad, which is Update Ads — so there is no Publish to press.
@@ -54,7 +54,7 @@ class AdBuilderPermissionsTest extends DuskTestCase
 
             // The saved ad's own address is the editor's, which is Update Ads: somebody who may only
             // create stays on Create, so a reload opens a fresh ad rather than a refusal.
-            $this->assertStringEndsWith('/builder/create', $browser->driver->getCurrentURL());
+            $this->assertStringEndsWith('/builder/create?orientation=landscape', $browser->driver->getCurrentURL());
 
             /* ── A second save would change it: refused here, before anything is sent ── */
             $this->countRequests($browser, 'PUT', '/builder/'.$ad->id);
@@ -64,7 +64,7 @@ class AdBuilderPermissionsTest extends DuskTestCase
             $browser->waitForText('This ad is saved. Changing a saved ad needs the Update Ads permission, which you do not have.');
             $this->assertSame(0, $this->requestsCounted($browser), 'the change was sent to the server anyway');
             $this->assertSame('First try', $ad->fresh()->name);
-            $this->assertStringEndsWith('/builder/create', $browser->driver->getCurrentURL());
+            $this->assertStringEndsWith('/builder/create?orientation=landscape', $browser->driver->getCurrentURL());
         });
     }
 

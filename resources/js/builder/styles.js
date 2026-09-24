@@ -223,7 +223,9 @@ export function shapeCss(style = {}, limits, maxStops) {
 
 /**
  * Where an element sits: AdCompiler::boxStyle(). Its z-index starts at 1, above the background, and a
- * Ken Burns loop clips the box so the photograph zooms inside its own frame.
+ * Ken Burns loop clips the box so the photograph zooms inside its own frame — a picture's, a shape's, a
+ * word's; never a group's, which the page does not clip either: what moves inside it (a slide, a float)
+ * would be cut at the group's edge.
  */
 export function boxCss(element, limits) {
     const style = element.style ?? {};
@@ -240,10 +242,23 @@ export function boxCss(element, limits) {
         display: element.visible === false ? 'none' : null,
     };
 
-    if (element.animations?.loop?.effect === 'kenburns') {
+    if (element.animations?.loop?.effect === 'kenburns' && element.type !== 'group') {
         css.overflow = 'hidden';
         css.borderRadius = limit(limits, 'radius', style.radius, 0) + 'px';
     }
 
+    // A group that neither fades, blends nor moves is no layer of its own: its children take their places in
+    // the stage's stacking order (their z is the tree's pre-order) and their blend modes mix with what is
+    // behind the group — AdCompiler::boxStyle() writes the page the same way (§13).
+    if (element.type === 'group' && !groupIsolates(element, limits)) css.zIndex = 'auto';
+
     return css;
+}
+
+/** AdCompiler::groupIsolates(): does this group have to be a layer of its own? */
+export function groupIsolates(group, limits) {
+    const animations = group.animations ?? {};
+    const moves = Boolean(animations.in?.effect || animations.loop?.effect || animations.out?.effect);
+
+    return limit(limits, 'opacity', group.opacity, 1) < 1 || (group.style?.blend ?? 'normal') !== 'normal' || moves;
 }

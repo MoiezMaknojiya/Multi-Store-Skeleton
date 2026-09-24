@@ -13,6 +13,14 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/player-icons/icon-192.png">
     <link rel="apple-touch-icon" href="/player-icons/icon-192.png">
 
+    {{-- A watchdog (docs/AD-BUILDER-SPEC.md §15): a page whose script never ran — a deploy's new script
+         that could not be fetched, a browser that choked on it — would sit on "Starting up..." for ever,
+         and nobody reloads a television. The player marks itself started; without the mark, the page
+         asks again in a minute, and keeps asking until the line brings a working copy. --}}
+    <script>
+        setTimeout(function () { if (!window.signagePlayerStarted) window.location.reload(); }, 60000);
+    </script>
+
     {{-- Deliberately no CSRF token and no session: this page authenticates with
          the device token it was handed at pairing, never with a cookie. --}}
     @vite(['resources/css/app.css', 'resources/js/player.js'])

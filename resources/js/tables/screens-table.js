@@ -188,6 +188,29 @@ export function registerScreensTable(Alpine) {
                 return ORIENTATION_LABELS[value] ?? value;
             },
 
+            /** Which way the screen in the form is: its four settings are two shapes. */
+            formShape() {
+                return String(this.form.orientation ?? '').startsWith('portrait') ? 'portrait' : 'landscape';
+            },
+
+            /** A holding picture's name in the list — saying so when it is the other way round from the screen. */
+            holdingLabel(media) {
+                if (!media.orientation || media.orientation === this.formShape()) return media.title;
+
+                return media.title + (media.orientation === 'portrait' ? ' (portrait)' : ' (landscape)');
+            },
+
+            /** Under the list: what the chosen holding picture will look like on this screen, when it is the other way. */
+            holdingNote() {
+                const chosen = (this.mediaOptions ?? []).find((media) => String(media.id) === String(this.form.default_media_id));
+
+                if (!chosen?.orientation || chosen.orientation === this.formShape()) return '';
+
+                return chosen.orientation === 'portrait'
+                    ? 'Portrait — it holds this screen with bars at the sides.'
+                    : 'Landscape — it holds this screen with bars above and below.';
+            },
+
             /* ── Network advertising ───────────────────────────────────── */
 
             /** Does this shop carry advertising at all? Nothing runs until it does. */

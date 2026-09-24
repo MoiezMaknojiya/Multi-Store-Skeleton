@@ -312,6 +312,51 @@ test('an email field takes an address, not a header injection or a list', functi
     expect(DB::table('invitations')->count())->toBe(0);
 });
 
+/* ── Text that is not UTF-8 ─────────────────────────────────────────────── */
+
+test('text that is not UTF-8 is refused at the door — a 400, never a 500 and never stored', function (string $method, string $uri, array $data, array $server) {
+    $screen = Screen::factory()->create(['store_id' => $this->store->id, 'name' => 'Front TV']);
+
+    $response = $this->call($method, str_replace('{screen}', (string) $screen->id, $uri), $data, [], [], ['HTTP_ACCEPT' => 'application/json', ...$server]);
+
+    expect($response->getStatusCode())->toBe(400)
+        ->and($response->json('message'))->toBe('The request carried text that is not valid UTF-8.')
+        ->and(Screen::sole()->name)->toBe('Front TV')
+        ->and(Channel::count())->toBe(0);
+})->with([
+    // Each of these answered 500 ("Malformed UTF-8 characters") before the check.
+    'a name on a screen' => ['PUT', '/screens/{screen}', ['name' => "Caf\xC3\x28", 'orientation' => 'landscape'], []],
+    'a search in a listing' => ['GET', '/screens/data?search='.rawurlencode("Caf\xC3\x28"), [], []],
+    'a new channel' => ['POST', '/channels', ['name' => "\xFF\xFE"], []],
+    'a key that is not UTF-8' => ['POST', '/channels', ["na\xFFme" => 'x'], []],
+    'deep inside a list' => ['POST', '/dayparts', ['name' => 'Lunch', 'windows' => [['days' => ["\xE9"]]]], []],
+    'the User-Agent the session keeps' => ['GET', '/screens/data', [], ['HTTP_USER_AGENT' => "Mozilla \xFF"]],
+]);
+
+test('an upload whose file name is not UTF-8 is refused before anything is stored', function () {
+    Storage::fake('public');
+
+    $file = UploadedFile::fake()->image("poster\xFF.jpg", 40, 40);
+
+    $this->call('POST', '/media', ['title' => 'Poster'], [], ['file' => $file], ['HTTP_ACCEPT' => 'application/json'])
+        ->assertStatus(400);
+
+    expect(Media::count())->toBe(0);
+});
+
+test('the device API is behind the same door: a screen cannot register with a uuid that is not UTF-8', function () {
+    $this->call('POST', '/device/register', ['device_uuid' => "\xFF\xFF"], [], [], ['HTTP_ACCEPT' => 'application/json'])
+        ->assertStatus(400);
+
+    expect(DB::table('pairing_requests')->count())->toBe(0);
+});
+
+test('every language is welcome: Urdu, accents and emoji are UTF-8 and pass', function () {
+    $this->postJson('/channels', ['name' => 'آج کی پیشکش · Café ☕'])->assertSuccessful();
+
+    expect(Channel::sole()->name)->toBe('آج کی پیشکش · Café ☕');
+});
+
 test('a search for "0" is a search, not "no search"', function () {
     // PHP reads "0" as false; the listings once did too, and showed everything.
     Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Menu 2020']);

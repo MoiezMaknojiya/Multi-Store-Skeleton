@@ -252,11 +252,14 @@ export function registerAdEditor(Alpine) {
             select(element, event = null) {
                 event?.stopPropagation();
 
+                const level = this.editingGroupId;
                 const target = this.resolveTarget(element);
 
                 if (!target || this.isLocked(target)) return;
 
-                if (event && (event.shiftKey || event.ctrlKey || event.metaKey)) {
+                // Shift or Ctrl adds to the selection only on the level being worked on: a click that stepped
+                // out of a group starts a selection of its own there, never one mixing two levels (§13).
+                if (event && (event.shiftKey || event.ctrlKey || event.metaKey) && this.editingGroupId === level) {
                     this.toggleInSelection(target);
 
                     return;
@@ -379,10 +382,7 @@ export function registerAdEditor(Alpine) {
                 this.place(element, 'Add ' + type);
             },
 
-            /**
-             * Put a new element on top of the others — inside the group being worked in, if one is —
-             * select it and remember the step.
-             */
+            /** Put a new element on top of the others, select it and remember the step. */
             place(element, label) {
                 if (this.doc.elements.length >= this.maxElements) {
                     window.toast(`An ad may hold at most ${this.maxElements} elements.`);
@@ -391,7 +391,10 @@ export function registerAdEditor(Alpine) {
                 }
 
                 this.stopPreview();
-                element.parentId = this.editingGroupId;
+                // Always on the stage itself, the way Canva adds one: placed at the stage's centre, a new
+                // element inside the group being worked in would only stretch that group across the frame.
+                element.parentId = null;
+                this.exitGroups();
                 this.doc.elements.push(element);
                 renumberDepth(this.doc);
                 this.selectedIds = [element.id];
@@ -476,20 +479,33 @@ export function registerAdEditor(Alpine) {
              * plain press selects it — unless it is already part of a selection, which then moves as one.
              */
             startDrag(event, element) {
+                // The innermost element under the pointer answers for the press, and only it: every group
+                // around it has a handler of its own on the same press, and must not act on it again (§13) —
+                // not select itself over a text being edited, not start a second pan.
+                event.stopPropagation();
+                this.closeContextMenu();
+
                 if (event.button !== 0) return;
                 if (this.spaceHeld) return this.startPan(event);
+                // Words being edited where they stand keep the press: the caret goes where it was clicked.
                 if (this.editingTextId === element.id) return;
 
+                // The group being worked in, pressed where it holds nothing, is the empty stage of its level:
+                // a drag from there draws a marquee over its children and a plain click is a click on empty
+                // stage — never the group itself picked up and dragged away as one.
+                if (element.id === this.editingGroupId) return this.startMarquee(event);
+
                 // Anything inside a group is the group, unless the group has been entered (§13).
+                const level = this.editingGroupId;
                 const target = this.resolveTarget(element);
 
                 if (!target || this.isLocked(target)) return;
 
-                event.stopPropagation();
                 event.preventDefault();
 
                 if (event.shiftKey || event.ctrlKey || event.metaKey) {
-                    this.toggleInSelection(target);
+                    if (this.editingGroupId === level) this.toggleInSelection(target);
+                    else this.setSelection([target.id]);
 
                     return;
                 }
@@ -535,14 +551,21 @@ export function registerAdEditor(Alpine) {
                 this.stopPreview();
 
                 const point = this.toStagePoint(event.clientX, event.clientY);
+                const subtree = isGroup(element) ? this.subtreeStart(element) : null;
+                // A group turns about the centroid of what it holds — a point the turn itself leaves where it
+                // was, so turning back by the same angle puts everything back where it stood. (The centre of
+                // its box would not do: the box around turned children is another box.)
+                const pivot = subtree ? this.pivotOf(subtree) : { x: element.x + element.w / 2, y: element.y + element.h / 2 };
+                const around = { x: pivot.x, y: pivot.y, w: 0, h: 0 };
 
                 this.beginGesture(event, {
                     kind: 'rotate',
                     start: { x: element.x, y: element.y, w: element.w, h: element.h, rotation: element.rotation ?? 0 },
                     element,
-                    subtree: isGroup(element) ? this.subtreeStart(element) : null,
-                    centre: { x: element.x + element.w / 2, y: element.y + element.h / 2 },
-                    startAngle: angleFromCentre(element, point.x, point.y),
+                    subtree,
+                    centre: pivot,
+                    around,
+                    startAngle: angleFromCentre(around, point.x, point.y),
                 });
             },
 
@@ -571,8 +594,11 @@ export function registerAdEditor(Alpine) {
                 if (gesture.kind === 'move') {
                     // The group snaps as one box: its edges and middle to the stage, the guides and
                     // everything that is not moving with it.
+                    // Never to the groups around what moves — their edges ARE its edges when the drag begins, so
+                    // it would stick where it stood — and never to anything that cannot be seen.
                     const moving = new Set(gesture.items.map((item) => item.element.id));
-                    const others = this.doc.elements.filter((other) => !moving.has(other.id) && other.visible !== false);
+                    const around = new Set(gesture.items.flatMap((item) => this.ancestorIds(item.element)));
+                    const others = this.doc.elements.filter((other) => !moving.has(other.id) && !around.has(other.id) && this.isShown(other));
                     const moved = snapMove(
                         { ...gesture.bounds, x: gesture.bounds.x + dx, y: gesture.bounds.y + dy },
                         this.stage,
@@ -594,7 +620,7 @@ export function registerAdEditor(Alpine) {
                 if (gesture.kind === 'resize') {
                     // The handles turn with the element, so a turned one is resized along its own sides.
                     // A group keeps its shape from a corner unless Shift asks to stretch it.
-                    const uniform = gesture.subtree ? gesture.corner !== event.shiftKey : event.shiftKey;
+                    const uniform = gesture.subtree ? gesture.corner && !event.shiftKey : event.shiftKey;
                     const box = resizeRotated(gesture.start, gesture.handle, dx, dy, gesture.start.rotation, {
                         keepRatio: uniform,
                         fromCentre: event.altKey,
@@ -611,7 +637,7 @@ export function registerAdEditor(Alpine) {
                     const point = this.toStagePoint(event.clientX, event.clientY);
 
                     if (gesture.subtree) {
-                        const delta = normaliseAngle(angleFromCentre(gesture.start, point.x, point.y) - gesture.startAngle);
+                        const delta = normaliseAngle(angleFromCentre(gesture.around, point.x, point.y) - gesture.startAngle);
 
                         this.rotateGroupBy(gesture.element, gesture.subtree, gesture.centre, event.shiftKey ? stepAngle(delta) : delta);
                     } else {
@@ -654,7 +680,11 @@ export function registerAdEditor(Alpine) {
 
                 if (!additive) this.clearSelection();
 
+                let moved = false;
+
                 const move = (moveEvent) => {
+                    moved = true;
+
                     const point = this.toStagePoint(moveEvent.clientX, moveEvent.clientY);
                     const box = {
                         x: Math.min(origin.x, point.x),
@@ -677,6 +707,9 @@ export function registerAdEditor(Alpine) {
                     window.removeEventListener('pointermove', move);
                     window.removeEventListener('pointerup', up);
                     this.marquee = null;
+
+                    // A plain click on empty stage also steps out of the group being worked in (§13).
+                    if (!moved && !additive) this.exitGroups();
                 };
 
                 window.addEventListener('pointermove', move);
@@ -939,7 +972,10 @@ export function registerAdEditor(Alpine) {
 
                 const rect = event.currentTarget.getBoundingClientRect();
                 const at = (event.clientY - rect.top) / Math.max(1, rect.height);
-                const inside = isGroup(element) && at > 0.3 && at < 0.7;
+                // Just under an OPEN group's row is the top of what it holds — its first child's row is the
+                // next one down — so that is where the element goes, not behind everything inside the group.
+                const open = isGroup(element) && !this.collapsedGroupIds.includes(element.id) && this.childrenOf(element.id).length > 0;
+                const inside = isGroup(element) && at > 0.3 && (at < 0.7 || open);
 
                 this.layerDrag = {
                     ...this.layerDrag,
@@ -1009,7 +1045,10 @@ export function registerAdEditor(Alpine) {
 
                 if (items.length === 0) return;
 
-                if (this.doc.elements.length + items.length > this.maxElements) {
+                // A group is copied with everything inside it (§13), so everything inside it counts.
+                const adding = items.reduce((count, element) => count + 1 + this.descendantsOf(element).length, 0);
+
+                if (this.doc.elements.length + adding > this.maxElements) {
                     window.toast(`An ad may hold at most ${this.maxElements} elements.`);
 
                     return;
@@ -1017,7 +1056,7 @@ export function registerAdEditor(Alpine) {
 
                 this.stopPreview();
 
-                // A group is copied with everything inside it (§13); the copies sit beside their originals.
+                // The copies sit beside their originals, in the same group.
                 const suffix = ' copy';
                 const ids = [];
 

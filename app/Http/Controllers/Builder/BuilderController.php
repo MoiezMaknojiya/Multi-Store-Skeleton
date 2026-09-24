@@ -83,7 +83,13 @@ class BuilderController extends Controller
      */
     public function create(Request $request): View
     {
-        $orientation = $request->query('orientation') === BuilderAd::PORTRAIT ? BuilderAd::PORTRAIT : BuilderAd::LANDSCAPE;
+        $orientation = $request->query('orientation');
+
+        // Which way the screen is mounted comes first (docs/AD-BUILDER-SPEC.md §12): chosen once, fixed after.
+        // The Create tab lands here with no answer yet — and a word nobody offers, or a list, is no answer.
+        if (! in_array($orientation, [BuilderAd::LANDSCAPE, BuilderAd::PORTRAIT], true)) {
+            return view('builder.choose');
+        }
 
         return view('builder.editor', [
             'ad' => null,
@@ -204,8 +210,9 @@ class BuilderController extends Controller
      * The page the compiler would publish, from the SAVED design, shown full screen in a tab of its own —
      * the way a television would show it, before anything reaches one. Nothing is written.
      *
-     * It is served with `Content-Security-Policy: sandbox allow-scripts`, so it runs in an opaque origin
-     * exactly as it does inside the player's sandboxed frame: even a page that somehow carried something it
+     * It is served with `Content-Security-Policy: sandbox allow-scripts`, so it runs in an opaque origin, as
+     * the page does on a television no service worker keeps (a set whose worker keeps it plays the page
+     * same-origin with the player, behind the page's own policy — docs §15): even a page that somehow carried something it
      * should not could reach nothing of this app — not its cookies, not its session, not its forms.
      */
     public function preview(BuilderAd $ad, AdCompiler $compiler): Response

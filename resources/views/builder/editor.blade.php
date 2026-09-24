@@ -330,7 +330,7 @@
                                  x-bind:style="{ paddingLeft: (8 + row.depth * 14) + 'px' }"
                                  x-bind:dusk="'layer-' + row.element.id"
                                  @click="selectFromLayers(row.element, $event)"
-                                 @contextmenu="openContextMenu($event, row.element)"
+                                 @contextmenu="openContextMenu($event, row.element, true)"
                                  @dragstart="layerDragStart($event, row.element)"
                                  @dragover.prevent="layerDragOver($event, row.element)"
                                  @drop.prevent="layerDrop($event, row.element)"
@@ -493,6 +493,16 @@
                              box around several. Hidden while the whole ad plays. --}}
                         <template x-if="previewing !== 'all'">
                             <div>
+                                {{-- The group being worked in (§13): its outline, and how to leave it. Sized in
+                                     screen pixels at any zoom, like every other mark over the stage. --}}
+                                <div class="absolute" x-show="editingGroup()" x-cloak
+                                     x-bind:style="editingGroupFrameStyle()" dusk="editing-group-frame">
+                                    <span class="absolute left-0 whitespace-nowrap rounded bg-purple-500 font-medium text-white"
+                                          x-bind:style="{ top: (-30 / zoom) + 'px', fontSize: screenText(11), padding: (2 / zoom) + 'px ' + (6 / zoom) + 'px' }"
+                                          x-text="'Inside ' + (editingGroup()?.name ?? 'the group') + ' · Esc to leave'"
+                                          dusk="editing-group-label"></span>
+                                </div>
+
                                 <template x-for="element in selection()" :key="'frame-' + element.id">
                                     <div class="absolute" x-bind:style="frameStyle(element)"
                                          x-bind:dusk="selectedIds.length === 1 ? 'selection-frame' : 'selection-frame-' + element.id">

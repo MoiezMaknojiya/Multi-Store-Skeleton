@@ -141,11 +141,13 @@ class ChannelAd extends Model
     }
 
     /**
-     * A cache key for the player, the same idea as Media's: it changes whenever what a screen should show
-     * for this ad could have — the ad pointed at another file, or the file itself replaced or re-published.
+     * The file's own cache key: an ad plays its library row's file, so the copy a screen keeps is that file's
+     * — the very copy a playlist line or another channel showing the same file keeps, never a second one of
+     * the same bytes. It moves when the file does (Media::cacheKey()); pointing the ad at another file moves
+     * its address anyway.
      */
     public function cacheKey(): string
     {
-        return substr(hash('sha256', 'h'.$this->id.'|'.$this->media_id.'|'.$this->media?->cacheKey()), 0, 20);
+        return $this->media?->cacheKey() ?? '';
     }
 }

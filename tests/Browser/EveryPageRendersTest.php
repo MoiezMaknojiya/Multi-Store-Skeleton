@@ -48,7 +48,8 @@ class EveryPageRendersTest extends DuskTestCase
                 '/campaigns',
                 '/builder',                  // the Ad Builder's three tabs: the ads…
                 '/builder/assets',           // …the shelf…
-                '/builder/create',           // …and the editor, on an empty stage
+                '/builder/create',           // …and Create, which asks which way the screen is mounted…
+                '/builder/create?orientation=portrait',   // …then the editor, on an empty stage of that shape
                 '/profile',
             ]);
         });
@@ -85,7 +86,8 @@ class EveryPageRendersTest extends DuskTestCase
                 '/channels/'.$channel->id,   // one channel's ads
                 '/builder',                  // the Ad Builder's three tabs: the ads…
                 '/builder/assets',           // …the shelf…
-                '/builder/create',           // …and the editor, on an empty stage
+                '/builder/create',           // …and Create, which asks which way the screen is mounted…
+                '/builder/create?orientation=landscape',  // …then the editor, on an empty stage of that shape
                 '/members',
                 '/roles',
                 '/activity',

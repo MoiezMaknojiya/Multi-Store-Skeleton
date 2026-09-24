@@ -52,6 +52,35 @@ export function groupPanel() {
             return this.descendantsOf(element).length;
         },
 
+        /** The ids of the groups an element is inside, nearest first. */
+        ancestorIds(element) {
+            return ancestorsOf(this.doc, element).map((group) => group.id);
+        },
+
+        /** The group being worked in, or null on the stage itself. */
+        editingGroup() {
+            return this.editingGroupId === null ? null : (this.doc.elements.find((element) => element.id === this.editingGroupId) ?? null);
+        },
+
+        /**
+         * The entered group's outline on the stage (§13): dashed, a colour of its own, so a person always
+         * sees that clicks now reach inside it — and that Esc, or a click on empty stage, leaves it.
+         */
+        editingGroupFrameStyle() {
+            const group = this.editingGroup();
+
+            if (!group) return { display: 'none' };
+
+            return {
+                left: group.x + 'px',
+                top: group.y + 'px',
+                width: group.w + 'px',
+                height: group.h + 'px',
+                outline: `${1.5 / this.zoom}px dashed #a855f7`,
+                outlineOffset: `${4 / this.zoom}px`,
+            };
+        },
+
         /** Locked itself, or inside a locked group. */
         isLocked(element) {
             return !!element?.locked || ancestorsOf(this.doc, element).some((group) => group.locked);
@@ -137,8 +166,14 @@ export function groupPanel() {
 
             if (!target || this.isLocked(target)) return;
 
+            // A double-click on the group being worked in, where it holds nothing, does nothing at all.
+            if (element.id === this.editingGroupId) return;
+
             if (isGroup(target)) {
                 this.enterGroup(target);
+
+                // Pressed where the group holds nothing: inside it, with nothing chosen yet.
+                if (element.id === target.id) return;
 
                 const child = this.resolveTarget(element);
 
@@ -190,7 +225,7 @@ export function groupPanel() {
             const group = {
                 id: newId('grp'),
                 type: 'group',
-                name: 'Group',
+                name: this.nextGroupName(),
                 parentId,
                 x: 0, y: 0, w: 1, h: 1,
                 rotation: 0,
@@ -211,6 +246,16 @@ export function groupPanel() {
             this.commit('Group');
         },
 
+        /** "Group 3": the first number no group in this design is called by. */
+        nextGroupName() {
+            const taken = new Set(this.doc.elements.filter(isGroup).map((group) => group.name));
+            let number = 1;
+
+            while (taken.has(`Group ${number}`)) number += 1;
+
+            return `Group ${number}`;
+        },
+
         /** Ctrl+Shift+G: every selected group's children take its place, and are selected. */
         ungroupSelection() {
             const groups = this.selection().filter((element) => isGroup(element) && !this.isLocked(element));
@@ -220,15 +265,25 @@ export function groupPanel() {
             this.stopPreview();
 
             const freed = [];
+            let movedAnimations = false;
 
             groups.forEach((group) => {
                 const children = this.childrenOf(group.id);
+                const opacity = Number(group.opacity ?? 1);
+                const blend = group.style?.blend ?? 'normal';
 
                 children.forEach((child, index) => {
                     child.parentId = parentIdOf(group);
                     child.z = (group.z ?? 0) + (index + 1) / (children.length + 1);
+                    // What the group gave them stays with them: a hidden group's children stay hidden, a faded
+                    // group's children keep its fade, and its blend goes to those that had none of their own.
+                    if (group.visible === false) child.visible = false;
+                    if (opacity < 1) child.opacity = Math.round(Number(child.opacity ?? 1) * opacity * 100) / 100;
+                    if (blend !== 'normal' && (child.style?.blend ?? 'normal') === 'normal') child.style = { ...(child.style ?? {}), blend };
                     freed.push(child.id);
                 });
+
+                if (Object.values(group.animations ?? {}).some((slot) => slot?.effect)) movedAnimations = true;
 
                 this.doc.elements = this.doc.elements.filter((element) => element.id !== group.id);
             });
@@ -236,6 +291,9 @@ export function groupPanel() {
             renumberDepth(this.doc);
             this.selectedIds = freed;
             this.commit('Ungroup');
+
+            // A group's animation moved them all as one; it cannot be handed to each of them.
+            if (movedAnimations) window.toast("The group's animation went with the group. Undo brings it back.");
         },
 
         /* ── Moving, scaling and turning a subtree ─────────────────────── */
@@ -257,7 +315,7 @@ export function groupPanel() {
                 element: item,
                 x: item.x, y: item.y, w: item.w, h: item.h,
                 rotation: item.rotation ?? 0,
-                fontSize: item.type === 'text' ? (item.style?.fontSize ?? 48) : null,
+                style: clone(item.style ?? {}),
             }));
         },
 
@@ -280,16 +338,24 @@ export function groupPanel() {
 
                 const item = start.element;
 
-                item.x = box.x + (start.x - origin.x) * sx;
-                item.y = box.y + (start.y - origin.y) * sy;
-                item.w = Math.max(1, start.w * sx);
-                item.h = Math.max(1, start.h * sy);
+                // Each child's centre moves with the stage's scale; its own sides take the scale along the way
+                // they point — so a child turned 90° that the group is widened grows taller, as it looks. Exact
+                // at right angles; in between, the nearest a turned box can come to a stretched one.
+                const radians = ((Number(start.rotation) || 0) * Math.PI) / 180;
+                const alongWidth = Math.hypot(sx * Math.cos(radians), sy * Math.sin(radians));
+                const alongHeight = Math.hypot(sx * Math.sin(radians), sy * Math.cos(radians));
+                const w = Math.max(1, tidy(start.w * alongWidth));
+                const h = Math.max(1, tidy(start.h * alongHeight));
+                const cx = box.x + (start.x + start.w / 2 - origin.x) * sx;
+                const cy = box.y + (start.y + start.h / 2 - origin.y) * sy;
 
-                if (scale !== null && start.fontSize !== null) {
-                    const [min, max] = this.limits.fontSize ?? [1, 2000];
-
-                    item.style = { ...(item.style ?? {}), fontSize: Math.max(min, Math.min(max, Math.round(start.fontSize * scale * 10) / 10)) };
-                }
+                item.x = tidy(cx - w / 2);
+                item.y = tidy(cy - h / 2);
+                item.w = w;
+                item.h = h;
+                // From a corner the look scales with the box — type, spacing, corners, frames, shadows, a
+                // line's weight — the way Canva scales a group; from a side the boxes stretch and the look stays.
+                item.style = scale === null ? clone(start.style) : scaledStyle(start.style, scale, this.limits);
             });
 
             syncGroupBounds(this.doc);
@@ -303,12 +369,23 @@ export function groupPanel() {
                 const item = start.element;
                 const turned = rotatePoint(start.x + start.w / 2, start.y + start.h / 2, centre.x, centre.y, delta);
 
-                item.x = turned.x - start.w / 2;
-                item.y = turned.y - start.h / 2;
-                item.rotation = normaliseAngle(start.rotation + delta);
+                item.x = tidy(turned.x - start.w / 2);
+                item.y = tidy(turned.y - start.h / 2);
+                item.rotation = tidy(normaliseAngle(start.rotation + delta));
             });
 
             syncGroupBounds(this.doc);
+        },
+
+        /** The centroid of the centres of the elements a subtree turns (a group's own box is derived, not turned). */
+        pivotOf(starts) {
+            const turned = starts.filter((start) => !isGroup(start.element));
+            const all = turned.length > 0 ? turned : starts;
+
+            return {
+                x: all.reduce((sum, start) => sum + start.x + start.w / 2, 0) / all.length,
+                y: all.reduce((sum, start) => sum + start.y + start.h / 2, 0) / all.length,
+            };
         },
 
         /** The angle of the pointer about a group's centre, as the rotate handle reads it. */
@@ -338,7 +415,8 @@ export function groupPanel() {
 
             copies.forEach(({ original, copy, root }) => {
                 copy.parentId = root ? parentId : (ids.get(parentIdOf(original)) ?? parentId);
-                copy.locked = false;
+                // The copy itself comes unlocked, to be placed; a lock inside it — a backdrop — stays.
+                if (root) copy.locked = false;
                 copy.visible = copy.visible !== false;
 
                 if (typeof copy.name === 'string') copy.name = clampName(copy.name, MAX_NAME);
@@ -410,4 +488,39 @@ export function groupPanel() {
             return fitsUnder(this.doc, parentId, elements);
         },
     };
+}
+
+/** Two decimals are more than a screen shows, and keep a group's geometry free of floating-point noise. */
+function tidy(value) {
+    return Math.round(value * 100) / 100;
+}
+
+/**
+ * The style numbers that are lengths — what a uniform scale of a group scales, each held inside its row of
+ * AdCompiler::LIMITS. Line height is a multiplier and colours are not lengths, so neither is here.
+ */
+const LENGTHS = [
+    'fontSize', 'letterSpacing', 'wordSpacing', 'padding', 'radius', 'lineWidth',
+    ['border', 'width'], ['textStroke', 'width'],
+    ['shadow', 'x'], ['shadow', 'y'], ['shadow', 'blur'], ['shadow', 'spread'],
+    ['textShadow', 'x'], ['textShadow', 'y'], ['textShadow', 'blur'],
+    ['filters', 'blur'],
+];
+
+function scaledStyle(style, factor, limits) {
+    const scaled = clone(style ?? {});
+
+    LENGTHS.forEach((path) => {
+        const [group, key] = Array.isArray(path) ? path : [null, path];
+        const holder = group ? scaled[group] : scaled;
+        const value = Number(holder?.[key]);
+
+        if (!holder || typeof holder !== 'object' || !Number.isFinite(value)) return;
+
+        const [min, max] = limits?.[group ? `${group}.${key}` : key] ?? [-Infinity, Infinity];
+
+        holder[key] = Math.max(min, Math.min(max, Math.round(value * factor * 10) / 10));
+    });
+
+    return scaled;
 }

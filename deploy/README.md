@@ -107,6 +107,16 @@ file on it, so the set keeps playing when the shop's internet drops and picks up
 moment it returns (docs/AD-BUILDER-SPEC.md §15). Nothing on the set says it is offline — the Screens page
 does, from its missed heartbeats. On a browser without service workers the player simply plays online.
 
+An Ad Builder page carries its own security policy from the release of 2026-09-24 on. A page published
+before it has none until it is written again: once, after that deploy, on the server as `deploy`:
+
+```bash
+cd /var/www/signage/current && php artisan builder:recompile
+```
+
+It writes each published page from the version on the screens — never a draft — and the screens fetch
+the new copy on their next poll. It is safe to run again.
+
 ## Every deploy after that
 
 Commit, then:

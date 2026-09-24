@@ -318,7 +318,7 @@ class AdEditorPolishFlowTest extends DuskTestCase
             $browser->loginAs($designer);
             $this->switchToStore($browser, $store);
 
-            $browser->visit('/builder/create');
+            $browser->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
             $browser->waitFor('@stage-empty-hint');
 
