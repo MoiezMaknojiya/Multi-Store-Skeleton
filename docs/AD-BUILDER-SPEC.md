@@ -926,7 +926,13 @@ anywhere else the player is exactly what it was — online only — because ever
    §13 among them — from **`php artisan builder:recompile`** (`--ad=` for some): each published page written
    again from the version on the screens, never the draft (no screen is given anything its owner has not
    published), and its row stamped so the screens fetch it anew; an ad published before versions were kept
-   (2026-09-21) is named and left for somebody to publish again from the editor.
+   (2026-09-21) is named and left for somebody to publish again from the editor. Every page's head names the
+   compiler that wrote it (`<meta name="ad-compiler" content="…">`, `AdCompiler::VERSION`), and **every deploy
+   runs `builder:recompile --outdated`** (`deploy/server/release.sh`, AFTER the site has switched to the new
+   release — before it, a page would name a runtime version the old release does not serve, and a set that
+   fetched it then would keep the old file under the new address): only the pages an older compiler wrote are
+   written again, the rest stay untouched and no screen fetches them anew. `VERSION` moves — to the day it
+   changes — whenever what the compiler writes changes in a way the published pages should get too.
 
 **Text that is not UTF-8** is refused at the door for every route, the device API's included
 (`RejectMalformedText`, a 400): a browser never sends it, and it passed every `string` rule and then broke

@@ -14,6 +14,7 @@ April 2026, and 8.4 is the version the panel is developed against.
 | `server/nginx-site.conf`, `php.ini`, `php-fpm-pool.conf`, `mysql.cnf`, `backup-database.sh` | Installed by `setup.sh` | — |
 | `deploy.sh` | Puts the **last commit** live and checks it | Claude or you, from Git Bash on the PC |
 | `server/release.sh` | The server's half of a deploy (uploaded by `deploy.sh` each time) | — |
+| `server/enable-http2.sh` | Turns HTTP/2 on once HTTPS is there (step 5) | **You**, as root — it changes Nginx's settings |
 
 ## On the server
 
@@ -88,6 +89,21 @@ certbot --nginx --redirect -d app.yourdomain.com
 
 It renews itself. Sign-in needs HTTPS: the session cookie is sent over HTTPS only.
 
+Then HTTP/2, once. Over HTTP/1.1 a browser opens at most six connections to a site, and a television caching
+a big video, playing another and asking for its playlist can use them all; HTTP/2 carries everything over one.
+From the project folder, in Git Bash:
+
+```bash
+scp -i ~/.ssh/signage_deploy deploy/server/enable-http2.sh root@SERVER_IP:/root/signage-setup/
+```
+
+```bash
+ssh -i ~/.ssh/signage_deploy root@SERVER_IP "bash /root/signage-setup/enable-http2.sh app.yourdomain.com"
+```
+
+It copies the site first and puts it back if Nginx will not take the change, and it ends by asking the site
+over HTTP/2. Safe to run again.
+
 ## 6. The first deploy
 
 ```bash
@@ -107,15 +123,11 @@ file on it, so the set keeps playing when the shop's internet drops and picks up
 moment it returns (docs/AD-BUILDER-SPEC.md §15). Nothing on the set says it is offline — the Screens page
 does, from its missed heartbeats. On a browser without service workers the player simply plays online.
 
-An Ad Builder page carries its own security policy from the release of 2026-09-24 on. A page published
-before it has none until it is written again: once, after that deploy, on the server as `deploy`:
-
-```bash
-cd /var/www/signage/current && php artisan builder:recompile
-```
-
-It writes each published page from the version on the screens — never a draft — and the screens fetch
-the new copy on their next poll. It is safe to run again.
+An Ad Builder page carries its own security policy from the release of 2026-09-24 on, and its head names the
+compiler that wrote it. Every deploy writes again the pages an older compiler wrote (`builder:recompile
+--outdated`, run by `release.sh` once the site has switched over), each from the version on the screens —
+never a draft — and the screens fetch the new copy on their next poll. Nothing to do by hand; a failure is
+printed in the deploy's output with the command to run again.
 
 ## Every deploy after that
 

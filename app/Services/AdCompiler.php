@@ -91,6 +91,14 @@ class AdCompiler
     public const MOTION_SCRIPTS = ['ad-runtime/anime.min.js', 'ad-runtime/runtime.js'];
 
     /**
+     * Which compiler wrote a page, stamped in its head (`<meta name="ad-compiler">`). Moved on — to the day
+     * it changes — whenever what the compiler writes changes in a way the pages already published should get
+     * too: every deploy then writes those pages again from the version on the screens
+     * (`builder:recompile --outdated`, run by deploy/server/release.sh), and leaves the rest alone.
+     */
+    public const VERSION = '2026-09-24';
+
+    /**
      * The boot script of an advert that moves (motionScripts()). A constant, because the page's policy names
      * it by its digest (contentSecurityPolicy()): a byte of difference and it would not run.
      */
@@ -241,6 +249,7 @@ class AdCompiler
         $policy = $animations === []
             ? $this->contentSecurityPolicy([$fit], false)
             : $this->contentSecurityPolicy([$fit, self::BOOT_SCRIPT], true);
+        $stamp = self::VERSION;
 
         return <<<HTML
         <!doctype html>
@@ -248,6 +257,7 @@ class AdCompiler
         <head>
         <meta charset="utf-8">
         {$policy}
+        <meta name="ad-compiler" content="{$stamp}">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>{$title}</title>
         {$fonts}
@@ -991,6 +1001,12 @@ class AdCompiler
         ]);
 
         return '<meta http-equiv="Content-Security-Policy" content="'.e($policy).'">';
+    }
+
+    /** Was this page written by the compiler as it is now? (Its stamp says so — see VERSION.) */
+    public static function wroteCurrent(?string $page): bool
+    {
+        return $page !== null && str_contains($page, '<meta name="ad-compiler" content="'.self::VERSION.'">');
     }
 
     /** "https://app.example.com" out of any address on it, or null for one that is not http(s). */

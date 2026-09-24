@@ -67,6 +67,14 @@ ln -sfn "$RELEASE" "$APP/current.next"
 mv -Tf "$APP/current.next" "$APP/current"
 sudo -n systemctl reload php$PHP-fpm
 
+# Ad Builder pages an older compiler wrote are written again from the version on the screens (never a draft),
+# so every published page carries what the compiler writes now — its security policy among it. After the
+# switch, never before: a page names the runtime by its version, and the site must already serve that version.
+# The site is up either way, so a failure here is reported rather than failing the deploy.
+echo "   writing out-of-date Ad Builder pages again"
+php artisan builder:recompile --outdated < /dev/null \
+    || echo "   WARNING: builder:recompile failed; run it by hand: cd $APP/current && php artisan builder:recompile --outdated" >&2
+
 # Five releases stay. rm never follows the storage links, so the shared uploads are never touched.
 find "$APP/releases" -mindepth 1 -maxdepth 1 -type d -regextype posix-extended -regex '.*/[0-9]{14}' \
     | sort | head -n -5 | while read -r old; do rm -rf "$old"; done

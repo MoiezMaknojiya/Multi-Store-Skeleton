@@ -3,6 +3,7 @@
 use App\Models\ActivityLog;
 use App\Models\BuilderAd;
 use App\Models\Store;
+use App\Services\AdCompiler;
 use App\Services\AdPublisher;
 use Illuminate\Support\Facades\Storage;
 
@@ -79,6 +80,64 @@ test('an ad with no kept version is named and left alone; an unpublished one is 
 
     expect(Storage::disk('public')->get($legacy->media->path))->toBe('as it was')
         ->and(Storage::disk('public')->get($draft->media->path))->toBe('pulled page');
+});
+
+test('a page names the compiler that wrote it', function () {
+    $ad = BuilderAd::factory()->withText('Hello')->create(['store_id' => $this->store->id]);
+    $page = app(AdCompiler::class)->compile($ad);
+
+    expect($page)->toContain('<meta name="ad-compiler" content="'.AdCompiler::VERSION.'">')
+        ->and(AdCompiler::wroteCurrent($page))->toBeTrue()
+        ->and(AdCompiler::wroteCurrent('<html><head><meta name="ad-compiler" content="2020-01-01"></head></html>'))->toBeFalse()
+        ->and(AdCompiler::wroteCurrent(null))->toBeFalse();
+});
+
+test('--outdated writes only the pages an older compiler wrote, and leaves the rest as they are', function () {
+    $old = publishedWithDraft($this->store, 'Old page', 'Old draft');
+    $fresh = BuilderAd::factory()->withText('Fresh page')->create(['store_id' => $this->store->id, 'name' => 'Fresh']);
+    app(AdPublisher::class)->publish($fresh);
+    $fresh->refresh();
+
+    $freshPage = Storage::disk('public')->get($fresh->media->path);
+    [$oldKey, $freshKey] = [$old->media->cacheKey(), $fresh->media->cacheKey()];
+
+    $this->travel(5)->seconds();
+    $this->artisan('builder:recompile', ['--outdated' => true])
+        ->expectsOutputToContain('1 page(s) written. 1 already current.')
+        ->assertSuccessful();
+
+    expect(Storage::disk('public')->get($old->media->path))->toContain('<meta name="ad-compiler" content="'.AdCompiler::VERSION.'">')
+        ->and($old->media->fresh()->cacheKey())->not->toBe($oldKey)
+        // The current one is not touched: no new copy for any screen to fetch.
+        ->and(Storage::disk('public')->get($fresh->media->path))->toBe($freshPage)
+        ->and($fresh->media->fresh()->cacheKey())->toBe($freshKey);
+
+    // Every deploy runs it: the second time there is nothing left to write.
+    $this->artisan('builder:recompile', ['--outdated' => true])
+        ->expectsOutputToContain('0 page(s) written. 2 already current.')
+        ->assertSuccessful();
+});
+
+test('--outdated writes a published page that is missing from the disk', function () {
+    $ad = BuilderAd::factory()->withText('Lost page')->create(['store_id' => $this->store->id, 'name' => 'Lost']);
+    $media = app(AdPublisher::class)->publish($ad);
+    Storage::disk('public')->delete($media->path);
+
+    $this->artisan('builder:recompile', ['--outdated' => true])->assertSuccessful();
+
+    expect(Storage::disk('public')->get($media->path))->toContain('Lost page');
+});
+
+test('every deploy writes the out-of-date pages again — after the site has switched to the new release', function () {
+    $release = (string) file_get_contents(base_path('deploy/server/release.sh'));
+    $switch = strpos($release, 'mv -Tf "$APP/current.next" "$APP/current"');
+    $recompile = strpos($release, 'php artisan builder:recompile --outdated');
+
+    // Before the switch, a page would name a runtime version the old release does not serve — and a set that
+    // fetched it then would keep the old file under the new address.
+    expect($switch)->not->toBeFalse()
+        ->and($recompile)->not->toBeFalse()
+        ->and($recompile)->toBeGreaterThan($switch);
 });
 
 test('--ad names the ads to write; the rest stay as they are', function () {
