@@ -77,9 +77,31 @@
 @endphp
 
 <x-builder-layout>
+    {{-- A design tool needs the width of a laptop — two panels and a stage between them. Below it (a phone,
+         a tablet held upright) the editor is not squeezed into a broken page: it says where to open it, and
+         waits. Turning a tablet sideways brings the editor back exactly as it was — it is only hidden. --}}
+    <div class="flex flex-1 items-center justify-center p-6 lg:hidden" dusk="builder-needs-wider-screen">
+        <div class="w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-6 text-center dark:border-gray-700 dark:bg-gray-800">
+            <svg class="mx-auto h-10 w-10 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="12" rx="1.5" stroke-width="1.5" />
+                <path stroke-linecap="round" stroke-width="1.5" d="M8 20h8M12 16v4" />
+            </svg>
+            <h1 class="mt-4 text-lg font-semibold text-gray-900 dark:text-white">The Ad Builder needs a wider screen</h1>
+            <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                Open it on a computer, or turn your tablet sideways. Everything else — your ads, the library and
+                your screens — works here as usual.
+            </p>
+            @can('ad-view')
+                <a href="{{ route('builder.index') }}" class="btn-primary mt-5">Back to Ads</a>
+            @else
+                <a href="{{ route('dashboard') }}" class="btn-primary mt-5">Back</a>
+            @endcan
+        </div>
+    </div>
+
     {{-- Js::from, not @json: @json leaves its quotes raw and the first string would close this
          attribute (see .claude/rules/02-project-conventions.md). --}}
-    <div class="flex min-h-0 flex-1 flex-col"
+    <div class="hidden min-h-0 flex-1 flex-col lg:flex"
          x-data="adEditor({{ Js::from([
              'adId' => $ad?->id,
              'name' => $ad?->name ?? 'Untitled ad',
@@ -1001,7 +1023,7 @@
                         The design goes back to the version on the screens. Everything changed since it was published
                         is lost — saved or not.
                     </p>
-                    <div class="mt-6 flex justify-end gap-3">
+                    <div class="mt-6 flex flex-wrap justify-end gap-3">
                         <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-discard-changes')">Cancel</x-secondary-button>
                         <x-danger-button type="button" x-on:click="discardChanges()" x-bind:disabled="discarding"
                                          dusk="confirm-discard-changes">Discard changes</x-danger-button>
@@ -1016,7 +1038,7 @@
                         It leaves every screen and channel showing it — and the media library — until you publish it
                         again. Nothing is deleted: every playlist and channel keeps its place for it.
                     </p>
-                    <div class="mt-6 flex justify-end gap-3">
+                    <div class="mt-6 flex flex-wrap justify-end gap-3">
                         <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-unpublish')">Cancel</x-secondary-button>
                         <x-danger-button type="button" x-on:click="unpublish()" x-bind:disabled="unpublishing"
                                          dusk="confirm-unpublish">Unpublish</x-danger-button>

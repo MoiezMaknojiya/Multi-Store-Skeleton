@@ -50,7 +50,7 @@
                     <span class="font-semibold text-red-600 dark:text-red-400">permanently delete every log older than 2 years, data included.</span>
                     This cannot be undone.
                 </p>
-                <div class="mt-6 flex justify-end gap-3">
+                <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-activity-maintenance')">
                         Cancel
                     </x-secondary-button>
@@ -104,11 +104,11 @@
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                         <td class="px-5 py-4 text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap"
                             x-text="new Date(item.created_at).toLocaleString()"></td>
-                        <td class="px-5 py-4 text-gray-800 dark:text-white" x-text="item.actor_name"></td>
+                        <td class="px-5 py-4 text-gray-800 dark:text-white whitespace-nowrap" x-text="item.actor_name"></td>
                         <td class="px-5 py-4">
                             <span class="badge-info" x-text="item.action"></span>
                         </td>
-                        <td class="px-5 py-4 text-gray-600 dark:text-gray-300 text-sm" x-text="item.description"></td>
+                        <td class="cell-prose px-5 py-4 text-gray-600 dark:text-gray-300 text-sm" x-text="item.description"></td>
                     </tr>
                 </template>
             </x-slot>

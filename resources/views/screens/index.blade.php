@@ -133,7 +133,7 @@
                              just the id. A screen no device has claimed shows nothing here
                              rather than an empty dash. --}}
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300 text-xs">
-                            <span x-text="item.paired_at ? new Date(item.paired_at).toLocaleString() : 'Not paired'"></span>
+                            <span class="whitespace-nowrap" x-text="item.paired_at ? new Date(item.paired_at).toLocaleString() : 'Not paired'"></span>
                             {{-- Plain text in the app's informational blue — the same
                                  pair used for the role chip elsewhere, so it reads clearly
                                  on both the light and the dark table. --}}

@@ -65,8 +65,11 @@
 /* Primary call-to-action button (Save, Submit).
    Height: 40px (h-10) — matches form-input / form-select / all other form
    controls exactly. */
+/* Every button below keeps its label on one line — a button is one fixed-height (h-10) line, and a label
+   broken over two spills out of it. Where there is not room for all of a row's buttons, the ROW wraps
+   (flex-wrap on the container), never a label. */
 @utility btn-primary {
-    @apply inline-flex items-center justify-center gap-2 h-10 rounded-md
+    @apply inline-flex items-center justify-center gap-2 h-10 rounded-md whitespace-nowrap
            font-semibold text-xs uppercase tracking-widest
            px-4 border border-transparent
            bg-blue-600 text-white
@@ -79,7 +82,7 @@
 /* Secondary / Cancel button. Background and border match form-input so
    secondary buttons sit on the same visual surface as adjacent text inputs. */
 @utility btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 h-10 rounded-md
+    @apply inline-flex items-center justify-center gap-2 h-10 rounded-md whitespace-nowrap
            font-semibold text-xs uppercase tracking-widest
            px-4
            bg-white dark:bg-gray-900
@@ -93,7 +96,7 @@
 
 /* Destructive button (Delete). */
 @utility btn-danger {
-    @apply inline-flex items-center justify-center gap-2 h-10 rounded-md
+    @apply inline-flex items-center justify-center gap-2 h-10 rounded-md whitespace-nowrap
            font-semibold text-xs uppercase tracking-widest
            px-4 border border-transparent
            bg-red-600 text-white
@@ -213,7 +216,7 @@
 }
 
 @utility card-footer {
-    @apply flex items-center justify-between
+    @apply flex flex-wrap items-center justify-between gap-3
            px-5 py-4
            border-t border-gray-100 dark:border-gray-700
            bg-gray-50/30 dark:bg-gray-800/50;
@@ -383,30 +386,59 @@
 }
 
 /* ── Tables ───────────────────────────────────────────────────────────── */
-@utility table-base       { @apply w-full text-sm; }
+/* A heading is one line at any width, and so is a row's set of buttons. Below 1280 px — a phone, a tablet, a
+   small laptop with the sidebar open, where a card is 650 px at most — every cell is one line too: a name one
+   name, a date one date. A table wider than its card is scrolled sideways by the card (every table sits in an
+   overflow-x-auto wrapper) instead of squeezing every column down to its narrowest word, or stacking a row's
+   buttons four high. From 1280 px up a long name may wrap at its spaces, so most tables fit their card; one
+   that still does not (very long names, many buttons) scrolls inside it too.
+   What must never break at any width says so on its cell (`whitespace-nowrap`: a date, a size, a person's
+   name in a log). Two kinds of cell always wrap: free text, marked `cell-prose` (an activity's details, a
+   description under a name, a daypart's exceptions), and a row that spans the table ("Loading…"). */
+@utility table-base {
+    @apply w-full text-sm;
+
+    & th {
+        white-space: nowrap;
+    }
+
+    @media (width < 80rem) {
+        & td:not(.cell-prose):not([colspan]) {
+            white-space: nowrap;
+        }
+    }
+}
+
+/* Free text in a table: it wraps. Below 1280 px, where the table scrolls anyway, never narrower than a
+   readable measure — a few lines, not one word per line; wider, it shares the card with the other columns. */
+@utility cell-prose {
+    @apply max-xl:min-w-64;
+}
 @utility table-head-row   { @apply border-b border-gray-100 dark:border-gray-700 text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-800/80; }
 @utility table-tbody      { @apply divide-y divide-gray-100 dark:divide-gray-700; }
 
 /* ── Badges ───────────────────────────────────────────────────────────── */
+/* A pill is one line, whatever the width: "Owner · Alpha Mart" broken over three lines is not a pill any
+   more. A row of pills wraps whole pills (flex-wrap on the container). */
 @utility badge-success {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap
            bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400;
 }
 @utility badge-neutral {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap
            bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400;
 }
 @utility badge-info {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap
            bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400;
 }
 /* "Yes, but not entirely" — a partial state, which must not read as either extreme. */
 @utility badge-warning {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap
            bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400;
 }
 @utility badge-danger {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap
            bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400;
 }
 

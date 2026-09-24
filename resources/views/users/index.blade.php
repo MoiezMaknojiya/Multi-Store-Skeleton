@@ -44,10 +44,11 @@
                                 <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
                                      x-text="initials(item.name)" aria-hidden="true"></div>
                                 <div class="min-w-0">
-                                    <p class="font-medium text-gray-800 dark:text-white">
+                                    {{-- The name is one line; its pills drop below it, whole, when the column is narrow. --}}
+                                    <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 font-medium text-gray-800 dark:text-white">
                                         <span x-text="item.name"></span>
-                                        <span x-show="item.is_you" class="ml-1 badge-neutral">You</span>
-                                        <span x-show="item.is_primary" class="ml-1 badge-info" title="The first super admin — cannot be removed">Primary</span>
+                                        <span x-show="item.is_you" class="badge-neutral">You</span>
+                                        <span x-show="item.is_primary" class="badge-info" title="The first super admin — cannot be removed">Primary</span>
                                     </p>
                                     <p class="text-xs text-gray-400 truncate" x-text="item.email"></p>
                                 </div>
@@ -64,7 +65,7 @@
                                 <span x-show="!item.platform_role && item.memberships.length === 0" class="text-xs text-gray-400">No access</span>
                             </div>
                         </td>
-                        <td class="px-5 py-4 text-gray-600 dark:text-gray-300" x-text="formatDate(item.created_at)"></td>
+                        <td class="px-5 py-4 text-gray-600 dark:text-gray-300 whitespace-nowrap" x-text="formatDate(item.created_at)"></td>
                         <td class="px-5 py-4">
                             <div class="flex items-center justify-end gap-2">
                                 <button type="button" class="btn-row-neutral" x-show="item.can.impersonate"
@@ -207,7 +208,7 @@
                             <span class="font-semibold" x-text="removing?.store_name"></span>? What they made there stays with the store.
                         </p>
                         <x-crud.password-confirm id="remove-membership-password" model="removePassword" error="removePasswordError" />
-                        <div class="mt-4 flex justify-end gap-3">
+                        <div class="mt-4 flex flex-wrap justify-end gap-3">
                             <x-secondary-button x-on:click="removing = null">Cancel</x-secondary-button>
                             <x-danger-button x-bind:disabled="removingBusy" dusk="remove-membership-confirm">Remove from store</x-danger-button>
                         </div>
@@ -258,7 +259,7 @@
 
                 <x-crud.password-confirm id="remove-platform-role-password" model="rolePassword" error="rolePasswordError" />
 
-                <div class="mt-6 flex justify-end gap-3">
+                <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-remove-platform-role')">Cancel</x-secondary-button>
                     <x-danger-button x-bind:disabled="removingRole" dusk="remove-platform-role-confirm">Remove role</x-danger-button>
                 </div>
@@ -272,7 +273,7 @@
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
                     The link sent to <span class="font-medium" x-text="selectedInvitation?.email"></span> stops working at once.
                 </p>
-                <div class="mt-6 flex justify-end gap-3">
+                <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-revoke-platform-invitation')">Cancel</x-secondary-button>
                     <x-danger-button x-on:click="revokeInvitation()" x-bind:disabled="revoking" dusk="revoke-platform-invitation-confirm">Revoke invitation</x-danger-button>
                 </div>
@@ -305,7 +306,7 @@
 
                 <x-crud.password-confirm id="delete-account-password" />
 
-                <div class="mt-6 flex justify-end gap-3">
+                <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-account-deletion')">Cancel</x-secondary-button>
                     <x-danger-button x-bind:disabled="deleting" dusk="delete-account-confirm">Delete account</x-danger-button>
                 </div>

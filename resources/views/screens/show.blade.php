@@ -51,7 +51,7 @@
                         <p class="text-xs text-gray-400 mt-0.5" dusk="playlist-summary" x-text="summary()"></p>
                     </div>
                     @can('screen-playlist')
-                    <div class="flex items-center gap-2">
+                    <div class="flex flex-wrap items-center gap-2">
                         {{-- Copying REPLACES the target's playlist, so it is deliberately
                              the quieter button of the two and asks before it acts. It copies the
                              SAVED playlist, so it waits until what is on the page has been saved. --}}
@@ -490,7 +490,7 @@
                     </div>
                 </div>
 
-                <div class="flex justify-end gap-3 mt-6">
+                <div class="flex flex-wrap justify-end gap-3 mt-6">
                     <button type="button" @click="closeSchedule()" dusk="schedule-cancel" class="btn-secondary">Cancel</button>
                     <button type="button" @click="applySchedule()" dusk="schedule-ok" class="btn-primary">OK</button>
                 </div>
@@ -538,7 +538,7 @@
                     <span x-text="copyWillReplace()"></span> existing item(s) will be permanently replaced.
                 </p>
 
-                <div class="flex justify-end gap-3 mt-6">
+                <div class="flex flex-wrap justify-end gap-3 mt-6">
                     <button type="button" @click="$dispatch('close-modal', 'playlist-copy-modal')"
                             dusk="copy-cancel" class="btn-secondary">Cancel</button>
                     <button type="button" @click="doCopy()" dusk="copy-confirm" class="btn-primary"

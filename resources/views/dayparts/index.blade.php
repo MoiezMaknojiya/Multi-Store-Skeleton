@@ -50,7 +50,7 @@
                             </span>
                         </td>
 
-                        <td class="px-5 py-4 text-gray-600 dark:text-gray-300 text-xs"
+                        <td class="cell-prose px-5 py-4 text-gray-600 dark:text-gray-300 text-xs"
                             x-text="rowSummary(item)"></td>
 
                         <td class="px-5 py-4">

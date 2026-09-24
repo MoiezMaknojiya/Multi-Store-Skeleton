@@ -151,6 +151,37 @@ export function createCrudTable({
             }
         },
 
+        /**
+         * The page numbers the pager shows: every one while there are few; otherwise the first, the last and
+         * the pages around the current one, with a gap ('gap-…', drawn as "…") where numbers are left out — so
+         * thirty pages are seven buttons, not thirty that run out of the card. A gap of one page shows that page
+         * instead: "…" standing for a single number is no shorter than the number.
+         */
+        pageList() {
+            const last = this.lastPage;
+            const current = this.currentPage;
+
+            if (last <= 7) return Array.from({ length: last }, (_, index) => index + 1);
+
+            const shown = new Set([1, last, current - 1, current, current + 1]);
+
+            if (current <= 3) [2, 3, 4].forEach((page) => shown.add(page));
+            if (current >= last - 2) [last - 3, last - 2, last - 1].forEach((page) => shown.add(page));
+
+            const pages = [...shown].filter((page) => page >= 1 && page <= last).sort((a, b) => a - b);
+            const list = [];
+
+            pages.forEach((page, index) => {
+                const left = index > 0 ? page - pages[index - 1] - 1 : 0;
+
+                if (left === 1) list.push(page - 1);
+                if (left > 1) list.push('gap-' + page);
+                list.push(page);
+            });
+
+            return list;
+        },
+
         /* ── Form modal open/close ─────────────────────────────────────── */
         openFormModal(item = null) {
             this.editingItem = item;

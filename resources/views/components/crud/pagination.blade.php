@@ -16,14 +16,20 @@
             </svg>
         </button>
 
-        {{-- Page number buttons --}}
-        <template x-for="page in lastPage" :key="page">
-            <button @click="goTo(page)"
-                :class="currentPage === page
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'"
-                class="w-8 h-8 rounded-md border font-medium text-xs"
-                x-text="page"></button>
+        {{-- On a phone: the page it is on, between the arrows. Wider: the page numbers around it, the first and
+             the last (pageList() leaves the rest out as "…"), so a long list never runs out of the card. --}}
+        <span class="px-1 text-xs font-medium text-muted-soft sm:hidden" dusk="pager-position"
+              x-text="'Page ' + currentPage + ' of ' + Math.max(lastPage, 1)"></span>
+        <template x-for="page in pageList()" :key="page">
+            <button type="button" @click="typeof page === 'number' && goTo(page)"
+                :disabled="typeof page !== 'number'"
+                :class="typeof page !== 'number'
+                    ? 'border-transparent text-gray-400 cursor-default'
+                    : (currentPage === page
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700')"
+                class="hidden w-8 h-8 rounded-md border font-medium text-xs sm:inline-block"
+                x-text="typeof page === 'number' ? page : '…'"></button>
         </template>
 
         {{-- Next page --}}

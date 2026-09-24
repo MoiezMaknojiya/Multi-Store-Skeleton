@@ -153,7 +153,7 @@
 
                         <x-auth.form-field name="store_country" label="Country" bag="newStore" value="USA" :required="true" autocomplete="off" dusk="open-store-country" />
 
-                        <div class="flex justify-end gap-3">
+                        <div class="flex flex-wrap justify-end gap-3">
                             <x-secondary-button x-on:click="$dispatch('close')">{{ __('Cancel') }}</x-secondary-button>
                             <x-primary-button dusk="open-store-confirm">{{ __('Create store') }}</x-primary-button>
                         </div>
@@ -185,7 +185,7 @@
                         <x-auth.form-field name="password" id="delete_password" label="Your password" type="password" bag="storeDeletion"
                             :required="true" autocomplete="current-password" dusk="delete-store-password" />
 
-                        <div class="flex justify-end gap-3">
+                        <div class="flex flex-wrap justify-end gap-3">
                             <x-secondary-button x-on:click="$dispatch('close')">{{ __('Cancel') }}</x-secondary-button>
                             <x-danger-button dusk="delete-store-confirm">{{ __('Delete Store') }}</x-danger-button>
                         </div>

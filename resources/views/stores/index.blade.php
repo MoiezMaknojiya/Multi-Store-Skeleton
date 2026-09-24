@@ -132,7 +132,7 @@
                     inside the shop afterwards.
                 </p>
 
-                <div class="mt-6 flex justify-end gap-3">
+                <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-store-ads')"
                                         x-bind:disabled="savingAds">
                         Cancel
@@ -168,7 +168,7 @@
                 </div>
 
                 <x-crud.password-confirm id="delete-store-password" error="deleteErrors.password?.[0]" />
-                <div class="flex justify-end gap-3">
+                <div class="flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-store-deletion')">Cancel</x-secondary-button>
                     <x-danger-button x-bind:disabled="deleting" dusk="delete-store-confirm">Delete store</x-danger-button>
                 </div>

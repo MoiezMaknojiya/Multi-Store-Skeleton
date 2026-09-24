@@ -62,7 +62,7 @@
 
                         <template x-for="role in mainRoles()" :key="role.id">
                             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50" x-bind:dusk="'role-row-' + role.id">
-                                <td class="px-5 py-4 max-w-sm">
+                                <td class="cell-prose px-5 py-4">
                                     <p class="flex items-center gap-2 font-medium text-gray-800 dark:text-white">
                                         <span x-text="role.name" x-bind:dusk="'role-name-' + role.id"></span>
                                         <span x-show="role.is_owner_role" class="badge-success shrink-0" dusk="owner-role-badge">Owner</span>
@@ -74,7 +74,7 @@
                                 </td>
                                 <td class="px-5 py-4 text-gray-600 dark:text-gray-300">
                                     <template x-if="role.kind === 'super_admin'">
-                                        <span class="text-xs text-gray-500 dark:text-gray-400">Every permission, always</span>
+                                        <span class="whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">Every permission, always</span>
                                     </template>
                                     <template x-if="role.kind !== 'super_admin'">
                                         <span class="badge-neutral" x-text="role.permissions.length"></span>
@@ -120,7 +120,7 @@
                     <tbody class="table-tbody">
                         <template x-for="role in storeCustomRoles()" :key="role.id">
                             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50" x-bind:dusk="'role-row-' + role.id">
-                                <td class="px-5 py-4 max-w-sm">
+                                <td class="cell-prose px-5 py-4">
                                     <p class="font-medium text-gray-800 dark:text-white" x-text="role.name" x-bind:dusk="'role-name-' + role.id"></p>
                                     <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400" x-text="role.description"></p>
                                 </td>
@@ -263,7 +263,7 @@
 
                 <x-crud.password-confirm id="delete-role-password" />
 
-                <div class="mt-6 flex justify-end gap-3">
+                <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-role-deletion')">Cancel</x-secondary-button>
                     <x-danger-button x-bind:disabled="deleting" dusk="confirm-role-deletion-confirm">Delete role</x-danger-button>
                 </div>

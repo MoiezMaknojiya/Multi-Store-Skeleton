@@ -90,7 +90,7 @@
                                 </template>
                             </div>
                         </td>
-                        <td class="px-5 py-4">
+                        <td class="cell-prose px-5 py-4">
                             <p class="font-medium text-gray-800 dark:text-white" x-text="item.title"></p>
                             <p class="text-xs text-gray-400" x-show="item.description" x-text="item.description"></p>
                         </td>
@@ -99,9 +99,9 @@
                             <span x-text="typeLabel(item)"></span>
                             <span class="block text-xs text-gray-400" x-text="item.orientation ?? '-'"></span>
                         </td>
-                        <td class="px-5 py-4 text-gray-600 dark:text-gray-300" x-text="formatSize(item.size)"></td>
+                        <td class="px-5 py-4 text-gray-600 dark:text-gray-300 whitespace-nowrap" x-text="formatSize(item.size)"></td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300 text-xs">
-                            <span x-text="scheduleLabel(item)"></span>
+                            <span class="whitespace-nowrap" x-text="scheduleLabel(item)"></span>
                             <span x-show="isExpired(item)" class="block text-red-500 font-medium">Expired</span>
                         </td>
                         <td class="px-5 py-4">

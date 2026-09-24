@@ -62,7 +62,7 @@
                         {{ __('You lose access to this store straight away. What you added there stays with the store. To come back, someone in the store has to invite you again.') }}
                     </p>
 
-                    <div class="mt-6 flex justify-end gap-3">
+                    <div class="mt-6 flex flex-wrap justify-end gap-3">
                         <x-secondary-button x-on:click="$dispatch('close')">{{ __('Cancel') }}</x-secondary-button>
                         <x-danger-button dusk="leave-store-{{ $memberStore->id }}-confirm">{{ __('Leave store') }}</x-danger-button>
                     </div>

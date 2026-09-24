@@ -197,7 +197,7 @@
 
                 <x-crud.password-confirm id="delete-ad-password" />
 
-                <div class="mt-6 flex justify-end gap-3">
+                <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-ad-deletion')">Cancel</x-secondary-button>
                     <x-danger-button x-bind:disabled="deleting" dusk="confirm-ad-deletion-confirm">Delete ad</x-danger-button>
                 </div>

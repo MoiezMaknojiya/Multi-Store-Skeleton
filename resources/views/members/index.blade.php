@@ -76,9 +76,10 @@
                                         <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
                                              x-text="initials(member.name)" aria-hidden="true"></div>
                                         <div class="min-w-0">
-                                            <p class="font-medium text-gray-800 dark:text-white">
+                                            {{-- The name is one line; its pill drops below it, whole, when the column is narrow. --}}
+                                            <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 font-medium text-gray-800 dark:text-white">
                                                 <span x-text="member.name"></span>
-                                                <span x-show="member.is_you" class="ml-1 badge-neutral">You</span>
+                                                <span x-show="member.is_you" class="badge-neutral">You</span>
                                             </p>
                                             <p class="text-xs text-gray-400 truncate" x-text="member.email"></p>
                                         </div>
@@ -225,7 +226,7 @@
 
                 <x-crud.password-confirm id="remove-member-password" model="removePassword" error="removePasswordError" />
 
-                <div class="mt-6 flex justify-end gap-3">
+                <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'remove-member')">Cancel</x-secondary-button>
                     <x-danger-button x-bind:disabled="removing" dusk="remove-member-confirm">Remove member</x-danger-button>
                 </div>
@@ -240,7 +241,7 @@
                     The link sent to <span class="font-medium" x-text="selectedInvitation?.email"></span> stops working at once.
                     You can invite them again later.
                 </p>
-                <div class="mt-6 flex justify-end gap-3">
+                <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'revoke-invitation')">Cancel</x-secondary-button>
                     <x-danger-button x-on:click="revoke()" x-bind:disabled="revoking" dusk="revoke-invitation-confirm">Revoke invitation</x-danger-button>
                 </div>
@@ -254,7 +255,7 @@
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
                     You lose access to this store straight away. To come back, someone in the store has to invite you again.
                 </p>
-                <div class="mt-6 flex justify-end gap-3">
+                <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'leave-store')">Cancel</x-secondary-button>
                     <x-danger-button x-on:click="leave()" x-bind:disabled="leaving" dusk="leave-store-confirm">Leave store</x-danger-button>
                 </div>
