@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -22,10 +22,22 @@
     </script>
 
     {{-- Deliberately no CSRF token and no session: this page authenticates with
-         the device token it was handed at pairing, never with a cookie. --}}
-    @vite(['resources/css/app.css', 'resources/js/player.js'])
+         the device token it was handed at pairing, never with a cookie.
+
+         And no stylesheet but its own: the panel's is Tailwind v4, which needs Chrome 111, while a
+         Fire TV or a cheap Android box runs a WebView as old as Chrome 80 — which the player's script
+         is built for too (build.target in vite.config.js). --}}
+    @vite('resources/js/player.js')
 
     <style>
+        /* What this page used of Tailwind's reset, written out. */
+        *, ::before, ::after { box-sizing: border-box; }
+        html { line-height: 1.5; -webkit-text-size-adjust: 100%; }
+        p { margin: 0; }
+        /* A view whose class sets its display still hides while it carries the hidden attribute. */
+        [hidden] { display: none !important; }
+        .text-center { text-align: center; }
+
         /* A TV is a fixed, dark, chrome-less surface — nothing here is scrolled,
            clicked or read up close, so the page owns the whole viewport. */
         html, body { height: 100%; margin: 0; background: #000; overflow: hidden; }
@@ -71,8 +83,9 @@
         }
         .muted { color: #9aa4b2; }
 
+        /* Four offsets rather than inset, which a WebView older than Chrome 87 ignores. */
         .centred {
-            position: absolute; inset: 0;
+            position: absolute; top: 0; right: 0; bottom: 0; left: 0;
             display: flex; flex-direction: column;
             align-items: center; justify-content: center;
             text-align: center;
@@ -80,7 +93,7 @@
 
         /* Media fills the stage and is letterboxed rather than cropped: a portrait
            poster on a landscape screen must never lose its edges. */
-        .media-layer { position: absolute; inset: 0; }
+        .media-layer { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
         /* The advert sits over both content layers and is opaque, so whatever is
            paused underneath is neither seen nor composited. */
         .media-layer-ad { z-index: 10; background: #000; }
@@ -102,7 +115,7 @@
         }
     </style>
 </head>
-<body class="h-full">
+<body>
     <div class="player-root">
         <div id="stage" data-orientation="landscape">
 
