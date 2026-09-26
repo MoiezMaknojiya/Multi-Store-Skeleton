@@ -103,8 +103,8 @@ class Media extends Model
      * Without the Ad Builder pages their designer keeps for channels (owner's rule, 2026-09-22): the same ad
      * inside a channel AND on the playlist that carries that channel plays twice in one pass. So a playlist's
      * pickers — and the playlist itself — take only the ads whose "Show in playlists" is ticked, while a
-     * channel's pickers go on offering every published one. Nothing else in a library is narrowed: an
-     * uploaded picture or video has no such switch.
+     * channel's pickers go on offering every published one. An uploaded picture or video has no such switch;
+     * what keeps any file, ticked ad included, off a playlist once a channel shows it is scopeInNoChannel().
      */
     public function scopeWithoutChannelOnly(Builder $query): Builder
     {
@@ -112,6 +112,29 @@ class Media extends Model
             ->from('builder_ads')
             ->whereColumn('builder_ads.media_id', 'media.id')
             ->where('builder_ads.in_playlists', false));
+    }
+
+    /**
+     * Without the files a channel shows (owner's rule, 2026-09-26: "agar koi bhi file channel k ander assign ha
+     * toh woo playlist mein nahi dikhe warna woo 2 bar ho jayegi"): a file in a channel AND on the playlist that
+     * carries that channel plays twice in one pass. So a file plays from playlists or from channels, never both:
+     * the playlist's picker leaves out every file any channel holds — paused, out of its dates or not — and a
+     * channel's pickers leave out every file a playlist holds (scopeOnNoPlaylist). Not shown, rather than shown
+     * and refused (owner: "dikhao hi nahi"); the walls behind both pickers refuse the same by id.
+     */
+    public function scopeInNoChannel(Builder $query): Builder
+    {
+        return $query->whereNotExists(fn (QueryBuilder $ad) => $ad->selectRaw('1')
+            ->from('channel_ads')
+            ->whereColumn('channel_ads.media_id', 'media.id'));
+    }
+
+    /** Without the files a screen's playlist holds: the channels' side of scopeInNoChannel(). */
+    public function scopeOnNoPlaylist(Builder $query): Builder
+    {
+        return $query->whereNotExists(fn (QueryBuilder $line) => $line->selectRaw('1')
+            ->from('playlist_items')
+            ->whereColumn('playlist_items.media_id', 'media.id'));
     }
 
     /**

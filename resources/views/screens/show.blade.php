@@ -192,6 +192,11 @@
                 </div>
 
                 <div class="p-4 space-y-2" dusk="media-picker">
+                    {{-- The picker leaves them out rather than offering and refusing them (owner, 2026-09-26). --}}
+                    <p class="text-xs text-muted-soft" dusk="picker-channel-note">
+                        Files that play in a channel are not listed here, so nothing plays twice.
+                    </p>
+
                     <template x-if="available.length === 0">
                         <p class="text-center text-muted-soft py-10" dusk="picker-empty">
                             Nothing to show here. Upload files to the library first, or clear the search.

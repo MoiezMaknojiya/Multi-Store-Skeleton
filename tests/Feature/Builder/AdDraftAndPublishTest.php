@@ -73,19 +73,27 @@ function changedDesign(BuilderAd $ad, string $text): array
     return $document;
 }
 
-test('a changed published ad keeps its published version on every screen until the changes are published', function () {
+test('a changed published ad keeps its published version on its screens until the changes are published', function (string $from) {
     $ad = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $this->store->id, 'name' => 'Winter sale']);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
     // A published ad is for channels only until it is opened to the shop's own playlists (2026-09-22).
     $this->postJson("/builder/{$ad->id}/in-playlists", ['in_playlists' => true])->assertOk();
     $page = Media::sole();
 
+    // It plays from a playlist line or from a channel's ad — never both, or it would play twice (2026-09-26).
     $screen = Screen::factory()->withToken('live-token')->create(['store_id' => $this->store->id]);
     $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Deals']);
-    ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $page->id]);
-    PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->id, 'position' => 0, 'duration_seconds' => 12]);
-    PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $channel->id, 'position' => 1]);
+    if ($from === 'a channel') {
+        ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $page->id]);
+        PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $channel->id, 'position' => 0]);
+    } else {
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->id, 'position' => 0, 'duration_seconds' => 12]);
+    }
     $pageOnScreen = fn () => collect(addressesOnScreen($this, 'live-token'))->filter(fn (string $url) => str_contains($url, "/ads/{$ad->id}/"));
+    // The picker of where it plays offers it; the other side's leaves it out.
+    [$offering, $leavingOut] = $from === 'a channel'
+        ? ["/channels/{$channel->id}/library?type=html", "/screens/{$screen->id}/available-media"]
+        : ["/screens/{$screen->id}/available-media", "/channels/{$channel->id}/library?type=html"];
 
     // -- Changed and saved: the draft only ---------------------------------------------------------
     $this->putJson("/builder/{$ad->id}", ['name' => 'Spring sale', 'document' => changedDesign($ad, 'Spring sale')])
@@ -95,12 +103,12 @@ test('a changed published ad keeps its published version on every screen until t
         ->assertJsonPath('ad.status', 'changed');
 
     // The screens, the pickers and the library still have the published version: its page, words and name.
-    expect($pageOnScreen())->toHaveCount(2)
+    expect($pageOnScreen())->toHaveCount(1)
         ->and(Storage::disk('public')->get($page->path))->toContain('Winter sale')->not->toContain('Spring sale')
         ->and($page->fresh()->title)->toBe('Winter sale')
         ->and(idsFrom($this, '/media/data'))->toContain($page->id)
-        ->and(idsFrom($this, "/screens/{$screen->id}/available-media"))->toContain($page->id)
-        ->and(idsFrom($this, "/channels/{$channel->id}/library?type=html"))->toContain($page->id);
+        ->and(idsFrom($this, $offering))->toContain($page->id)
+        ->and(idsFrom($this, $leavingOut))->not->toContain($page->id);
 
     // The listing says so — and never hands out a design, drafted or published.
     $row = collect($this->getJson('/builder/data')->assertOk()->json('ads'))->firstWhere('id', $ad->id);
@@ -114,8 +122,8 @@ test('a changed published ad keeps its published version on every screen until t
     expect(Media::count())->toBe(1)
         ->and(Storage::disk('public')->get($page->path))->toContain('Spring sale')
         ->and($page->fresh()->title)->toBe('Spring sale')
-        ->and($pageOnScreen())->toHaveCount(2);
-});
+        ->and($pageOnScreen())->toHaveCount(1);
+})->with(['from a playlist' => 'a playlist', 'from a channel' => 'a channel']);
 
 test('discarding the changes brings back the published design, name and poster', function () {
     $ad = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $this->store->id, 'name' => 'Winter sale']);
@@ -164,76 +172,103 @@ test('there is nothing to discard on an ad never published, up to date, or publi
     expect(ActivityLog::where('action', 'ad.changes_discarded')->exists())->toBeFalse();
 });
 
-test('unpublishing takes the page off every screen, channel, picker and library — and publishing brings it back', function () {
+test('unpublishing takes the page off its screens, channel, pickers and library — and publishing brings it back', function (string $from) {
     $ad = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $this->store->id, 'name' => 'Winter sale']);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
     $this->postJson("/builder/{$ad->id}/in-playlists", ['in_playlists' => true])->assertOk();
     $page = Media::sole();
 
-    // On a screen's playlist, and in a channel that screen carries beside a picture of its own.
+    // On a screen from a playlist line, or from a channel the screen carries — never both, or it would play
+    // twice (2026-09-26) — beside a poster of the shop's own and a channel ad of the channel's own.
     $screen = Screen::factory()->withToken('draft-token')->create(['store_id' => $this->store->id]);
     $poster = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Poster']);
     $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Deals']);
-    $pageAd = ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $page->id, 'title' => 'Winter sale']);
+    $pageAd = $from === 'a channel'
+        ? ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $page->id, 'title' => 'Winter sale'])
+        : null;
     ChannelAd::factory()->create(['channel_id' => $channel->id, 'title' => 'Coffee', 'position' => 1]);
-    PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->id, 'position' => 0, 'duration_seconds' => 12]);
-    PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $poster->id, 'position' => 1, 'duration_seconds' => 10]);
-    PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $channel->id, 'position' => 2]);
+    $playlist = array_values(array_filter([
+        $from === 'a playlist' ? ['media_id' => $page->id, 'duration_seconds' => 12] : null,
+        ['media_id' => $poster->id, 'duration_seconds' => 10],
+        ['channel_id' => $channel->id],
+    ]));
+    foreach ($playlist as $position => $line) {
+        PlaylistItem::create(['screen_id' => $screen->id, 'position' => $position, ...$line]);
+    }
 
     $pageOnScreen = fn () => collect(addressesOnScreen($this, 'draft-token'))->filter(fn (string $url) => str_contains($url, "/ads/{$ad->id}/"));
     $pickers = fn () => [
-        idsFrom($this, '/media/data'),
-        idsFrom($this, "/screens/{$screen->id}/available-media"),
-        idsFrom($this, "/screens/{$screen->id}/media-options"),
-        idsFrom($this, "/channels/{$channel->id}/library?type=html"),
+        'library' => idsFrom($this, '/media/data'),
+        'playlist' => idsFrom($this, "/screens/{$screen->id}/available-media"),
+        'holding picture' => idsFrom($this, "/screens/{$screen->id}/media-options"),
+        'channel' => idsFrom($this, "/channels/{$channel->id}/library?type=html"),
     ];
+    // The one picker that leaves it out even while it is published: the other side's.
+    $otherSide = $from === 'a channel' ? 'playlist' : 'channel';
+    $reach = $from === 'a channel' ? '1 channel' : '1 screen';
 
-    expect($pageOnScreen())->toHaveCount(2);
+    expect($pageOnScreen())->toHaveCount(1);
 
     // -- Unpublished ---------------------------------------------------------------------------------
     $this->postJson("/builder/{$ad->id}/unpublish")
         ->assertOk()
-        ->assertJsonPath('message', 'Unpublished — taken off 1 screen and 1 channel')
+        ->assertJsonPath('message', "Unpublished — taken off {$reach}")
         ->assertJsonPath('ad.status', 'draft');
 
     expect($ad->fresh()->isPublished())->toBeFalse()
         ->and(ActivityLog::where('action', 'ad.unpublished')->value('description'))
-        ->toBe('Unpublished ad Winter sale — taken off 1 screen and 1 channel');
+        ->toBe("Unpublished ad Winter sale — taken off {$reach}");
     $this->postJson("/builder/{$ad->id}/unpublish")->assertStatus(422)->assertJsonValidationErrors(['ad' => 'This ad is not on any screen.']);
 
-    // Nobody sees it: no television — the line nor the channel's ad — no picker, no library.
+    // Nobody sees it: no television — as a line or as the channel's ad — no picker, no library.
     expect($pageOnScreen())->toBeEmpty()
         ->and(addressesOnScreen($this, 'draft-token'))->toHaveCount(2);
     foreach ($pickers() as $ids) {
         expect($ids)->not->toContain($page->id);
     }
 
-    // Nothing is deleted: everything holding it keeps its place, and says why it is quiet.
+    // Nothing is deleted: whatever holds it keeps its place, and says why it is quiet.
     $lines = collect($this->getJson("/screens/{$screen->id}/playlist")->assertOk()->json('items'));
-    expect($lines->firstWhere('media_id', $page->id)['is_draft'])->toBeTrue()
-        ->and($lines->firstWhere('media_id', $poster->id)['is_draft'])->toBeFalse();
+    expect($lines->firstWhere('media_id', $poster->id)['is_draft'])->toBeFalse();
 
-    $ads = collect($this->getJson("/channels/{$channel->id}/ads")->assertOk()->json('ads'))->keyBy('id');
-    expect($ads[$pageAd->id]['status'])->toBe('draft');
+    if ($pageAd === null) {
+        expect($lines->firstWhere('media_id', $page->id)['is_draft'])->toBeTrue();
+    } else {
+        $ads = collect($this->getJson("/channels/{$channel->id}/ads")->assertOk()->json('ads'))->keyBy('id');
+        expect($ads[$pageAd->id]['status'])->toBe('draft');
+    }
 
     $row = collect($this->getJson('/channels/data')->assertOk()->json('channels'))->firstWhere('id', $channel->id);
-    expect($row['ads_count'])->toBe(2)->and($row['running_ads_count'])->toBe(1);
+    expect($row['ads_count'])->toBe($pageAd === null ? 1 : 2)->and($row['running_ads_count'])->toBe(1);
 
+    // A save keeps a quiet line where it is.
     $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
-    $this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => [
-        ['media_id' => $page->id, 'duration_seconds' => 12],
-        ['media_id' => $poster->id, 'duration_seconds' => 10],
-        ['channel_id' => $channel->id],
-    ]])->assertOk();
+    $this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => $playlist])->assertOk();
 
     // -- Published again: the same row, back everywhere at once ---------------------------------------
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
 
     expect(Media::find($page->id))->not->toBeNull()
-        ->and($pageOnScreen())->toHaveCount(2);
-    foreach ($pickers() as $ids) {
-        expect($ids)->toContain($page->id);
+        ->and($pageOnScreen())->toHaveCount(1);
+    foreach ($pickers() as $picker => $ids) {
+        $picker === $otherSide
+            ? expect($ids)->not->toContain($page->id)
+            : expect($ids)->toContain($page->id);
     }
+})->with(['from a playlist' => 'a playlist', 'from a channel' => 'a channel']);
+
+test('a page on a line AND in a channel — as a playlist could hold before 2026-09-26 — is counted in both', function () {
+    $ad = BuilderAd::factory()->withText('Winter sale')->published()->create([
+        'store_id' => $this->store->id, 'name' => 'Winter sale', 'in_playlists' => true,
+    ]);
+    $screen = Screen::factory()->create(['store_id' => $this->store->id]);
+    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Deals']);
+    ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $ad->media_id]);
+    PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $ad->media_id, 'position' => 0, 'duration_seconds' => 12]);
+
+    $this->postJson("/builder/{$ad->id}/unpublish")
+        ->assertOk()
+        ->assertJsonPath('message', 'Unpublished — taken off 1 screen and 1 channel');
 });
 
 test('a save that changes nothing leaves the ad up to date, and the history alone', function () {

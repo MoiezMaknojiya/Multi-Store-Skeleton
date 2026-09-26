@@ -85,8 +85,11 @@ class ChannelAdController extends Controller implements HasMiddleware
         ]);
 
         // Never an Ad Builder page taken off the screens (unpublished): nobody picks one until it is published again.
+        // Nor a file a playlist holds (owner's rule, 2026-09-26): on a screen that also carries this channel it
+        // would play twice.
         $query = Media::query()
             ->withoutDrafts()
+            ->onNoPlaylist()
             ->when($channel->isPlatformChannel(),
                 fn (Builder $query) => ($filters['library'] ?? 'platform') === 'platform'
                     ? $query->platformOwned()

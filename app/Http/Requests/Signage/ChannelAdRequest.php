@@ -36,8 +36,20 @@ class ChannelAdRequest extends FormRequest
                 'integer',
                 'min:1',
                 function (string $attribute, mixed $value, Closure $fail) {
-                    if ($this->chosenMedia() === null) {
+                    $media = $this->chosenMedia();
+
+                    if ($media === null) {
                         $fail('Choose a file from this channel\'s library.');
+
+                        return;
+                    }
+
+                    // A file a playlist holds stays out of channels (owner's rule, 2026-09-26): on a screen that
+                    // also carries this channel it would play twice. The picker never offers one — this is the
+                    // wall behind it. The file an ad already shows is its own, and saving the ad keeps it.
+                    if ((int) $media->id !== (int) $this->route('ad')?->media_id
+                        && ($onScreens = $media->stillOnScreensMessage()) !== null) {
+                        $fail("{$media->title} plays on a playlist, so it stays out of channels: it would play twice. {$onScreens}");
                     }
                 },
             ],

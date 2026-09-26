@@ -64,11 +64,12 @@ class PlaylistController extends Controller
         $search = trim((string) ($validated['search'] ?? ''));
 
         // Never an Ad Builder page taken off the screens (unpublished): nobody picks one until it is published
-        // again — nor one its designer keeps for channels, which would play twice on a screen that also
-        // carries the channel (owner's rule, 2026-09-22).
+        // again — nor one its designer keeps for channels (owner's rule, 2026-09-22), nor any file a channel
+        // shows (owner's rule, 2026-09-26): either would play twice on a screen that also carries the channel.
         $media = Media::where('store_id', $screen->store_id)
             ->withoutDrafts()
             ->withoutChannelOnly()
+            ->inNoChannel()
             ->when($search !== '', fn (Builder $q) => $q->where('title', 'like', "%{$search}%"))
             ->orderByDesc('created_at')
             ->limit(100)
@@ -155,6 +156,7 @@ class PlaylistController extends Controller
         $this->assertEachLineIsAFileOrAChannel($items);
         $this->assertMediaBelongsToTheSameStore($screen, $items);
         $this->assertAdsMayBeOnAPlaylist($items);
+        $this->assertFilesAreInNoChannel($items);
         $this->assertChannelsAreAvailable($screen, $items);
         $this->assertDaypartsBelongToTheSameStore($screen, $items);
 
@@ -376,6 +378,30 @@ class PlaylistController extends Controller
                 'items' => $channelOnly->count() === 1
                     ? "The ad {$channelOnly->first()} is for channels only. Tick \"Show in playlists\" in the Ad Builder to put it on a screen."
                     : 'These ads are for channels only: '.$channelOnly->join(', ').'. Tick "Show in playlists" in the Ad Builder to put one on a screen.',
+            ]);
+        }
+    }
+
+    /**
+     * A file a channel shows belongs on no playlist (owner's rule, 2026-09-26) — the picker never offers one, and
+     * this is the wall behind it: an id posted by hand, or a line from before the rule, would play twice on a
+     * screen that also carries the channel. The channel side keeps a file a playlist holds out of a channel.
+     */
+    private function assertFilesAreInNoChannel(array $items): void
+    {
+        $ids = collect($items)->pluck('media_id')->reject(fn (int|string|null $id) => $id === null)->unique();
+
+        if ($ids->isEmpty()) {
+            return;
+        }
+
+        $inChannels = Media::whereIn('id', $ids)->whereHas('channelAds')->orderBy('title')->pluck('title');
+
+        if ($inChannels->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'items' => $inChannels->count() === 1
+                    ? "{$inChannels->first()} plays in a channel, so it stays off playlists: it would play twice. Take its line out."
+                    : 'These files play in a channel, so they stay off playlists: '.$inChannels->join(', ').'. Take their lines out.',
             ]);
         }
     }

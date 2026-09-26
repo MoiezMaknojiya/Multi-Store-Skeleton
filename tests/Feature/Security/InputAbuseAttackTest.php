@@ -136,8 +136,12 @@ test('the library pickers and a channel ad\'s file take one shape only — never
 test('an unpublished Ad Builder page never reaches a television, however its line is posted', function () {
     // The pickers never offer an unpublished ad. A line posted by hand is taken — it keeps its place like any line
     // waiting for its page — but nothing of it goes to a screen until the ad is published again (docs/AD-BUILDER-SPEC.md §9).
+    // Two of them: a file plays from a playlist or from a channel, never both (2026-09-26), so the line and the
+    // channel's ad each take their own.
     $design = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id]);
+    $forChannel = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id]);
     $this->postJson("/builder/{$design->id}/unpublish")->assertOk();
+    $this->postJson("/builder/{$forChannel->id}/unpublish")->assertOk();
     $screen = Screen::factory()->withToken('smuggled-token')->create(['store_id' => $this->store->id]);
     $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Our Deals']);
     $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
@@ -146,7 +150,7 @@ test('an unpublished Ad Builder page never reaches a television, however its lin
         ['media_id' => $design->media_id, 'duration_seconds' => 10],
         ['channel_id' => $channel->id],
     ]])->assertOk();
-    $this->postJson("/channels/{$channel->id}/ads", ['media_id' => $design->media_id, 'seconds' => 10])->assertOk();
+    $this->postJson("/channels/{$channel->id}/ads", ['media_id' => $forChannel->media_id, 'seconds' => 10])->assertOk();
     $screen->forceFill(['default_media_id' => $design->media_id])->save();
 
     // As a line, as a channel's ad, as the holding picture: none of it.
@@ -175,6 +179,46 @@ test('an ad kept for channels cannot be smuggled onto a playlist, or made the ho
 
     expect($screen->fresh()->default_media_id)->toBeNull()
         ->and($this->getJson('/device/playlist', ['Authorization' => 'Bearer smuggler-token'])->json('items'))->toBe([]);
+});
+
+test('a file one picker leaves out cannot be forced past it by id, either way round', function () {
+    // Owner, 2026-09-26: a file plays from playlists or from channels, never both — in a channel AND on the
+    // playlist carrying that channel it would play twice. Each side's picker leaves out the other's files; this
+    // is the wall behind them, whoever posts the id.
+    $screen = Screen::factory()->create(['store_id' => $this->store->id, 'name' => 'Counter TV']);
+    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Our Deals']);
+    $inChannel = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Deal poster']);
+    $onPlaylist = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Menu board']);
+    $ad = ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $inChannel->id]);
+
+    $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
+    $version = $this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => [
+        ['media_id' => $onPlaylist->id, 'duration_seconds' => 10],
+        ['channel_id' => $channel->id],
+    ]])->assertOk()->json('version');
+
+    // The channel's file onto the playlist that carries its channel.
+    $this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => [
+        ['media_id' => $onPlaylist->id, 'duration_seconds' => 10],
+        ['media_id' => $inChannel->id, 'duration_seconds' => 10],
+        ['channel_id' => $channel->id],
+    ]])->assertStatus(422)->assertJsonValidationErrors([
+        'items' => 'Deal poster plays in a channel, so it stays off playlists: it would play twice. Take its line out.',
+    ]);
+
+    // The playlist's file into the channel: added as an ad, or swapped in for an ad's own file.
+    $this->postJson("/channels/{$channel->id}/ads", ['media_id' => $onPlaylist->id, 'seconds' => 10])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors([
+            'media_id' => 'Menu board plays on a playlist, so it stays out of channels: it would play twice. Still on the screen Counter TV. Take it off that screen first.',
+        ]);
+    $this->postJson("/channels/{$channel->id}/ads/{$ad->id}", ['media_id' => $onPlaylist->id, 'seconds' => 10])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('media_id');
+
+    // Nothing moved: the channel shows what it showed, and the playlist holds what it held.
+    expect(ChannelAd::sole()->media_id)->toBe($inChannel->id)
+        ->and($screen->playlistItems()->whereNotNull('media_id')->pluck('media_id')->all())->toBe([$onPlaylist->id]);
 });
 
 test('ids that are not ids answer 422 or 404 — never a 500', function () {

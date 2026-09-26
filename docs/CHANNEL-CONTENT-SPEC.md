@@ -178,6 +178,29 @@ published ad, both playing in turn, and the ad re-published mid-run reaching the
 
 ---
 
+## 8a. A file plays from playlists or from channels, never both (owner, 2026-09-26)
+
+"agar koi bhi file channel k ander assign ha toh woo playlist mein nahi dikhe warna woo 2 bar ho jayegi" —
+then "add naah ho sake nahi, dikhao hi nahi". A file in a channel and on the playlist that carries the channel
+plays twice in one pass, so:
+
+- The playlist's Content library never shows a file any channel holds — the shop's own channel or the
+  platform's, paused or out of its dates (`Media::scopeInNoChannel`, `PlaylistController::availableMedia`).
+- A channel's Add-ad pickers never show a file a screen's playlist holds (`Media::scopeOnNoPlaylist`,
+  `ChannelAdController::library`) — the platform's channel looking into a shop's library included.
+- Each picker says so in one line ("Files that play in a channel are not listed here…", "Files on a screen's
+  playlist are not listed here…"), so a missing file is never a mystery.
+- Behind the pickers, an id posted by hand is refused: the playlist save with a 422 naming the file
+  (`PlaylistController::assertFilesAreInNoChannel`), the Add-ad and the ad's change of file with a 422 naming
+  the screens (`ChannelAdRequest`). An ad saved with the file it already shows keeps it, so a channel ad and a
+  playlist line that shared a file before the rule can still be re-timed.
+- Taken out of every channel — or off every playlist — a file is the other side's to choose again.
+- The holding picture is neither a playlist line nor a channel's ad and keeps its own list.
+- An Ad Builder ad ticked "Show in playlists" follows the same rule: while a channel shows it, the playlist's
+  picker leaves it out.
+
+---
+
 ## 9. Questions already answered, so nobody asks again
 
 - **Why not copy the file into the channel?** A copy goes stale: re-publishing an ad would leave the channel

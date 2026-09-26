@@ -184,6 +184,11 @@
                                    x-bind:placeholder="source === 'ads' ? 'Search ads…' : 'Search files…'" aria-label="Search">
                         </div>
 
+                        {{-- The picker leaves them out rather than offering and refusing them (owner, 2026-09-26). --}}
+                        <p class="text-xs text-muted-soft" dusk="channel-ad-picker-note">
+                            Files on a screen's playlist are not listed here, so nothing plays twice.
+                        </p>
+
                         <p x-show="picker.loading && picker.items.length === 0" x-cloak class="py-6 text-center text-sm text-muted-soft">Loading…</p>
 
                         <p x-show="!picker.loading && picker.items.length === 0" x-cloak dusk="channel-ad-picker-empty"

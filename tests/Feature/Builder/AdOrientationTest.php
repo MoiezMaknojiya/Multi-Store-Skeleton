@@ -211,7 +211,13 @@ test('every picker and playlist line says which way a portrait page is', functio
     $option = collect($this->getJson("/screens/{$screen->id}/media-options")->assertOk()->json('media'))->firstWhere('id', $media->id);
     expect($option['orientation'])->toBe('portrait');
 
-    // …a saved line…
+    // …a channel's library — asked first: once the page is on a playlist, a channel's pickers leave it out
+    // (a file plays from playlists or from channels, never both — 2026-09-26)…
+    $channel = Channel::factory()->create(['store_id' => $this->store->id]);
+    $inLibrary = collect($this->getJson("/channels/{$channel->id}/library?type=html")->assertOk()->json('media'))->firstWhere('id', $media->id);
+    expect($inLibrary['orientation'])->toBe('portrait');
+
+    // …and a saved line.
     $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
     $this->putJson("/screens/{$screen->id}/playlist", [
         'version' => $version,
@@ -220,11 +226,6 @@ test('every picker and playlist line says which way a portrait page is', functio
 
     $line = collect($this->getJson("/screens/{$screen->id}/playlist")->assertOk()->json('items'))->firstWhere('media_id', $media->id);
     expect($line['orientation'])->toBe('portrait');
-
-    // …and a channel's library.
-    $channel = Channel::factory()->create(['store_id' => $this->store->id]);
-    $inLibrary = collect($this->getJson("/channels/{$channel->id}/library?type=html")->assertOk()->json('media'))->firstWhere('id', $media->id);
-    expect($inLibrary['orientation'])->toBe('portrait');
 });
 
 test('the blank documents and the factory agree on the two sizes', function () {
