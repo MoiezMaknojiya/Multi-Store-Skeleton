@@ -170,7 +170,10 @@ class PlaylistController extends Controller
             ], 409);
         }
 
-        DB::transaction(fn () => $this->writeItems($screen, $items));
+        DB::transaction(function () use ($screen, $items) {
+            $this->assertFilesAreInNoChannelUnderLock($items);
+            $this->writeItems($screen, $items);
+        });
 
         ActivityLog::record(
             'screen.playlist_updated',
@@ -229,6 +232,8 @@ class PlaylistController extends Controller
         $this->assertFilesAreInNoChannel($items);
 
         DB::transaction(function () use ($targets, $items) {
+            $this->assertFilesAreInNoChannelUnderLock($items);
+
             foreach ($targets as $target) {
                 $this->writeItems($target, $items);
             }
@@ -407,6 +412,23 @@ class PlaylistController extends Controller
                     : 'These files play in a channel, so they stay off playlists: '.$inChannels->join(', ').'. Take their lines out.',
             ]);
         }
+    }
+
+    /**
+     * The same check read again under the files' row locks — the lock a channel's write takes too — so a file put
+     * into a channel at the same moment is seen, and the two can never both land. Call inside the transaction,
+     * before the lines are written; the rows are locked in id order, so two saves sharing files never deadlock.
+     */
+    private function assertFilesAreInNoChannelUnderLock(array $items): void
+    {
+        $ids = collect($items)->pluck('media_id')->reject(fn (int|string|null $id) => $id === null)->unique();
+
+        if ($ids->isEmpty()) {
+            return;
+        }
+
+        Media::whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get(['id']);
+        $this->assertFilesAreInNoChannel($items);
     }
 
     /**

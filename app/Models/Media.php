@@ -243,6 +243,20 @@ class Media extends Model
             : "Still on the screens {$listed}. Take it off those screens first.";
     }
 
+    /**
+     * Why this file may not go into a channel, or null when it may (owner's rule, 2026-09-26): a screen's playlist
+     * holds it, and in a channel too it would play twice on a screen that carries the channel. The Add-ad request
+     * says it, and the channel's write says it again under the file's lock (ChannelAdController).
+     */
+    public function keptOutOfChannelsMessage(): ?string
+    {
+        $onScreens = $this->stillOnScreensMessage();
+
+        return $onScreens === null
+            ? null
+            : "{$this->title} plays on a playlist, so it stays out of channels: it would play twice. {$onScreens}";
+    }
+
     /** "A, B, C and 2 more" — the same shortening wherever a refusal names what still uses a file. */
     private static function listOfNames(Collection $names): string
     {

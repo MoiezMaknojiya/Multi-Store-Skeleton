@@ -195,6 +195,9 @@ plays twice in one pass, so:
   the screens (`ChannelAdRequest`). An ad saved with the file it already shows keeps it, so a channel ad and a
   playlist line that shared a file before the rule can still be re-timed. Copy to other screens refuses a
   playlist still holding such a line, so it never spreads to more televisions.
+- Two people at the same moment, one putting a file on a playlist and one putting it into a channel, cannot
+  both land it: both writes lock the file's row inside their transaction and look again under the lock
+  (`PlaylistController::assertFilesAreInNoChannelUnderLock`, `ChannelAdController::refuseAFileAPlaylistHolds`).
 - Taken out of every channel — or off every playlist — a file is the other side's to choose again.
 - The holding picture is neither a playlist line nor a channel's ad and keeps its own list.
 - An Ad Builder ad ticked "Show in playlists" follows the same rule: while a channel shows it, the playlist's

@@ -7,6 +7,8 @@ use App\Models\Media;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
 use App\Models\Store;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /*
@@ -122,6 +124,54 @@ test('a playlist still holding a channel file from before the rule is not copied
         ]);
 
     expect($window->playlistItems()->count())->toBe(0);
+});
+
+/*
+| Two people at the same moment — one putting a file on a playlist, one putting it into a channel — would each
+| pass the first look on what they read before the other wrote. Both writes lock the file's row and look again
+| inside the lock. One PHP process cannot race itself, so the other person's write lands the moment this
+| request takes its lock: after the first look, before the second.
+*/
+
+test('a file put into a channel while a playlist is being saved is seen under the lock, and the save refused', function () {
+    $poster = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Deal poster']);
+    $version = $this->getJson("/screens/{$this->screen->id}/playlist")->json('version');
+
+    $landed = false;
+    DB::listen(function (QueryExecuted $query) use (&$landed, $poster) {
+        if (! $landed && str_starts_with($query->sql, 'select "id" from "media" where "id" in')) {
+            $landed = true;
+            ChannelAd::factory()->create(['channel_id' => $this->channel->id, 'media_id' => $poster->id]);
+        }
+    });
+
+    $this->putJson("/screens/{$this->screen->id}/playlist", ['version' => $version, 'items' => [
+        ['media_id' => $poster->id, 'duration_seconds' => 10],
+    ]])->assertStatus(422)->assertJsonValidationErrors([
+        'items' => 'Deal poster plays in a channel, so it stays off playlists: it would play twice. Take its line out.',
+    ]);
+
+    expect($landed)->toBeTrue()->and($this->screen->playlistItems()->count())->toBe(0);
+});
+
+test('a file put on a playlist while it is being added to a channel is seen under the lock, and the ad refused', function () {
+    $poster = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Deal poster']);
+
+    $landed = false;
+    DB::listen(function (QueryExecuted $query) use (&$landed, $poster) {
+        if (! $landed && str_starts_with($query->sql, 'select "id" from "media" where "media"."id" =')) {
+            $landed = true;
+            PlaylistItem::create(['screen_id' => $this->screen->id, 'media_id' => $poster->id, 'position' => 0, 'duration_seconds' => 10]);
+        }
+    });
+
+    $this->postJson("/channels/{$this->channel->id}/ads", ['media_id' => $poster->id, 'seconds' => 10])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors([
+            'media_id' => 'Deal poster plays on a playlist, so it stays out of channels: it would play twice. Still on the screen Counter TV. Take it off that screen first.',
+        ]);
+
+    expect($landed)->toBeTrue()->and(ChannelAd::count())->toBe(0);
 });
 
 test('both pickers say why a file is not there', function () {

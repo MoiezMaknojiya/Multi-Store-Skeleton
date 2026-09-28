@@ -46,10 +46,11 @@ class ChannelAdRequest extends FormRequest
 
                     // A file a playlist holds stays out of channels (owner's rule, 2026-09-26): on a screen that
                     // also carries this channel it would play twice. The picker never offers one — this is the
-                    // wall behind it. The file an ad already shows is its own, and saving the ad keeps it.
+                    // wall behind it (and ChannelAdController reads it again under the file's lock). The file an
+                    // ad already shows is its own, and saving the ad keeps it.
                     if ((int) $media->id !== (int) $this->route('ad')?->media_id
-                        && ($onScreens = $media->stillOnScreensMessage()) !== null) {
-                        $fail("{$media->title} plays on a playlist, so it stays out of channels: it would play twice. {$onScreens}");
+                        && ($keptOut = $media->keptOutOfChannelsMessage()) !== null) {
+                        $fail($keptOut);
                     }
                 },
             ],

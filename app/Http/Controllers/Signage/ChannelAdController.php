@@ -116,7 +116,13 @@ class ChannelAdController extends Controller implements HasMiddleware
         $validated = $request->validated();
 
         $ad = DB::transaction(function () use ($request, $validated, $channel) {
-            $media = $request->hasFile('file') ? $this->uploadIntoLibrary($request, $channel) : $request->chosenMedia();
+            if ($request->hasFile('file')) {
+                // A file uploaded this moment is on no playlist.
+                $media = $this->uploadIntoLibrary($request, $channel);
+            } else {
+                $media = $request->chosenMedia();
+                $this->refuseAFileAPlaylistHolds($media);
+            }
 
             return ChannelAd::create([
                 'channel_id' => $channel->id,
@@ -150,6 +156,12 @@ class ChannelAdController extends Controller implements HasMiddleware
                 filled($validated['media_id'] ?? null) => $request->chosenMedia(),
                 default => $ad->media,
             };
+
+            // The file the ad already shows is its own, and one uploaded this moment is on no playlist: only a
+            // library file coming INTO the channel is asked about.
+            if (! $request->hasFile('file') && (int) $media->id !== (int) $ad->media_id) {
+                $this->refuseAFileAPlaylistHolds($media);
+            }
 
             $ad->update([
                 'media_id' => $media->id,
@@ -209,6 +221,20 @@ class ChannelAdController extends Controller implements HasMiddleware
         ActivityLog::record('channel.ads_reordered', $channel, "Reordered the ads in channel {$channel->name}");
 
         return response()->json(['message' => 'Order saved', 'ads' => $this->adsPayload($channel)]);
+    }
+
+    /**
+     * A file a playlist holds stays out of channels (owner's rule, 2026-09-26). ChannelAdRequest has refused it
+     * already; this reads it again under the file's row lock — the lock a playlist's save takes too — so a line
+     * put on a playlist at the same moment is seen, and the two can never both land. Call inside the transaction.
+     */
+    private function refuseAFileAPlaylistHolds(Media $media): void
+    {
+        Media::whereKey($media->id)->lockForUpdate()->first(['id']);
+
+        if (($keptOut = $media->keptOutOfChannelsMessage()) !== null) {
+            throw ValidationException::withMessages(['media_id' => $keptOut]);
+        }
     }
 
     /**
