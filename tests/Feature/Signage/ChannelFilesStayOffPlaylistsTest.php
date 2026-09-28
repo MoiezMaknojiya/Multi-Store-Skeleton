@@ -109,6 +109,21 @@ test('an ad keeps its own file when it is saved, even one a playlist came to hol
     expect($ad->fresh()->duration_seconds)->toBe(25)->and($ad->fresh()->media_id)->toBe($shared->id);
 });
 
+test('a playlist still holding a channel file from before the rule is not copied onto other screens', function () {
+    $shared = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Deal poster']);
+    ChannelAd::factory()->create(['channel_id' => $this->channel->id, 'media_id' => $shared->id]);
+    PlaylistItem::create(['screen_id' => $this->screen->id, 'media_id' => $shared->id, 'position' => 0, 'duration_seconds' => 10]);
+    $window = Screen::factory()->create(['store_id' => $this->store->id, 'name' => 'Window TV']);
+
+    $this->postJson("/screens/{$this->screen->id}/playlist/copy", ['target_screen_ids' => [$window->id]])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors([
+            'items' => 'Deal poster plays in a channel, so it stays off playlists: it would play twice. Take its line out.',
+        ]);
+
+    expect($window->playlistItems()->count())->toBe(0);
+});
+
 test('both pickers say why a file is not there', function () {
     $this->get("/screens/{$this->screen->id}")
         ->assertOk()

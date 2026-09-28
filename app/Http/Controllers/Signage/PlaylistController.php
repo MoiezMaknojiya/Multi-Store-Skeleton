@@ -225,6 +225,9 @@ class PlaylistController extends Controller
         // old one is worse than none of them changing.
         $items = $this->itemsForCopy($screen);
 
+        // A line from before 2026-09-26 whose file a channel shows would carry the double play to every target.
+        $this->assertFilesAreInNoChannel($items);
+
         DB::transaction(function () use ($targets, $items) {
             foreach ($targets as $target) {
                 $this->writeItems($target, $items);

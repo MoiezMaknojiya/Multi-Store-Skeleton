@@ -193,7 +193,8 @@ plays twice in one pass, so:
 - Behind the pickers, an id posted by hand is refused: the playlist save with a 422 naming the file
   (`PlaylistController::assertFilesAreInNoChannel`), the Add-ad and the ad's change of file with a 422 naming
   the screens (`ChannelAdRequest`). An ad saved with the file it already shows keeps it, so a channel ad and a
-  playlist line that shared a file before the rule can still be re-timed.
+  playlist line that shared a file before the rule can still be re-timed. Copy to other screens refuses a
+  playlist still holding such a line, so it never spreads to more televisions.
 - Taken out of every channel — or off every playlist — a file is the other side's to choose again.
 - The holding picture is neither a playlist line nor a channel's ad and keeps its own list.
 - An Ad Builder ad ticked "Show in playlists" follows the same rule: while a channel shows it, the playlist's
