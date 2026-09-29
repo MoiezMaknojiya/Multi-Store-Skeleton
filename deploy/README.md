@@ -109,18 +109,21 @@ change a minute, and the log lives on the disk the uploads need). A server set u
 once, with no restart; the second line also deletes what is older right away:
 
 ```bash
-ssh -i ~/.ssh/signage_deploy root@SERVER_IP 'du -ch $(mysql -Nse "SELECT @@log_bin_basename").[0-9]* | tail -1'
+ssh -i ~/.ssh/signage_deploy root@SERVER_IP "du -ch /var/lib/mysql/binlog.[0-9]* | tail -1"
 ```
 
 ```bash
-ssh -i ~/.ssh/signage_deploy root@SERVER_IP 'mysql -e "SET PERSIST binlog_expire_logs_seconds = 259200; FLUSH BINARY LOGS;"'
+ssh -i ~/.ssh/signage_deploy root@SERVER_IP "mysql -e 'SET PERSIST binlog_expire_logs_seconds = 259200; FLUSH BINARY LOGS;'"
 ```
 
 ```bash
-ssh -i ~/.ssh/signage_deploy root@SERVER_IP 'mysql -Nse "SELECT @@binlog_expire_logs_seconds"'
+ssh -i ~/.ssh/signage_deploy root@SERVER_IP "mysql -Nse 'SELECT @@binlog_expire_logs_seconds'"
 ```
 
-The first says how much the log takes, the last must answer `259200`. Safe to run again.
+The first says how much the log takes (MySQL 8.4 keeps it as `/var/lib/mysql/binlog.000001` and on), the last
+must answer `259200`. Safe to run again. Double quotes outside and single quotes inside, with no `$`, so the same
+lines work in Git Bash and in Windows PowerShell 5.1 — which drops double quotes nested inside an argument: a
+`'…"SELECT @@x"…'` line reached the server as `mysql -Nse SELECT @@x`, "Unknown database '@@x'".
 
 ## 6. The first deploy
 
