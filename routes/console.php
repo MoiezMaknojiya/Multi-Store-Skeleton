@@ -37,3 +37,13 @@ Schedule::call(function () {
 | days goes, with the store it made alone (PruneUnverifiedAccounts).
 */
 Schedule::command('accounts:prune-unverified')->dailyAt('03:15')->name('prune-unverified-accounts')->withoutOverlapping();
+
+/*
+|--------------------------------------------------------------------------
+| The server's disk — looked at every hour (owner's rule, 2026-09-29)
+|--------------------------------------------------------------------------
+| While less than the warning is free (10 GB), the super admins get one email a day; uploads still work until the
+| reserve (5 GB). A disk can fill without an upload — the database's own records, the nightly backups, the logs —
+| so it is looked at on the clock, not only when somebody uploads (DiskGuard::warnWhenLow).
+*/
+Schedule::command('disk:check')->hourly()->name('disk-space-check')->withoutOverlapping();

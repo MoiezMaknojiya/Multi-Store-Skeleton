@@ -41,4 +41,15 @@ return [
         in_array(env('APP_ENV'), ['testing', 'dusk'], true) ? 0 : 5120
     ) * 1024 * 1024,
 
+    /**
+     * Below how much free space the super admins are warned by email (DiskGuard::warnWhenLow, owner's rule
+     * 2026-09-29: "server per jab 10gb khaali rahe toh email aye") — looked at every hour by `disk:check`, one
+     * email a day while it stays below, uploads still working. In megabytes in the environment; 10 GB unless it
+     * says, and none under the test suites, like the reserve above.
+     */
+    'disk_warning_bytes' => (int) env(
+        'SIGNAGE_DISK_WARNING_MB',
+        in_array(env('APP_ENV'), ['testing', 'dusk'], true) ? 0 : 10240
+    ) * 1024 * 1024,
+
 ];

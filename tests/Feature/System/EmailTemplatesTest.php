@@ -6,6 +6,7 @@ use App\Models\Store;
 use App\Models\User;
 use App\Notifications\ConfirmNewEmailNotification;
 use App\Notifications\DiskAlmostFullNotification;
+use App\Notifications\DiskSpaceLowNotification;
 use App\Notifications\InvitationNotification;
 use App\Notifications\ResetPasswordNotification;
 use App\Notifications\VerifyEmailNotification;
@@ -187,6 +188,20 @@ test('the disk warning says what is left, what is kept free and how often it is 
         ->not->toContain('<img');
 });
 
+test('the early disk warning says what is left, when uploads stop and how often it is sent', function () {
+    $mail = (new DiskSpaceLowNotification((int) (9.2 * 1024 ** 3), 10 * 1024 ** 3, 5 * 1024 ** 3))->toMail(User::factory()->create());
+
+    expect($mail->view)->toBe(['emails.disk-space-low', 'emails.disk-space-low-text'])
+        ->and($mail->subject)->toContain('has only 9.2 GB free')
+        ->and((string) $mail->render())
+        ->toContain('9.2 GB')
+        ->toContain('Uploads still work')
+        ->toContain('<strong style="color:#111827;">5 GB</strong> is left')
+        ->toContain('than 10 GB is free')
+        ->toContain('once every 24 hours')
+        ->not->toContain('<img');
+});
+
 test('every plain-text twin prints its link and its words as they are, never HTML-escaped', function () {
     // A signed link carries "&" between its parameters: escaped, it reads "&amp;" and the link is broken.
     $user = User::factory()->unverified()->create(['first_name' => "Sa'ra", 'email' => 'sara@example.com']);
@@ -203,6 +218,7 @@ test('every plain-text twin prints its link and its words as they are, never HTM
         (new ResetPasswordNotification('reset-token'))->toMail($user),
         (new InvitationNotification($invitation, 'text-twin'))->toMail(new AnonymousNotifiable),
         (new DiskAlmostFullNotification(1024 ** 3, 5 * 1024 ** 3))->toMail($user),
+        (new DiskSpaceLowNotification(9 * 1024 ** 3, 10 * 1024 ** 3, 5 * 1024 ** 3))->toMail($user),
     ] as $mail) {
         $text = view($mail->view[1], $mail->viewData)->render();
 

@@ -5,7 +5,10 @@ use App\Models\Channel;
 use App\Models\Media;
 use App\Models\Store;
 use App\Notifications\DiskAlmostFullNotification;
+use App\Notifications\DiskSpaceLowNotification;
 use App\Services\DiskGuard;
+use Illuminate\Console\Scheduling\Event;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
@@ -102,6 +105,61 @@ test('a mail server that refuses the warning changes nothing: the upload is refu
 
     $this->postJson('/media', ['file' => UploadedFile::fake()->create('a.jpg', 10)])
         ->assertStatus(422)->assertJsonValidationErrors(['file' => DISK_FULL]);
+});
+
+test('below the warning the super admins are told once a day, and uploads still work', function () {
+    // Owner's rule, 2026-09-29: "server per jab 10gb khaali rahe toh email aye".
+    Notification::fake();
+    config(['signage.disk_warning_bytes' => 10 * GB]);
+    $admin = createSuperAdmin();
+    $this->free = 9 * GB;
+
+    $this->artisan('disk:check')
+        ->expectsOutputToContain('Free: 9 GB. The super admins are warned below 10 GB, and uploads stop below 5 GB.')
+        ->expectsOutputToContain('the super admins have been emailed')
+        ->assertSuccessful();
+    $this->artisan('disk:check')->doesntExpectOutputToContain('emailed')->assertSuccessful();
+
+    Notification::assertSentToTimes($admin, DiskSpaceLowNotification::class, 1);
+    Notification::assertNotSentTo($this->manager, DiskSpaceLowNotification::class);
+
+    // Uploads still work: 9 GB free is well above the 5 GB reserve.
+    $this->postJson('/media', ['file' => UploadedFile::fake()->create('menu.jpg', 1024)])->assertOk();
+
+    // A day later, still below: told again.
+    $this->travel(DiskGuard::WARNING_HOURS)->hours();
+    $this->travel(1)->minutes();
+    $this->artisan('disk:check')->assertSuccessful();
+
+    Notification::assertSentToTimes($admin, DiskSpaceLowNotification::class, 2);
+});
+
+test('above the warning nobody is told, and a drop after the disk had room again is told at once', function () {
+    Notification::fake();
+    config(['signage.disk_warning_bytes' => 10 * GB]);
+    $admin = createSuperAdmin();
+
+    $this->free = 11 * GB;
+    $this->artisan('disk:check')->assertSuccessful();
+    Notification::assertNothingSent();
+
+    $this->free = 9 * GB;
+    $this->artisan('disk:check');
+    $this->free = 12 * GB;                  // files deleted: room again
+    $this->artisan('disk:check');
+    $this->free = (int) (9.5 * GB);         // and below again, the same day
+    $this->artisan('disk:check');
+
+    Notification::assertSentToTimes($admin, DiskSpaceLowNotification::class, 2);
+});
+
+test('the disk is looked at every hour, whether anybody uploads or not', function () {
+    $event = collect(app(Schedule::class)->events())
+        ->first(fn (Event $event) => str_contains((string) $event->command, 'disk:check'));
+
+    expect($event)->not->toBeNull()
+        ->and($event->expression)->toBe('0 * * * *')
+        ->and($event->withoutOverlapping)->toBeTrue();
 });
 
 test('a system that cannot say how much is free refuses nothing', function () {
