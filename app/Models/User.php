@@ -2,22 +2,46 @@
 
 namespace App\Models;
 
+use App\Notifications\ConfirmNewEmailNotification;
 use App\Notifications\ResetPasswordNotification;
+use App\Notifications\VerifyEmailNotification;
+use Illuminate\Auth\MustVerifyEmail as ConfirmsItsEmail;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\RateLimiter;
+use Throwable;
 
 /**
  * An account: a login and nothing more (docs/STORE-ORGANIZATION-SPEC.md rule 1). Nobody owns it,
  * and it gives no power by itself — power comes from memberships (`store_user`): a role in a
  * store, or a platform role on the store_id = 0 row.
  */
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
-    use HasFactory, Notifiable;
+    use ConfirmsItsEmail, HasFactory, Notifiable;
+
+    /**
+     * An account never confirmed is removed this many days after it was made, with the store it made alone
+     * (owner's rule, 2026-09-29 — PruneUnverifiedAccounts). Until it is confirmed it can do nothing that uses
+     * the server's space: the `verified` middleware sends it to "Check your inbox".
+     */
+    public const UNVERIFIED_DAYS = 7;
+
+    /**
+     * Emails that confirm an address, as [how many, in how many seconds] (owner's rule, 2026-09-29): the signup's,
+     * "send it again" on either page and a new address typed on the profile all draw on them — counted inside
+     * sendALink(), so no door can skip it. Each is an email to an address somebody typed, so neither one account
+     * nor one visitor (by IP, across every account they make) can be used to fill other people's inboxes.
+     */
+    public const LINKS_PER_ACCOUNT = ['minute' => [3, 60], 'hour' => [20, 3600]];
+
+    public const LINKS_PER_VISITOR = ['hour' => [30, 3600]];
 
     protected $fillable = [
         'first_name', 'last_name', 'phone', 'email', 'password',
@@ -33,14 +57,20 @@ class User extends Authenticatable
     protected static function booted(): void
     {
         static::deleted(function (User $user) {
-            if (config('session.driver') === 'database') {
-                DB::table(config('session.table', 'sessions'))->where('user_id', $user->id)->delete();
-            }
+            $user->endEverySession();
 
             DB::table(config('auth.passwords.users.table', 'password_reset_tokens'))->where('email', $user->email)->delete();
             $user->invitationsToEmail()->delete();
             DB::table('activity_logs')->where('actor_id', $user->id)->update(['actor_id' => null]);
         });
+    }
+
+    /** Every sign-in of this account ends, on every device (the database session driver keeps them in a table). */
+    public function endEverySession(): void
+    {
+        if (config('session.driver') === 'database') {
+            DB::table(config('session.table', 'sessions'))->where('user_id', $this->id)->delete();
+        }
     }
 
     /** The invitations addressed to this account's email — to any store or to the platform team, expired ones included. */
@@ -58,6 +88,95 @@ class User extends Authenticatable
     public function sendPasswordResetNotification($token): void
     {
         $this->notify(new ResetPasswordNotification($token));
+    }
+
+    /** The signup's "confirm your email" goes out in the app's own template too. */
+    public function sendEmailVerificationNotification(): void
+    {
+        $this->notify(new VerifyEmailNotification);
+    }
+
+    /** The link that confirms this account's email: null once it is on its way, or the words that say why not. */
+    public function sendVerificationLink(): ?string
+    {
+        return $this->sendALink(fn () => $this->sendEmailVerificationNotification());
+    }
+
+    /**
+     * The link that confirms a changed address, to that address — the account keeps its own until it is opened:
+     * null once it is on its way, or the words that say why not.
+     */
+    public function sendNewEmailLink(): ?string
+    {
+        if ($this->pending_email === null) {
+            return 'There is no change of email waiting to be confirmed.';
+        }
+
+        return $this->sendALink(fn () => Notification::route('mail', $this->pending_email)->notify(new ConfirmNewEmailNotification($this)));
+    }
+
+    /**
+     * Null while another email that confirms an address may go out for this account now, or the words that say when
+     * one may. Counts nothing: a form that sends one asks first, before it saves anything (the Profile's email).
+     */
+    public function linkRefusal(): ?string
+    {
+        foreach ($this->linkBudgets() as [$key, $most]) {
+            if (RateLimiter::tooManyAttempts($key, $most)) {
+                $seconds = RateLimiter::availableIn($key);
+
+                return 'Too many emails asked for. Try again in '
+                    .($seconds < 2 ? 'a second' : ($seconds < 90 ? "{$seconds} seconds" : (int) ceil($seconds / 60).' minutes')).'.';
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Within the budgets, $send — counted, whether the mail server takes it or not — and a mail server that refuses
+     * reported, never thrown (as Invitation::sendLink does).
+     */
+    private function sendALink(callable $send): ?string
+    {
+        if (($refusal = $this->linkRefusal()) !== null) {
+            return $refusal;
+        }
+
+        foreach ($this->linkBudgets() as [$key, , $seconds]) {
+            RateLimiter::hit($key, $seconds);
+        }
+
+        try {
+            $send();
+
+            return null;
+        } catch (Throwable $e) {
+            report($e);
+
+            return 'The email could not be sent just now. Send the link again in a minute.';
+        }
+    }
+
+    /**
+     * Every budget this account's next link draws on, as [key, how many, in how many seconds]: its own, and the
+     * visitor's — read from the request, since every door that sends one is a page somebody submitted.
+     *
+     * @return list<array{0: string, 1: int, 2: int}>
+     */
+    private function linkBudgets(): array
+    {
+        $budgets = [];
+
+        foreach (self::LINKS_PER_ACCOUNT as $window => [$most, $seconds]) {
+            $budgets[] = ["confirm-links:account:{$window}:{$this->id}", $most, $seconds];
+        }
+
+        foreach (self::LINKS_PER_VISITOR as $window => [$most, $seconds]) {
+            $budgets[] = ["confirm-links:visitor:{$window}:".request()->ip(), $most, $seconds];
+        }
+
+        return $budgets;
     }
 
     /* ── Per-request memo caches ──────────────────────────────────────────

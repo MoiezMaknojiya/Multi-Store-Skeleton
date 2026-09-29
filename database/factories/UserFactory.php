@@ -34,4 +34,10 @@ class UserFactory extends Factory
             'remember_token' => Str::random(10),
         ];
     }
+
+    /** An account that signed up and has not confirmed its email yet. */
+    public function unverified(): static
+    {
+        return $this->state(fn () => ['email_verified_at' => null]);
+    }
 }

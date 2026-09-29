@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
@@ -37,6 +38,17 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
+    // Email verification (owner's rule, 2026-09-29) — open to an account that has not confirmed yet: it is where
+    // the `verified` middleware sends it. Each link opens nothing by itself: the account must be signed in.
+    Route::get('verify-email', [EmailVerificationController::class, 'notice'])->name('verification.notice');
+    Route::get('verify-email/{id}/{hash}', [EmailVerificationController::class, 'verify'])
+        ->whereNumber('id')->middleware('throttle:verification-link')->name('verification.verify');
+    // Every email that confirms an address draws on the account's and the visitor's budgets (User::sendALink),
+    // whichever door asks — so none of the doors needs a throttle of its own.
+    Route::post('verify-email/resend', [EmailVerificationController::class, 'resend'])->name('verification.send');
+    Route::get('confirm-email/{id}/{hash}', [EmailVerificationController::class, 'confirmNewEmail'])
+        ->whereNumber('id')->middleware('throttle:verification-link')->name('email.confirm');
+
     Route::put('password', [PasswordController::class, 'update'])->name('password.update');
 
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])

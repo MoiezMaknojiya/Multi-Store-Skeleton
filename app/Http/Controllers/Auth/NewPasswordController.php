@@ -63,6 +63,19 @@ class NewPasswordController extends Controller
                 // The user is not authenticated here, so pass them explicitly as the actor.
                 ActivityLog::record('password.reset', $user, 'Reset their password via email link', $user);
 
+                // Whoever held the old password is signed out on every device — the person resetting it is not
+                // signed in (the link never signs anybody in), so nothing of theirs ends. And the link came to the
+                // account's own inbox, which is what confirming an email proves (as an invitation's link does), so
+                // an account never confirmed is confirmed now. Together they give a person their address back from
+                // somebody who signed up with it and kept a session open (one account per email, owner's rule
+                // 2026-09-29).
+                $user->endEverySession();
+
+                if (! $user->hasVerifiedEmail()) {
+                    $user->markEmailAsVerified();
+                    ActivityLog::record('account.verified', $user, "Confirmed their email {$user->email} by a password-reset link", $user);
+                }
+
                 event(new PasswordReset($user));
             }
         );

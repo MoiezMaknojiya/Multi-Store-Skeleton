@@ -43,20 +43,73 @@ class ProfileController extends Controller
         $user->first_name = $request->first_name;
         $user->last_name = $request->last_name;
         $user->phone = $request->phone;
-        $user->email = $request->email;
 
-        if ($user->isDirty('email')) {
-            $user->email_verified_at = null;
+        // A new address is confirmed by the link sent to IT (owner's rule, 2026-09-29). An account that has not
+        // confirmed its email yet is simply correcting it — the new one takes its place and the link goes there.
+        // A confirmed account keeps its address until the new one's link is opened (users.pending_email), so a
+        // typo can never lock anybody out.
+        $newEmail = $request->email !== $user->email ? $request->email : null;
+
+        // A new address is an email to it, which draws on the account's budget (User::LINKS_PER_ACCOUNT): asked
+        // BEFORE anything is saved, so a refusal leaves the account as it was and the form as it was typed.
+        if ($newEmail !== null && ($refusal = $user->linkRefusal()) !== null) {
+            return Redirect::route('profile.edit')->withErrors(['email' => $refusal])->withInput();
+        }
+
+        if ($newEmail !== null && ! $user->hasVerifiedEmail()) {
+            $user->email = $newEmail;
+        } elseif ($newEmail !== null) {
+            $user->pending_email = $newEmail;
         }
 
         $changed = $user->isDirty();
         $user->save();
 
         if ($changed) {
-            ActivityLog::record('profile.updated', $user, 'Updated their own profile');
+            ActivityLog::record('profile.updated', $user, 'Updated their own profile'
+                .($newEmail !== null ? ($user->hasVerifiedEmail() ? ", asking to change their email to {$newEmail}" : ", correcting their email to {$newEmail}") : ''));
         }
 
-        return Redirect::route('profile.edit')->with('status', 'profile-updated');
+        if ($newEmail === null) {
+            return Redirect::route('profile.edit')->with('status', 'profile-updated');
+        }
+
+        $problem = $user->hasVerifiedEmail() ? $user->sendNewEmailLink() : $user->sendVerificationLink();
+
+        return $problem === null
+            ? Redirect::route('profile.edit')->with('status', $user->hasVerifiedEmail() ? 'email-pending' : 'verification-link-sent')
+            : Redirect::route('profile.edit')->with('error', $problem);
+    }
+
+    /** The link for a changed email, sent again. */
+    public function resendNewEmail(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        if ($user->pending_email === null) {
+            return Redirect::route('profile.edit');
+        }
+
+        $problem = $user->sendNewEmailLink();
+
+        return $problem === null
+            ? Redirect::route('profile.edit')->with('status', 'email-link-resent')
+            : Redirect::route('profile.edit')->with('error', $problem);
+    }
+
+    /** A changed email given up: the account keeps the address it has. */
+    public function cancelNewEmail(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        if ($user->pending_email !== null) {
+            $pending = $user->pending_email;
+            $user->forceFill(['pending_email' => null])->save();
+
+            ActivityLog::record('profile.updated', $user, "Gave up changing their email to {$pending}");
+        }
+
+        return Redirect::route('profile.edit')->with('status', 'email-change-cancelled');
     }
 
     /**

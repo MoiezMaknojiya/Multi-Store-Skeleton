@@ -31,6 +31,7 @@ class MediaStorage
     public function __construct(
         private readonly VideoDuration $durations,
         private readonly StoreStorage $quota,
+        private readonly DiskGuard $disk,
     ) {}
 
     /** Longest edge of a generated thumbnail, in pixels. */
@@ -64,6 +65,9 @@ class MediaStorage
      */
     public function addToLibrary(UploadedFile $file, ?int $storeId, array $clientMeta, ?string $typedTitle, ?int $createdBy): Media
     {
+        // The server's own disk first, whoever uploads (DiskGuard) — the platform's library included.
+        $this->disk->assertRoomFor((int) $file->getSize());
+
         // A full shop is told before its upload is even written. The platform's own library has no wall.
         if ($storeId !== null) {
             $this->quota->assertRoomFor($storeId, (int) $file->getSize());
@@ -91,6 +95,7 @@ class MediaStorage
      */
     public function addBuilderAsset(UploadedFile $file, int $storeId, array $clientMeta, string $title, ?int $createdBy): BuilderAsset
     {
+        $this->disk->assertRoomFor((int) $file->getSize());
         $this->quota->assertRoomFor($storeId, (int) $file->getSize());
 
         $stored = $this->storeBuilderAsset($file, $storeId, $clientMeta);
@@ -174,6 +179,9 @@ class MediaStorage
      */
     public function storeCampaignFile(UploadedFile $file, array $clientMeta = []): array
     {
+        // The ads network has no allowance of its own; the server's disk still has its reserve (DiskGuard).
+        $this->disk->assertRoomFor((int) $file->getSize());
+
         return $this->put($file, 'campaigns', $clientMeta);
     }
 

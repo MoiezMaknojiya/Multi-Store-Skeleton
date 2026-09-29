@@ -28,3 +28,12 @@ Schedule::call(function () {
             "Scheduled maintenance — partitions created: {$createdYears}; dropped (with data): {$droppedYears}");
     }
 })->monthlyOn(1, '00:30')->name('activity-log-partition-maintenance');
+
+/*
+|--------------------------------------------------------------------------
+| Accounts never confirmed — removed after a week (owner's rule, 2026-09-29)
+|--------------------------------------------------------------------------
+| Daily, in the quiet of the night: an account that has not confirmed its email within User::UNVERIFIED_DAYS
+| days goes, with the store it made alone (PruneUnverifiedAccounts).
+*/
+Schedule::command('accounts:prune-unverified')->dailyAt('03:15')->name('prune-unverified-accounts')->withoutOverlapping();

@@ -21,7 +21,11 @@ use Illuminate\Support\Facades\Storage;
  */
 class AdPublisher
 {
-    public function __construct(private readonly AdCompiler $compiler, private readonly StoreStorage $quota) {}
+    public function __construct(
+        private readonly AdCompiler $compiler,
+        private readonly StoreStorage $quota,
+        private readonly DiskGuard $disk,
+    ) {}
 
     /**
      * Compile and publish; returns the media row a playlist plays.
@@ -35,6 +39,9 @@ class AdPublisher
     {
         $disk = Storage::disk('public');
         $html = $this->compiler->compile($ad);
+
+        // The server's own disk has its reserve, whatever the shop's allowance says (DiskGuard).
+        $this->disk->assertRoomFor(strlen($html), 'publish');
         $path = $ad->storageDirectory().'/index.html';
         $media = $ad->media ?? new Media;
 

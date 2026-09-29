@@ -36,10 +36,12 @@ class RegistrationFlowTest extends DuskTestCase
 
     /**
      * A brand-new customer signs themselves up: their details + their store in one
-     * public form, becomes that store's Owner, and lands on their dashboard with the
-     * store showing.
+     * public form, and becomes that store's Owner. The panel waits for their email
+     * (owner's rule, 2026-09-29): "Check your inbox" says where the link went, the
+     * dashboard sends them back there, and the link from the email opens their
+     * dashboard with the store showing.
      */
-    public function test_a_customer_signs_up_with_their_store_and_lands_on_their_dashboard(): void
+    public function test_a_customer_signs_up_confirms_their_email_and_lands_on_their_dashboard(): void
     {
         $this->seedSuperAdmin(); // the Owner role every signup receives is put back if it is missing
 
@@ -63,14 +65,25 @@ class RegistrationFlowTest extends DuskTestCase
             $browser->select('#state', 'TX');
             $this->jsType($browser, '#zip_code', '73301');
 
-            // The new owner lands on their dashboard; their single store shows in
-            // the header switcher (the role assignment itself is checked in the DB
-            // below).
+            // "Check your inbox", naming the address the link went to.
+            $logSizeBefore = $this->mailLogSize();
             $browser->press('Create Account')
+                ->waitForLocation('/verify-email')
+                ->assertSeeIn('@verify-email-address', 'zara@example.com');
+
+            // Nothing of the panel opens before the link does.
+            $browser->visit('/dashboard')->waitForLocation('/verify-email');
+
+            // The link from the email: the new owner lands on their dashboard, told so; their
+            // single store shows in the header switcher (the role assignment itself is checked
+            // in the DB below).
+            $browser->visit($this->linkFromMailLog($logSizeBefore, 'verify-email'))
                 ->waitForLocation('/dashboard')
+                ->waitForText('Your email is confirmed. Welcome!')
                 ->waitForText('Zara Mart');
 
             $owner = User::where('email', 'zara@example.com')->firstOrFail();
+            $this->assertTrue($owner->hasVerifiedEmail());
             $store = Store::where('name', 'Zara Mart')->firstOrFail();
             $roleId = Role::starter(Role::OWNER)->id;
 

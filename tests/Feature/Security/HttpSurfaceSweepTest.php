@@ -27,11 +27,13 @@ use Illuminate\Support\Facades\Storage;
 | Every route, every kind of person, nothing but rubbish in the body
 |--------------------------------------------------------------------------
 |
-| The blunt sweep: walk the whole route table as a guest, a Staff member, an Owner, platform support and
-| the super admin, sending an empty body everywhere. Two rules, and they are the point of the exercise:
+| The blunt sweep: walk the whole route table as a guest, a Staff member, an Owner, platform support, the
+| super admin and an Owner who has not confirmed their email, sending an empty body everywhere. Three rules,
+| and they are the point of the exercise:
 |
 |   1. nothing answers 500 — a refusal is a 401/403/404/405/422, never a stack trace;
-|   2. a guest is offered nothing but the public doors.
+|   2. a guest is offered nothing but the public doors;
+|   3. an account that has not confirmed its email is offered its profile and the pages that confirm it.
 |
 */
 
@@ -45,7 +47,7 @@ beforeEach(function () {
 /** The kinds of person a pass is made as, in the order the passes run. */
 function sweepPeople(): array
 {
-    return ['guest', 'staff', 'owner', 'support', 'super admin'];
+    return ['guest', 'staff', 'owner', 'support', 'super admin', 'unconfirmed'];
 }
 
 /** Real rows, so an id in a URL resolves to something — one of each thing a route can point at. */
@@ -56,6 +58,9 @@ function sweepFixtures(): array
     $staff = createStoreMember($store, Role::STAFF);
     $support = createPlatformUser(['user-view', 'store-view', 'channel-view', 'activity-view'], 'Support');
     $superAdmin = createSuperAdmin();
+    // A customer who signed up and has not opened the link yet: the Owner of a store of their own.
+    $unconfirmed = createStoreMember(Store::factory()->create(['name' => 'Unconfirmed Mart']), Role::OWNER);
+    $unconfirmed->forceFill(['email_verified_at' => null])->save();
 
     $screen = Screen::factory()->withToken('sweep-token-'.$store->id)->create(['store_id' => $store->id]);
     $media = Media::factory()->create(['store_id' => $store->id]);
@@ -78,6 +83,7 @@ function sweepFixtures(): array
             'owner' => $owner,
             'support' => $support,
             'super admin' => $superAdmin,
+            'unconfirmed' => $unconfirmed,
         ],
         'store' => $store,
         // Keyed by route parameter name. A name two sections use for different things is given per
@@ -97,6 +103,10 @@ function sweepFixtures(): array
             'asset' => $asset->id,
             'campaign' => $campaign->id,
             'token' => str_repeat('a', 64),
+            // An email link's account and address hash (verification, a changed address) — unsigned here, so it
+            // is refused on its page: the sweep only asks that it never answers 500.
+            'id' => $staff->id,
+            'hash' => sha1('nobody@example.com'),
         ],
     ];
 }
@@ -272,6 +282,63 @@ test('a guest is offered nothing but the public doors', function () {
     }
 
     expect($leaks)->toBe([]);
+});
+
+test('an account that has not confirmed its email is offered its profile and the pages that confirm it, and nothing else', function () {
+    $templates = fn (Collection $routes): array => $routes
+        ->flatMap(fn (RouteDefinition $route) => collect($route->methods())
+            ->reject(fn (string $method) => in_array($method, ['HEAD', 'OPTIONS'], true))
+            ->map(fn (string $method) => $method.' '.$route->uri()))
+        ->sort()->values()->all();
+
+    // The doors a signed-in account keeps before it confirms (owner's rule, 2026-09-29): what it needs to confirm,
+    // correct or give up its email, to leave or sign out, to accept an invitation (whose link confirms it too) —
+    // and the way back from "Log in as". A new signed-in route outside `verified` fails here until it is added on
+    // purpose.
+    $open = $templates(sweepRouteTable()->filter(fn (RouteDefinition $route) => in_array('auth', $route->gatherMiddleware(), true)
+        && ! in_array('verified', $route->gatherMiddleware(), true)));
+
+    expect($open)->toBe([
+        'DELETE profile', 'DELETE profile/email', 'DELETE profile/stores/{store}',
+        'GET confirm-email/{id}/{hash}', 'GET profile', 'GET verify-email', 'GET verify-email/{id}/{hash}',
+        'PATCH profile', 'POST impersonate/stop', 'POST invitations/{token}/accept', 'POST logout',
+        'POST profile/email/resend', 'POST verify-email/resend', 'PUT password',
+    ]);
+
+    // Every other signed-in door sends it to "Check your inbox" — a request that wants JSON is refused — and
+    // nothing is written.
+    $guarded = $templates(sweepRouteTable()->filter(fn (RouteDefinition $route) => in_array('verified', $route->gatherMiddleware(), true)));
+    $fixtures = sweepFixtures();
+    $before = sweepCounts();
+    $leaks = [];
+
+    expect(count($guarded))->toBeGreaterThan(50);
+
+    foreach (sweepRoutes($fixtures['parameters']) as $route) {
+        if (! in_array($route['template'], $guarded, true)) {
+            continue;
+        }
+
+        sweepAs($this, $fixtures['people']['unconfirmed'], $fixtures['store']);
+
+        if ($route['method'] === 'GET') {
+            $response = $this->get($route['uri']);
+
+            if (! $response->isRedirect(route('verification.notice'))) {
+                $leaks[] = "GET {$route['uri']} answered {$response->status()}";
+            }
+
+            continue;
+        }
+
+        $status = $this->json($route['method'], $route['uri'], [])->status();
+
+        if ($status !== 403) {
+            $leaks[] = "{$route['method']} {$route['uri']} answered {$status} to JSON";
+        }
+    }
+
+    expect($leaks)->toBe([])->and(sweepCounts())->toBe($before);
 });
 
 test('no write endpoint answers with a server error, however misshapen the body', function () {

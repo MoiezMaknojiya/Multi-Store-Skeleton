@@ -17,7 +17,11 @@
     </template>
 </div>
 
-@if (is_string($__flash) && ! in_array($__flash, ['profile-updated', 'password-updated', 'store-updated'], true))
+{{-- The keys the Profile and Settings pages say in their own words — the email's beside the email field. --}}
+@if (is_string($__flash) && ! in_array($__flash, [
+    'profile-updated', 'password-updated', 'store-updated',
+    'email-pending', 'email-link-resent', 'email-changed', 'email-change-cancelled', 'verification-link-sent',
+], true))
     <script>
         document.addEventListener('alpine:initialized', () => window.toast({{ Js::from($__flash) }}, 'success'));
     </script>

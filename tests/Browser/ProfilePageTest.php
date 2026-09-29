@@ -53,6 +53,38 @@ class ProfilePageTest extends DuskTestCase
     }
 
     /**
+     * A changed email is confirmed by a link to the NEW address (owner's rule, 2026-09-29): the profile says it
+     * is waiting and keeps the old one meanwhile, and the link from the email changes it.
+     */
+    public function test_a_changed_email_waits_for_the_link_sent_to_it(): void
+    {
+        $user = User::factory()->create(['first_name' => 'Sara', 'email' => 'sara@example.com']);
+
+        $this->browse(function (Browser $browser) use ($user) {
+            $this->freshSession($browser);
+            $browser->loginAs($user)->visit('/profile');
+            $this->waitForAlpine($browser);
+
+            $logSizeBefore = $this->mailLogSize();
+            $this->jsType($browser, 'input[name="email"]', 'sara@newshop.com');
+            $browser->script("document.querySelector('input[name=\"email\"]').closest('form').requestSubmit();");
+
+            // Waiting: the new address is named, and the field still holds the old one.
+            $browser->waitFor('@profile-email-pending')
+                ->assertSeeIn('@profile-email-pending', 'sara@newshop.com')
+                ->assertInputValue('input[name="email"]', 'sara@example.com');
+            $this->assertSame('sara@example.com', $user->fresh()->email);
+
+            $browser->visit($this->linkFromMailLog($logSizeBefore, 'confirm-email'))
+                ->waitFor('@profile-email-changed')
+                ->assertSeeIn('@profile-email-changed', 'Your email is now sara@newshop.com.')
+                ->assertMissing('@profile-email-pending')
+                ->assertInputValue('input[name="email"]', 'sara@newshop.com');
+            $this->assertSame('sara@newshop.com', $user->fresh()->email);
+        });
+    }
+
+    /**
      * Staff and Viewers have no Members page and no Stores tab, so Profile → Your stores is where they leave a
      * store. A store's only Owner — on the Stores tab of Settings — is told why they cannot, instead of being
      * offered a button that fails.

@@ -73,10 +73,12 @@ Route::prefix('invitations/{token}')
 // -----------------------------------------------------------------------
 // Dashboard
 // -----------------------------------------------------------------------
-Route::get('/dashboard', [DashboardController::class, 'index'])->middleware('auth')->name('dashboard');
+// An account that has not confirmed its email (owner's rule, 2026-09-29) is sent to "Check your inbox" from here and
+// from every page below; only its profile, and the verification pages themselves (routes/auth.php), stay open.
+Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
 // Store selection page (auth only — it lists the person's OWN memberships, not the
 // stores module, so it is not gated by store-view).
-Route::get('/select-store', [DashboardController::class, 'selectStore'])->middleware('auth')->name('stores.select');
+Route::get('/select-store', [DashboardController::class, 'selectStore'])->middleware(['auth', 'verified'])->name('stores.select');
 
 // -----------------------------------------------------------------------
 // Profile  (all authenticated users)
@@ -90,12 +92,15 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     // Leave one of your stores — any member, whatever their role (rule 10)
     Route::delete('/profile/stores/{store}', [ProfileController::class, 'leaveStore'])->whereNumber('store')->name('profile.stores.leave');
+    // A changed email waiting for its link: sent again, or given up (the account keeps its address meanwhile)
+    Route::post('/profile/email/resend', [ProfileController::class, 'resendNewEmail'])->name('profile.email.resend');
+    Route::delete('/profile/email', [ProfileController::class, 'cancelNewEmail'])->name('profile.email.cancel');
 });
 
 // -----------------------------------------------------------------------
 // Admin Routes  (auth required on every group below; throttled per user)
 // -----------------------------------------------------------------------
-Route::middleware(['auth', 'throttle:admin'])->group(function () {
+Route::middleware(['auth', 'verified', 'throttle:admin'])->group(function () {
 
     // -------------------------------------------------------------------
     // Members  (the current store's team — docs/STORE-ORGANIZATION-SPEC.md)
@@ -430,12 +435,15 @@ Route::middleware(['auth', 'throttle:admin'])->group(function () {
         Route::delete('/{permission}', [PermissionController::class, 'destroy'])->middleware('can:permission-destroy')->name('permissions.destroy');
     });
 
-    // -------------------------------------------------------------------
-    // Impersonation — "stop" must stay reachable by the impersonated user,
-    // who is not a Super Admin, so it cannot sit behind a permission gate.
-    // -------------------------------------------------------------------
-    Route::post('/impersonate/stop', [ImpersonateController::class, 'stop'])->name('impersonate.stop');
-
 });
+
+// -------------------------------------------------------------------
+// Impersonation — "stop" must stay reachable by the impersonated user,
+// who is not a Super Admin (so it cannot sit behind a permission gate)
+// and may not have confirmed their email (so it cannot sit behind
+// `verified` either: "Log in as" such an account would otherwise have
+// no way back but signing out).
+// -------------------------------------------------------------------
+Route::post('/impersonate/stop', [ImpersonateController::class, 'stop'])->middleware(['auth', 'throttle:admin'])->name('impersonate.stop');
 
 require __DIR__.'/auth.php';

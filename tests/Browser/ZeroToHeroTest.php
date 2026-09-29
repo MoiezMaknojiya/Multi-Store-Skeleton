@@ -105,7 +105,13 @@ class ZeroToHeroTest extends DuskTestCase
             $panel->select('#state', 'TX');
             $this->jsType($panel, '#zip_code', '73301');
 
+            // The panel waits for the email (owner's rule, 2026-09-29): the link from it opens the dashboard.
+            $logSizeBefore = $this->mailLogSize();
             $panel->press('Create Account')
+                ->waitForLocation('/verify-email')
+                ->assertSeeIn('@verify-email-address', 'bilal@example.com');
+
+            $panel->visit($this->linkFromMailLog($logSizeBefore, 'verify-email'))
                 ->waitForLocation('/dashboard')
                 ->waitForText('Bilal Mart');
 

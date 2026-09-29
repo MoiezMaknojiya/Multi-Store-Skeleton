@@ -64,6 +64,12 @@ class InvitationResponseController extends Controller
         $user = auth()->user();
         abort_unless($invitation->isFor($user), 403, 'This invitation is for a different email address.');
 
+        // The link was opened from this account's own inbox: that confirms its address, as the signup's link would.
+        if (! $user->hasVerifiedEmail()) {
+            $user->markEmailAsVerified();
+            ActivityLog::record('account.verified', $user, "Confirmed their email {$user->email} by an invitation's link");
+        }
+
         if (! $invitation->isForPlatform() && $this->team->isMember($user, $invitation->store)) {
             $invitation->delete();
             session(['current_store_id' => $invitation->store_id]);

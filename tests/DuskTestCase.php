@@ -238,6 +238,34 @@ abstract class DuskTestCase extends BaseTestCase
         return $match[1];
     }
 
+    /**
+     * The whole link — its expiry and signature included — of the email the app wrote to the log after $from,
+     * whose path begins with $linkPath (`verify-email`, `confirm-email`): a signed link is good only whole.
+     *
+     * The log holds each part as the mailer encoded it: as it is, or quoted-printable when a line is long or not
+     * plain ASCII. Only the soft line breaks are undone over the whole of it, as for a token — decoding every
+     * "=" of a part written as it is would turn "expires=17…" into a control byte — and the link alone is decoded
+     * when it carries quoted-printable's "=3D"; one read out of the HTML part has its "&amp;" undone too.
+     */
+    protected function linkFromMailLog(int $from, string $linkPath): string
+    {
+        $path = storage_path('logs/laravel.log');
+
+        if (! file_exists($path)) {
+            throw new RuntimeException('No log file: the application never wrote the email.');
+        }
+
+        $written = str_replace(["=\r\n", "=\n"], '', (string) file_get_contents($path, false, null, $from));
+
+        if (! preg_match('#https?://[^\s"\'<>]+/'.preg_quote($linkPath, '#').'/[^\s"\'<>]+#', $written, $match)) {
+            throw new RuntimeException("The email carried no {$linkPath} link.");
+        }
+
+        $link = str_contains($match[0], '=3D') ? quoted_printable_decode($match[0]) : $match[0];
+
+        return html_entity_decode($link);
+    }
+
     /** Dusk keeps its first browser open from one test of a class to the next (it
      *  closes it only once the class is done), so cookies (auth + the selected store)
      *  carry over from test to test — start each test with none. */

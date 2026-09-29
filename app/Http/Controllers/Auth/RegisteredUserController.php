@@ -102,6 +102,14 @@ class RegisteredUserController extends Controller
         ActivityLog::record('user.registered', $user,
             "Self-registered: {$user->name} ({$user->email}) with store {$store->name}", storeId: $store->id);
 
-        return redirect()->route('dashboard');
+        // The address has to be confirmed before anything that uses the server's space (owner's rule, 2026-09-29):
+        // the link goes out now, and "Check your inbox" says where. A link that could not go out — a mail server
+        // that refuses, a visitor over the budget — is said there too: the account stands, and the page sends the
+        // link again.
+        $problem = $user->sendVerificationLink();
+
+        return $problem === null
+            ? redirect()->route('verification.notice')
+            : redirect()->route('verification.notice')->with('error', $problem);
     }
 }

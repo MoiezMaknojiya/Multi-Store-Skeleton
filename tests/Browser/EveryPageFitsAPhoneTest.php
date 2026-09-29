@@ -163,6 +163,32 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
         });
     }
 
+    public function test_the_pages_of_an_email_waiting_to_be_confirmed_fit_a_phone(): void
+    {
+        $alpha = Store::factory()->create(['name' => 'Alpha Mart Downtown Superstore']);
+        // A signup that has not opened its link, and a colleague whose change of address is waiting for one.
+        $unconfirmed = $this->storeMember($alpha, Role::OWNER, 'a.very.long.customer.address@alpha-mart-downtown.example.com');
+        $unconfirmed->forceFill(['email_verified_at' => null])->save();
+        $changing = $this->storeMember($alpha, Role::OWNER, 'cashier@example.com');
+        $changing->forceFill(['pending_email' => 'the.new.and.much.longer.address.of.the.cashier@alpha-mart-downtown.example.com'])->save();
+
+        $this->browse(function (Browser $browser) use ($unconfirmed, $changing, $alpha) {
+            $this->freshSession($browser);
+            $browser->loginAs($unconfirmed)->visit('/verify-email');
+
+            $this->assertEveryPageFits($browser, [
+                '/verify-email' => [],
+                '/profile' => ['confirm-user-deletion'],
+            ]);
+
+            $this->freshSession($browser);
+            $browser->loginAs($changing);
+            $this->switchToStore($browser, $alpha);
+
+            $this->assertEveryPageFits($browser, ['/profile' => ['confirm-user-deletion']]);
+        });
+    }
+
     public function test_on_a_phone_the_ad_builder_says_it_needs_a_wider_screen_and_on_a_desk_it_is_there(): void
     {
         $this->seedSuperAdmin();

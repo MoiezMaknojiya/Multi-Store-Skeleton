@@ -23,4 +23,22 @@ return [
         env('APP_ENV') === 'dusk' ? 6 : 3600
     ),
 
+    /*
+    |--------------------------------------------------------------------------
+    | The server's own disk
+    |--------------------------------------------------------------------------
+    */
+
+    /**
+     * How much of the server's disk is always kept free (App\Services\DiskGuard, owner's decision 2026-09-29): an
+     * upload that would leave less is refused, whatever a shop's own 512 MB says, and the super admins are told.
+     * In megabytes in the environment; 5 GB unless it says. The test suites keep none unless told, like the ad
+     * break above, so a suite never fails because the machine running it is fuller than a server may be — the
+     * guard's own test sets its reserve itself.
+     */
+    'upload_reserve_bytes' => (int) env(
+        'SIGNAGE_UPLOAD_RESERVE_MB',
+        in_array(env('APP_ENV'), ['testing', 'dusk'], true) ? 0 : 5120
+    ) * 1024 * 1024,
+
 ];

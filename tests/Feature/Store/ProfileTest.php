@@ -22,8 +22,10 @@ test('profile information can be updated', function () {
 
     $this->assertSame('Test', $user->first_name);
     $this->assertSame('User', $user->last_name);
-    $this->assertSame('test@example.com', $user->email);
-    $this->assertNull($user->email_verified_at);
+    // A confirmed account keeps its address until the new one's link is opened (owner's rule, 2026-09-29).
+    $this->assertNotSame('test@example.com', $user->email);
+    $this->assertSame('test@example.com', $user->pending_email);
+    $this->assertNotNull($user->email_verified_at);
 });
 
 test('profile update rejects missing required fields (backend mirrors the client rules)', function () {

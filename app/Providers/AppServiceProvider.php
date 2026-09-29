@@ -229,5 +229,10 @@ class AppServiceProvider extends ServiceProvider
         // minute is far above anybody who has simply mistyped their new password.
         RateLimiter::for('password-reset', fn (Request $request) => Limit::perMinute(10)
             ->by('password-reset:'.$request->ip()));
+
+        // The emails that confirm an address are counted where they are sent, whichever door asks
+        // (User::sendALink); the links themselves, opened, here — a guess at a signature is one request.
+        RateLimiter::for('verification-link', fn (Request $request) => Limit::perMinute(20)
+            ->by('verification-link:'.($request->user()?->id ?: $request->ip())));
     }
 }

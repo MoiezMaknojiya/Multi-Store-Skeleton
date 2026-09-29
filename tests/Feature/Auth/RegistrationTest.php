@@ -38,7 +38,8 @@ test('the registration screen renders with the store fields', function () {
 });
 
 test('signing up creates the account, the store, and makes the person its Owner', function () {
-    $this->post('/register', validSignupPayload())->assertRedirect(route('dashboard'));
+    // …and asks for the email to be confirmed before anything else (owner's rule, 2026-09-29).
+    $this->post('/register', validSignupPayload())->assertRedirect(route('verification.notice'));
     $this->assertAuthenticated();
 
     $user = User::where('email', 'sana@example.com')->firstOrFail();
@@ -83,7 +84,7 @@ test('an invalid store half creates nothing — no half-registered state', funct
 });
 
 test('the email is kept lowercased, so capitals can never make a second account', function () {
-    $this->post('/register', [...validSignupPayload(), 'email' => 'Sana@Example.COM'])->assertRedirect(route('dashboard'));
+    $this->post('/register', [...validSignupPayload(), 'email' => 'Sana@Example.COM'])->assertRedirect(route('verification.notice'));
 
     expect(User::sole()->email)->toBe('sana@example.com');
 
