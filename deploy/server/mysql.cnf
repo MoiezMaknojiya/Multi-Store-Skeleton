@@ -7,3 +7,8 @@ mysqlx = OFF
 innodb_buffer_pool_size = 512M
 innodb_redo_log_capacity = 128M
 max_connections = 40
+# MySQL writes every change to its binary log and keeps 30 days of it by default, on the same disk as the
+# uploads — and every television's heartbeat is a change a minute. Nothing replicates from it here and the
+# nightly dump is the backup, so three days are kept: enough to replay the changes since a dump if it ever came
+# to that (owner, 2026-09-29). 3 × 24 × 60 × 60 seconds.
+binlog_expire_logs_seconds = 259200

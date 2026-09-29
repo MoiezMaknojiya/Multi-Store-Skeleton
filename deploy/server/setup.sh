@@ -117,9 +117,9 @@ echo "== 7/9 MySQL: the database and its user"
 install -d /etc/mysql/mysql.conf.d
 install -m 644 "$HERE/mysql.cnf" /etc/mysql/mysql.conf.d/99-signage.cnf
 systemctl restart mysql
-MYSQL_SETTINGS="$(mysql -NBe 'SELECT @@bind_address, @@innodb_buffer_pool_size >= 536870912')"
-[[ "$MYSQL_SETTINGS" == $'127.0.0.1\t1' ]] \
-    || { echo "MySQL did not take mysql.cnf (bind address, cache size): $MYSQL_SETTINGS" >&2; exit 1; }
+MYSQL_SETTINGS="$(mysql -NBe 'SELECT @@bind_address, @@innodb_buffer_pool_size >= 536870912, @@binlog_expire_logs_seconds')"
+[[ "$MYSQL_SETTINGS" == $'127.0.0.1\t1\t259200' ]] \
+    || { echo "MySQL did not take mysql.cnf (bind address, cache size, binary log days): $MYSQL_SETTINGS" >&2; exit 1; }
 # The panel talks to MySQL through its socket, wherever this MySQL keeps it.
 DB_SOCKET="$(mysql -NBe 'SELECT @@socket')"
 [[ -S "$DB_SOCKET" ]] || { echo "MySQL's socket is not where it says: $DB_SOCKET" >&2; exit 1; }

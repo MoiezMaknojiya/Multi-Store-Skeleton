@@ -104,6 +104,24 @@ ssh -i ~/.ssh/signage_deploy root@SERVER_IP "bash /root/signage-setup/enable-htt
 It copies the site first and puts it back if Nginx will not take the change, and it ends by asking the site
 over HTTP/2. Safe to run again.
 
+MySQL's binary log is kept three days, not its default thirty (`mysql.cnf`: every television's heartbeat is a
+change a minute, and the log lives on the disk the uploads need). A server set up before that setting takes it
+once, with no restart; the second line also deletes what is older right away:
+
+```bash
+ssh -i ~/.ssh/signage_deploy root@SERVER_IP 'du -ch $(mysql -Nse "SELECT @@log_bin_basename").[0-9]* | tail -1'
+```
+
+```bash
+ssh -i ~/.ssh/signage_deploy root@SERVER_IP 'mysql -e "SET PERSIST binlog_expire_logs_seconds = 259200; FLUSH BINARY LOGS;"'
+```
+
+```bash
+ssh -i ~/.ssh/signage_deploy root@SERVER_IP 'mysql -Nse "SELECT @@binlog_expire_logs_seconds"'
+```
+
+The first says how much the log takes, the last must answer `259200`. Safe to run again.
+
 ## 6. The first deploy
 
 ```bash
