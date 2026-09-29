@@ -298,6 +298,12 @@ export function motionPanel(motion) {
                     video.currentTime = 0;
                     video.play().catch(() => {});
                 });
+
+                // For the ad's own length, then from the start again — a playlist of this one ad, a video in it
+                // cut at the end however long it is.
+                motion.lengthTimer = window.setTimeout(() => {
+                    if (this.previewing === 'all') this.playAll();
+                }, this.adSeconds() * 1000);
             });
         },
 
@@ -322,6 +328,8 @@ export function motionPanel(motion) {
 
         /** Stop everything and put every element back exactly where it was designed. */
         stopPreview() {
+            window.clearTimeout(motion.lengthTimer);
+            motion.lengthTimer = null;
             motion.running.forEach((animation) => animation.kill());
             motion.running = [];
 

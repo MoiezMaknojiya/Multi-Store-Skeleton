@@ -275,6 +275,7 @@ class ExampleAds
 
         return [
             'version' => 1,
+            'duration' => BuilderAd::DEFAULT_SECONDS,
             'stage' => [
                 'width' => BuilderAd::STAGE_WIDTH,
                 'height' => BuilderAd::STAGE_HEIGHT,

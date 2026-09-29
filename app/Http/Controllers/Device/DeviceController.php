@@ -143,9 +143,7 @@ class DeviceController extends Controller
         $items = $resolved['items']
             ->map(fn (PlaylistItem $item) => $item->isChannel()
                 ? $this->channelEntry($item)
-                : $this->manifestItem(
-                    $item->id, $item->media, $item->duration_seconds ?? PlaylistItem::DEFAULT_IMAGE_SECONDS
-                ))->values()->all();
+                : $this->manifestItem($item->id, $item->media, $this->lineSeconds($item)))->values()->all();
 
         // Nothing due: the shop's own holding picture rather than a black rectangle
         // in the middle of the afternoon. It goes out as an ordinary item, so the
@@ -202,7 +200,7 @@ class DeviceController extends Controller
                 $variant = $line->isChannel() ? 'p'.$line->id.':'.$line->liveAds->pluck('id')->implode(',') : 'f'.$line->id;
                 $entry['items'][] = $keys[$variant] ??= $this->lineKey($lines, $line->isChannel()
                     ? $this->channelEntry($line)
-                    : $this->manifestItem($line->id, $line->media, $line->duration_seconds ?? PlaylistItem::DEFAULT_IMAGE_SECONDS));
+                    : $this->manifestItem($line->id, $line->media, $this->lineSeconds($line)));
             }
 
             // Nothing due: the holding picture, exactly as itemsFor() sends it now.
@@ -245,6 +243,15 @@ class DeviceController extends Controller
             'duration' => $campaign->play_seconds,
             'mime' => $campaign->mime_type,
         ];
+    }
+
+    /**
+     * How long a file line plays: its file's own length — a video's, or an Ad Builder page's as its design says —
+     * and only a picture (or a page published before designs had a length) the seconds the line was given.
+     */
+    private function lineSeconds(PlaylistItem $line): int
+    {
+        return $line->media?->ownLength() ?? $line->duration_seconds ?? PlaylistItem::DEFAULT_IMAGE_SECONDS;
     }
 
     /** One entry in the manifest, whatever it was resolved from. The id identifies

@@ -255,6 +255,68 @@ abstract class DuskTestCase extends BaseTestCase
     }
 
     /**
+     * window.__makeVideo(seconds, name): a real WebM that long, as a File — WebCodecs VP8 at a frame a second in a
+     * small WebM writer, so the page measures it the way it measures a file off a phone (tests/Support/VideoFiles
+     * builds the server-side ones).
+     */
+    protected const MAKE_VIDEO_SCRIPT = <<<'JS'
+        window.__makeVideo = async (seconds, name) => {
+            const W = 320, H = 180, config = { codec: 'vp8', width: W, height: H, bitrate: 100000, framerate: 1, latencyMode: 'realtime' };
+            const canvas = new OffscreenCanvas(W, H);
+            const context = canvas.getContext('2d');
+            const chunks = [];
+            const encoder = new VideoEncoder({
+                output: (chunk) => { const data = new Uint8Array(chunk.byteLength); chunk.copyTo(data); chunks.push({ ms: Math.round(chunk.timestamp / 1000), key: chunk.type === 'key', data }); },
+                error: () => {},
+            });
+            encoder.configure(config);
+            for (let s = 0; s < seconds; s++) {
+                context.fillStyle = 'hsl(' + ((s * 7) % 360) + ', 50%, 30%)';
+                context.fillRect(0, 0, W, H);
+                const frame = new VideoFrame(canvas, { timestamp: s * 1000000, duration: 1000000 });
+                encoder.encode(frame, { keyFrame: s % 30 === 0 });
+                frame.close();
+                while (encoder.encodeQueueSize > 4) await new Promise((resolve) => encoder.addEventListener('dequeue', resolve, { once: true }));
+            }
+            await encoder.flush();
+            encoder.close();
+
+            const join = (parts) => { let n = 0; parts.forEach((p) => { n += p.length; }); const out = new Uint8Array(n); let at = 0; parts.forEach((p) => { out.set(p, at); at += p.length; }); return out; };
+            const idBytes = (id) => { const out = []; while (id > 0) { out.unshift(id % 256); id = Math.floor(id / 256); } return Uint8Array.from(out); };
+            const size = (n) => { for (let l = 1; l <= 8; l++) { if (n < Math.pow(2, 7 * l) - 1) { const out = []; let v = n; for (let i = 0; i < l; i++) { out.unshift(v % 256); v = Math.floor(v / 256); } out[0] |= 0x80 >> (l - 1); return Uint8Array.from(out); } } };
+            const el = (id, payload) => join([idBytes(id), size(payload.length), payload]);
+            const uint = (v) => { const out = []; do { out.unshift(v % 256); v = Math.floor(v / 256); } while (v > 0); return Uint8Array.from(out); };
+            const text = (s) => new TextEncoder().encode(s);
+            const f64 = (v) => { const out = new Uint8Array(8); new DataView(out.buffer).setFloat64(0, v); return out; };
+
+            const clusters = [];
+            chunks.forEach((c) => {
+                if (c.key || clusters.length === 0) clusters.push({ ms: c.ms, blocks: [] });
+                const cluster = clusters[clusters.length - 1];
+                const rel = c.ms - cluster.ms;
+                const block = new Uint8Array(4 + c.data.length);
+                block[0] = 0x81; block[1] = (rel >> 8) & 0xff; block[2] = rel & 0xff; block[3] = c.key ? 0x80 : 0;
+                block.set(c.data, 4);
+                cluster.blocks.push(el(0xA3, block));
+            });
+            const segment = join([
+                el(0x1549A966, join([el(0x2AD7B1, uint(1000000)), el(0x4489, f64(seconds * 1000)), el(0x4D80, text('dusk')), el(0x5741, text('dusk'))])),
+                el(0x1654AE6B, el(0xAE, join([el(0xD7, uint(1)), el(0x73C5, uint(1)), el(0x83, uint(1)), el(0x86, text('V_VP8')), el(0xE0, join([el(0xB0, uint(W)), el(0xBA, uint(H))]))]))),
+                ...clusters.map((cluster) => el(0x1F43B675, join([el(0xE7, uint(cluster.ms)), ...cluster.blocks]))),
+            ]);
+            const header = el(0x1A45DFA3, join([el(0x4286, uint(1)), el(0x42F7, uint(1)), el(0x42F2, uint(4)), el(0x42F3, uint(8)), el(0x4282, text('webm')), el(0x4287, uint(2)), el(0x4285, uint(2))]));
+
+            return new File([header, el(0x18538067, segment)], name, { type: 'video/webm' });
+        };
+    JS;
+
+    /** Give the page window.__makeVideo (MAKE_VIDEO_SCRIPT). */
+    protected function defineMakeVideo(Browser $browser): void
+    {
+        $browser->script(self::MAKE_VIDEO_SCRIPT);
+    }
+
+    /**
      * A real PNG of one flat colour, written where a file input can attach it
      * (storage/framework/testing — never the disk the application serves), so an
      * upload goes through the same checks a person's file does. Returns its path.

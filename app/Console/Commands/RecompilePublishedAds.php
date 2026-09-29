@@ -70,8 +70,16 @@ class RecompilePublishedAds extends Command
 
             Storage::disk($media->disk)->put($media->path, $html);
 
-            // Stamped even when the length is the same, or the cache key would not move (as AdPublisher does).
-            $media->forceFill(['size' => strlen($html), 'updated_at' => now()])->save();
+            // Stamped even when the length is the same, or the cache key would not move (as AdPublisher does). The
+            // ad's length is the published version's, as the page is — and a version published before designs had
+            // one keeps its lines' seconds: writing a page again never changes how long the screens show it.
+            $media->forceFill([
+                'size' => strlen($html),
+                'duration_seconds' => isset($ad->published_document['duration'])
+                    ? BuilderAd::lengthOf($ad->published_document)
+                    : $media->duration_seconds,
+                'updated_at' => now(),
+            ])->save();
 
             ActivityLog::record('ad.recompiled', $ad, "Wrote the published page of {$published->name} again");
 

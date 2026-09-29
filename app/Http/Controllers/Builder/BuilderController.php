@@ -22,6 +22,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -228,7 +229,12 @@ class BuilderController extends Controller
 
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
 
-        return response($compiler->compile($ad), 200, [
+        // As a screen shows it: for the ad's own length, then from the start again, as a playlist of this one ad
+        // would — a video in it cut at the end. A published page never carries this: the player times it.
+        $refresh = '<meta http-equiv="refresh" content="'.BuilderAd::lengthOf($ad->document).'">';
+        $page = Str::replaceFirst('<meta charset="utf-8">', '<meta charset="utf-8">'."\n".$refresh, $compiler->compile($ad));
+
+        return response($page, 200, [
             'Content-Type' => 'text/html; charset=UTF-8',
             'Content-Security-Policy' => 'sandbox allow-scripts',
             'Cache-Control' => 'no-store, private',
@@ -414,6 +420,8 @@ class BuilderController extends Controller
             // draft | published | changed — changed: on the screens, with saved changes they do not show yet.
             'status' => $ad->status(),
             'has_published_version' => $ad->hasPublishedVersion(),
+            // On the screens since before designs had a length: each line keeps its own seconds until Publish.
+            'timed_by_its_lines' => $ad->isTimedByItsLines(),
             // May a shop's own playlist play it, or is it for channels only (showInPlaylists)?
             'in_playlists' => (bool) $ad->in_playlists,
             'updated_at' => $ad->updated_at?->toIso8601String(),

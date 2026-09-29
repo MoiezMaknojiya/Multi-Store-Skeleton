@@ -246,17 +246,17 @@
                                       maxlength="255" autocomplete="off" placeholder="Taken from the file when left blank" />
                     </x-crud.form-field>
 
-                    {{-- Seconds belong to an image or an ad page. A video plays to its own end, so for one
-                         there is no field at all rather than one that does nothing. --}}
-                    <div x-show="!isVideo()" x-cloak>
+                    {{-- Seconds belong to a picture. A video plays to its own end, and an Ad Builder page for the
+                         length its design says, so for them there is no field at all rather than one that does
+                         nothing. --}}
+                    <div x-show="!runsOwnLength()" x-cloak>
                         <x-crud.form-field label="Seconds on screen" field="seconds" :required="true">
                             <x-text-input type="number" min="1" x-bind:max="maxImageSeconds" x-model.number="form.seconds"
                                           dusk="channel-ad-seconds" class="block w-full" />
                         </x-crud.form-field>
                     </div>
-                    <p x-show="isVideo()" x-cloak dusk="channel-ad-video-note" class="text-sm text-gray-500 dark:text-gray-400">
-                        A video plays to its own end &mdash; there is nothing to set.
-                    </p>
+                    <p x-show="runsOwnLength()" x-cloak dusk="channel-ad-video-note" class="text-sm text-gray-500 dark:text-gray-400"
+                       x-text="ownLengthNote()"></p>
 
                     <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -123,8 +123,13 @@ class ChannelAd extends Model
      */
     public function getPlaySecondsAttribute(): int
     {
+        // A video's own length, and an Ad Builder page's as its design says (Media::ownLength()).
+        if (($own = $this->media?->ownLength()) !== null) {
+            return $own;
+        }
+
         if ($this->type === Media::TYPE_VIDEO) {
-            return $this->media?->duration_seconds ?: self::UNMEASURED_VIDEO_SECONDS;
+            return self::UNMEASURED_VIDEO_SECONDS;
         }
 
         return $this->duration_seconds ?: PlaylistItem::DEFAULT_IMAGE_SECONDS;

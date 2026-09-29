@@ -50,6 +50,18 @@ class BuilderAd extends Model
         self::PORTRAIT => [self::STAGE_HEIGHT, self::STAGE_WIDTH],
     ];
 
+    /**
+     * How long an ad is on screen, as its design says (`document.duration`, owner 2026-09-28: "8 seconds ki ad aur
+     * background 20 seconds, toh 8 seconds k bad change honi chahiye"). The industry's way — Xibo's layout
+     * duration, Canva's page duration: every playlist and channel plays the ad this long, a video inside it
+     * (its background's or one on its stage) repeats when it is shorter and is cut when the ad ends. Published
+     * with the page, as the media row's duration_seconds (Media::ownLength()); a design with none says ten.
+     */
+    public const DEFAULT_SECONDS = 10;
+
+    /** The longest an ad may be — as long as a picture may hold a channel's screen (ChannelAd::MAX_IMAGE_SECONDS). */
+    public const MAX_SECONDS = 300;
+
     protected $fillable = [
         'store_id', 'name', 'orientation', 'document', 'thumbnail_path', 'media_id', 'published_at',
         'in_playlists', 'created_by', 'updated_by',
@@ -175,6 +187,16 @@ class BuilderAd extends Model
         return $this->wouldChangeWith($this->published_name ?? $this->name, $this->published_document);
     }
 
+    /**
+     * On the screens since before designs had a length (2026-09-28): its page's row says none, so every playlist
+     * line and channel ad keeps the seconds it was given there until the ad is published again — which is when
+     * its own length reaches the screens. The editor says so under Length.
+     */
+    public function isTimedByItsLines(): bool
+    {
+        return $this->isPublished() && $this->media !== null && $this->media->ownLength() === null;
+    }
+
     /** On the screens, with the version they show kept (every publish since 2026-09-21 keeps it)? */
     public function hasPublishedVersion(): bool
     {
@@ -279,6 +301,7 @@ class BuilderAd extends Model
 
         return [
             'version' => 1,
+            'duration' => self::DEFAULT_SECONDS,
             'stage' => [
                 'width' => $width,
                 'height' => $height,
@@ -286,5 +309,16 @@ class BuilderAd extends Model
             ],
             'elements' => [],
         ];
+    }
+
+    /**
+     * How long a design says its ad is on screen, read as the editor reads it (normaliseDocument): a whole number
+     * from one up, held inside what the rules allow — anything else, or nothing, says ten.
+     */
+    public static function lengthOf(?array $document): int
+    {
+        $seconds = $document['duration'] ?? null;
+
+        return is_int($seconds) && $seconds >= 1 ? min(self::MAX_SECONDS, $seconds) : self::DEFAULT_SECONDS;
     }
 }

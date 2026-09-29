@@ -89,6 +89,12 @@ class BuilderAdRequest extends FormRequest
             'document' => ['required', 'array'],
             'document.version' => ['required', 'integer', 'in:1'],
 
+            // How long the ad is on screen (BuilderAd::DEFAULT_SECONDS): every playlist and channel plays it this
+            // long, and a video inside it repeats or is cut to fit. A design saved before it had one says ten.
+            // A real number only (`strict`): "8" or true passes the loose rule, and the editor would show ten
+            // for either while the screens played something else.
+            'document.duration' => ['nullable', 'integer:strict', 'min:1', 'max:'.BuilderAd::MAX_SECONDS],
+
             // The frame is the size a television is — 1920×1080, or 1080×1920 mounted upright — and the
             // ad's orientation says which. Nothing may say otherwise: a document claiming another size would
             // be designed for a screen that does not exist, and one claiming the OTHER television would be a

@@ -206,6 +206,25 @@ export function registerChannelAds(Alpine) {
             return 'Nothing in this library yet. Choose Upload to add a file.';
         },
 
+        /** Does the ad run for its file's own length — a video, or an Ad Builder page whose design says how
+         *  long? Then it has no seconds to set. A page published before designs had a length does not. */
+        runsOwnLength() {
+            if (this.isVideo()) return true;
+            if (this.source === 'upload') return false;
+            if (this.source === 'keep') return Number(this.editingAd?.own_length) > 0;
+
+            return this.chosen?.type === 'html' && Number(this.chosen?.duration_seconds) > 0;
+        },
+
+        /** "Plays for the ad's own length: 8 secs, set in the Ad Builder." */
+        ownLengthNote() {
+            if (this.isVideo()) return 'A video plays to its own end — there is nothing to set.';
+
+            const seconds = this.source === 'keep' ? this.editingAd?.own_length : this.chosen?.duration_seconds;
+
+            return `Plays for the ad's own length: ${seconds} secs, set in the Ad Builder.`;
+        },
+
         /** Is the ad in the form a video? Whatever the chosen way names decides. */
         isVideo() {
             if (this.source === 'upload') return this.selectedFile?.type.startsWith('video/') ?? false;
@@ -270,7 +289,7 @@ export function registerChannelAds(Alpine) {
                 errors.title = ['The title may not be longer than 255 characters.'];
             }
 
-            if (! this.isVideo()) {
+            if (! this.runsOwnLength()) {
                 const seconds = Number(this.form.seconds);
 
                 if (! Number.isInteger(seconds) || seconds < 1) {
@@ -311,8 +330,8 @@ export function registerChannelAds(Alpine) {
                     ends_on: this.form.ends_on,
                 };
 
-                // Seconds only for an image or an ad page. A video has none to send.
-                if (! this.isVideo()) fields.seconds = this.form.seconds;
+                // Seconds only for a picture. A video and an ad page with its own length have none to send.
+                if (! this.runsOwnLength()) fields.seconds = this.form.seconds;
 
                 Object.entries(fields).forEach(([key, value]) => {
                     if (value !== '' && value !== null && value !== undefined) payload.append(key, value);

@@ -117,6 +117,8 @@
              'published' => (bool) $ad?->isPublished(),
              'hasChanges' => (bool) $ad?->hasUnpublishedChanges(),
              'hasPublishedVersion' => (bool) $ad?->hasPublishedVersion(),
+             // On the screens since before designs had a length: each line keeps its own seconds until Publish.
+             'timedByItsLines' => (bool) $ad?->isTimedByItsLines(),
              // May a shop's own playlist play it, or is it for channels only (owner's rule, 2026-09-22)?
              'inPlaylists' => (bool) $ad?->in_playlists,
              'hasPoster' => (bool) $ad?->thumbnail_path,
@@ -130,6 +132,8 @@
              'maxStops' => \App\Http\Requests\Builder\BuilderAdRequest::MAX_STOPS,
              'maxElements' => \App\Http\Requests\Builder\BuilderAdRequest::MAX_ELEMENTS,
              'maxGuides' => \App\Http\Requests\Builder\BuilderAdRequest::MAX_GUIDES,
+             // How long the ad is on screen when its design does not say, and the longest it may be.
+             'adSeconds' => ['default' => \App\Models\BuilderAd::DEFAULT_SECONDS, 'max' => \App\Models\BuilderAd::MAX_SECONDS],
          ]) }})"
          @keydown.window="onKeydown($event)"
          @keyup.window="onKeyup($event)">
@@ -584,7 +588,7 @@
                 <p class="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-xs text-gray-500 dark:text-gray-400"
                    dusk="stage-size-note"
                    x-text="previewing === 'all'
-                       ? 'Playing — the way a screen shows it. Click the stage or press Esc to stop.'
+                       ? 'Playing for ' + adSeconds() + ' seconds, then from the start — the way a screen shows it. Click the stage or press Esc to stop.'
                        : stageSizeNote() + ' · ? for shortcuts'"></p>
             </main>
 

@@ -69,10 +69,10 @@ class ChannelAdRequest extends FormRequest
             // Blank takes the file's own title.
             'title' => ['nullable', 'string', 'max:255'],
 
-            // Seconds belong to an IMAGE or an ad page. A video runs to its own end and has no such
-            // setting at all (owner's decision), so for a video this field is not merely optional —
-            // whatever arrives is thrown away.
-            'seconds' => $this->describesVideo()
+            // Seconds belong to an IMAGE. A video runs to its own end, and an Ad Builder page for the length its
+            // design says (Media::ownLength()), and neither has such a setting at all (owner's decisions) — for
+            // them this field is not merely optional: whatever arrives is thrown away.
+            'seconds' => $this->runsItsOwnLength()
                 ? ['exclude']
                 : ['required', 'integer', 'min:1', 'max:'.ChannelAd::MAX_IMAGE_SECONDS],
 
@@ -111,6 +111,28 @@ class ChannelAdRequest extends FormRequest
             ->whereKey((int) $id)
             ->when(! $channel->isPlatformChannel(), fn (Builder $query) => $query->where('store_id', $channel->store_id))
             ->first();
+    }
+
+    /**
+     * Does the ad this request describes run for its file's own length — a video, or an Ad Builder page whose
+     * design says how long? An uploaded file decides when there is one (a picture never does); then the library
+     * row chosen; otherwise the file the ad already shows.
+     */
+    public function runsItsOwnLength(): bool
+    {
+        if ($this->describesVideo()) {
+            return true;
+        }
+
+        $file = $this->file('file');
+
+        if ($file !== null && ! is_array($file) && $file->isValid()) {
+            return false;
+        }
+
+        $media = filled($this->input('media_id')) ? $this->chosenMedia() : $this->route('ad')?->media;
+
+        return $media?->ownLength() !== null;
     }
 
     /**

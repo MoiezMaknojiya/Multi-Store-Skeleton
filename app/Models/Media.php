@@ -171,6 +171,19 @@ class Media extends Model
         return $this->store_id === null;
     }
 
+    /**
+     * How long this file plays by itself, or null when whoever places it says: a video runs to its own end, and
+     * an Ad Builder page for the length its design says (owner, 2026-09-28, the industry's way — Xibo's layout
+     * duration, Canva's page duration: a video inside is cut at the end, or repeats to fill it). A picture has
+     * none, and neither has a page published before designs had a length: those keep the seconds they were given.
+     */
+    public function ownLength(): ?int
+    {
+        return in_array($this->type, [self::TYPE_VIDEO, self::TYPE_HTML], true) && (int) $this->duration_seconds > 0
+            ? (int) $this->duration_seconds
+            : null;
+    }
+
     /** The shop whose library this is; null for the platform's. */
     public function store(): BelongsTo
     {

@@ -13,7 +13,7 @@ use Tests\DuskTestCase;
 
 /**
  * The four example ads (`builder:examples`, docs/AD-BUILDER-SPEC.md §10) on a real television: paired
- * from the panel, put on its playlist with seconds of their own, and played one after another — each
+ * from the panel, put on its playlist for the length each design says, and played one after another — each
  * checked from INSIDE the television's sandboxed frame, where the page's own runtime has brought its
  * headline in. A screenshot of each is kept in tests/Browser/screenshots.
  */
@@ -47,7 +47,7 @@ class AdExamplesOnTelevisionTest extends DuskTestCase
             $tv->waitUntil('document.querySelector(\'[dusk="pairing-code"]\').textContent.trim().length === 6', 15);
             $code = trim($tv->text('@pairing-code'));
 
-            /* ── 2. The owner pairs it and gives it the four, eight seconds each ── */
+            /* ── 2. The owner pairs it and gives it the four, each for its own length ── */
             $this->freshSession($panel);
             $panel->loginAs($owner);
             $this->switchToStore($panel, $store);
@@ -65,16 +65,20 @@ class AdExamplesOnTelevisionTest extends DuskTestCase
             $panel->visit('/screens/'.$screen->id);
             $this->waitForAlpine($panel);
 
+            // An ad plays for the length its design says (owner, 2026-09-28): each line shows it, with no seconds
+            // to set, as a video's has none.
             foreach ($ads->values() as $index => $ad) {
                 $panel->waitFor('@playlist-add-'.$ad->media_id);
                 $this->jsClick($panel, '@playlist-add-'.$ad->media_id);
-                $panel->waitFor('@playlist-duration-'.$index);
-                $this->jsType($panel, '@playlist-duration-'.$index, '8');
+                $panel->waitFor('@playlist-length-'.$index)->assertMissing('@playlist-duration-'.$index);
             }
 
             $this->jsClick($panel, '@playlist-save');
             $panel->waitUsing(15, 250, fn () => PlaylistItem::where('screen_id', $screen->id)->count() === 4);
-            $this->assertSame([8, 8, 8, 8], PlaylistItem::where('screen_id', $screen->id)->orderBy('position')->pluck('duration_seconds')->all());
+            $this->assertSame(
+                array_fill(0, 4, BuilderAd::DEFAULT_SECONDS),
+                PlaylistItem::where('screen_id', $screen->id)->orderBy('position')->pluck('duration_seconds')->all(),
+            );
 
             /* ── 3. Reopened, the television asks at once rather than at its next poll ── */
             $tv->refresh();

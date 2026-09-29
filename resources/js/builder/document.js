@@ -185,6 +185,9 @@ export function normaliseDocument(doc) {
     const object = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
     const numbers = (value) => (Array.isArray(value) ? value.map(Number).filter(Number.isFinite) : []);
 
+    // The ad's length (seconds on screen): a whole number from one up, or none at all — then the ad says ten.
+    if ('duration' in doc && !(Number.isInteger(doc.duration) && doc.duration >= 1)) delete doc.duration;
+
     doc.stage = object(doc.stage);
     doc.stage.background = object(doc.stage.background);
 

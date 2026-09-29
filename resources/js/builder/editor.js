@@ -37,7 +37,7 @@ export function registerAdEditor(Alpine) {
     Alpine.data('adEditor', (config) => {
         // What Anime.js is running for the preview — deliberately NOT part of the component's reactive state
         // (see motion.js).
-        const motion = { running: [], easeTweens: {} };
+        const motion = { running: [], easeTweens: {}, lengthTimer: null };
 
         return {
             ...backgroundPanel(),
@@ -74,6 +74,9 @@ export function registerAdEditor(Alpine) {
             maxStops: config.maxStops ?? 6,
             maxElements: config.maxElements ?? 200,
             maxGuides: config.maxGuides ?? 50,
+            /* How long the ad is on screen (BuilderAd::DEFAULT_SECONDS, ::MAX_SECONDS): the design's own. */
+            adSecondsDefault: config.adSeconds?.default ?? 10,
+            adSecondsMax: config.adSeconds?.max ?? 300,
 
             /* ── Editor state (not part of the design) ─────────────────── */
             selectedIds: [],
@@ -97,6 +100,8 @@ export function registerAdEditor(Alpine) {
             inPlaylists: config.inPlaylists ?? false,
             playlistUseSaving: false,
             hasPublishedVersion: config.hasPublishedVersion ?? false,
+            // On the screens since before designs had a length: every line keeps its own seconds until Publish.
+            timedByItsLines: config.timedByItsLines ?? false,
             unpublishing: false,
             discarding: false,
             publishMenuOpen: false,
@@ -214,6 +219,27 @@ export function registerAdEditor(Alpine) {
                 return this.orientation === 'portrait'
                     ? `${size} — a portrait screen, a television mounted upright`
                     : `${size} — a television screen`;
+            },
+
+            /**
+             * How long the ad is on screen, as its design says (owner, 2026-09-28 — the industry's way, Xibo's layout
+             * duration and Canva's page duration): every playlist and channel plays it this long, and a video in it,
+             * the background's or one on the stage, repeats when it is shorter and is cut when the ad ends.
+             */
+            adSeconds() {
+                return Number.isInteger(this.doc.duration) ? this.doc.duration : this.adSecondsDefault;
+            },
+
+            /** Set the ad's length, held between one second and the longest the server takes. */
+            setAdSeconds(value) {
+                const seconds = Math.round(Number(value));
+
+                if (! Number.isFinite(seconds)) return this.adSeconds();
+
+                this.doc.duration = Math.min(this.adSecondsMax, Math.max(1, seconds));
+                this.commit('Length');
+
+                return this.doc.duration;
             },
 
             /**
@@ -1236,6 +1262,7 @@ export function registerAdEditor(Alpine) {
                 this.published = ad.is_published ?? false;
                 this.hasChanges = ad.status === 'changed';
                 this.hasPublishedVersion = ad.has_published_version ?? false;
+                this.timedByItsLines = ad.timed_by_its_lines ?? false;
                 this.inPlaylists = ad.in_playlists ?? false;
             },
 

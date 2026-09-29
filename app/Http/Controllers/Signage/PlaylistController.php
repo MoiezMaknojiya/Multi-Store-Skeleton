@@ -509,16 +509,16 @@ class PlaylistController extends Controller
         // to a television the other way round.
         ksort($items);
 
-        // A video runs to its own end and has no seconds anywhere in the panel (owner's rule): its line keeps
-        // the length read from the file, whatever a request sends — the player's backstop is that length, so a
-        // line written by hand cannot let a longer video run past it.
-        $videoSeconds = Media::whereIn('id', collect($items)->pluck('media_id')->filter()->map(fn (int|string $id) => (int) $id)->all())
-            ->where('type', Media::TYPE_VIDEO)
-            ->pluck('duration_seconds', 'id');
+        // A video runs to its own end, and an Ad Builder page for the length its design says (Media::ownLength()):
+        // neither has seconds anywhere in the panel, and its line keeps the file's own length whatever a request
+        // sends — the player's timer is that length, so a line written by hand cannot stretch or cut it.
+        $files = Media::whereIn('id', collect($items)->pluck('media_id')->filter()->map(fn (int|string $id) => (int) $id)->all())
+            ->get(['id', 'type', 'duration_seconds'])
+            ->keyBy('id');
 
         foreach (array_values($items) as $position => $item) {
             $isChannel = filled($item['channel_id'] ?? null);
-            $isVideo = ! $isChannel && $videoSeconds->has((int) $item['media_id']);
+            $file = $isChannel ? null : $files->get((int) $item['media_id']);
 
             $created = PlaylistItem::create([
                 'screen_id' => $screen->id,
@@ -528,7 +528,8 @@ class PlaylistController extends Controller
                 // A channel line lasts as long as its ads do; only a file keeps a length.
                 'duration_seconds' => match (true) {
                     $isChannel => null,
-                    $isVideo => $videoSeconds[(int) $item['media_id']] ?: ChannelAd::UNMEASURED_VIDEO_SECONDS,
+                    $file?->ownLength() !== null => $file->ownLength(),
+                    $file?->type === Media::TYPE_VIDEO => ChannelAd::UNMEASURED_VIDEO_SECONDS,
                     default => $item['duration_seconds'],
                 },
             ]);
@@ -689,7 +690,9 @@ class PlaylistController extends Controller
                 'media_id' => $item->media_id,
                 'channel_id' => $item->channel_id,
                 'position' => $item->position,
-                'duration_seconds' => $item->duration_seconds,
+                // What the line plays for: its file's own length when it has one (a video, an ad page), else its own.
+                'duration_seconds' => $item->media?->ownLength() ?? $item->duration_seconds,
+                'runs_own_length' => $item->media?->ownLength() !== null,
                 ...($item->channel !== null ? $this->channelSummary($item->channel, $today) : [
                     'title' => $item->media?->title,
                     'type' => $item->media?->type,

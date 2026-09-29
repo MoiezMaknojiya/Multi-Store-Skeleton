@@ -221,6 +221,42 @@ test('a file one picker leaves out cannot be forced past it by id, either way ro
         ->and($screen->playlistItems()->whereNotNull('media_id')->pluck('media_id')->all())->toBe([$onPlaylist->id]);
 });
 
+test("an ad is on screen for its design's length alone: no document, line or channel ad posted by hand stretches it", function () {
+    // Owner, 2026-09-28: the design owns its length — a whole number of seconds from 1 to BuilderAd::MAX_SECONDS —
+    // and every screen and channel plays the ad that long. Text, a truth value or a fraction is no length the editor
+    // would show, so the server takes none either; and the seconds a line or a channel ad posts are not the ad's.
+    $ad = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id, 'name' => 'Short one', 'in_playlists' => true]);
+    $forChannel = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id, 'name' => 'Channel one']);
+
+    foreach (['8', '8 seconds', true, 8.5, -8, 0, 301, PHP_INT_MAX, ['8'], ['seconds' => 8]] as $duration) {
+        $this->putJson("/builder/{$ad->id}", ['name' => $ad->name, 'document' => [...$ad->document, 'duration' => $duration]])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('document.duration');
+    }
+
+    foreach ([$ad, $forChannel] as $design) {
+        $this->putJson("/builder/{$design->id}", ['name' => $design->name, 'document' => [...$design->document, 'duration' => 8]])->assertOk();
+        $this->postJson("/builder/{$design->id}/publish")->assertOk();
+    }
+
+    // A playlist line posted with a day's worth of seconds keeps the design's eight.
+    $screen = Screen::factory()->withToken('stretch-token')->create(['store_id' => $this->store->id]);
+    $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
+    $this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => [
+        ['media_id' => $ad->fresh()->media_id, 'duration_seconds' => 86400],
+    ]])->assertOk();
+
+    // A channel ad's seconds are left out for an ad page, whatever shape they are sent in.
+    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Our Deals']);
+    $this->postJson("/channels/{$channel->id}/ads", ['media_id' => $forChannel->fresh()->media_id, 'seconds' => ['9999']])
+        ->assertOk()
+        ->assertJsonPath('ads.0.play_seconds', 8);
+
+    expect($this->getJson('/device/playlist', ['Authorization' => 'Bearer stretch-token'])->json('items.0.duration'))->toBe(8)
+        ->and(ChannelAd::sole()->duration_seconds)->toBeNull()
+        ->and($ad->fresh()->document['duration'])->toBe(8);
+});
+
 test('ids that are not ids answer 422 or 404 — never a 500', function () {
     $media = Media::factory()->create(['store_id' => $this->store->id]);
     $screen = Screen::factory()->create(['store_id' => $this->store->id]);

@@ -186,12 +186,14 @@ export function registerScreenPlaylist(Alpine) {
                 type: media.type,
                 orientation: media.orientation ?? null,
                 thumbnail_url: media.thumbnail_url,
-                // An ad page and a picture both stay up for as long as the line says; only a video
-                // runs to its own end — its measured length, or a generous backstop for one the
-                // browser could not measure (never an image's ten seconds, which would cut it off).
+                // A picture stays up for as long as the line says. A video runs to its own end — its
+                // measured length, or a generous backstop for one nobody could measure (never an image's
+                // ten seconds, which would cut it off) — and an Ad Builder page for the length its design
+                // says; a page published before designs had a length is timed like a picture.
                 duration_seconds: media.type === 'video'
                     ? (media.duration_seconds || PlaylistItemDefaults.unmeasuredVideoSeconds)
-                    : PlaylistItemDefaults.imageSeconds,
+                    : (media.type === 'html' && media.duration_seconds ? media.duration_seconds : PlaylistItemDefaults.imageSeconds),
+                runs_own_length: media.type === 'video' || (media.type === 'html' && Number(media.duration_seconds) > 0),
                 expires_at: null,
                 // The picker never offers an Ad Builder page taken off the screens (unpublished).
                 is_draft: false,
@@ -531,10 +533,11 @@ export function registerScreenPlaylist(Alpine) {
                 : 'Landscape — plays with bars above and below on this screen';
         },
 
-        /** Whether the line's seconds are set here: a picture and an ad page stay up for as
-         *  long as the line says; a video runs to its own end and a channel to its ads'. */
+        /** Whether the line's seconds are set here: a picture stays up for as long as the line
+         *  says; a video runs to its own end, an Ad Builder page for its design's length (one
+         *  published before designs had a length is timed like a picture), a channel to its ads'. */
         isTimed(item) {
-            return item.type === 'image' || item.type === 'html';
+            return item.type === 'image' || (item.type === 'html' && ! item.runs_own_length);
         },
 
         /** How long one line holds the screen: a file its seconds, a channel about one

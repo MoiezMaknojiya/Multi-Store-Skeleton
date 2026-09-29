@@ -272,7 +272,8 @@ class ChannelAdController extends Controller implements HasMiddleware
      */
     private function secondsFor(Media $media, array $validated, ?int $current = null): ?int
     {
-        if ($media->type === Media::TYPE_VIDEO) {
+        // A video runs to its own end, and an Ad Builder page for the length its design says.
+        if ($media->type === Media::TYPE_VIDEO || $media->ownLength() !== null) {
             return null;
         }
 
@@ -301,6 +302,8 @@ class ChannelAdController extends Controller implements HasMiddleware
                 'thumbnail_url' => $ad->thumbnail_url,
                 'duration_seconds' => $ad->duration_seconds,
                 'play_seconds' => $ad->play_seconds,
+                // The file's own length — a video's, an ad page's — when it has one: no seconds to set for it.
+                'own_length' => $ad->media?->ownLength(),
                 'starts_on' => $ad->starts_on?->toDateString(),
                 'ends_on' => $ad->ends_on?->toDateString(),
                 // Whose library the file is in — "Platform", or the shop's name.

@@ -149,9 +149,9 @@ class AdOrientationFlowTest extends DuskTestCase
             $panel->waitUntil("!!{$thumb} && {$thumb}.complete && {$thumb}.naturalWidth > 0", 10);
             $this->assertSame([360, 640], $panel->script("const i = {$thumb}; return [i.naturalWidth, i.naturalHeight];")[0], 'the picker shows the upright poster');
 
+            // The ad plays for the length its design says, so its line has no seconds to set.
             $this->jsClick($panel, '@playlist-add-'.$media->id);
-            $panel->waitFor('@playlist-duration-0')->assertMissing('@playlist-orientation-0');
-            $this->jsType($panel, '@playlist-duration-0', '10');
+            $panel->waitFor('@playlist-length-0')->assertMissing('@playlist-orientation-0');
             $this->jsClick($panel, '@playlist-save');
             $panel->waitUsing(15, 250, fn () => PlaylistItem::where('screen_id', $screen->id)->count() === 1);
 

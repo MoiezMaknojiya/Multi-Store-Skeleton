@@ -333,13 +333,13 @@ class AdBuilderFlowTest extends DuskTestCase
 
             $this->jsClick($panel, '@playlist-add-'.$media->id);
 
-            // An ad page is timed like a picture: its line carries the seconds, and they can be changed.
-            $panel->waitFor('@playlist-duration-0')->assertMissing('@playlist-length-0');
-            $this->jsType($panel, '@playlist-duration-0', '15');
+            // An ad page plays for the length its design says (owner, 2026-09-28): its line shows it and has no
+            // seconds to set, as a video's has none.
+            $panel->waitFor('@playlist-length-0')->assertMissing('@playlist-duration-0');
             $this->jsClick($panel, '@playlist-save');
 
             $panel->waitUsing(15, 250, fn () => PlaylistItem::where('screen_id', $screen->id)->count() === 1);
-            $this->assertSame(15, PlaylistItem::where('screen_id', $screen->id)->sole()->duration_seconds);
+            $this->assertSame(BuilderAd::DEFAULT_SECONDS, PlaylistItem::where('screen_id', $screen->id)->sole()->duration_seconds);
 
             /* ── 6. The television plays it ─────────────────────────────── */
             $tv->waitUntil('!!document.querySelector("#layer-a iframe, #layer-b iframe")', 45);
