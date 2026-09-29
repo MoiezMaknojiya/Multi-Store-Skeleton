@@ -33,9 +33,11 @@ class ZeroToHeroTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    /** Upload one file through the real modal and return its row. */
+    /** Upload one file through the real modal and return its row — titled by its file's name. */
     private function upload(Browser $panel, string $path, string $title): Media
     {
+        $this->assertSame($title, pathinfo($path, PATHINFO_FILENAME), 'A file is titled by its name.');
+
         $this->clickAndAwait($panel, '@upload-media', fn (Browser $b) => $b->waitFor('@media-upload-form', 5));
 
         // The "select a store first" banner belongs to people who work above the stores. A
@@ -43,12 +45,11 @@ class ZeroToHeroTest extends DuskTestCase
         // the banner lives in this modal, so with the modal shut it would be missing anyway.
         $panel->assertDontSeeIn('@media-upload-form', 'Select a store first');
 
-        $panel->attach('@media-file', $path);
-        $this->jsType($panel, '@media-title', $title);
-        $this->jsClick($panel, '@media-upload-save');
+        $this->uploadThrough($panel, 'media', $path);
+        $this->jsClick($panel, '@media-upload-close');
+        $this->waitForModalClosed($panel, '@media-upload-form');
 
         $panel->waitForText($title, 20);
-        $this->waitForModalClosed($panel, '@media-upload-form');
 
         return Media::where('title', $title)->firstOrFail();
     }
@@ -83,8 +84,8 @@ class ZeroToHeroTest extends DuskTestCase
         // Nothing else is created by hand anywhere in this test.
         $this->seedSuperAdmin();
 
-        $posterPath = $this->fixtureImage('hero-poster.png', 205, 55, 85);
-        $secondPath = $this->fixtureImage('hero-second.png', 35, 135, 205);
+        $posterPath = $this->fixtureImage('Opening Poster.png', 205, 55, 85);
+        $secondPath = $this->fixtureImage('Second Board.png', 35, 135, 205);
 
         $this->browse(function (Browser $panel, Browser $tv) use ($posterPath, $secondPath) {
 

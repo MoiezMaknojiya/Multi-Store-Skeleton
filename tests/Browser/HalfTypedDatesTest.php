@@ -62,8 +62,8 @@ class HalfTypedDatesTest extends DuskTestCase
 
             $this->clickAndAwait($browser, '@add-campaign', fn (Browser $b) => $b->waitFor('@campaign-form', 3));
             $this->jsType($browser, '@campaign-name', 'Winter Cola');
-            $browser->attach('@campaign-file', $this->fixtureImage('advert-half-time.png', 20, 90, 200))
-                ->waitFor('@campaign-seconds');
+            $this->uploadThrough($browser, 'campaign', $this->fixtureImage('advert-half-time.png', 20, 90, 200));
+            $browser->waitFor('@campaign-seconds');
             $this->jsType($browser, '@campaign-seconds', '10');
 
             // Only the hour of the start time.

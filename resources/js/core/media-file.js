@@ -1,12 +1,12 @@
 /**
  * Choosing and measuring a file before it is uploaded.
  *
- * Shared by the store's media library, the platform's advertising campaigns, a
- * channel's ads (channel-ads.js) and the Ad Builder's asset shelf
- * (builder-assets-table.js): all of them accept exactly the same formats and all need
- * a video's shape, length and a poster frame — because the server has no ffmpeg, so
- * the BROWSER measures them and sends the numbers along. The server re-validates
- * everything it is told.
+ * Used by the uploader every page that takes a file shares (upload-dropzone.js,
+ * docs/UPLOADS-SPEC.md): the store's media library, the platform's advertising
+ * campaigns, a channel's ads and the Ad Builder's asset shelf all accept exactly the
+ * same formats and all need a video's shape, length and a poster frame — because the
+ * server has no ffmpeg, so the BROWSER measures them and sends the numbers along. The
+ * server re-validates everything it is told.
  *
  * Kept in one place because the fiddly part is the canvas: a codec the browser can
  * decode but not paint throws, and every failure path here has to end with the

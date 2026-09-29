@@ -120,6 +120,8 @@ class MediaController extends Controller
         ActivityLog::record('media.uploaded', $media, "Uploaded {$media->type} {$media->title}"
             .($media->isPlatformOwned() ? " to the platform's library" : ''));
 
+        $request->forgetFinishedUpload();
+
         return response()->json(['message' => 'File uploaded successfully', 'media' => $media, 'storage' => $quota->summary($media->store_id)]);
     }
 

@@ -1,0 +1,115 @@
+# Uploading a file: dropped, sent in chunks, and shown as it goes — spec
+
+> How a picture or a video reaches the server from any of the four places that take one: the Media page, a
+> channel's **Upload**, a campaign's advert and the Ad Builder's shelf. The owner asked on 2026-09-29 for "drag and
+> drop, chunking, a good progress bar", a professional look in the panel's own design, and free software only.
+> What a file may be — its formats, size and length, the shop's 512 MB, the server's reserve — is still ruled by
+> `.claude/rules/02-project-conventions.md` (**Upload limits**), and nothing here loosens it.
+>
+> **Status: built, 2026-09-29.**
+
+---
+
+## 0. Decisions taken (owner, 2026-09-29)
+
+| Question | Answer |
+| --- | --- |
+| The library in the browser | **Uppy 6, its engine only**: `@uppy/core` and `@uppy/tus` (MIT, free, no account). Uppy's own Dashboard is not used: what a person sees is the panel's own Blade, Alpine and Tailwind (`<x-upload-dropzone>`). |
+| How a file travels | **The tus protocol 1.0** (creation + termination): 5 MB chunks, each its own request. A dropped connection retries by itself and carries on from the last chunk the server has; the browser going offline waits for it to come back and carries on the moment it does; a connection that hangs without a word is noticed and sent again; the same file chosen again after a reload carries on too. Nothing reloads the page, and nothing is chosen again. |
+| The server side | **No package**: the tus endpoints are the app's own (`UploadController`, `App\Services\ChunkedUploads`). `ankitpokhrel/tus-php` has had no release since February 2024 and would stop Laravel at Symfony 7, and every rule of this app must be asked before the first byte. |
+| When a finished file joins its place | **Through the same door as before**: the form posts `upload` (the upload's id) instead of `file`, and the Form Request turns the finished upload into the `file` every existing rule already checks — formats read from the bytes, the video's length read from the file, the shop's room decided under its lock, the server's reserve. |
+| The Media page and the shelf | **Several files at once**, each added to its place as soon as it arrives. A file's title is its name, changed later with Edit. |
+| A channel's Upload and a campaign's advert | **One file**, sent as soon as it is chosen; Save waits until it has arrived. |
+| A page left mid-upload | The browser asks first (its own words). |
+
+## 1. The flow
+
+1. A file is dropped on the box, or chosen with it (click, Enter or Space). The browser checks what it can before
+   a byte leaves: the format and size (`fileError`), the shop's room (`storageError`), and a video's length, shape and
+   poster frame (`readVideoMeta`, `videoLengthError`). A refusal is said on the file's own row, in the server's words.
+2. `POST /uploads` opens an upload with its size and what it is for. The server refuses here, before any byte, what
+   it would refuse at the end: the permission, the place (a shop the person works in, a channel within reach), the
+   format by name, the size, the shop's room **counting every upload still open for that shop**, and the server's
+   reserve counting every open upload's missing bytes.
+3. `PATCH /uploads/{id}` carries each 5 MB chunk at its offset; `HEAD` says how far it got; `DELETE` gives it up.
+4. With every byte in, the page posts the form it always posted, with `upload` in place of `file`. The row is
+   made as it always was, and the upload is forgotten.
+
+## 2. The server
+
+| Route | Answers |
+| --- | --- |
+| `OPTIONS /uploads` | 204, `Tus-Version: 1.0.0`, `Tus-Extension: creation,termination`, `Tus-Max-Size` |
+| `POST /uploads` | 201 and `Location`; 413 too large; 415 a format that is not taken; 422 a refusal with its reason; 429 too many open |
+| `HEAD /uploads/{id}` | 200, `Upload-Offset`, `Upload-Length`, `Cache-Control: no-store`; 404 for anybody else's |
+| `PATCH /uploads/{id}` | 204 and the new `Upload-Offset`; 409 at the wrong offset; 415 not `application/offset+octet-stream`; 413 past the end |
+| `DELETE /uploads/{id}` | 204 |
+
+Every answer carries `Tus-Resumable: 1.0.0`. The routes sit behind `auth`, `verified` and the named limiter
+`uploads` (a chunk is a request, and 5 MB chunks on a fast line are many), and keep CSRF: the browser sends the page's
+token with every request.
+
+**`uploads`** (a row per open upload, `App\Models\Upload`): a random uuid, the user, the shop it will count to (NULL for
+the platform's library and the ads network; the foreign key cascades), `purpose` (`media`, `channel`, `campaign`,
+`asset`), the file's name and claimed type, its `size` and the bytes `received`, and `expires_at` — 24 hours. The bytes
+are `{id}.part` on the `uploads` disk (config/filesystems.php): `storage/app/private/uploads`, private, never under
+`public/` — and a root of its own for the browser tests (`storage/app/dusk-uploads`) and the backend tests
+(`storage/framework/testing/uploads`), as the `public` disk has, because the prune takes every part no row names and
+one database names none of another's.
+
+| Number | Value |
+| --- | --- |
+| Chunk the browser sends | 5 MB |
+| Largest chunk the server takes | 16 MB |
+| Open uploads per person | 20 |
+| An unfinished upload is kept | 24 hours, then `uploads:prune` (hourly) takes it, and any part no row names |
+| Uploads one page sends at once | 3 |
+| A chunk that failed is sent again | at once, after 1, 3, 5, 10, 20 and 30 seconds, then every minute: some 25 minutes, the count starting again whenever a chunk gets through |
+| A row that has sent nothing says "Connection trouble…" | after 6 seconds |
+| …and its request is given up and sent again | after 30 seconds (a connection that died without a word would otherwise wait for the system's own timeout) |
+
+A shop that is deleted takes its open uploads (`Store::purgeContents`); an account that is deleted loses its rows
+through the foreign key, and the next prune takes their parts.
+
+## 3. The four doors
+
+`StoreMediaRequest`, `ChannelAdRequest`, `CampaignRequest` and `BuilderAssetRequest` take `upload` beside `file`
+(`Concerns\TakesAFinishedUpload`): the person's own upload, complete, unexpired and opened for that purpose, becomes
+the request's `file` before any rule runs. Anything else is refused on `file`: "That upload is not finished, or it
+has expired. Choose the file again." — and a request carrying both is refused too. The controllers forget the upload
+once its row is made; a refused one stays for the person to try again, until it expires.
+
+## 4. The browser
+
+`resources/js/core/upload-dropzone.js` registers the Alpine component `uploadDropzone` (Uppy is loaded only when a
+page has one), and `<x-upload-dropzone>` draws it. Two modes:
+
+- **`add`** — the Media page and the shelf: each file that arrives is posted to its door at once, and the component
+  dispatches `upload-added` with the server's answer, so the page refreshes its list and its storage meter.
+- **`form`** — a channel's Upload and a campaign's advert: the component dispatches `upload-ready` with the upload's
+  id and what the browser measured, `upload-cleared` when the file is taken away, and `upload-busy` while bytes are
+  still going, so the form can hold Save.
+
+## 5. What a person sees
+
+A box with a dashed border: an upload icon, "Drop files here or **choose files**" ("a file" where only one is
+taken), and the formats and limits under it; it turns blue while a file is dragged over it. Below it, a row per
+file: a preview (the picture itself, or the video's poster), the name, the size and a video's length, a bar in the
+panel's blue with the percent, the speed and the time left, and Pause, Resume, Cancel or Try again. What each row
+says: "Checking…" · "Waiting…" · "Uploading 45% · 2.4 MB/s · 12 s left" · "Paused at 45%" · "Connection lost.
+Waiting for the internet…" · "Connection trouble at 45%. Trying again…" · "Adding…" · "Added" · "Uploaded. It is
+added when you save." · or the reason it was refused, in red. The bar never goes back: a chunk sent again after a
+pause or a lost connection starts from the last one the server kept, and the bar waits until it is caught up.
+Several files show "3 of 5 added" above the rows. It works with the keyboard, says its changes to a screen reader,
+turns dark with the panel, and fits a phone (`EveryPageFitsAPhoneTest`).
+
+## 6. Tests
+
+`tests/Feature/System/ChunkedUploadTest.php` (the protocol, the four doors, the early refusals, expiry and the prune),
+`tests/Feature/Security/ChunkedUploadAttackTest.php` (somebody else's upload, offsets and lengths that lie, names
+that are paths or not UTF-8, too many at once, a half-finished upload posted, one upload used twice, a PHP file
+wearing a picture's name) and `tests/Browser/ChunkedUploadFlowTest.php` (several files dropped at once; a picture
+larger than a chunk sent in pieces, one request each, and arriving byte for byte; paused and resumed; a lost
+connection waited out on the same page — Chrome's own network emulation, offline and slow; cancelled on its way,
+and gone from the server; a form holding Save until its file is in). The refusals as a person meets them are
+`tests/Browser/UploadLimitsTest.php`.

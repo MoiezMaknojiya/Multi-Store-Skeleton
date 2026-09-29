@@ -13,6 +13,7 @@ use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
 use App\Models\Store;
+use App\Models\Upload;
 use App\Models\User;
 use Illuminate\Routing\Route as RouteDefinition;
 use Illuminate\Support\Collection;
@@ -41,6 +42,7 @@ beforeEach(function () {
     // A sweep publishes ads, uploads and deletes files: all of it lands on a disk of the test's own. And
     // nothing it sends may reach out of the server — installing a font would ask Google.
     Storage::fake('public');
+    Storage::fake('uploads');
     Http::preventStrayRequests();
 });
 
@@ -75,6 +77,11 @@ function sweepFixtures(): array
     $invitation = Invitation::factory()->create(['store_id' => $store->id]);
     $role = Role::create(['name' => 'Sweep Role', 'store_id' => $store->id]);
     $permission = Permission::firstWhere('name', 'screen-view');
+    // A file on its way in (docs/UPLOADS-SPEC.md): the Owner's, so everybody else is told it is not found.
+    $upload = Upload::create([
+        'user_id' => $owner->id, 'store_id' => $store->id, 'purpose' => 'media', 'filename' => 'sweep.jpg',
+        'size' => 10, 'received' => 0, 'expires_at' => now()->addDay(),
+    ]);
 
     return [
         'people' => [
@@ -102,6 +109,7 @@ function sweepFixtures(): array
             'ad' => ['channels' => $channelAd->id, 'builder' => $design->id],
             'asset' => $asset->id,
             'campaign' => $campaign->id,
+            'upload' => $upload->id,
             'token' => str_repeat('a', 64),
             // An email link's account and address hash (verification, a changed address) — unsigned here, so it
             // is refused on its page: the sweep only asks that it never answers 500.
@@ -199,7 +207,7 @@ function sweepCounts(): array
     return collect([
         'stores', 'users', 'store_user', 'roles', 'role_has_permissions', 'permissions', 'invitations',
         'screens', 'playlist_items', 'media', 'dayparts', 'channels', 'channel_ads', 'campaigns',
-        'builder_ads', 'builder_assets', 'builder_fonts',
+        'builder_ads', 'builder_assets', 'builder_fonts', 'uploads',
     ])->mapWithKeys(fn (string $table) => [$table => DB::table($table)->count()])->all();
 }
 

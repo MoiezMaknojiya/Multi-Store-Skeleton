@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Signage;
 
+use App\Http\Requests\Concerns\TakesAFinishedUpload;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
@@ -19,8 +20,16 @@ use Illuminate\Foundation\Http\FormRequest;
  */
 class ChannelAdRequest extends FormRequest
 {
+    use TakesAFinishedUpload;
+
     /** The library row named by `media_id`, once looked up. */
     private Media|false|null $chosen = false;
+
+    /** A file sent in chunks arrives as `upload`, and is the `file` below from here on (docs/UPLOADS-SPEC.md). */
+    protected function prepareForValidation(): void
+    {
+        $this->takeFinishedUpload('channel');
+    }
 
     /**
      * @return array<string, ValidationRule|array<mixed>|string>

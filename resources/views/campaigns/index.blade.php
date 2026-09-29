@@ -131,15 +131,23 @@
 
                     {{-- The advert itself. Silent by design: the player mutes every
                          video, and a browser will not autoplay an unmuted one anyway. --}}
-                    <x-crud.form-field label="Advert" field="file" requiredWhen="!editingItem">
-                        <input type="file" x-ref="fileInput" @change="onFileSelected($event)"
-                               dusk="campaign-file" class="form-input"
-                               accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm">
-                    </x-crud.form-field>
+                    {{-- It goes up in chunks the moment it is chosen (docs/UPLOADS-SPEC.md), and Save waits until it has
+                         arrived. The page listens here, not on the box: an expression on the box runs with the box's
+                         own `this`. --}}
+                    <div x-ref="advertUpload"
+                         x-on:upload-picked="onPicked($event.detail)"
+                         x-on:upload-ready="onUploadReady($event.detail)"
+                         x-on:upload-cleared="onUploadCleared()"
+                         x-on:upload-busy="uploading = $event.detail.busy">
+                        <x-crud.form-field label="Advert" field="file" requiredWhen="!editingItem">
+                            <x-upload-dropzone purpose="campaign" mode="form" dusk="campaign"
+                                :max-video-seconds="\App\Models\Campaign::MAX_AD_SECONDS" video-noun="An advert"
+                                hint="JPG, PNG, GIF, WEBP, MP4 or WEBM — up to 250 MB, 60 seconds at most." />
+                        </x-crud.form-field>
+                    </div>
                     <p class="text-xs text-gray-500 dark:text-gray-400 -mt-2">
-                        JPG, PNG, GIF, WEBP, MP4 or WEBM &mdash; up to 250 MB, 60 seconds at most. Adverts play with no sound.
-                        <span x-show="editingItem" x-cloak>Leave empty to keep the current advert.</span>
-                        <span x-show="preparing" x-cloak>Reading the video&hellip;</span>
+                        Adverts play with no sound.
+                        <span x-show="editingItem" x-cloak>Leave it empty to keep the current advert.</span>
                     </p>
 
                     {{-- Seconds belong to an IMAGE. A video runs to its own length, so for one the
@@ -253,7 +261,7 @@
                     </div>
 
                     {{-- Save waits while a video is still being measured, or it would go without its length and poster. --}}
-                    <x-crud.form-actions savingVar="saving || preparing" dusk="campaign-save" cancelDusk="campaign-cancel" />
+                    <x-crud.form-actions savingVar="saving || uploading" cancelAction="closeCampaignModal()" dusk="campaign-save" cancelDusk="campaign-cancel" />
                 </form>
             </div>
         </x-modal>

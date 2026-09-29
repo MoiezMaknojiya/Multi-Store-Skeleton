@@ -73,7 +73,8 @@ class PlaylistFlowTest extends DuskTestCase
     {
         $store = Store::factory()->create(['name' => 'Alpha Mart']);
         $owner = $this->makeOwner($store);
-        $poster = $this->fixtureImage('flow-poster.png', 210, 60, 90);
+        // The file's name is its title in the library (docs/UPLOADS-SPEC.md).
+        $poster = $this->fixtureImage('Opening Poster.png', 210, 60, 90);
 
         $this->browse(function (Browser $tv, Browser $panel) use ($owner, $store, $poster) {
             // -- 1. The TV asks to be adopted -----------------------------------
@@ -105,9 +106,9 @@ class PlaylistFlowTest extends DuskTestCase
             $panel->visit('/media');
             $this->waitForAlpine($panel);
             $this->clickAndAwait($panel, '@upload-media', fn (Browser $b) => $b->waitFor('@media-upload-form', 3));
-            $panel->attach('@media-file', $poster);
-            $this->jsType($panel, '@media-title', 'Opening Poster');
-            $this->jsClick($panel, '@media-upload-save');
+            $this->uploadThrough($panel, 'media', $poster);
+            $this->jsClick($panel, '@media-upload-close');
+            $this->waitForModalClosed($panel, '@media-upload-form');
             $panel->waitForText('Opening Poster', 15);
 
             $media = Media::where('title', 'Opening Poster')->firstOrFail();

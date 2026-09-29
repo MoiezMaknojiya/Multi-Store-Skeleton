@@ -105,6 +105,8 @@ class BuilderAssetController extends Controller
 
         ActivityLog::record('ad_asset.uploaded', $asset, "Uploaded {$asset->title} to the ad builder", storeId: $storeId);
 
+        $request->forgetFinishedUpload();
+
         return response()->json(['message' => 'Uploaded', 'asset' => $asset, 'storage' => $this->quota->summary($storeId)]);
     }
 

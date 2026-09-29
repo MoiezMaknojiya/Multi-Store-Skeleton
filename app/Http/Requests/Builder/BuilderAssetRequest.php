@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Builder;
 
+use App\Http\Requests\Concerns\TakesAFinishedUpload;
 use App\Http\Requests\Signage\StoreMediaRequest;
 use App\Models\BuilderAsset;
 use App\Rules\VideoLength;
@@ -17,6 +18,14 @@ use Illuminate\Foundation\Http\FormRequest;
  */
 class BuilderAssetRequest extends FormRequest
 {
+    use TakesAFinishedUpload;
+
+    /** A file sent in chunks arrives as `upload`, and is the `file` below from here on (docs/UPLOADS-SPEC.md). */
+    protected function prepareForValidation(): void
+    {
+        $this->takeFinishedUpload('asset');
+    }
+
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */

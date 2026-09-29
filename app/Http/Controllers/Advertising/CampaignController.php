@@ -140,6 +140,8 @@ class CampaignController extends Controller
 
         ActivityLog::record('campaign.created', $campaign, "Created campaign {$campaign->name}");
 
+        $request->forgetFinishedUpload();
+
         return response()->json([
             'message' => 'Campaign created successfully',
             'campaign' => $campaign->load('screens:id,name'),
@@ -184,6 +186,8 @@ class CampaignController extends Controller
         });
 
         ActivityLog::record('campaign.updated', $campaign, "Updated campaign {$campaign->name}");
+
+        $request->forgetFinishedUpload();
 
         return response()->json([
             'message' => 'Campaign updated successfully',

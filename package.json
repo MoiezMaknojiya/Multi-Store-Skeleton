@@ -16,6 +16,8 @@
         "vite": "^8.0.0"
     },
     "dependencies": {
+        "@uppy/core": "^6.1.0",
+        "@uppy/tus": "^6.0.0",
         "animejs": "^4.5.0",
         "modern-screenshot": "^4.7.0"
     }

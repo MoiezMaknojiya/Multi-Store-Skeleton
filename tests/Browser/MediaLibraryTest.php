@@ -27,7 +27,8 @@ class MediaLibraryTest extends DuskTestCase
 
         $owner = $this->storeMember($store, ['media-view', 'media-store', 'media-update', 'media-destroy']);
 
-        $path = $this->fixtureImage('dusk-menu.png', 30, 120, 200);
+        // The file's name is its title in the library (docs/UPLOADS-SPEC.md).
+        $path = $this->fixtureImage('Breakfast Board.png', 30, 120, 200);
 
         $this->browse(function (Browser $browser) use ($owner, $store, $path) {
             $this->freshSession($browser);
@@ -39,20 +40,19 @@ class MediaLibraryTest extends DuskTestCase
             $this->waitForAlpine($browser);
             $browser->waitForText('No media found.');
 
-            // -- Cancel closes the upload modal (it is not the shared form modal,
+            // -- Close shuts the upload modal (it is not the shared form modal,
             //    so it needs its own close action) -----------------------------
             $this->clickAndAwait($browser, '@upload-media', fn (Browser $b) => $b->waitFor('@media-upload-form', 3));
-            $this->jsClick($browser, '@media-upload-cancel');
+            $this->jsClick($browser, '@media-upload-close');
             $this->waitForModalClosed($browser, '@media-upload-form');
 
-            // -- Upload --------------------------------------------------------
+            // -- Upload: in chunks, added to the library as it arrives ----------
             $this->clickAndAwait($browser, '@upload-media', fn (Browser $b) => $b->waitFor('@media-upload-form', 3));
-            $browser->attach('@media-file', $path);
-            $this->jsType($browser, '@media-title', 'Breakfast Board');
-            $this->jsClick($browser, '@media-upload-save');
+            $this->uploadThrough($browser, 'media', $path);
+            $this->jsClick($browser, '@media-upload-close');
+            $this->waitForModalClosed($browser, '@media-upload-form');
 
             $browser->waitForText('Breakfast Board', 15);
-            $this->waitForModalClosed($browser, '@media-upload-form');
 
             $media = Media::where('title', 'Breakfast Board')->firstOrFail();
             $this->assertSame($store->id, $media->store_id);
@@ -128,7 +128,7 @@ class MediaLibraryTest extends DuskTestCase
         $promo = Media::factory()->platformOwned()->create(['title' => 'Platform promo', 'thumbnail_path' => null]);
         ChannelAd::factory()->create(['channel_id' => Channel::factory()->create(['name' => 'GAMA'])->id, 'media_id' => $promo->id]);
 
-        $path = $this->fixtureImage('dusk-alpha-menu.png', 200, 120, 30);
+        $path = $this->fixtureImage('Alpha menu.png', 200, 120, 30);
 
         $this->browse(function (Browser $browser) use ($admin, $alpha, $promo, $path) {
             $this->freshSession($browser);
@@ -150,13 +150,12 @@ class MediaLibraryTest extends DuskTestCase
                 ->assertDontSee('Platform promo');
 
             $this->clickAndAwait($browser, '@upload-media', fn (Browser $b) => $b->waitFor('@media-upload-form', 3));
-            $browser->assertSeeIn('@media-upload-library', "It joins Alpha Mart's library.")
-                ->attach('@media-file', $path);
-            $this->jsType($browser, '@media-title', 'Alpha menu');
-            $this->jsClick($browser, '@media-upload-save');
+            $browser->assertSeeIn('@media-upload-library', "They join Alpha Mart's library.");
+            $this->uploadThrough($browser, 'media', $path);
+            $this->jsClick($browser, '@media-upload-close');
+            $this->waitForModalClosed($browser, '@media-upload-form');
 
             $browser->waitForText('Alpha menu', 15);
-            $this->waitForModalClosed($browser, '@media-upload-form');
             $this->assertSame($alpha->id, Media::where('title', 'Alpha menu')->firstOrFail()->store_id);
         });
     }

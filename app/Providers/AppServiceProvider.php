@@ -230,6 +230,11 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('password-reset', fn (Request $request) => Limit::perMinute(10)
             ->by('password-reset:'.$request->ip()));
 
+        // A file sent in chunks (docs/UPLOADS-SPEC.md): every 5 MB chunk is a request, and a fast line sends many — so
+        // uploads count apart from `admin`, per person, with room for three files at once on a fast connection.
+        RateLimiter::for('uploads', fn (Request $request) => Limit::perMinute(600)
+            ->by('uploads:'.($request->user()?->id ?: $request->ip())));
+
         // The emails that confirm an address are counted where they are sent, whichever door asks
         // (User::sendALink); the links themselves, opened, here — a guess at a signature is one request.
         RateLimiter::for('verification-link', fn (Request $request) => Limit::perMinute(20)

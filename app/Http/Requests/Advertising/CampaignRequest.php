@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Advertising;
 
+use App\Http\Requests\Concerns\TakesAFinishedUpload;
 use App\Http\Requests\Signage\StoreMediaRequest;
 use App\Models\Campaign;
 use App\Models\Media;
@@ -17,8 +18,13 @@ use Illuminate\Foundation\Http\FormRequest;
  */
 class CampaignRequest extends FormRequest
 {
+    use TakesAFinishedUpload;
+
     protected function prepareForValidation(): void
     {
+        // A file sent in chunks arrives as `upload`, and is the `file` below from here on (docs/UPLOADS-SPEC.md).
+        $this->takeFinishedUpload('campaign');
+
         $this->merge([
             'is_active' => $this->boolean('is_active'),
             // Numbers from the form become ints; anything that is not one plain value is left as it came,

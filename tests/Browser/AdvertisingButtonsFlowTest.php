@@ -34,8 +34,9 @@ class AdvertisingButtonsFlowTest extends DuskTestCase
 
             $this->jsType($browser, '@campaign-name', 'Winter Cola');
             $this->jsType($browser, '@campaign-advertiser', 'GAMA Wholesale');
-            $browser->attach('@campaign-file', $this->fixtureImage('advert-winter.png', 20, 90, 200))
-                ->waitFor('@campaign-seconds');
+            // The advert goes up as it is chosen; Save waits until every byte is in.
+            $this->uploadThrough($browser, 'campaign', $this->fixtureImage('advert-winter.png', 20, 90, 200));
+            $browser->waitFor('@campaign-seconds');
 
             // Six seconds at least (owner's rule, 2026-09-28): said under the field before anything is sent.
             $this->jsType($browser, '@campaign-seconds', '5');

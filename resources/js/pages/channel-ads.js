@@ -10,12 +10,13 @@
  * ads (they live in the same library), or a fresh upload — which joins the library first.
  * An edit may also keep the file it has. Only the way chosen is sent.
  *
- * Uploading posts FormData and measures a video in the browser first, exactly like the
- * media library and the campaigns (there is no ffmpeg on the server). An image or an ad
- * page is given its seconds; a video has none to give — it plays to its own end (owner's rule).
+ * A fresh upload goes through the shared uploader (<x-upload-dropzone>, docs/UPLOADS-SPEC.md): it is sent in chunks
+ * as soon as it is chosen, a video measured in the browser first, and Save waits until it has arrived — then posts
+ * its upload id in place of the file. An image or an ad page is given its seconds; a video has none to give — it plays
+ * to its own end (owner's rule).
  */
 import axios from 'axios';
-import { fileError, lengthInWords, readVideoMeta, videoLengthError, storageError } from '../core/media-file.js';
+import { lengthInWords } from '../core/media-file.js';
 import { PlaylistItemDefaults } from '../core/playlist-defaults.js';
 import { unreadableFields } from '../core/validate.js';
 
@@ -58,9 +59,11 @@ export function registerChannelAds(Alpine) {
         // Numbers each picker request, so an answer overtaken by a newer one is dropped.
         pickerTicket: 0,
 
-        selectedFile: null,
-        clientMeta: {},
-        preparing: false,
+        // The file chosen in the uploader ({name, size, type}), its upload once every byte is in ({upload, meta}),
+        // and whether bytes are still going (Save waits for them).
+        picked: null,
+        uploaded: null,
+        uploading: false,
         // How full the library an upload here joins is ({used, limit}), or null for the platform's own.
         storage: null,
 
@@ -111,6 +114,8 @@ export function registerChannelAds(Alpine) {
             this.formErrors = {};
             // A picker answer still on its way belongs to a form that is gone.
             this.pickerTicket++;
+            // So does a file still going up, or one that arrived and was never saved.
+            this.clearFile();
         },
 
         /** Switch the way the file is named. What was picked or chosen the other way is
@@ -130,11 +135,30 @@ export function registerChannelAds(Alpine) {
             }
         },
 
+        /** Forget the uploaded file, and take it out of the uploader — a file still going is cancelled. */
         clearFile() {
-            this.selectedFile = null;
-            this.clientMeta = {};
-            this.preparing = false;
-            if (this.$refs.fileInput) this.$refs.fileInput.value = '';
+            this.picked = null;
+            this.uploaded = null;
+            this.uploading = false;
+
+            const box = this.$refs.adUpload?.querySelector('[dusk="channel-ad-dropzone"]');
+            if (box) window.Alpine.$data(box).clear();
+        },
+
+        /* The uploader's events (docs/UPLOADS-SPEC.md). */
+        onPicked(file) {
+            this.picked = file;
+            this.uploaded = null;
+            this.forgetErrors('file');
+        },
+
+        onUploadReady(detail) {
+            this.uploaded = detail;
+        },
+
+        onUploadCleared() {
+            this.picked = null;
+            this.uploaded = null;
         },
 
         forgetErrors(...fields) {
@@ -229,58 +253,18 @@ export function registerChannelAds(Alpine) {
 
         /** Is the ad in the form a video? Whatever the chosen way names decides. */
         isVideo() {
-            if (this.source === 'upload') return this.selectedFile?.type.startsWith('video/') ?? false;
+            if (this.source === 'upload') return this.picked?.type?.startsWith('video/') ?? false;
             if (this.source === 'keep') return this.editingAd?.type === 'video';
 
             return this.chosen?.type === 'video';
-        },
-
-        async onFileSelected(event) {
-            const file = event.target.files?.[0] ?? null;
-            this.selectedFile = file;
-            this.clientMeta = {};
-            this.forgetErrors('file');
-            // Whatever an earlier pick was still measuring no longer matters.
-            this.preparing = false;
-            if (! file) return;
-
-            // The formats, the size, and whether it fits the shop — before a byte is sent.
-            const error = fileError(file) ?? storageError(file, this.storage);
-            if (error) {
-                this.formErrors = { ...this.formErrors, file: [error] };
-                this.selectedFile = null;
-                return;
-            }
-
-            if (file.type.startsWith('video/')) {
-                this.preparing = true;
-                try {
-                    const meta = await readVideoMeta(file);
-                    // Another file was chosen while this one was measured: its numbers are
-                    // not that file's, and must not ride along with its upload.
-                    if (this.selectedFile === file) {
-                        this.clientMeta = meta;
-
-                        // Five minutes at most: said now rather than after the whole upload.
-                        const tooLong = videoLengthError(meta);
-                        if (tooLong) {
-                            this.formErrors = { ...this.formErrors, file: [tooLong] };
-                            this.selectedFile = null;
-                            this.preparing = false;
-                        }
-                    }
-                } finally {
-                    if (this.selectedFile === file) this.preparing = false;
-                }
-            }
         },
 
         /* Mirrors ChannelAdRequest. The server still decides. */
         validateAd() {
             const errors = {};
 
-            if (this.source === 'upload' && ! this.selectedFile) {
-                errors.file = ['Choose the file to upload.'];
+            if (this.source === 'upload' && ! this.uploaded) {
+                errors.file = [this.picked ? 'Wait until the file has finished uploading.' : 'Choose the file to upload.'];
             }
 
             if (PICKING.includes(this.source) && ! this.chosen) {
@@ -316,7 +300,7 @@ export function registerChannelAds(Alpine) {
         /** POST, with FormData, for an edit too: an edit may carry a new file, and PHP does
          *  not parse a multipart body sent as PUT. */
         async saveAd(event) {
-            if (this.saving || this.preparing) return;
+            if (this.saving || this.uploading) return;
 
             // A date typed only in part reads as '' — said under it, never saved as no date at all.
             const errors = { ...this.validateAd(), ...unreadableFields(event?.target) };
@@ -329,7 +313,7 @@ export function registerChannelAds(Alpine) {
             this.saving = true;
             try {
                 const payload = new FormData();
-                if (this.source === 'upload') payload.append('file', this.selectedFile);
+                if (this.source === 'upload') payload.append('upload', this.uploaded.upload);
                 if (PICKING.includes(this.source)) payload.append('media_id', this.chosen.id);
 
                 const fields = {
@@ -345,8 +329,9 @@ export function registerChannelAds(Alpine) {
                     if (value !== '' && value !== null && value !== undefined) payload.append(key, value);
                 });
 
+                // What the browser measured of a video: its shape, its length and a first frame.
                 if (this.source === 'upload') {
-                    Object.entries(this.clientMeta).forEach(([key, value]) => {
+                    Object.entries(this.uploaded.meta ?? {}).forEach(([key, value]) => {
                         if (value !== null && value !== undefined) payload.append(key, value);
                     });
                 }

@@ -9,7 +9,7 @@
 import axios from 'axios';
 import { windowLabel as clockRange } from '../core/clock.js';
 import { createCrudTable } from '../core/crud-table-base.js';
-import { fileError, readVideoMeta, videoLengthError } from '../core/media-file.js';
+
 import { validate, required, maxLen, maxNumber, minNumber, requiredMessage, unreadableFields, wholeNumber } from '../core/validate.js';
 import { PlaylistItemDefaults } from '../core/playlist-defaults.js';
 
@@ -40,9 +40,11 @@ export function registerCampaignsTable(Alpine) {
             /* The screen picker, fetched once when a modal first opens. */
             allScreens: [],
             loadingScreens: false,
-            selectedFile: null,
-            clientMeta: {},
-            preparing: false,
+            /* The advert chosen in the uploader ({name, size, type, meta}), its upload once every byte is in
+             * ({upload, meta}), and whether bytes are still going: Save waits for them (docs/UPLOADS-SPEC.md). */
+            picked: null,
+            uploaded: null,
+            uploading: false,
         },
 
         defaultForm: blankForm(),
@@ -86,59 +88,50 @@ export function registerCampaignsTable(Alpine) {
             /* ── The form ──────────────────────────────────────────────── */
 
             openCampaignModal(item = null) {
-                this.selectedFile = null;
-                this.clientMeta = {};
-                this.preparing = false;
-                if (this.$refs.fileInput) this.$refs.fileInput.value = '';
+                this.clearFile();
                 this.openFormModal(item);
                 // A modal opened before the list arrived would show no screens at all.
                 if (this.allScreens.length === 0 && ! this.loadingScreens) this.loadScreens();
             },
 
-            async onFileSelected(event) {
-                const file = event.target.files?.[0] ?? null;
-                this.selectedFile = file;
-                this.clientMeta = {};
-                this.formErrors = {};
-                // Whatever an earlier pick was still measuring no longer matters.
-                this.preparing = false;
-                if (! file) return;
+            /** Closing the form gives up an advert still going up, or one that arrived and was never saved. */
+            closeCampaignModal() {
+                this.clearFile();
+                this.closeFormModal();
+            },
 
-                const error = fileError(file);
-                if (error) {
-                    this.formErrors = { file: [error] };
-                    this.selectedFile = null;
-                    return;
-                }
+            /** Forget the uploaded advert, and take it out of the uploader — one still going is cancelled. */
+            clearFile() {
+                this.picked = null;
+                this.uploaded = null;
+                this.uploading = false;
 
-                if (file.type.startsWith('video/')) {
-                    this.preparing = true;
-                    try {
-                        const meta = await readVideoMeta(file);
-                        // Another file was chosen while this one was measured: its numbers are
-                        // not that file's, and must not ride along with its upload.
-                        if (this.selectedFile === file) {
-                            this.clientMeta = meta;
+                const box = this.$refs.advertUpload?.querySelector('[dusk="campaign-dropzone"]');
+                if (box) window.Alpine.$data(box).clear();
+            },
 
-                            // One break at most (Campaign::MAX_AD_SECONDS): said now, not after the upload.
-                            const tooLong = videoLengthError(meta, this.maxBreakSeconds, 'An advert');
-                            if (tooLong) {
-                                this.formErrors = { file: [tooLong] };
-                                this.selectedFile = null;
-                                this.preparing = false;
-                            }
-                        }
-                    } finally {
-                        if (this.selectedFile === file) this.preparing = false;
-                    }
-                }
+            /* The uploader's events (docs/UPLOADS-SPEC.md). */
+            onPicked(file) {
+                this.picked = file;
+                this.uploaded = null;
+                const { file: _gone, ...rest } = this.formErrors ?? {};
+                this.formErrors = rest;
+            },
+
+            onUploadReady(detail) {
+                this.uploaded = detail;
+            },
+
+            onUploadCleared() {
+                this.picked = null;
+                this.uploaded = null;
             },
 
             /** Is the advert in the form a video? The newly chosen file decides when there
              *  is one; otherwise the advert the campaign already has. A video has no
              *  seconds to set — it runs to its own end — so its field is not shown. */
             isVideoAd() {
-                if (this.selectedFile) return this.selectedFile.type.startsWith('video/');
+                if (this.picked) return this.picked.type.startsWith('video/');
 
                 return this.editingItem?.type === 'video';
             },
@@ -156,8 +149,8 @@ export function registerCampaignsTable(Alpine) {
             },
 
             async saveCampaign(event) {
-                // Not while a video is still being measured: it would go without its length and poster.
-                if (this.saving || this.preparing) return;
+                // Not while the advert is still going up: Save sends its upload once every byte is in.
+                if (this.saving || this.uploading) return;
 
                 const errors = validate(this.form, {
                     name: [required('Campaign name'), maxLen('Campaign name', 120)],
@@ -173,7 +166,9 @@ export function registerCampaignsTable(Alpine) {
                     }),
                 });
 
-                if (! this.editingItem && ! this.selectedFile) {
+                if (this.picked && ! this.uploaded) {
+                    errors.file = ['Wait until the advert has finished uploading.'];
+                } else if (! this.editingItem && ! this.uploaded) {
                     errors.file = ['Choose the advert to upload.'];
                 }
 
@@ -202,13 +197,13 @@ export function registerCampaignsTable(Alpine) {
                 try {
                     const payload = new FormData();
 
-                    if (this.selectedFile) payload.append('file', this.selectedFile);
+                    if (this.uploaded) payload.append('upload', this.uploaded.upload);
 
                     Object.entries({
                         name: this.form.name,
                         advertiser_name: this.form.advertiser_name,
                         // A video has no typed seconds to send; the length the browser
-                        // measured goes with the rest of clientMeta below.
+                        // measured goes with the rest of the upload's meta below.
                         duration_seconds: this.isVideoAd() ? '' : this.form.duration_seconds,
                         starts_on: this.form.starts_on,
                         ends_on: this.form.ends_on,
@@ -228,14 +223,15 @@ export function registerCampaignsTable(Alpine) {
                         this.form.screen_ids.forEach((id) => payload.append('screen_ids[]', id));
                     }
 
-                    Object.entries(this.clientMeta).forEach(([key, value]) => {
+                    // What the browser measured of a video: its shape, its length and a first frame.
+                    Object.entries(this.uploaded?.meta ?? {}).forEach(([key, value]) => {
                         if (value !== null && value !== undefined) payload.append(key, value);
                     });
 
                     const url = this.editingItem ? `/campaigns/${this.editingItem.id}` : '/campaigns';
                     await axios.post(url, payload);
 
-                    this.closeFormModal();
+                    this.closeCampaignModal();
                     this.currentPage = 1;
                     await this.fetchItems();
                     await this.loadScreens();   // the booked seconds have moved
@@ -326,7 +322,7 @@ export function registerCampaignsTable(Alpine) {
 
             /** A video runs to its own length; an image to the typed seconds. */
             thisAdSeconds() {
-                return Number(this.clientMeta.duration_seconds) || Number(this.form.duration_seconds) || 0;
+                return Number(this.picked?.meta?.duration_seconds) || Number(this.form.duration_seconds) || 0;
             },
 
             /* ── Labels ────────────────────────────────────────────────── */

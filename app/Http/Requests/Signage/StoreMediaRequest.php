@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Signage;
 
+use App\Http\Requests\Concerns\TakesAFinishedUpload;
 use App\Models\Media;
 use App\Rules\VideoLength;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -9,6 +10,8 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class StoreMediaRequest extends FormRequest
 {
+    use TakesAFinishedUpload;
+
     /** Formats the player can actually render. Anything else is rejected here
      *  rather than discovered on a TV in a shop. */
     public const ALLOWED_MIMES = 'jpg,jpeg,png,gif,webp,mp4,webm';
@@ -30,6 +33,12 @@ class StoreMediaRequest extends FormRequest
     public static function tooLargeMessage(): string
     {
         return 'The file may not be larger than '.intdiv(self::MAX_KILOBYTES, 1024).' MB.';
+    }
+
+    /** A file sent in chunks arrives as `upload`, and is the `file` below from here on (docs/UPLOADS-SPEC.md). */
+    protected function prepareForValidation(): void
+    {
+        $this->takeFinishedUpload('media');
     }
 
     /**

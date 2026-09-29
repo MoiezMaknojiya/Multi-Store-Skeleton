@@ -63,10 +63,11 @@ class ChannelAdminTest extends DuskTestCase
                 ->assertSeeIn('@channel-ad-picker-empty', 'Nothing in this library yet');
 
             $this->jsClick($browser, '@channel-ad-source-upload');
-            $browser->waitFor('@channel-ad-file')
-                ->assertSeeIn('@channel-ad-upload-note', "It joins the platform's media library")
-                ->attach('@channel-ad-file', $this->fixtureImage('gama-coke.png', 200, 30, 30))
-                ->assertVisible('@channel-ad-seconds');
+            $browser->waitFor('@channel-ad-drop')
+                ->assertSeeIn('@channel-ad-upload-note', "It joins the platform's media library");
+            // The file goes up in chunks as it is chosen; Save then adds it.
+            $this->uploadThrough($browser, 'channel-ad', $this->fixtureImage('gama-coke.png', 200, 30, 30));
+            $browser->assertVisible('@channel-ad-seconds');
             $this->jsType($browser, '@channel-ad-seconds', '12');
             $this->jsClick($browser, '@channel-ad-save');
 
@@ -127,15 +128,16 @@ class ChannelAdminTest extends DuskTestCase
                 ->assertSeeIn('@channel-ad-library-'.$burger->id, 'Alpha Mart');
 
             // -- A video has no seconds to set --------------------------------------
-            // A File is planted in the component rather than a real video uploaded:
-            // the field disappearing is the point here, not a video's bytes.
+            // The uploader's own "a file was chosen" is sent rather than a real video
+            // uploaded: the field disappearing is the point here, not a video's bytes.
             $this->jsClick($browser, '@add-channel-ad');
             $browser->waitFor('@channel-ad-form')->assertVisible('@channel-ad-seconds');
             $this->jsClick($browser, '@channel-ad-source-upload');
-            $browser->waitFor('@channel-ad-file');
+            $browser->waitFor('@channel-ad-drop');
             $browser->script(<<<'JS'
-                const root = document.querySelector('[x-data^="channelAds"]');
-                Alpine.$data(root).selectedFile = new File([''], 'clip.mp4', { type: 'video/mp4' });
+                document.querySelector('[dusk="channel-ad-dropzone"]').dispatchEvent(new CustomEvent('upload-picked', {
+                    bubbles: true, detail: { name: 'clip.mp4', size: 1, type: 'video/mp4', meta: {} },
+                }));
             JS);
             $browser->waitUntilMissing('@channel-ad-seconds')
                 ->assertVisible('@channel-ad-video-note');
@@ -242,8 +244,9 @@ class ChannelAdminTest extends DuskTestCase
             $browser->waitFor('@campaign-form')->assertVisible('@campaign-seconds');
 
             $browser->script(<<<'JS'
-                const root = document.querySelector('[x-data^="campaignsTable"]');
-                Alpine.$data(root).selectedFile = new File([''], 'coke.mp4', { type: 'video/mp4' });
+                document.querySelector('[dusk="campaign-dropzone"]').dispatchEvent(new CustomEvent('upload-picked', {
+                    bubbles: true, detail: { name: 'coke.mp4', size: 1, type: 'video/mp4', meta: {} },
+                }));
             JS);
 
             $browser->waitUntilMissing('@campaign-seconds')

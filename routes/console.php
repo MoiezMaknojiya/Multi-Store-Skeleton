@@ -47,3 +47,12 @@ Schedule::command('accounts:prune-unverified')->dailyAt('03:15')->name('prune-un
 | so it is looked at on the clock, not only when somebody uploads (DiskGuard::warnWhenLow).
 */
 Schedule::command('disk:check')->hourly()->name('disk-space-check')->withoutOverlapping();
+
+/*
+|--------------------------------------------------------------------------
+| Uploads never finished — taken after a day (docs/UPLOADS-SPEC.md)
+|--------------------------------------------------------------------------
+| A file sent in chunks and never added anywhere keeps its bytes for 24 hours; then this takes them, with any part no
+| row names any more (its shop or its person deleted meanwhile).
+*/
+Schedule::command('uploads:prune')->hourly()->name('prune-uploads')->withoutOverlapping();

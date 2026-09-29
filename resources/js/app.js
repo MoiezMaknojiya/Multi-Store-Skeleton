@@ -17,6 +17,7 @@ import { registerRegisterForm }      from './pages/register-form.js';
 import { registerAuthForms }         from './pages/auth-forms.js';
 import { registerStoreSettings }     from './pages/store-settings.js';
 import { registerMembersPage }       from './pages/members-page.js';
+import { registerUploadDropzone }    from './core/upload-dropzone.js';
 
 /* The panel's listings (most of them built on crud-table-base) */
 import { registerUsersTable }        from './tables/users-table.js';
@@ -70,6 +71,9 @@ registerRegisterForm(Alpine);
 registerAuthForms(Alpine);
 registerStoreSettings(Alpine);
 registerMembersPage(Alpine);
+
+/* The uploader every page that takes a file uses (docs/UPLOADS-SPEC.md) */
+registerUploadDropzone(Alpine);
 
 /* Register CRUD table components */
 registerUsersTable(Alpine);

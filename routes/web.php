@@ -24,6 +24,8 @@ use App\Http\Controllers\Signage\ScreenController;
 use App\Http\Controllers\Store\InvitationController;
 use App\Http\Controllers\Store\MemberController;
 use App\Http\Controllers\Store\StoreSettingsController;
+use App\Http\Controllers\UploadController;
+use App\Http\Middleware\SpeaksTus;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -435,6 +437,20 @@ Route::middleware(['auth', 'verified', 'throttle:admin'])->group(function () {
         Route::delete('/{permission}', [PermissionController::class, 'destroy'])->middleware('can:permission-destroy')->name('permissions.destroy');
     });
 
+});
+
+// -------------------------------------------------------------------
+// Uploads — a file sent in chunks by the tus protocol 1.0 (docs/UPLOADS-SPEC.md), from any page that takes one. A
+// limiter of their own: a chunk is a request, and `throttle:admin` would stop a big file halfway. Each form still
+// makes its row through its own route, with its own permission; these only carry bytes, and ask the same permission
+// before the first one.
+// -------------------------------------------------------------------
+Route::middleware(['auth', 'verified', 'throttle:uploads', SpeaksTus::class])->prefix('uploads')->group(function () {
+    Route::options('/', [UploadController::class, 'options'])->name('uploads.options');
+    Route::post('/', [UploadController::class, 'store'])->name('uploads.store');
+    Route::match(['HEAD'], '/{upload}', [UploadController::class, 'show'])->whereUuid('upload')->name('uploads.show');
+    Route::patch('/{upload}', [UploadController::class, 'update'])->whereUuid('upload')->name('uploads.update');
+    Route::delete('/{upload}', [UploadController::class, 'destroy'])->whereUuid('upload')->name('uploads.destroy');
 });
 
 // -------------------------------------------------------------------

@@ -41,6 +41,24 @@ return [
         ],
 
         /*
+         * Files on their way in, one `{id}.part` per upload (docs/UPLOADS-SPEC.md): private, never served. A root per
+         * environment for the reason `public` below has one: uploads:prune takes every part no row names, and a
+         * browser test's database names none of the real application's parts — in one shared folder, either side
+         * would take the other's.
+         */
+        'uploads' => [
+            'driver' => 'local',
+            'root' => storage_path(match (env('APP_ENV')) {
+                'dusk' => 'app/dusk-uploads',
+                'testing' => 'framework/testing/uploads',
+                default => 'app/private/uploads',
+            }),
+            'serve' => false,
+            'throw' => false,
+            'report' => false,
+        ],
+
+        /*
          * Uploaded media, served over HTTP.
          *
          * Dusk gets a root and a URL prefix OF ITS OWN. Browser tests run on the

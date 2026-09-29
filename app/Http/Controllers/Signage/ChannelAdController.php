@@ -144,6 +144,8 @@ class ChannelAdController extends Controller implements HasMiddleware
 
         ActivityLog::record('channel.ad_added', $channel, "Added ad {$ad->title} to channel {$channel->name}");
 
+        $request->forgetFinishedUpload();
+
         return response()->json(['message' => 'Ad added', 'ads' => $this->adsPayload($channel), 'storage' => $this->quota->summary($channel->store_id)]);
     }
 
@@ -181,6 +183,8 @@ class ChannelAdController extends Controller implements HasMiddleware
         });
 
         ActivityLog::record('channel.ad_updated', $channel, "Updated ad {$ad->title} in channel {$channel->name}");
+
+        $request->forgetFinishedUpload();
 
         return response()->json(['message' => 'Ad updated', 'ads' => $this->adsPayload($channel), 'storage' => $this->quota->summary($channel->store_id)]);
     }

@@ -9,22 +9,6 @@
 
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex flex-wrap items-center gap-3">
-                @can('ad-store')
-                    <label class="btn-primary-add cursor-pointer" dusk="upload-asset">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                  d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0-12l-4 4m4-4l4 4" />
-                        </svg>
-                        <span x-text="uploading ? 'Uploading...' : 'Upload'"></span>
-                        {{-- The formats the player can render; StoreMediaRequest::ALLOWED_MIMES is the source
-                             of truth and this list mirrors it (see 02-project-conventions.md). --}}
-                        {{-- sr-only rather than hidden: a `display:none` input is out of the keyboard's
-                             reach (and a browser test's), while this one is only out of sight. --}}
-                        <input type="file" class="sr-only" @change="upload($event)" x-bind:disabled="uploading"
-                               accept=".jpg,.jpeg,.png,.gif,.webp,.mp4,.webm" dusk="asset-file" />
-                    </label>
-                @endcan
-
                 <p class="text-sm text-gray-500 dark:text-gray-400" dusk="assets-scope-note">
                     Pictures and videos used inside ads. A video is 30 seconds at most, and it repeats for as long as
                     the ad is on screen. Separate from the media library, which is what your screens play.
@@ -51,6 +35,18 @@
 
         {{-- The shelf counts toward the shop's 512 MB like its library does. --}}
         <x-storage-meter />
+
+        @can('ad-store')
+            {{-- The shared uploader (docs/UPLOADS-SPEC.md): each picture or video joins the shelf as it arrives. The
+                 page listens here, not on the box: an expression on the box runs with the box's own `this`. --}}
+            <div x-on:upload-added="onUploaded($event.detail)" dusk="upload-asset">
+                <x-upload-dropzone purpose="asset" mode="add" :multiple="true" add-url="/builder/assets" dusk="asset"
+                    :max-video-seconds="\App\Models\BuilderAsset::MAX_VIDEO_SECONDS"
+                    :needs-store="$stores !== [] ? 'Choose the shop in the Shop list first — an ad\'s pictures belong to one shop.' : null"
+                    context="{ store: filterStore || null, fields: filterStore ? { store_id: filterStore } : {}, storage: storage }"
+                    hint="Pictures (JPG, PNG, GIF, WEBP) and videos (MP4, WEBM), up to 250 MB each. A video is 30 seconds at most." />
+            </div>
+        @endcan
 
         <div class="card">
             <div class="p-5">

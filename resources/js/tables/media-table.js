@@ -2,11 +2,10 @@
  * Media library Alpine component.
  *
  * Differences from the other CRUD tables:
- *  - creating a row means uploading a FILE, so it posts FormData from its own
- *    modal instead of the base's JSON create path;
- *  - a video's duration, dimensions and poster frame are measured HERE, in the
- *    browser, because the server has no ffmpeg. The values are sent along with
- *    the upload and re-validated server-side (see StoreMediaRequest);
+ *  - creating a row means uploading FILES: the upload modal holds the shared uploader
+ *    (<x-upload-dropzone>, docs/UPLOADS-SPEC.md), which sends each in chunks, measures a
+ *    video in the browser and adds each to the library as it arrives — this page only
+ *    refreshes its list and its storage meter when one has (onUploaded);
  *  - above the stores the page reads one library at a time — the platform's own
  *    or a shop's — and an upload joins the one chosen (docs/CHANNEL-CONTENT-SPEC.md);
  *  - a file a channel shows is refused before the delete is confirmed: the row
@@ -14,9 +13,7 @@
  */
 import axios from 'axios';
 import { createCrudTable } from '../core/crud-table-base.js';
-/* Shared with the advertising campaigns page — both upload the same kinds of file
- * and both need a video measured in the browser. */
-import { fileError, readVideoMeta, videoLengthError, storageError, storageUsedText, storagePercent } from '../core/media-file.js';
+import { storageUsedText, storagePercent } from '../core/media-file.js';
 import { validate, required, maxLen } from '../core/validate.js';
 
 /** ISO instant -> the value a datetime-local input expects, in the viewer's own
@@ -52,12 +49,10 @@ export function registerMediaTable(Alpine) {
             filterType: '',
             filterOrientation: '',
             sort: 'newest',
-            uploadForm: { title: '' },
-            selectedFile: null,
-            clientMeta: {},
-            preparing: false,
             // How full the library on the page is ({used, limit}), or null for one with no wall (the platform's).
             storage: null,
+            // Several files arriving together refresh the list once.
+            refreshTimer: null,
         },
 
         defaultForm: { title: '', description: '', starts_at: '', expires_at: '' },
@@ -107,106 +102,25 @@ export function registerMediaTable(Alpine) {
             },
 
             /* ── Upload ────────────────────────────────────────────────── */
+            /** The uploader in the modal keeps its files: open it again and they are still there, going or gone. */
             openUploadModal() {
-                this.uploadForm = { title: '' };
-                this.selectedFile = null;
-                this.clientMeta = {};
-                this.formErrors = {};
-                if (this.$refs.fileInput) this.$refs.fileInput.value = '';
                 this.$dispatch('open-modal', 'media-upload-modal');
             },
 
+            /** Closing it lets the uploads carry on. */
             closeUploadModal() {
                 this.$dispatch('close-modal', 'media-upload-modal');
-                this.selectedFile = null;
-                this.clientMeta = {};
-                this.formErrors = {};
-                this.preparing = false;
-                // Clear the native input too, so reopening never shows a stale filename.
-                if (this.$refs.fileInput) this.$refs.fileInput.value = '';
             },
 
-            async onFileSelected(event) {
-                const file = event.target.files?.[0] ?? null;
-                this.selectedFile = file;
-                this.clientMeta = {};
-                this.formErrors = {};
-                // Whatever an earlier pick was still measuring no longer matters.
-                this.preparing = false;
-                if (!file) return;
+            /** A file joined the library: its storage now, and the list once the files arriving together are in. */
+            onUploaded(detail) {
+                this.storage = detail?.response?.storage ?? this.storage;
 
-                // The formats, the size, and whether it fits the shop — before a byte is sent.
-                const error = fileError(file) ?? storageError(file, this.storage);
-                if (error) {
-                    this.formErrors = { file: [error] };
-                    this.selectedFile = null;
-                    return;
-                }
-
-                if (file.type.startsWith('video/')) {
-                    this.preparing = true;
-                    try {
-                        const meta = await readVideoMeta(file);
-                        // Another file was chosen while this one was measured: its numbers are
-                        // not that file's, and must not ride along with its upload.
-                        if (this.selectedFile === file) {
-                            this.clientMeta = meta;
-
-                            // Five minutes at most: said now rather than after the whole upload.
-                            const tooLong = videoLengthError(meta);
-                            if (tooLong) {
-                                this.formErrors = { file: [tooLong] };
-                                this.selectedFile = null;
-                                this.preparing = false;
-                            }
-                        }
-                    } finally {
-                        if (this.selectedFile === file) this.preparing = false;
-                    }
-                }
-            },
-
-            async uploadFile() {
-                // Not while a video is still being measured: it would go without its length and poster.
-                if (this.saving || this.preparing) return;
-
-                if (!this.selectedFile) {
-                    this.formErrors = { file: ['Choose a file to upload.'] };
-                    return;
-                }
-
-                // Said before a byte of what may be 250 MB is sent (StoreMediaRequest, in its words).
-                const titleErrors = validate(this.uploadForm, { title: [maxLen('Title', 255)] });
-                if (Object.keys(titleErrors).length > 0) {
-                    this.formErrors = titleErrors;
-                    return;
-                }
-
-                this.formErrors = {};
-                this.saving = true;
-                try {
-                    const payload = new FormData();
-                    payload.append('file', this.selectedFile);
-                    if (this.uploadForm.title) payload.append('title', this.uploadForm.title);
-                    // Above the stores: the shop chosen, or — with none — the platform's own library.
-                    if (this.libraries !== null && this.library !== 'platform') payload.append('store_id', this.library);
-                    Object.entries(this.clientMeta).forEach(([key, value]) => {
-                        if (value !== null && value !== undefined) payload.append(key, value);
-                    });
-
-                    await axios.post('/media', payload);
-                    this.closeUploadModal();
+                clearTimeout(this.refreshTimer);
+                this.refreshTimer = setTimeout(() => {
                     this.currentPage = 1;
-                    await this.fetchItems();
-                } catch (error) {
-                    if (error.response?.status === 422 && error.response.data.errors) {
-                        this.formErrors = error.response.data.errors;
-                    } else {
-                        window.toast(error.response?.data?.message ?? 'Upload failed. Please try again.');
-                    }
-                } finally {
-                    this.saving = false;
-                }
+                    this.fetchItems();
+                }, 400);
             },
 
             /* ── Edit (title, description, schedule) ───────────────────── */

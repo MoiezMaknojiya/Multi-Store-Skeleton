@@ -130,45 +130,28 @@
             deleteAction="deleteItem()"
             disabledVar="deleting" />
 
-        {{-- Upload Modal --}}
+        {{-- Upload Modal: the shared uploader (docs/UPLOADS-SPEC.md). Files dropped or chosen go up in chunks and join
+             the library as each arrives, titled by their names (Edit renames them). Closing it lets the uploads carry
+             on; they are still listed when it opens again. --}}
         <x-modal name="media-upload-modal" :show="false" maxWidth="lg">
-            <div class="p-6">
-                <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Upload File</h2>
+            {{-- The page listens here, not on the box: an expression on the box runs with the box's own `this`. --}}
+            <div class="p-6" dusk="media-upload-form" x-on:upload-added="onUploaded($event.detail)">
+                <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Upload files</h2>
 
-                <form @submit.prevent="uploadFile" novalidate dusk="media-upload-form" class="mt-4 space-y-4">
-                    @if ($libraries !== null)
-                        <p class="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200"
-                           dusk="media-upload-library">
-                            It joins <span class="font-semibold" x-text="libraryName()"></span>.
-                        </p>
-                    @endif
+                @if ($libraries !== null)
+                    <p class="mt-4 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200"
+                       dusk="media-upload-library">
+                        They join <span class="font-semibold" x-text="libraryName()"></span>.
+                    </p>
+                @endif
 
-                    <x-crud.form-field label="File" field="file" :required="true">
-                        {{-- A border of its own, so a refused file is outlined in red like every other field. --}}
-                        <input type="file" x-ref="fileInput" dusk="media-file"
-                               accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm"
-                               @change="onFileSelected($event)"
-                               class="form-input block w-full text-sm text-gray-600 dark:text-gray-300
-                                      file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0
-                                      file:text-sm file:font-medium file:bg-blue-600 file:text-white
-                                      hover:file:bg-blue-700">
-                    </x-crud.form-field>
-                    <p class="-mt-2 text-xs text-gray-400">Images (JPG, PNG, GIF, WEBP) and videos (MP4, WEBM), up to 250 MB. A video may be at most 5 minutes long.</p>
+                <x-upload-dropzone class="mt-4" purpose="media" mode="add" :multiple="true" add-url="/media" dusk="media"
+                    context="{ library: libraries !== null ? String(library) : null, fields: libraries !== null && library !== 'platform' ? { store_id: library } : {}, storage: storage }"
+                    hint="Images (JPG, PNG, GIF, WEBP) and videos (MP4, WEBM), up to 250 MB each. A video may be at most 5 minutes long." />
 
-                    <x-crud.form-field label="Title" field="title">
-                        <x-text-input x-model="uploadForm.title" dusk="media-title" class="block w-full" maxlength="255"
-                                      placeholder="Leave blank to use the file name" autocomplete="off" />
-                    </x-crud.form-field>
-
-                    <div x-show="preparing" x-cloak class="text-xs text-gray-500">Reading the file...</div>
-
-                    {{-- This modal is not the shared form modal, so Cancel has to close
-                         the upload one — the default closeFormModal() would target the
-                         edit modal and leave this one open. Upload waits while a video is
-                         still being measured, or it would go without its length and poster. --}}
-                    <x-crud.form-actions cancelAction="closeUploadModal()" savingVar="saving || preparing"
-                        saveLabel="Upload" dusk="media-upload-save" cancelDusk="media-upload-cancel" />
-                </form>
+                <div class="mt-6 flex flex-wrap justify-end gap-3">
+                    <button type="button" class="btn-secondary" @click="closeUploadModal()" dusk="media-upload-close">Close</button>
+                </div>
             </div>
         </x-modal>
 

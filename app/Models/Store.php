@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class Store extends Model
 {
@@ -120,6 +121,24 @@ class Store extends Model
         $this->purgeChannels();
         $this->purgeMedia();
         $this->purgeBuilder();
+        $this->purgeUploads();
+    }
+
+    /**
+     * Remove the uploads still on their way into this shop (docs/UPLOADS-SPEC.md): the rows, and each one's bytes once
+     * that is committed — by the name each row gives, never the folder.
+     */
+    public function purgeUploads(): void
+    {
+        $uploads = Upload::where('store_id', $this->id)->get(['id']);
+
+        if ($uploads->isEmpty()) {
+            return;
+        }
+
+        Upload::whereIn('id', $uploads->pluck('id'))->delete();
+
+        DB::afterCommit(fn () => $uploads->each(fn (Upload $upload) => Storage::disk(Upload::DISK)->delete($upload->partName())));
     }
 
     /**

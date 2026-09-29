@@ -52,14 +52,10 @@ class UploadLimitsTest extends DuskTestCase
             // A six-minute video: refused as it is chosen, in the server's own words.
             $this->choose($browser, 'media-file', "window.__makeVideo(360, 'long.webm')");
             $browser->waitForText('A video may be at most 5 minutes long. This one is 6:00.', 30);
-
-            $this->jsClick($browser, '@media-upload-save');
-            $browser->waitForText('Choose a file to upload.');
             $this->assertSame(1, Media::count(), 'nothing was uploaded');
 
-            // A picture that fits goes up, and the meter moves with it.
+            // A picture that fits goes up at once, and the meter moves with it.
             $this->choose($browser, 'media-file', "new Promise((resolve) => { const c = document.createElement('canvas'); c.width = 64; c.height = 64; c.toBlob((blob) => resolve(new File([blob], 'fits.png', { type: 'image/png' })), 'image/png'); })");
-            $this->jsClick($browser, '@media-upload-save');
             $browser->waitUsing(20, 200, fn () => Media::count() === 2)
                 ->waitUsing(10, 200, fn () => $browser->text('@storage-meter-text') !== '510 MB of 512 MB used');
             $this->assertMatchesRegularExpression('/^510\.\d MB of 512 MB used$/', $browser->text('@storage-meter-text'));
@@ -83,7 +79,7 @@ class UploadLimitsTest extends DuskTestCase
             $this->jsClick($browser, '@add-channel-ad');
             $browser->waitFor('@channel-ad-form');
             $this->jsClick($browser, '@channel-ad-source-upload');
-            $browser->waitFor('@channel-ad-file');
+            $browser->waitFor('@channel-ad-drop');
             $this->choose($browser, 'channel-ad-file', "window.__makeVideo(420, 'long.webm')");
             $browser->waitForText('A video may be at most 5 minutes long. This one is 7:00.', 30);
 
@@ -113,8 +109,9 @@ class UploadLimitsTest extends DuskTestCase
             $this->choose($browser, 'campaign-file', "window.__makeVideo(70, 'advert.webm')");
             $browser->waitForText('An advert may be at most 60 seconds long. This one is 1:10.', 30);
 
-            // A picture's seconds, one past a break.
+            // A picture's seconds, one past a break — once the picture has gone up, since Save waits for it.
             $this->choose($browser, 'campaign-file', "new Promise((resolve) => { const c = document.createElement('canvas'); c.width = 64; c.height = 64; c.toBlob((blob) => resolve(new File([blob], 'advert.png', { type: 'image/png' })), 'image/png'); })");
+            $browser->waitForTextIn('@campaign-upload-status', 'Uploaded', 20);
             $browser->type('@campaign-name', 'Coca-Cola')->clear('@campaign-seconds')->type('@campaign-seconds', '61');
             $this->jsClick($browser, '@campaign-save');
             $browser->waitForText('An advert stays on screen for at most 60 seconds: one break.');

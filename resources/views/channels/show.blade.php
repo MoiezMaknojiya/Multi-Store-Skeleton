@@ -231,17 +231,21 @@
                         </template>
                     </div>
 
-                    {{-- A fresh file: it joins the channel's library first, like an upload on the Media page. --}}
-                    <div x-show="source === 'upload'" x-cloak>
+                    {{-- A fresh file: it joins the channel's library first, like an upload on the Media page. It goes up in
+                         chunks the moment it is chosen (docs/UPLOADS-SPEC.md), and Save waits until it has arrived. The page
+                         listens here, not on the box: an expression on the box runs with the box's own `this`. --}}
+                    <div x-show="source === 'upload'" x-cloak x-ref="adUpload"
+                         x-on:upload-picked="onPicked($event.detail)"
+                         x-on:upload-ready="onUploadReady($event.detail)"
+                         x-on:upload-cleared="onUploadCleared()"
+                         x-on:upload-busy="uploading = $event.detail.busy">
                         <x-crud.form-field label="File" field="file" :required="true">
-                            <input type="file" x-ref="fileInput" @change="onFileSelected($event)"
-                                   dusk="channel-ad-file" class="form-input"
-                                   accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm">
+                            <x-upload-dropzone purpose="channel" mode="form" dusk="channel-ad"
+                                context="{ channel: String(channelId), storage: storage }"
+                                hint="JPG, PNG, GIF, WEBP, MP4 or WEBM — up to 250 MB, a video 5 minutes at most." />
                         </x-crud.form-field>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" dusk="channel-ad-upload-note">
-                            JPG, PNG, GIF, WEBP, MP4 or WEBM &mdash; up to 250 MB, a video 5 minutes at most. Ads play with no sound.
-                            It joins <span x-text="uploadsJoin"></span>.
-                            <span x-show="preparing" x-cloak>Reading the video&hellip;</span>
+                            Ads play with no sound. It joins <span x-text="uploadsJoin"></span>.
                         </p>
                     </div>
 
@@ -276,7 +280,7 @@
                         </p>
                     </div>
 
-                    <x-crud.form-actions savingVar="saving || preparing" cancelAction="closeAdModal()"
+                    <x-crud.form-actions savingVar="saving || uploading" cancelAction="closeAdModal()"
                                          dusk="channel-ad-save" cancelDusk="channel-ad-cancel" />
                 </form>
             </div>

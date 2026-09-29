@@ -159,9 +159,9 @@ class AdBuilderFlowTest extends DuskTestCase
             /* ── 1. A picture onto the shelf ────────────────────────────── */
             $browser->visit('/builder/assets');
             $this->waitForAlpine($browser);
-            $browser->waitFor('@assets-empty')
-                ->assertVisible('@upload-asset')
-                ->attach('@asset-file', $this->fixtureImage('builder-logo.png', 30, 120, 220));
+            $browser->waitFor('@assets-empty')->assertVisible('@upload-asset');
+            // Onto the shelf as soon as every byte is in: no Save to press.
+            $this->uploadThrough($browser, 'asset', $this->fixtureImage('builder-logo.png', 30, 120, 220));
 
             $browser->waitUsing(20, 250, fn () => BuilderAsset::where('store_id', $store->id)->exists());
             $asset = BuilderAsset::firstWhere('store_id', $store->id);
@@ -254,9 +254,12 @@ class AdBuilderFlowTest extends DuskTestCase
             $this->assertSame(0, BuilderAsset::count(), 'a picture was put on a shelf nobody chose');
 
             /* ── 2. One shop chosen: the picture goes onto its shelf ───── */
+            // The refused row is taken away first, as a person clears what the box said no to.
+            $this->jsClick($browser, '@asset-upload-remove');
+            $browser->waitUntilMissing('@asset-upload-row');
             $browser->select('@assets-filter-store', (string) $beta->id)
                 ->waitFor('@assets-empty');                         // Beta's shelf, loaded and empty
-            $browser->attach('@asset-file', $picture);
+            $this->uploadThrough($browser, 'asset', $picture);
 
             $browser->waitUsing(20, 250, fn () => BuilderAsset::count() === 1);
             $asset = BuilderAsset::sole();

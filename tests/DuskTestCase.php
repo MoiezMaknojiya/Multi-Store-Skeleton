@@ -10,6 +10,7 @@ use App\Models\Media;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Store;
+use App\Models\Upload;
 use App\Models\User;
 use Facebook\WebDriver\Chrome\ChromeOptions;
 use Facebook\WebDriver\Exception\TimeoutException;
@@ -27,6 +28,9 @@ abstract class DuskTestCase extends BaseTestCase
 {
     /** @var list<string> media files present before this test ran */
     private array $mediaFilesAtStart = [];
+
+    /** @var list<string> upload parts present before this test ran */
+    private array $uploadPartsAtStart = [];
 
     /**
      * Prepare for Dusk test execution.
@@ -61,6 +65,7 @@ abstract class DuskTestCase extends BaseTestCase
         // Snapshot the media folder BEFORE the test writes anything, so tearDown
         // can tell what this test added from what was already there.
         $this->mediaFilesAtStart = $this->mediaFilesOnDisk();
+        $this->uploadPartsAtStart = Storage::disk(Upload::DISK)->files();
     }
 
     /**
@@ -94,6 +99,22 @@ abstract class DuskTestCase extends BaseTestCase
                     $disk->delete($file);
                 } else {
                     fwrite(STDERR, PHP_EOL."  Dusk left a file it cannot claim: {$file}".PHP_EOL);
+                }
+            }
+        }
+
+        // The same for files still on their way in (the uploads disk, storage/app/dusk-uploads): a file chosen and
+        // never saved leaves its upload open. Only the parts that appeared now and that this test's uploads name go.
+        $parts = array_values(array_diff(Storage::disk(Upload::DISK)->files(), $this->uploadPartsAtStart));
+
+        if ($parts !== []) {
+            $named = Upload::pluck('id')->map(fn (string $id): string => "{$id}.part")->flip();
+
+            foreach ($parts as $part) {
+                if (isset($named[$part])) {
+                    Storage::disk(Upload::DISK)->delete($part);
+                } else {
+                    fwrite(STDERR, PHP_EOL."  Dusk left an upload it cannot claim: {$part}".PHP_EOL);
                 }
             }
         }
@@ -264,6 +285,37 @@ abstract class DuskTestCase extends BaseTestCase
         $link = str_contains($match[0], '=3D') ? quoted_printable_decode($match[0]) : $match[0];
 
         return html_entity_decode($link);
+    }
+
+    /**
+     * A file through the shared uploader (docs/UPLOADS-SPEC.md): chosen with the box whose dusk prefix is $box, then
+     * waited for until its row says it arrived — "Added" where it joins its place at once (the Media page, the shelf),
+     * "Uploaded" in a form that adds it on Save (a channel's Upload, a campaign's advert). A row that says why it was
+     * refused fails the test with those words.
+     */
+    protected function uploadThrough(Browser $browser, string $box, string $path, int $seconds = 30): void
+    {
+        $browser->attach("@{$box}-file", $path);
+
+        $name = json_encode(basename($path));
+        $state = <<<JS
+            const row = [...document.querySelectorAll('[dusk="{$box}-upload-row"]')]
+                .find((each) => each.querySelector('[dusk="{$box}-upload-name"]')?.textContent.trim() === {$name});
+            if (! row) return 'pending';
+            const error = row.querySelector('[dusk="{$box}-upload-error"]');
+            if (error && error.offsetParent !== null && error.textContent.trim() !== '') return 'error: ' + error.textContent.trim();
+            return /^(Added|Uploaded)/.test(row.querySelector('[dusk="{$box}-upload-status"]')?.textContent.trim() ?? '') ? 'done' : 'pending';
+        JS;
+
+        $browser->waitUsing($seconds, 200, function () use ($browser, $state, $path) {
+            $now = $browser->script($state)[0] ?? 'pending';
+
+            if (str_starts_with((string) $now, 'error: ')) {
+                throw new RuntimeException(basename($path).' was refused: '.substr((string) $now, 7));
+            }
+
+            return $now === 'done';
+        }, 'The upload of '.basename($path).' did not arrive.');
     }
 
     /** Dusk keeps its first browser open from one test of a class to the next (it
