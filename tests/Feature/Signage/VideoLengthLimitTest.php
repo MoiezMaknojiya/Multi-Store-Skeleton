@@ -6,19 +6,20 @@ use App\Models\ChannelAd;
 use App\Models\Media;
 use App\Models\Screen;
 use App\Models\Store;
+use App\Rules\VideoLength;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\VideoFiles;
 
 /*
 |--------------------------------------------------------------------------
-| No video over five minutes, whichever door it comes in by
+| No video over its door's ceiling, whichever door it comes in by
 |--------------------------------------------------------------------------
 |
-| Owner's rule, 2026-09-28: "Media Library aur Channel mein 5 min se zyada wali video upload na ho". A video
-| reaches a shop's screens through its library, a channel's Upload, and the Ad Builder's shelf, and each door
-| measures the FILE — the browser's number is only a field. Rounded as a phone shows it: 5:00 goes in, 5:01
-| does not.
+| Owner's rules, 2026-09-28: "Media Library aur Channel mein 5 min se zyada wali video upload na ho", and for
+| the Ad Builder, whose videos repeat for as long as an ad is up, "max 30 seconds". A video reaches a shop's
+| screens through its library, a channel's Upload and the Ad Builder's shelf, and each door measures the FILE —
+| the browser's number is only a field. Rounded as a phone shows it: 5:00 goes in, 5:01 does not.
 |
 */
 
@@ -52,27 +53,42 @@ function lengthKeptBy(string $door): ?int
     };
 }
 
-dataset('doors', ['the Media page' => 'library', "a channel's Upload" => 'channel', "the Ad Builder's shelf" => 'shelf']);
+/** Each door, its ceiling in seconds, and the ceiling as the refusal says it. */
+dataset('doors', [
+    'the Media page' => ['library', 300, '5 minutes'],
+    "a channel's Upload" => ['channel', 300, '5 minutes'],
+    "the Ad Builder's shelf" => ['shelf', 30, '30 seconds'],
+]);
 
-test('a video of exactly five minutes goes in, and keeps its own length', function (string $door) {
-    uploadVideoThrough($door, VideoFiles::upload(VideoFiles::mp4(300.4), 'menu.mp4'))->assertOk();
+test("a video of exactly its door's ceiling goes in, and keeps its own length", function (string $door, int $ceiling) {
+    uploadVideoThrough($door, VideoFiles::upload(VideoFiles::mp4($ceiling + 0.4), 'menu.mp4'))->assertOk();
 
-    expect(lengthKeptBy($door))->toBe(300);
+    expect(lengthKeptBy($door))->toBe($ceiling);
 })->with('doors');
 
-test('a video one second over five minutes is refused, saying how long it is, and nothing is kept', function (string $door) {
-    uploadVideoThrough($door, VideoFiles::upload(VideoFiles::mp4(301), 'menu.mp4'))
+test('a video one second over its door\'s ceiling is refused, saying how long it is, and nothing is kept', function (string $door, int $ceiling, string $inWords) {
+    uploadVideoThrough($door, VideoFiles::upload(VideoFiles::mp4($ceiling + 1), 'menu.mp4'))
         ->assertStatus(422)
-        ->assertJsonValidationErrors(['file' => 'A video may be at most 5 minutes long. This one is 5:01.']);
+        ->assertJsonValidationErrors(['file' => "A video may be at most {$inWords} long. This one is ".VideoLength::clock($ceiling + 1).'.']);
 
     expect(Media::count() + BuilderAsset::count() + ChannelAd::count())->toBe(0)
         ->and(Storage::disk('public')->allFiles())->toBe([]);
 })->with('doors');
 
-test('an hour-long video is refused at every door, in both formats and every layout', function (string $door, string $name, string $bytes) {
+test('the Ad Builder takes 30 seconds where the library takes 5 minutes: a one-minute video goes into one and not the other', function () {
+    uploadVideoThrough('library', VideoFiles::upload(VideoFiles::mp4(60), 'loop.mp4'))->assertOk();
+
+    uploadVideoThrough('shelf', VideoFiles::upload(VideoFiles::mp4(60), 'loop.mp4'))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['file' => 'A video may be at most 30 seconds long. This one is 1:00.']);
+
+    expect(Media::count())->toBe(1)->and(BuilderAsset::count())->toBe(0);
+});
+
+test('an hour-long video is refused at every door, in both formats and every layout', function (string $door, int $ceiling, string $inWords, string $name, string $bytes) {
     uploadVideoThrough($door, VideoFiles::upload($bytes, $name))
         ->assertStatus(422)
-        ->assertJsonValidationErrors(['file' => 'A video may be at most 5 minutes long. This one is 1:00:00.']);
+        ->assertJsonValidationErrors(['file' => "A video may be at most {$inWords} long. This one is 1:00:00."]);
 })->with('doors')->with([
     'MP4, index first' => ['menu.mp4', VideoFiles::mp4(3600)],
     'MP4, index last' => ['menu.mp4', VideoFiles::mp4(3600, ['moov_at_end' => true])],

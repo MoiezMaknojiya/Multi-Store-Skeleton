@@ -20,9 +20,13 @@ const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm'];
 /* Mirrors StoreMediaRequest::MAX_KILOBYTES. */
 const MAX_BYTES = 256000 * 1024;
 
-/* Mirrors Media::MAX_VIDEO_SECONDS: the longest video a library, a channel or the Ad Builder's shelf
- * takes. The server measures the file itself and decides; this only spares an upload it would refuse. */
+/* Mirrors Media::MAX_VIDEO_SECONDS: the longest video a library or a channel takes. The server measures the
+ * file itself and decides; this only spares an upload it would refuse. */
 export const MAX_VIDEO_SECONDS = 300;
+
+/* Mirrors BuilderAsset::MAX_VIDEO_SECONDS: the longest video on the Ad Builder's shelf, where it repeats for as
+ * long as the ad is on screen. */
+export const BUILDER_VIDEO_SECONDS = 30;
 
 const POSTER_MAX_EDGE = 480;
 const METADATA_TIMEOUT_MS = 8000;

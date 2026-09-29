@@ -3,7 +3,7 @@
 namespace App\Http\Requests\Builder;
 
 use App\Http\Requests\Signage\StoreMediaRequest;
-use App\Models\Media;
+use App\Models\BuilderAsset;
 use App\Rules\VideoLength;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -23,9 +23,9 @@ class BuilderAssetRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // A video on the shelf is no longer than the library's: no page plays longer, and the shelf's files
-            // reach a television inside a page as much as the library's do. `bail`: see StoreMediaRequest.
-            'file' => ['bail', 'required', 'file', 'mimes:'.StoreMediaRequest::ALLOWED_MIMES, 'max:'.StoreMediaRequest::MAX_KILOBYTES, new VideoLength(Media::MAX_VIDEO_SECONDS)],
+            // A video on the shelf is 30 seconds at most: in a design it repeats for as long as the ad is on screen
+            // (BuilderAsset::MAX_VIDEO_SECONDS). `bail`: see StoreMediaRequest.
+            'file' => ['bail', 'required', 'file', 'mimes:'.StoreMediaRequest::ALLOWED_MIMES, 'max:'.StoreMediaRequest::MAX_KILOBYTES, new VideoLength(BuilderAsset::MAX_VIDEO_SECONDS)],
             'title' => ['nullable', 'string', 'max:255'],
 
             // Browser-measured facts about a video, never trusted for anything but display.

@@ -6,7 +6,7 @@
  */
 import axios from 'axios';
 import { createCrudTable } from '../core/crud-table-base.js';
-import { fileError, readVideoMeta, videoLengthError, storageError, storageUsedText, storagePercent } from '../core/media-file.js';
+import { BUILDER_VIDEO_SECONDS, fileError, readVideoMeta, videoLengthError, storageError, storageUsedText, storagePercent } from '../core/media-file.js';
 
 export function registerBuilderAssetsTable(Alpine) {
     Alpine.data('builderAssetsTable', createCrudTable({
@@ -74,7 +74,8 @@ export function registerBuilderAssetsTable(Alpine) {
                     // A video's length, size and first frame are measured here, because the server cannot.
                     if (file.type.startsWith('video/')) {
                         const meta = await readVideoMeta(file);
-                        const tooLong = videoLengthError(meta);
+                        // Thirty seconds at most: in a design a video repeats for as long as the ad is up.
+                        const tooLong = videoLengthError(meta, BUILDER_VIDEO_SECONDS);
 
                         if (tooLong) {
                             window.toast(tooLong);

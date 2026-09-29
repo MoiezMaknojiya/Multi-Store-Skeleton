@@ -118,7 +118,7 @@ class UploadLimitsTest extends DuskTestCase
         });
     }
 
-    public function test_a_channel_upload_and_the_ad_builder_shelf_refuse_a_video_over_five_minutes(): void
+    public function test_a_channel_upload_refuses_a_video_over_five_minutes_and_the_ad_builder_shelf_one_over_thirty_seconds(): void
     {
         $store = Store::factory()->create(['name' => 'Alpha Mart']);
         // Channels are the platform's permissions a store's role may carry: given here, as a shop would give them.
@@ -142,8 +142,9 @@ class UploadLimitsTest extends DuskTestCase
             $browser->visit('/builder/assets');
             $this->waitForAlpine($browser);
             $browser->waitFor('@storage-meter')->assertSeeIn('@storage-meter-text', '0 KB of 512 MB used');
-            $this->choose($browser, 'asset-file', "window.__makeVideo(330, 'long.webm')");
-            $browser->waitForText('A video may be at most 5 minutes long. This one is 5:30.', 30);
+            // The shelf keeps thirty seconds: a design's video repeats for as long as the ad is up.
+            $this->choose($browser, 'asset-file', "window.__makeVideo(45, 'long.webm')");
+            $browser->waitForText('A video may be at most 30 seconds long. This one is 0:45.', 30);
 
             $this->assertSame(0, Media::count() + BuilderAsset::count(), 'nothing was uploaded');
         });

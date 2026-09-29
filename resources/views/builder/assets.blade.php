@@ -26,8 +26,8 @@
                 @endcan
 
                 <p class="text-sm text-gray-500 dark:text-gray-400" dusk="assets-scope-note">
-                    Pictures and videos used inside ads, a video 5 minutes at most. Separate from the media library,
-                    which is what your screens play.
+                    Pictures and videos used inside ads. A video is 30 seconds at most, and it repeats for as long as
+                    the ad is on screen. Separate from the media library, which is what your screens play.
                     @if ($stores !== [])
                         An upload goes to the shop chosen in the Shop list.
                     @endif
