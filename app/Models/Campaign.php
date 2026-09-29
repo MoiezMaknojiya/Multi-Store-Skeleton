@@ -150,7 +150,7 @@ class Campaign extends Model
     {
         return $this->type === Media::TYPE_VIDEO
             ? ($this->media_duration_seconds ?: $this->duration_seconds)
-            : $this->duration_seconds;
+            : PlaylistItem::secondsForAPicture($this->duration_seconds);
     }
 
     public function getUrlAttribute(): string

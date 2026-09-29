@@ -211,10 +211,10 @@ test('a published Ad Builder ad is chosen the same way, and runs on seconds like
 test('a file and a choice together, or neither, are refused', function () {
     $promo = Media::factory()->platformOwned()->create();
 
-    uploadChannelAd($this, ['media_id' => $promo->id, 'file' => UploadedFile::fake()->image('x.jpg'), 'seconds' => 5])
+    uploadChannelAd($this, ['media_id' => $promo->id, 'file' => UploadedFile::fake()->image('x.jpg'), 'seconds' => 8])
         ->assertStatus(422)->assertJsonValidationErrors('file');
 
-    uploadChannelAd($this, ['seconds' => 5])
+    uploadChannelAd($this, ['seconds' => 8])
         ->assertStatus(422)->assertJsonValidationErrors(['media_id', 'file']);
 
     expect(ChannelAd::count())->toBe(0);
@@ -233,15 +233,15 @@ test("a shop's channel takes that shop's files only; the platform's channel take
     $this->actingAs($keeper)->withSession(['current_store_id' => $store->id]);
 
     foreach ([$theirs, $platform] as $foreign) {
-        $this->postJson("/channels/{$own->id}/ads", ['media_id' => $foreign->id, 'seconds' => 5])
+        $this->postJson("/channels/{$own->id}/ads", ['media_id' => $foreign->id, 'seconds' => 8])
             ->assertStatus(422)->assertJsonValidationErrors('media_id');
     }
 
-    $this->postJson("/channels/{$own->id}/ads", ['media_id' => $ours->id, 'seconds' => 5])->assertOk();
+    $this->postJson("/channels/{$own->id}/ads", ['media_id' => $ours->id, 'seconds' => 8])->assertOk();
 
     // The platform's channel, from above the stores: its own library and any shop's.
     foreach ([$platform, $theirs] as $allowed) {
-        uploadChannelAd($this, ['media_id' => $allowed->id, 'seconds' => 5])->assertOk();
+        uploadChannelAd($this, ['media_id' => $allowed->id, 'seconds' => 8])->assertOk();
     }
 
     expect(ChannelAd::where('channel_id', $this->channel->id)->pluck('media_id')->all())->toBe([$platform->id, $theirs->id]);
@@ -249,7 +249,7 @@ test("a shop's channel takes that shop's files only; the platform's channel take
 
 test('an id that is not an id is refused, never a 500', function () {
     foreach ([['x'], 'abc', 0, -3, 99999999] as $id) {
-        uploadChannelAd($this, ['media_id' => $id, 'seconds' => 5])->assertStatus(422);
+        uploadChannelAd($this, ['media_id' => $id, 'seconds' => 8])->assertStatus(422);
     }
 
     expect(ChannelAd::count())->toBe(0);
@@ -397,7 +397,7 @@ test('taking an ad out of a channel leaves its file in the library', function ()
 test('an ad in another channel cannot be reached through this one', function () {
     $theirs = ChannelAd::factory()->create(['channel_id' => Channel::factory()->create()->id]);
 
-    editChannelAd($this, $theirs, ['seconds' => 5])->assertNotFound();
+    editChannelAd($this, $theirs, ['seconds' => 8])->assertNotFound();
     $this->deleteJson("/channels/{$this->channel->id}/ads/{$theirs->id}")->assertNotFound();
 
     expect(ChannelAd::find($theirs->id))->not->toBeNull();
@@ -451,7 +451,7 @@ test('seeing the ads needs channel-view; changing them needs channel-update', fu
     $this->actingAs($viewer)->getJson("/channels/{$this->channel->id}/ads")->assertOk();
 
     $this->post("/channels/{$this->channel->id}/ads", [
-        'file' => UploadedFile::fake()->image('x.jpg'), 'seconds' => 5,
+        'file' => UploadedFile::fake()->image('x.jpg'), 'seconds' => 8,
     ], ['Accept' => 'application/json'])->assertForbidden();
 
     $this->putJson("/channels/{$this->channel->id}/ads/order", ['ad_ids' => []])->assertForbidden();
@@ -470,11 +470,11 @@ test("inside a store the platform's channel is read, never changed", function ()
     $this->getJson("/channels/{$this->channel->id}/ads")->assertOk()->assertJsonPath('ads.0.title', 'Platform promo');
     $this->get("/channels/{$this->channel->id}")->assertOk()->assertDontSee('dusk="add-channel-ad"', false);
 
-    $this->post("/channels/{$this->channel->id}/ads", ['file' => UploadedFile::fake()->image('x.jpg'), 'seconds' => 5], ['Accept' => 'application/json'])
+    $this->post("/channels/{$this->channel->id}/ads", ['file' => UploadedFile::fake()->image('x.jpg'), 'seconds' => 8], ['Accept' => 'application/json'])
         ->assertNotFound();
     $this->getJson("/channels/{$this->channel->id}/library")->assertNotFound();
     $this->putJson("/channels/{$this->channel->id}/ads/order", ['ad_ids' => [$ad->id]])->assertNotFound();
-    $this->postJson("/channels/{$this->channel->id}/ads/{$ad->id}", ['seconds' => 5])->assertNotFound();
+    $this->postJson("/channels/{$this->channel->id}/ads/{$ad->id}", ['seconds' => 8])->assertNotFound();
     $this->deleteJson("/channels/{$this->channel->id}/ads/{$ad->id}")->assertNotFound();
 
     expect(ChannelAd::where('channel_id', $this->channel->id)->pluck('title')->all())->toBe(['Platform promo'])

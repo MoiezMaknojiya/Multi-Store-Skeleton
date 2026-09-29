@@ -1,11 +1,13 @@
 <?php
 
 use App\Models\BuilderAd;
+use App\Models\Campaign;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Daypart;
 use App\Models\Media;
 use App\Models\Permission;
+use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
 use App\Models\Store;
@@ -228,7 +230,7 @@ test("an ad is on screen for its design's length alone: no document, line or cha
     $ad = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id, 'name' => 'Short one', 'in_playlists' => true]);
     $forChannel = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id, 'name' => 'Channel one']);
 
-    foreach (['8', '8 seconds', true, 8.5, -8, 0, 301, PHP_INT_MAX, ['8'], ['seconds' => 8]] as $duration) {
+    foreach (['8', '8 seconds', true, 8.5, -8, 0, 5, 301, PHP_INT_MAX, ['8'], ['seconds' => 8]] as $duration) {
         $this->putJson("/builder/{$ad->id}", ['name' => $ad->name, 'document' => [...$ad->document, 'duration' => $duration]])
             ->assertStatus(422)
             ->assertJsonValidationErrors('document.duration');
@@ -255,6 +257,38 @@ test("an ad is on screen for its design's length alone: no document, line or cha
     expect($this->getJson('/device/playlist', ['Authorization' => 'Bearer stretch-token'])->json('items.0.duration'))->toBe(8)
         ->and(ChannelAd::sole()->duration_seconds)->toBeNull()
         ->and($ad->fresh()->document['duration'])->toBe(8);
+});
+
+test('a picture cannot be flashed by for less than six seconds, whatever shape the seconds are sent in', function () {
+    // Owner's rule, 2026-09-28: six seconds at least on a playlist, in a channel and as an advert. The forms say
+    // so before anything is sent; this is the wall behind them, for a request made by hand.
+    Storage::fake('public');
+    $screen = Screen::factory()->create(['store_id' => $this->store->id]);
+    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Our Deals']);
+    $poster = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Poster']);
+    $flyer = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Flyer']);
+
+    foreach ([5, '5', 0, -6, 5.9, ['6'], true] as $seconds) {
+        $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
+        $this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => [
+            ['media_id' => $poster->id, 'duration_seconds' => $seconds],
+        ]])->assertStatus(422);
+
+        $this->postJson("/channels/{$channel->id}/ads", ['media_id' => $flyer->id, 'seconds' => $seconds])->assertStatus(422);
+    }
+
+    $this->actingAs(createSuperAdmin());
+
+    foreach ([5, '5', 0, -6, 5.9] as $seconds) {
+        $this->post('/campaigns', [
+            'name' => 'Coca-Cola', 'is_active' => '1', 'screen_ids' => [],
+            'file' => UploadedFile::fake()->image('coke.jpg'), 'duration_seconds' => $seconds,
+        ], ['Accept' => 'application/json'])->assertStatus(422)->assertJsonValidationErrors('duration_seconds');
+    }
+
+    expect(PlaylistItem::count())->toBe(0)
+        ->and(ChannelAd::count())->toBe(0)
+        ->and(Campaign::count())->toBe(0);
 });
 
 test('ids that are not ids answer 422 or 404 — never a 500', function () {

@@ -10,12 +10,13 @@ import axios from 'axios';
 import { windowLabel as clockRange } from '../core/clock.js';
 import { createCrudTable } from '../core/crud-table-base.js';
 import { fileError, readVideoMeta, videoLengthError } from '../core/media-file.js';
-import { validate, required, maxLen, maxNumber } from '../core/validate.js';
+import { validate, required, maxLen, maxNumber, minNumber } from '../core/validate.js';
+import { PlaylistItemDefaults } from '../core/playlist-defaults.js';
 
 const blankForm = () => ({
     name: '',
     advertiser_name: '',
-    duration_seconds: 15,
+    duration_seconds: PlaylistItemDefaults.imageSeconds,
     starts_on: '',
     ends_on: '',
     start_time: '',
@@ -49,7 +50,7 @@ export function registerCampaignsTable(Alpine) {
         mapItemToForm: (campaign) => ({
             name: campaign.name,
             advertiser_name: campaign.advertiser_name ?? '',
-            duration_seconds: campaign.duration_seconds ?? 15,
+            duration_seconds: campaign.duration_seconds ?? PlaylistItemDefaults.imageSeconds,
             starts_on: campaign.starts_on ? String(campaign.starts_on).slice(0, 10) : '',
             ends_on: campaign.ends_on ? String(campaign.ends_on).slice(0, 10) : '',
             start_time: (campaign.start_time ?? '').slice(0, 5),
@@ -154,6 +155,7 @@ export function registerCampaignsTable(Alpine) {
                     ...(this.isVideoAd() ? {} : {
                         duration_seconds: [
                             required('Seconds'),
+                            minNumber(`An advert stays on screen for at least ${PlaylistItemDefaults.minImageSeconds} seconds.`, PlaylistItemDefaults.minImageSeconds),
                             maxNumber(`An advert may be on screen for at most ${this.maxBreakSeconds} seconds: one break.`, this.maxBreakSeconds),
                         ],
                     }),

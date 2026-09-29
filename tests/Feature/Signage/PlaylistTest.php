@@ -338,14 +338,14 @@ test('the same file can appear more than once in a playlist, at different length
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => $screen->playlistFingerprint(),
             'items' => [
-                ['media_id' => $logo->id, 'duration_seconds' => 3],
+                ['media_id' => $logo->id, 'duration_seconds' => 6],
                 ['media_id' => $offer->id, 'duration_seconds' => 20],
-                ['media_id' => $logo->id, 'duration_seconds' => 5],
+                ['media_id' => $logo->id, 'duration_seconds' => 8],
             ],
         ])->assertOk();
 
     expect($screen->playlistItems()->count())->toBe(3);
-    expect($screen->playlistItems()->pluck('duration_seconds')->all())->toBe([3, 20, 5]);
+    expect($screen->playlistItems()->pluck('duration_seconds')->all())->toBe([6, 20, 8]);
 
     $this->flushSession();
     $items = $this->withHeader('Authorization', 'Bearer tok')->getJson('/device/playlist')->json('items');
@@ -381,7 +381,7 @@ test('a playlist longer than the cap is refused whole', function () {
     $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => $screen->playlistFingerprint(),
-            'items' => array_fill(0, 201, ['media_id' => $media->id, 'duration_seconds' => 5]),
+            'items' => array_fill(0, 201, ['media_id' => $media->id, 'duration_seconds' => 6]),
         ])->assertStatus(422)->assertJsonValidationErrors(['items']);
 
     expect($screen->playlistItems()->count())->toBe(0);

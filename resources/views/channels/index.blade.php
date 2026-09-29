@@ -135,7 +135,9 @@
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
                     x-text="editingItem ? 'Edit Channel' : 'Add Channel'"></h2>
 
-                <form @submit.prevent="saveItem" dusk="channel-form" class="mt-4 space-y-4">
+                {{-- novalidate: the ads-per-pass field's own min and max would stop the save with the browser's
+                     bubble before saveItem could say it under the field, as every form here does (validate.js). --}}
+                <form @submit.prevent="saveItem" novalidate dusk="channel-form" class="mt-4 space-y-4">
                     <x-crud.form-field label="Channel name" field="name" :required="true">
                         <x-text-input x-model="form.name" dusk="channel-name" class="block w-full"
                                       placeholder="GAMA Wholesale" autocomplete="off" maxlength="120" />

@@ -182,7 +182,7 @@ class ZeroToHeroTest extends DuskTestCase
 
             $saved = PlaylistItem::where('screen_id', $screen->id)->orderBy('position')->get();
             $this->assertSame([$poster->id, $second->id], $saved->pluck('media_id')->all());
-            $this->assertSame([10, 10], $saved->pluck('duration_seconds')->all()); // the image default
+            $this->assertSame([6, 6], $saved->pluck('duration_seconds')->all()); // the image default (owner's rule, 2026-09-28)
 
             /* ── 8. The picture actually reaches the wall ────────────────── */
             $visible = '#layer-a:not([hidden]) img, #layer-b:not([hidden]) img';
@@ -203,7 +203,7 @@ class ZeroToHeroTest extends DuskTestCase
             $tv->waitUsing(30, 250, fn () => str_contains($srcOf(), basename($second->path)));
 
             /* ── 9. The owner changes their mind: retime and reorder ─────── */
-            $this->jsType($panel, '@playlist-duration-0', '4');
+            $this->jsType($panel, '@playlist-duration-0', '7');
             $this->jsClick($panel, '@playlist-down-0');       // poster moves to second
             $this->jsClick($panel, '@playlist-save');
             $panel->waitUsing(15, 200, function () use ($screen, $second) {
@@ -214,7 +214,7 @@ class ZeroToHeroTest extends DuskTestCase
 
             $reordered = PlaylistItem::where('screen_id', $screen->id)->orderBy('position')->get();
             $this->assertSame([$second->id, $poster->id], $reordered->pluck('media_id')->all());
-            $this->assertSame(4, $reordered->last()->duration_seconds, 'the retimed row did not follow its file');
+            $this->assertSame(7, $reordered->last()->duration_seconds, 'the retimed row did not follow its file');
 
             // The rows are in the database before the answer reaches the page, and the page then redraws
             // its list from that answer — a click made in between is redrawn away. Wait for the answer:

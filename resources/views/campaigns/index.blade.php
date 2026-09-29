@@ -110,7 +110,9 @@
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
                     x-text="editingItem ? 'Edit Campaign' : 'Add Campaign'"></h2>
 
-                <form @submit.prevent="saveCampaign" dusk="campaign-form" class="mt-4 space-y-4">
+                {{-- novalidate: the seconds field's own min and max would stop the save with the browser's bubble
+                     before saveCampaign could say it under the field, as every form here does (validate.js). --}}
+                <form @submit.prevent="saveCampaign" novalidate dusk="campaign-form" class="mt-4 space-y-4">
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <x-crud.form-field label="Campaign name" field="name" :required="true">
@@ -144,7 +146,7 @@
                          field is not shown at all, rather than shown and then ignored (owner's rule). --}}
                     <div x-show="!isVideoAd()" x-cloak class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <x-crud.form-field label="Seconds on screen" field="duration_seconds" :required="true">
-                            <x-text-input type="number" min="1" max="300" x-model.number="form.duration_seconds"
+                            <x-text-input type="number" min="{{ \App\Models\PlaylistItem::MIN_IMAGE_SECONDS }}" max="300" x-model.number="form.duration_seconds"
                                           dusk="campaign-seconds" class="block w-full" />
                         </x-crud.form-field>
                     </div>

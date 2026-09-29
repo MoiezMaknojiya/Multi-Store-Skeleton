@@ -75,7 +75,8 @@ export function registerAdEditor(Alpine) {
             maxElements: config.maxElements ?? 200,
             maxGuides: config.maxGuides ?? 50,
             /* How long the ad is on screen (BuilderAd::DEFAULT_SECONDS, ::MAX_SECONDS): the design's own. */
-            adSecondsDefault: config.adSeconds?.default ?? 10,
+            adSecondsDefault: config.adSeconds?.default ?? 6,
+            adSecondsMin: config.adSeconds?.min ?? 6,
             adSecondsMax: config.adSeconds?.max ?? 300,
 
             /* ── Editor state (not part of the design) ─────────────────── */
@@ -227,16 +228,18 @@ export function registerAdEditor(Alpine) {
              * the background's or one on the stage, repeats when it is shorter and is cut when the ad ends.
              */
             adSeconds() {
-                return Number.isInteger(this.doc.duration) ? this.doc.duration : this.adSecondsDefault;
+                return Number.isInteger(this.doc.duration)
+                    ? Math.min(this.adSecondsMax, Math.max(this.adSecondsMin, this.doc.duration))
+                    : this.adSecondsDefault;
             },
 
-            /** Set the ad's length, held between one second and the longest the server takes. */
+            /** Set the ad's length, held between the shortest and the longest the server takes. */
             setAdSeconds(value) {
                 const seconds = Math.round(Number(value));
 
                 if (! Number.isFinite(seconds)) return this.adSeconds();
 
-                this.doc.duration = Math.min(this.adSecondsMax, Math.max(1, seconds));
+                this.doc.duration = Math.min(this.adSecondsMax, Math.max(this.adSecondsMin, seconds));
                 this.commit('Length');
 
                 return this.doc.duration;

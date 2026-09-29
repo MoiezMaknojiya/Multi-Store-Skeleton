@@ -5,6 +5,7 @@ namespace App\Http\Requests\Advertising;
 use App\Http\Requests\Signage\StoreMediaRequest;
 use App\Models\Campaign;
 use App\Models\Media;
+use App\Models\PlaylistItem;
 use App\Rules\VideoLength;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -56,7 +57,11 @@ class CampaignRequest extends FormRequest
             // An IMAGE's seconds on screen — or, for a video, the length the browser
             // measured. A video's form has no seconds field at all (it runs to its own
             // end), so for one this may simply be missing, and what is kept is the file's own.
-            'duration_seconds' => [$this->describesVideo() ? 'nullable' : 'required', 'integer', 'min:1', 'max:'.($this->describesVideo() ? 86400 : Campaign::MAX_AD_SECONDS)],
+            // A picture's seconds: six at least, like every picture (PlaylistItem::MIN_IMAGE_SECONDS), one break at
+            // most. A video's form sends none — its length is read from the file.
+            'duration_seconds' => $this->describesVideo()
+                ? ['nullable', 'integer', 'min:1', 'max:86400']
+                : ['required', 'integer', 'min:'.PlaylistItem::MIN_IMAGE_SECONDS, 'max:'.Campaign::MAX_AD_SECONDS],
             // Browser-measured facts about a video — never trusted for identity, only
             // for shape. Same contract as a media upload.
             'width' => ['nullable', 'integer', 'min:1', 'max:16384'],
@@ -108,6 +113,7 @@ class CampaignRequest extends FormRequest
             'file.max' => StoreMediaRequest::tooLargeMessage(),
             'screen_ids.*.exists' => 'One of the chosen screens no longer exists. Reload the page and choose again.',
             'duration_seconds.max' => 'An advert may be on screen for at most '.Campaign::MAX_AD_SECONDS.' seconds: one break.',
+            'duration_seconds.min' => 'An advert stays on screen for at least '.PlaylistItem::MIN_IMAGE_SECONDS.' seconds.',
             'ends_on.after_or_equal' => 'The end date cannot be before the start date.',
             'start_time.required_with' => 'Give both a start and an end time, or leave both blank to run all day.',
             'end_time.required_with' => 'Give both a start and an end time, or leave both blank to run all day.',

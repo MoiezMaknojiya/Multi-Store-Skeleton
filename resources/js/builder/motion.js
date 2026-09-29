@@ -96,6 +96,49 @@ export function motionPanel(motion) {
             this.previewElement(element);
         },
 
+        /**
+         * What the ad's length (Stage panel) does to one of the selected element's animations — the page leaves
+         * the screen at that length however the element moves, on the runtime's own clock (public/ad-runtime):
+         * an entrance or an exit that starts after it is never seen, one still running is cut, and a loop that
+         * only starts after it leaves the element still. A loop cut part-way round is what a loop is, so it is
+         * not said. '' when all of it fits.
+         */
+        timingNote(slot) {
+            const animations = this.selected?.animations ?? {};
+
+            if (!animations[slot]?.effect) return '';
+
+            const end = this.adSeconds();
+            const number = (from, key) => {
+                const value = Number(animations[from]?.[key]);
+
+                return Number.isFinite(value) ? value : Number(this.animationNumbers?.[from]?.[key]?.[2] ?? 0);
+            };
+
+            if (slot === 'in') {
+                const start = number('in', 'delay');
+
+                if (start >= end) return `Comes in after the ad ends at ${end} s: nobody will see this element.`;
+                if (start + number('in', 'duration') > end) return `Still coming in when the ad ends at ${end} s.`;
+            }
+
+            if (slot === 'loop') {
+                // It starts once the entrance has landed, then waits its own delay.
+                const landed = animations.in?.effect ? number('in', 'delay') + number('in', 'duration') : 0;
+
+                if (landed + number('loop', 'delay') >= end) return `Starts after the ad ends at ${end} s: it never moves.`;
+            }
+
+            if (slot === 'out') {
+                const start = number('out', 'at');
+
+                if (start >= end) return `After the ad ends at ${end} s: nobody will see it.`;
+                if (start + number('out', 'duration') > end) return `Still leaving when the ad ends at ${end} s.`;
+            }
+
+            return '';
+        },
+
         /** One value in a slot; numbers held inside AdAnimations::NUMBERS. Returns what was kept. */
         setSlot(slot, key, value) {
             const element = this.selected;

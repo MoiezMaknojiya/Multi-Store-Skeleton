@@ -132,8 +132,12 @@
              'maxStops' => \App\Http\Requests\Builder\BuilderAdRequest::MAX_STOPS,
              'maxElements' => \App\Http\Requests\Builder\BuilderAdRequest::MAX_ELEMENTS,
              'maxGuides' => \App\Http\Requests\Builder\BuilderAdRequest::MAX_GUIDES,
-             // How long the ad is on screen when its design does not say, and the longest it may be.
-             'adSeconds' => ['default' => \App\Models\BuilderAd::DEFAULT_SECONDS, 'max' => \App\Models\BuilderAd::MAX_SECONDS],
+             // How long the ad is on screen when its design does not say, and the shortest and longest it may be.
+             'adSeconds' => [
+                 'default' => \App\Models\BuilderAd::DEFAULT_SECONDS,
+                 'min' => \App\Models\BuilderAd::MIN_SECONDS,
+                 'max' => \App\Models\BuilderAd::MAX_SECONDS,
+             ],
          ]) }})"
          @keydown.window="onKeydown($event)"
          @keyup.window="onKeyup($event)">

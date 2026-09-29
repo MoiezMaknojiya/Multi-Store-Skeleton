@@ -5,6 +5,7 @@ namespace App\Http\Requests\Signage;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
+use App\Models\PlaylistItem;
 use App\Rules\VideoLength;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -74,7 +75,7 @@ class ChannelAdRequest extends FormRequest
             // them this field is not merely optional: whatever arrives is thrown away.
             'seconds' => $this->runsItsOwnLength()
                 ? ['exclude']
-                : ['required', 'integer', 'min:1', 'max:'.ChannelAd::MAX_IMAGE_SECONDS],
+                : ['required', 'integer', 'min:'.PlaylistItem::MIN_IMAGE_SECONDS, 'max:'.ChannelAd::MAX_IMAGE_SECONDS],
 
             // Browser-measured facts about an uploaded video: shape and length only, never identity. The
             // same contract as a media upload.
@@ -166,6 +167,7 @@ class ChannelAdRequest extends FormRequest
             'file.mimes' => 'Only '.StoreMediaRequest::FORMATS_IN_WORDS.' can be uploaded.',
             'file.max' => StoreMediaRequest::tooLargeMessage(),
             'seconds.required' => 'Say how many seconds it stays on screen.',
+            'seconds.min' => 'A picture stays on screen for at least '.PlaylistItem::MIN_IMAGE_SECONDS.' seconds.',
             'seconds.max' => 'It may not stay up longer than '.ChannelAd::MAX_IMAGE_SECONDS.' seconds.',
             'ends_on.after_or_equal' => 'The end date cannot be before the start date.',
         ];

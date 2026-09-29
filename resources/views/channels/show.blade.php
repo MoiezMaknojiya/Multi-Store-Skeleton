@@ -133,7 +133,9 @@
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
                     x-text="editingAd ? 'Edit Ad' : 'Add Ad'"></h2>
 
-                <form @submit.prevent="saveAd" dusk="channel-ad-form" class="mt-4 space-y-4">
+                {{-- novalidate: the seconds field's own min and max would stop the save with the browser's bubble
+                     before saveAd could say it under the field, as every form here does (validate.js). --}}
+                <form @submit.prevent="saveAd" novalidate dusk="channel-ad-form" class="mt-4 space-y-4">
                     {{-- Where the file comes from. --}}
                     <div class="flex flex-wrap gap-2" role="group" aria-label="Where the ad comes from">
                         <template x-if="editingAd">
@@ -251,7 +253,7 @@
                          nothing. --}}
                     <div x-show="!runsOwnLength()" x-cloak>
                         <x-crud.form-field label="Seconds on screen" field="seconds" :required="true">
-                            <x-text-input type="number" min="1" x-bind:max="maxImageSeconds" x-model.number="form.seconds"
+                            <x-text-input type="number" min="{{ \App\Models\PlaylistItem::MIN_IMAGE_SECONDS }}" x-bind:max="maxImageSeconds" x-model.number="form.seconds"
                                           dusk="channel-ad-seconds" class="block w-full" />
                         </x-crud.form-field>
                     </div>

@@ -54,11 +54,12 @@ class OfflinePlayerTest extends DuskTestCase
         $screen->update(['default_media_id' => $holding->id]);
 
         // Two pictures with short lives: the first ends while the line is down, the second a while after.
-        $soon = $this->picture($store, 'soon.png', [200, 40, 40], now()->addSeconds(50));
-        $later = $this->picture($store, 'later.png', [40, 160, 60], now()->addSeconds(100));
+        // Each picture stays up six seconds, the least one may (owner's rule, 2026-09-28).
+        $soon = $this->picture($store, 'soon.png', [200, 40, 40], now()->addSeconds(60));
+        $later = $this->picture($store, 'later.png', [40, 160, 60], now()->addSeconds(110));
 
-        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $soon->id, 'position' => 0, 'duration_seconds' => 3]);
-        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $later->id, 'position' => 1, 'duration_seconds' => 3]);
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $soon->id, 'position' => 0, 'duration_seconds' => 6]);
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $later->id, 'position' => 1, 'duration_seconds' => 6]);
 
         $this->browse(function (Browser $tv) use ($soon, $later) {
             try {
@@ -96,7 +97,7 @@ class OfflinePlayerTest extends DuskTestCase
                     'after the first picture expired, the cached manifest did not move on to the timeline entry without it');
                 $this->assertSame('', $tv->script('return document.body.dataset.dropped;')[0], 'the timeline had already left it out');
 
-                // Then the glass shows the second alone: two passes of a three-second picture with no sign of
+                // Then the glass shows the second alone: two passes of a six-second picture with no sign of
                 // the first. (Seeing the second once proves nothing — the two took turns before.)
                 $lastSeenSoon = microtime(true);
                 $tv->waitUsing(75, 250, function () use ($tv, &$lastSeenSoon) {
@@ -106,7 +107,7 @@ class OfflinePlayerTest extends DuskTestCase
                         $lastSeenSoon = microtime(true);
                     }
 
-                    return microtime(true) - $lastSeenSoon > 7 && str_contains($showing, 'later.png');
+                    return microtime(true) - $lastSeenSoon > 13 && str_contains($showing, 'later.png');
                 }, 'after the first picture expired, it kept coming back');
 
                 /* ── 4. …then the second: the holding picture takes the glass ── */
@@ -146,8 +147,8 @@ class OfflinePlayerTest extends DuskTestCase
         // A file the next days bring — tomorrow — bigger than two pieces: warmed now, played by no one here.
         $big = $this->bigFile($store, 'tomorrow.mp4', 2 * self::PART_BYTES + 123_456, now()->addDay());
 
-        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->media_id, 'position' => 0, 'duration_seconds' => 4]);
-        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $later->id, 'position' => 1, 'duration_seconds' => 3]);
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->media_id, 'position' => 0, 'duration_seconds' => 6]);
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $later->id, 'position' => 1, 'duration_seconds' => 6]);
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $big->id, 'position' => 2]);
 
         $server = $this->startLine();

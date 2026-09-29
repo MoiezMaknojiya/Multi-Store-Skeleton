@@ -9,8 +9,16 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PlaylistItem extends Model
 {
-    /** What an image shows for when nothing else says otherwise. */
-    public const DEFAULT_IMAGE_SECONDS = 10;
+    /**
+     * The shortest a picture stays on screen — and an Ad Builder ad (BuilderAd::MIN_SECONDS) — owner's rule,
+     * 2026-09-28: "6 seconds minimum … us se kam nahi kar paye". Six seconds is the industry's shortest spot
+     * (YouTube's bumper ad) and the least a roadside screen must hold one in much of the United States; anything
+     * shorter is a flicker nobody can read. A video is never held to it: it runs to its own end.
+     */
+    public const MIN_IMAGE_SECONDS = 6;
+
+    /** What an image shows for when nothing else says otherwise (owner's rule, 2026-09-28: six, like the least). */
+    public const DEFAULT_IMAGE_SECONDS = 6;
 
     protected $fillable = ['screen_id', 'media_id', 'channel_id', 'position', 'duration_seconds'];
 
@@ -20,6 +28,15 @@ class PlaylistItem extends Model
             'position' => 'integer',
             'duration_seconds' => 'integer',
         ];
+    }
+
+    /**
+     * How long a picture is on screen for the seconds it was given: the default when it says none, and never under
+     * the least — a line, a channel ad or an advert saved before the least keeps its place and simply plays for it.
+     */
+    public static function secondsForAPicture(?int $seconds): int
+    {
+        return max(self::MIN_IMAGE_SECONDS, $seconds ?: self::DEFAULT_IMAGE_SECONDS);
     }
 
     public function media(): BelongsTo

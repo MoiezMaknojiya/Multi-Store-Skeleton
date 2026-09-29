@@ -214,6 +214,23 @@ class AdBackgroundAndMotionFlowTest extends DuskTestCase
             $browser->waitFor('@anim-out-at');
             $this->setValue($browser, '@anim-out-at', '6', 'change');
 
+            // The ad is six seconds long (the Stage panel's default, owner's rule 2026-09-28) and leaves the screen
+            // then, however its elements move: the panel says so where each time is set.
+            $browser->waitFor('@anim-out-timing')->assertSeeIn('@anim-out-timing', 'After the ad ends at 6 s: nobody will see it.')
+                ->assertMissing('@anim-in-timing')
+                ->assertMissing('@anim-loop-timing');
+
+            $this->setValue($browser, '@anim-in-delay', '5.6', 'change');
+            $browser->waitFor('@anim-in-timing')->assertSeeIn('@anim-in-timing', 'Still coming in when the ad ends at 6 s.')
+                ->assertSeeIn('@anim-loop-timing', 'Starts after the ad ends at 6 s: it never moves.');
+
+            $this->setValue($browser, '@anim-in-delay', '7', 'change');
+            $browser->waitUsing(5, 100, fn () => str_contains($browser->text('@anim-in-timing'), 'Comes in after the ad ends at 6 s: nobody will see this element.'));
+
+            // Back where it was: nothing to say about the entrance or the loop.
+            $this->setValue($browser, '@anim-in-delay', '0', 'change');
+            $browser->waitUntilMissing('@anim-in-timing', 5)->assertMissing('@anim-loop-timing');
+
             /* ── 2. ▶ Play runs the television's runtime over the stage ──── */
             $this->jsClick($browser, '@ad-play');
             $browser->waitFor('@preview-overlay');

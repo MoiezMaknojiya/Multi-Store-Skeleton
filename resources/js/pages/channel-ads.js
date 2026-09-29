@@ -16,8 +16,9 @@
  */
 import axios from 'axios';
 import { fileError, readVideoMeta, videoLengthError, storageError } from '../core/media-file.js';
+import { PlaylistItemDefaults } from '../core/playlist-defaults.js';
 
-const blankForm = () => ({ title: '', seconds: 10, starts_on: '', ends_on: '' });
+const blankForm = () => ({ title: '', seconds: PlaylistItemDefaults.imageSeconds, starts_on: '', ends_on: '' });
 
 const blankPicker = () => ({ items: [], page: 1, lastPage: 1, loading: false, search: '', library: 'platform' });
 
@@ -93,7 +94,7 @@ export function registerChannelAds(Alpine) {
             this.form = ad
                 ? {
                     title: ad.title,
-                    seconds: ad.duration_seconds ?? 10,
+                    seconds: ad.duration_seconds ?? PlaylistItemDefaults.imageSeconds,
                     starts_on: ad.starts_on ?? '',
                     ends_on: ad.ends_on ?? '',
                 }
@@ -294,6 +295,8 @@ export function registerChannelAds(Alpine) {
 
                 if (! Number.isInteger(seconds) || seconds < 1) {
                     errors.seconds = ['Say how many seconds it stays on screen.'];
+                } else if (seconds < PlaylistItemDefaults.minImageSeconds) {
+                    errors.seconds = [`A picture stays on screen for at least ${PlaylistItemDefaults.minImageSeconds} seconds.`];
                 } else if (seconds > this.maxImageSeconds) {
                     errors.seconds = [`It may not stay up longer than ${this.maxImageSeconds} seconds.`];
                 }

@@ -115,9 +115,6 @@
                         <input type="number" step="0.1" min="0" max="3600" class="form-input mt-1 w-full text-sm"
                                x-bind:value="slotOf('out')?.at ?? 5"
                                @change="$el.value = setSlot('out', 'at', $el.value)" dusk="anim-out-at" />
-                        {{-- The ad leaves the screen at its length (Stage panel): an exit after that is never seen. --}}
-                        <span x-show="(slotOf('out')?.at ?? 5) >= adSeconds()" x-cloak class="mt-1 block text-xs text-amber-600 dark:text-amber-400"
-                              x-text="'After the ad ends at ' + adSeconds() + ' s: nobody will see it.'" dusk="anim-out-after-end"></span>
                     </label>
                 @else
                     <label class="text-xs text-gray-500 dark:text-gray-400">Wait first (s)
@@ -133,6 +130,11 @@
                 </label>
             </div>
         @endif
+
+        {{-- The ad leaves the screen at its length (Stage panel), however its elements move: what starts after
+             that is never seen, and what is still running is cut. Said where the timing is set. --}}
+        <p x-show="timingNote('{{ $slot }}')" x-cloak class="text-xs text-amber-600 dark:text-amber-400"
+           x-text="timingNote('{{ $slot }}')" dusk="anim-{{ $slot }}-timing"></p>
 
         {{-- The ease: a name from the runtime's list, or a curve drawn by hand. A spin turns at an even
              pace, so it has none. --}}

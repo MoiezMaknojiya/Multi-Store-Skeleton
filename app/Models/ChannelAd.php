@@ -132,7 +132,8 @@ class ChannelAd extends Model
             return self::UNMEASURED_VIDEO_SECONDS;
         }
 
-        return $this->duration_seconds ?: PlaylistItem::DEFAULT_IMAGE_SECONDS;
+        // A picture's seconds, never under the least (an ad saved before it simply plays for it).
+        return PlaylistItem::secondsForAPicture($this->duration_seconds);
     }
 
     public function getUrlAttribute(): ?string

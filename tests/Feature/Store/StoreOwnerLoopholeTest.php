@@ -119,7 +119,7 @@ test('they may CARRY a channel but never change one', function () {
         'version' => $this->screen->playlistFingerprint(),
     ])->assertOk();
 
-    $this->post("/channels/{$channel->id}/ads", ['seconds' => 5], ['Accept' => 'application/json'])->assertForbidden();
+    $this->post("/channels/{$channel->id}/ads", ['seconds' => 8], ['Accept' => 'application/json'])->assertForbidden();
 });
 
 test('network advertising cannot be switched on — not by the switch, not smuggled through a form', function () {

@@ -91,7 +91,7 @@ class AdLengthOnScreenTest extends DuskTestCase
             // On the playlist: the ad, then the picture.
             $screen = Screen::where('store_id', $store->id)->sole();
             PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->id, 'position' => 0, 'duration_seconds' => 8]);
-            PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $picture->id, 'position' => 1, 'duration_seconds' => 4]);
+            PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $picture->id, 'position' => 1, 'duration_seconds' => 6]);
 
             /* ── The television ─────────────────────────────────────────── */
             $tv->visit('/login');
@@ -139,8 +139,9 @@ class AdLengthOnScreenTest extends DuskTestCase
         $store = Store::factory()->create(['name' => 'Alpha Mart']);
         $owner = $this->storeMember($store, Role::OWNER, 'owner@example.com');
 
-        $ad = BuilderAd::factory()->withText('Two seconds')->create(['store_id' => $store->id, 'name' => 'Two seconds']);
-        $ad->update(['document' => [...$ad->document, 'duration' => 2]]);
+        // The shortest an ad may be: six seconds (owner's rule, 2026-09-28).
+        $ad = BuilderAd::factory()->withText('Six seconds')->create(['store_id' => $store->id, 'name' => 'Six seconds']);
+        $ad->update(['document' => [...$ad->document, 'duration' => 6]]);
 
         $this->browse(function (Browser $browser) use ($owner, $store, $ad) {
             $this->freshSession($browser);
@@ -148,27 +149,27 @@ class AdLengthOnScreenTest extends DuskTestCase
             $this->switchToStore($browser, $store);
             $browser->visit('/builder/'.$ad->id);
             $this->waitForAlpine($browser);
-            $browser->waitFor('@ad-length')->assertInputValue('@ad-length', '2');
+            $browser->waitFor('@ad-length')->assertInputValue('@ad-length', '6');
 
-            // Play: the television's own runtime, started again every two seconds — each start noted here.
+            // Play: the television's own runtime, started again every six seconds — each start noted here.
             $browser->script(<<<'JS'
                 window.__starts = [];
                 const run = window.AdRuntime.run;
                 window.AdRuntime.run = function () { window.__starts.push(performance.now()); return run.apply(this, arguments); };
             JS);
             $this->jsClick($browser, '@ad-play');
-            $browser->waitFor('@preview-overlay')->assertSeeIn('@stage-size-note', 'Playing for 2 seconds, then from the start');
-            $browser->waitUsing(10, 100, fn () => count($browser->script('return window.__starts;')[0]) >= 3);
+            $browser->waitFor('@preview-overlay')->assertSeeIn('@stage-size-note', 'Playing for 6 seconds, then from the start');
+            $browser->waitUsing(20, 100, fn () => count($browser->script('return window.__starts;')[0]) >= 3);
 
             $starts = $browser->script('return window.__starts;')[0];
-            $this->assertEqualsWithDelta(2000, $starts[1] - $starts[0], 500, 'the second start, two seconds on');
-            $this->assertEqualsWithDelta(2000, $starts[2] - $starts[1], 500, 'and the third');
+            $this->assertEqualsWithDelta(6000, $starts[1] - $starts[0], 500, 'the second start, six seconds on');
+            $this->assertEqualsWithDelta(6000, $starts[2] - $starts[1], 500, 'and the third');
 
             // Stop stops the starts too.
             $this->jsClick($browser, '@ad-play');
             $browser->waitUntilMissing('@preview-overlay', 5);
             $stopped = count($browser->script('return window.__starts;')[0]);
-            $browser->pause(3000);
+            $browser->pause(7000);
             $this->assertCount($stopped, $browser->script('return window.__starts;')[0], 'nothing starts after Stop');
 
             // Preview: the page in a tab of its own, loaded again at the ad's length.
@@ -181,7 +182,7 @@ class AdLengthOnScreenTest extends DuskTestCase
             $browser->waitUntil('document.readyState === "complete" && !!document.getElementById("ad-stage")', 10);
 
             $loaded = $browser->script('return performance.timeOrigin;')[0];
-            $browser->waitUsing(10, 250, function () use ($browser, $loaded) {
+            $browser->waitUsing(15, 250, function () use ($browser, $loaded) {
                 try {
                     return $browser->script('return document.readyState === "complete" ? performance.timeOrigin : 0;')[0] > $loaded;
                 } catch (\Throwable) {

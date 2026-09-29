@@ -88,6 +88,13 @@ class ChannelAdminTest extends DuskTestCase
             $browser->waitFor('@channel-ad-pick-'.$ad->media_id)->screenshot('channel-ad-library-picker');
             $this->jsClick($browser, '@channel-ad-pick-'.$ad->media_id);
             $this->jsType($browser, '@channel-ad-title', 'Coke again');
+
+            // Six seconds at least (owner's rule, 2026-09-28): said under the field before anything is sent.
+            $this->jsType($browser, '@channel-ad-seconds', '5');
+            $this->jsClick($browser, '@channel-ad-save');
+            $browser->waitForText('A picture stays on screen for at least 6 seconds.');
+            $this->assertSame(1, ChannelAd::where('channel_id', $channel->id)->count(), 'nothing was saved');
+
             $this->jsType($browser, '@channel-ad-seconds', '7');
             $this->jsClick($browser, '@channel-ad-save');
 

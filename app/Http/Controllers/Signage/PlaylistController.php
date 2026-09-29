@@ -157,6 +157,7 @@ class PlaylistController extends Controller
         $this->assertMediaBelongsToTheSameStore($screen, $items);
         $this->assertAdsMayBeOnAPlaylist($items);
         $this->assertFilesAreInNoChannel($items);
+        $this->assertPicturesStayUpLongEnough($items);
         $this->assertChannelsAreAvailable($screen, $items);
         $this->assertDaypartsBelongToTheSameStore($screen, $items);
 
@@ -530,7 +531,9 @@ class PlaylistController extends Controller
                     $isChannel => null,
                     $file?->ownLength() !== null => $file->ownLength(),
                     $file?->type === Media::TYPE_VIDEO => ChannelAd::UNMEASURED_VIDEO_SECONDS,
-                    default => $item['duration_seconds'],
+                    // A picture's own seconds, never under the least: a line copied from a screen saved before the
+                    // least carries it up with it.
+                    default => PlaylistItem::secondsForAPicture((int) $item['duration_seconds']),
                 },
             ]);
 
@@ -543,6 +546,36 @@ class PlaylistController extends Controller
                 $created->scheduleRules()->create([
                     ...$this->ruleAttributes($rule),
                     'position' => $index,
+                ]);
+            }
+        }
+    }
+
+    /**
+     * A picture stays on screen for at least PlaylistItem::MIN_IMAGE_SECONDS (owner's rule, 2026-09-28) — and so
+     * does an Ad Builder page published before designs had a length, which is timed like one. A video and a page
+     * with a length of its own are not asked: their lines keep the file's length whatever is sent (writeItems).
+     *
+     * @param  array<int|string, array<string, mixed>>  $items
+     */
+    private function assertPicturesStayUpLongEnough(array $items): void
+    {
+        $lines = collect($items)->filter(fn (array $item) => filled($item['media_id'] ?? null));
+        $files = Media::whereIn('id', $lines->pluck('media_id')->map(fn (int|string $id) => (int) $id)->all())
+            ->get(['id', 'type', 'title', 'duration_seconds'])
+            ->keyBy('id');
+
+        foreach ($lines as $index => $item) {
+            $file = $files->get((int) $item['media_id']);
+
+            if ($file === null || $file->type === Media::TYPE_VIDEO || $file->ownLength() !== null) {
+                continue;
+            }
+
+            if ((int) $item['duration_seconds'] < PlaylistItem::MIN_IMAGE_SECONDS) {
+                throw ValidationException::withMessages([
+                    "items.{$index}.duration_seconds" => "{$file->title}: a picture stays on screen for at least "
+                        .PlaylistItem::MIN_IMAGE_SECONDS.' seconds.',
                 ]);
             }
         }
@@ -690,8 +723,10 @@ class PlaylistController extends Controller
                 'media_id' => $item->media_id,
                 'channel_id' => $item->channel_id,
                 'position' => $item->position,
-                // What the line plays for: its file's own length when it has one (a video, an ad page), else its own.
-                'duration_seconds' => $item->media?->ownLength() ?? $item->duration_seconds,
+                // What the line plays for: its file's own length when it has one (a video, an ad page), else its own
+                // — a picture's never under the least, which a line saved before it simply plays for.
+                'duration_seconds' => $item->media?->ownLength()
+                    ?? ($item->media_id !== null ? PlaylistItem::secondsForAPicture($item->duration_seconds) : null),
                 'runs_own_length' => $item->media?->ownLength() !== null,
                 ...($item->channel !== null ? $this->channelSummary($item->channel, $today) : [
                     'title' => $item->media?->title,

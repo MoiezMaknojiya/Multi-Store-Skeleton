@@ -91,9 +91,9 @@ class BuilderAdRequest extends FormRequest
 
             // How long the ad is on screen (BuilderAd::DEFAULT_SECONDS): every playlist and channel plays it this
             // long, and a video inside it repeats or is cut to fit. A design saved before it had one says ten.
-            // A real number only (`strict`): "8" or true passes the loose rule, and the editor would show ten
-            // for either while the screens played something else.
-            'document.duration' => ['nullable', 'integer:strict', 'min:1', 'max:'.BuilderAd::MAX_SECONDS],
+            // A real number only (`strict`): "8" or true passes the loose rule, and the editor would show the
+            // default for either while the screens played something else. Six seconds at least, like a picture.
+            'document.duration' => ['nullable', 'integer:strict', 'min:'.BuilderAd::MIN_SECONDS, 'max:'.BuilderAd::MAX_SECONDS],
 
             // The frame is the size a television is — 1920×1080, or 1080×1920 mounted upright — and the
             // ad's orientation says which. Nothing may say otherwise: a document claiming another size would
@@ -242,6 +242,7 @@ class BuilderAdRequest extends FormRequest
         return [
             'name.required' => 'Give the ad a name.',
             'orientation.in' => 'An ad is landscape or portrait.',
+            'document.duration.min' => 'An ad stays on screen for at least '.BuilderAd::MIN_SECONDS.' seconds.',
             'document.stage.width.in' => $size,
             'document.stage.height.in' => $size,
             'document.elements.max' => 'An ad may hold at most '.self::MAX_ELEMENTS.' elements.',

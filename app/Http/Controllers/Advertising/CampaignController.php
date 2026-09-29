@@ -9,6 +9,7 @@ use App\Http\Requests\Advertising\CampaignRequest;
 use App\Models\ActivityLog;
 use App\Models\Campaign;
 use App\Models\Media;
+use App\Models\PlaylistItem;
 use App\Models\Screen;
 use App\Services\MediaStorage;
 use Illuminate\Http\JsonResponse;
@@ -102,7 +103,13 @@ class CampaignController extends Controller
             ->where('campaigns.is_active', true)
             ->groupBy('campaign_screen.screen_id')
             ->selectRaw('campaign_screen.screen_id as screen_id')
-            ->selectRaw('SUM(COALESCE(NULLIF(campaigns.media_duration_seconds, 0), campaigns.duration_seconds)) as seconds')
+            // As Campaign::play_seconds reads it: a video its own length, a picture its seconds, never under the
+            // least — which an advert saved before it simply plays for.
+            ->selectRaw(
+                'SUM(CASE WHEN campaigns.type = ? THEN COALESCE(NULLIF(campaigns.media_duration_seconds, 0), campaigns.duration_seconds)'
+                .' WHEN campaigns.duration_seconds < ? THEN ? ELSE campaigns.duration_seconds END) as seconds',
+                [Media::TYPE_VIDEO, PlaylistItem::MIN_IMAGE_SECONDS, PlaylistItem::MIN_IMAGE_SECONDS],
+            )
             ->pluck('seconds', 'screen_id');
     }
 
@@ -122,7 +129,7 @@ class CampaignController extends Controller
                 // A video's form sends no typed seconds; its length, read from the file, stands in.
                 'duration_seconds' => $file['type'] === Media::TYPE_VIDEO
                     ? ($file['duration_seconds'] ?? 15)
-                    : ($validated['duration_seconds'] ?? 15),
+                    : ($validated['duration_seconds'] ?? PlaylistItem::DEFAULT_IMAGE_SECONDS),
                 'created_by' => auth()->id(),
             ]);
 

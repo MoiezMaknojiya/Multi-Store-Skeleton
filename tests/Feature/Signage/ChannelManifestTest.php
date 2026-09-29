@@ -177,7 +177,7 @@ test('a paused channel is not sent at all, and its line is simply skipped', func
 
 test('two channels on one screen keep their places, and a paused one is simply missing', function () {
     $lottery = Channel::factory()->create(['name' => 'Lottery']);
-    ChannelAd::factory()->lasting(5)->create(['channel_id' => $lottery->id, 'title' => 'Jackpot']);
+    ChannelAd::factory()->lasting(8)->create(['channel_id' => $lottery->id, 'title' => 'Jackpot']);
 
     $paused = Channel::factory()->paused()->create(['name' => 'Thanksgiving']);
     ChannelAd::factory()->create(['channel_id' => $paused->id]);
@@ -191,7 +191,7 @@ test('two channels on one screen keep their places, and a paused one is simply m
     // Two entries, in the order the shop arranged them — the paused one leaves no gap.
     expect(collect($items)->pluck('type')->all())->toBe(['channel', 'channel']);
     expect($items[0]['ads'])->toHaveCount(2);
-    expect($items[1]['ads'][0]['duration'])->toBe(5);
+    expect($items[1]['ads'][0]['duration'])->toBe(8);
 });
 
 test('a channel with no ads running today is skipped rather than sent empty', function () {

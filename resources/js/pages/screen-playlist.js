@@ -248,6 +248,17 @@ export function registerScreenPlaylist(Alpine) {
         async save() {
             if (this.saving || !this.dirty) return;
 
+            // A picture stays on screen for at least six seconds (PlaylistItem::MIN_IMAGE_SECONDS): said here, in
+            // the server's own words, before anything is sent.
+            const short = this.items.find((item) => this.isTimed(item)
+                && (Number(item.duration_seconds) || PlaylistItemDefaults.imageSeconds) < PlaylistItemDefaults.minImageSeconds);
+
+            if (short) {
+                window.toast(`${short.title}: a picture stays on screen for at least ${PlaylistItemDefaults.minImageSeconds} seconds.`);
+
+                return;
+            }
+
             this.saving = true;
             try {
                 const { data } = await axios.put(`/screens/${this.screenId}/playlist`, {

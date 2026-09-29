@@ -60,20 +60,25 @@ function savePlaylist(array $lines): void
     test()->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => $lines])->assertOk();
 }
 
-test('a new ad says how long it is on screen: ten seconds, until the designer says otherwise', function () {
+test('a new ad says how long it is on screen: six seconds, until the designer says otherwise', function () {
     $id = $this->postJson('/builder', ['name' => 'Fresh', 'document' => BuilderAd::blankDocument()])->assertOk()->json('ad.id');
 
-    expect(BuilderAd::find($id)->document['duration'])->toBe(BuilderAd::DEFAULT_SECONDS)
-        ->and(BuilderAd::lengthOf(['version' => 1]))->toBe(10);
+    // Owner's rule, 2026-09-28: six by default, and six at least.
+    expect(BuilderAd::find($id)->document['duration'])->toBe(6)
+        ->and(BuilderAd::lengthOf(['version' => 1]))->toBe(6)
+        ->and(BuilderAd::DEFAULT_SECONDS)->toBe(6)
+        ->and(BuilderAd::MIN_SECONDS)->toBe(6);
 });
 
-test('the length is a whole number of seconds, from one to five minutes', function (mixed $seconds, bool $accepted) {
+test('the length is a whole number of seconds, from six seconds to five minutes', function (mixed $seconds, bool $accepted) {
     $response = $this->postJson('/builder', ['name' => 'Fresh', 'document' => [...BuilderAd::blankDocument(), 'duration' => $seconds]]);
 
     $accepted ? $response->assertOk() : $response->assertStatus(422)->assertJsonValidationErrors('document.duration');
 })->with([
-    'one second' => [1, true],
+    'six seconds' => [6, true],
     'five minutes' => [300, true],
+    'five seconds' => [5, false],
+    'one second' => [1, false],
     'nothing' => [0, false],
     'a second past five minutes' => [301, false],
     'half a second' => [8.5, false],
@@ -83,10 +88,11 @@ test('the length is a whole number of seconds, from one to five minutes', functi
     'a list' => [[8], false],
 ]);
 
-test('a length is read as the editor reads it: a whole number from one up, anything else says ten', function (mixed $stored, int $seconds) {
+test('a length is read as the editor reads it: a whole number held between six and five minutes, anything else the default', function (mixed $stored, int $seconds) {
     expect(BuilderAd::lengthOf(['version' => 1, 'duration' => $stored]))->toBe($seconds);
 })->with([
     'eight' => [8, 8],
+    'under six' => [3, BuilderAd::MIN_SECONDS],
     'past five minutes' => [900, BuilderAd::MAX_SECONDS],
     'text' => ['8', BuilderAd::DEFAULT_SECONDS],
     'a truth value' => [true, BuilderAd::DEFAULT_SECONDS],
@@ -105,16 +111,16 @@ test('publishing puts the length on the library row, and every screen plays the 
     // Whatever the save sends for the ad, its line keeps the ad's eight; the picture keeps what it was given.
     savePlaylist([
         ['media_id' => $ad->media_id, 'duration_seconds' => 30],
-        ['media_id' => $picture->id, 'duration_seconds' => 5],
+        ['media_id' => $picture->id, 'duration_seconds' => 12],
     ]);
 
-    expect($this->screen->playlistItems()->orderBy('position')->pluck('duration_seconds')->all())->toBe([8, 5])
-        ->and(secondsOnTheTelevision())->toBe(['html' => 8, 'image' => 5]);
+    expect($this->screen->playlistItems()->orderBy('position')->pluck('duration_seconds')->all())->toBe([8, 12])
+        ->and(secondsOnTheTelevision())->toBe(['html' => 8, 'image' => 12]);
 
     // The panel is told so, and shows no seconds to set for the ad.
     $lines = $this->getJson("/screens/{$this->screen->id}/playlist")->json('items');
     expect([$lines[0]['duration_seconds'], $lines[0]['runs_own_length']])->toBe([8, true])
-        ->and([$lines[1]['duration_seconds'], $lines[1]['runs_own_length']])->toBe([5, false]);
+        ->and([$lines[1]['duration_seconds'], $lines[1]['runs_own_length']])->toBe([12, false]);
 });
 
 test('a changed length reaches the screens only when it is published, and Discard changes takes it back', function () {
@@ -168,10 +174,10 @@ test('a page published before designs had a length keeps the seconds it is given
 
 test('the preview shows the draft as a screen does: for its length, then from the start again; a published page never', function () {
     $ad = adLasting(8);
-    $this->putJson("/builder/{$ad->id}", ['name' => $ad->name, 'document' => [...$ad->document, 'duration' => 3]])->assertOk();
+    $this->putJson("/builder/{$ad->id}", ['name' => $ad->name, 'document' => [...$ad->document, 'duration' => 7]])->assertOk();
 
     expect($this->get("/builder/{$ad->id}/preview")->assertOk()->getContent())
-        ->toContain('<meta charset="utf-8">'."\n".'<meta http-equiv="refresh" content="3">');
+        ->toContain('<meta charset="utf-8">'."\n".'<meta http-equiv="refresh" content="7">');
 
     // The page the screens play has none: the player times it, and moves on to the next item.
     expect(Storage::disk('public')->get($ad->fresh()->media->path))->not->toContain('http-equiv="refresh"');

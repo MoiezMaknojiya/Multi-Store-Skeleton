@@ -36,6 +36,13 @@ class AdvertisingButtonsFlowTest extends DuskTestCase
             $this->jsType($browser, '@campaign-advertiser', 'GAMA Wholesale');
             $browser->attach('@campaign-file', $this->fixtureImage('advert-winter.png', 20, 90, 200))
                 ->waitFor('@campaign-seconds');
+
+            // Six seconds at least (owner's rule, 2026-09-28): said under the field before anything is sent.
+            $this->jsType($browser, '@campaign-seconds', '5');
+            $this->jsClick($browser, '@campaign-save');
+            $browser->waitForText('An advert stays on screen for at least 6 seconds.');
+            $this->assertFalse(Campaign::where('name', 'Winter Cola')->exists(), 'nothing was saved');
+
             $this->jsType($browser, '@campaign-seconds', '10');
             $this->jsType($browser, '@campaign-starts-on', now()->toDateString());
             $this->jsType($browser, '@campaign-ends-on', now()->addWeek()->toDateString());

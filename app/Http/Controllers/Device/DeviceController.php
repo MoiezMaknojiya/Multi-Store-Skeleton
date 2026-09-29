@@ -247,11 +247,12 @@ class DeviceController extends Controller
 
     /**
      * How long a file line plays: its file's own length — a video's, or an Ad Builder page's as its design says —
-     * and only a picture (or a page published before designs had a length) the seconds the line was given.
+     * and only a picture (or a page published before designs had a length) the seconds the line was given, never
+     * under the least (PlaylistItem::secondsForAPicture).
      */
     private function lineSeconds(PlaylistItem $line): int
     {
-        return $line->media?->ownLength() ?? $line->duration_seconds ?? PlaylistItem::DEFAULT_IMAGE_SECONDS;
+        return $line->media?->ownLength() ?? PlaylistItem::secondsForAPicture($line->duration_seconds);
     }
 
     /** One entry in the manifest, whatever it was resolved from. The id identifies

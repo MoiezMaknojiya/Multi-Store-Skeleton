@@ -6,14 +6,15 @@
     <div>
         <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-400">Length</h4>
         <label class="mt-2 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-            <input type="number" min="1" x-bind:max="adSecondsMax" step="1" class="form-input w-24 text-sm"
+            <input type="number" x-bind:min="adSecondsMin" x-bind:max="adSecondsMax" step="1" class="form-input w-24 text-sm"
                    x-bind:value="adSeconds()" @change="$el.value = setAdSeconds($el.value)"
                    aria-label="Seconds on screen" dusk="ad-length" />
             <span>seconds on screen</span>
         </label>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" dusk="ad-length-note">
-            Every screen and channel shows the ad this long. A video in it that is shorter repeats; a longer one is
-            cut when the ad ends.
+            Every screen and channel shows the ad this long: {{ \App\Models\BuilderAd::MIN_SECONDS }} seconds at least,
+            {{ \App\Rules\VideoLength::inWords(\App\Models\BuilderAd::MAX_SECONDS) }} at most. A video in it that is
+            shorter repeats; a longer one is cut when the ad ends.
         </p>
         {{-- An ad on the screens since before designs had a length: its lines keep their own seconds until Publish. --}}
         <p x-show="timedByItsLines" x-cloak class="mt-1 text-xs text-amber-600 dark:text-amber-400" dusk="ad-length-earlier">

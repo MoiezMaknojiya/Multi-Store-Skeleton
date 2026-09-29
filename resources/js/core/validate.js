@@ -50,3 +50,6 @@ export const minCount = (message, min = 1) => (value) =>
 
 export const maxNumber = (message, max) => (value) =>
     !empty(value) && Number(value) > max ? message : null;
+
+export const minNumber = (message, min) => (value) =>
+    !empty(value) && Number(value) < min ? message : null;

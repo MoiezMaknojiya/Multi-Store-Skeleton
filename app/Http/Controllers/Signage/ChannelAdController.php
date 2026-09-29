@@ -300,7 +300,8 @@ class ChannelAdController extends Controller implements HasMiddleware
                 'orientation' => $ad->orientation,
                 'url' => $ad->url,
                 'thumbnail_url' => $ad->thumbnail_url,
-                'duration_seconds' => $ad->duration_seconds,
+                // A picture's seconds as it plays them: never under the least, which an ad saved before it plays for.
+                'duration_seconds' => $ad->duration_seconds === null ? null : PlaylistItem::secondsForAPicture($ad->duration_seconds),
                 'play_seconds' => $ad->play_seconds,
                 // The file's own length — a video's, an ad page's — when it has one: no seconds to set for it.
                 'own_length' => $ad->media?->ownLength(),

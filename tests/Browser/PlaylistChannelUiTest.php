@@ -133,14 +133,14 @@ class PlaylistChannelUiTest extends DuskTestCase
             'store_id' => $store->id, 'title' => 'Burger', 'mime_type' => 'image/png', 'thumbnail_path' => null,
             'path' => $this->putImage("media/{$store->id}/burger.png", 200, 120, 30),
         ]);
-        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $poster->id, 'position' => 0, 'duration_seconds' => 2]);
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $poster->id, 'position' => 0, 'duration_seconds' => 6]);
 
         // The platform's channel shows two files of the platform's own library.
         $gama = Channel::factory()->perPass(1)->create(['name' => 'GAMA']);
-        ChannelAd::factory()->lasting(2)->showing([
+        ChannelAd::factory()->lasting(6)->showing([
             'mime_type' => 'image/png', 'thumbnail_path' => null, 'path' => $this->putImage('media/platform/monster.png', 30, 200, 60),
         ])->create(['channel_id' => $gama->id, 'title' => 'Monster', 'position' => 0]);
-        ChannelAd::factory()->lasting(2)->showing([
+        ChannelAd::factory()->lasting(6)->showing([
             'mime_type' => 'image/png', 'thumbnail_path' => null, 'path' => $this->putImage('media/platform/coke.png', 220, 30, 40),
         ])->create(['channel_id' => $gama->id, 'title' => 'Coke', 'position' => 1]);
         PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $gama->id, 'position' => 1]);
@@ -154,9 +154,9 @@ class PlaylistChannelUiTest extends DuskTestCase
             $visible = '#layer-a:not([hidden]) img, #layer-b:not([hidden]) img';
             $tv->waitUntil("!!document.querySelector('{$visible}')", 30);
 
-            // Read the wall as it changes: one name each time the picture does.
+            // Read the wall as it changes: one name each time the picture does — five changes of six seconds each.
             $seen = [];
-            $tv->waitUsing(45, 100, function () use ($tv, $visible, &$seen) {
+            $tv->waitUsing(60, 100, function () use ($tv, $visible, &$seen) {
                 $src = $tv->script("return (document.querySelector('{$visible}') || {}).src || '';")[0];
                 $name = basename((string) parse_url($src, PHP_URL_PATH));
 
@@ -195,17 +195,18 @@ class PlaylistChannelUiTest extends DuskTestCase
             'store_id' => $store->id, 'title' => 'Burger', 'mime_type' => 'image/png', 'thumbnail_path' => null,
             'path' => $this->putImage("media/{$store->id}/burger.png", 200, 120, 30),
         ]);
-        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $poster->id, 'position' => 0, 'duration_seconds' => 2]);
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $poster->id, 'position' => 0, 'duration_seconds' => 6]);
 
         // The shop's own channel: a picture of its library, then an ad its Ad Builder published into that library.
         $deals = Channel::factory()->create(['name' => 'Alpha Deals', 'store_id' => $store->id]);
-        ChannelAd::factory()->lasting(2)->showing([
+        ChannelAd::factory()->lasting(6)->showing([
             'mime_type' => 'image/png', 'thumbnail_path' => null, 'path' => $this->putImage("media/{$store->id}/monster.png", 30, 200, 60),
         ])->create(['channel_id' => $deals->id, 'title' => 'Monster', 'position' => 0]);
 
         $design = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $store->id, 'name' => 'Winter sale']);
         $page = app(AdPublisher::class)->publish($design);
-        ChannelAd::factory()->lasting(3)->create(['channel_id' => $deals->id, 'media_id' => $page->id, 'title' => 'Winter sale', 'position' => 1]);
+        // The page plays for its own length (six seconds, its design's default), so the ad keeps no seconds.
+        ChannelAd::factory()->create(['channel_id' => $deals->id, 'media_id' => $page->id, 'title' => 'Winter sale', 'position' => 1, 'duration_seconds' => null]);
         PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $deals->id, 'position' => 1]);
 
         $this->browse(function (Browser $tv) use ($design, $page) {
@@ -253,7 +254,7 @@ class PlaylistChannelUiTest extends DuskTestCase
             $this->assertNotSame($firstVersion, $newVersion);
             $this->assertStringContainsString('Spring sale', (string) Storage::disk('public')->get($republished->path));
 
-            // The playlist poll is every 30 seconds, and the page is up for 3 seconds of every 7.
+            // The playlist poll is every 30 seconds, and the page is up for 6 seconds of every 18.
             $tv->waitUsing(80, 150, fn () => str_contains($showing(), $newVersion));
 
             // Leave the player, so its timers do not follow this browser into the next test.

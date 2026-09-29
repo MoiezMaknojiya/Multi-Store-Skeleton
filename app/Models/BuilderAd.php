@@ -55,9 +55,13 @@ class BuilderAd extends Model
      * background 20 seconds, toh 8 seconds k bad change honi chahiye"). The industry's way — Xibo's layout
      * duration, Canva's page duration: every playlist and channel plays the ad this long, a video inside it
      * (its background's or one on its stage) repeats when it is shorter and is cut when the ad ends. Published
-     * with the page, as the media row's duration_seconds (Media::ownLength()); a design with none says ten.
+     * with the page, as the media row's duration_seconds (Media::ownLength()); a design with none says six, a
+     * picture's default (owner's rule, 2026-09-28).
      */
-    public const DEFAULT_SECONDS = 10;
+    public const DEFAULT_SECONDS = PlaylistItem::DEFAULT_IMAGE_SECONDS;
+
+    /** The shortest an ad may be: the six seconds a picture is held to (PlaylistItem::MIN_IMAGE_SECONDS). */
+    public const MIN_SECONDS = PlaylistItem::MIN_IMAGE_SECONDS;
 
     /** The longest an ad may be — as long as a picture may hold a channel's screen (ChannelAd::MAX_IMAGE_SECONDS). */
     public const MAX_SECONDS = 300;
@@ -312,13 +316,15 @@ class BuilderAd extends Model
     }
 
     /**
-     * How long a design says its ad is on screen, read as the editor reads it (normaliseDocument): a whole number
-     * from one up, held inside what the rules allow — anything else, or nothing, says ten.
+     * How long a design says its ad is on screen, read as the editor reads it (normaliseDocument, adSeconds): a
+     * whole number from one up, held inside what the rules allow — anything else, or nothing, says the default.
      */
     public static function lengthOf(?array $document): int
     {
         $seconds = $document['duration'] ?? null;
 
-        return is_int($seconds) && $seconds >= 1 ? min(self::MAX_SECONDS, $seconds) : self::DEFAULT_SECONDS;
+        return is_int($seconds) && $seconds >= 1
+            ? max(self::MIN_SECONDS, min(self::MAX_SECONDS, $seconds))
+            : self::DEFAULT_SECONDS;
     }
 }

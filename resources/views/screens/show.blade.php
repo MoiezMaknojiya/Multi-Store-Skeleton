@@ -140,7 +140,7 @@
                                 <div class="flex items-center gap-1">
                                     <template x-if="isTimed(item)">
                                         <span class="flex items-center gap-1">
-                                            <input type="number" min="1" max="86400" x-model.number="item.duration_seconds"
+                                            <input type="number" min="{{ \App\Models\PlaylistItem::MIN_IMAGE_SECONDS }}" max="86400" x-model.number="item.duration_seconds"
                                                 @input="dirty = true" x-bind:dusk="'playlist-duration-' + index"
                                                 x-bind:disabled="!canEdit"
                                                 class="form-input w-20 text-sm text-right">
