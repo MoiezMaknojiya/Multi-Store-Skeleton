@@ -9,8 +9,8 @@
 import axios from 'axios';
 import { windowLabel as clockRange } from '../core/clock.js';
 import { createCrudTable } from '../core/crud-table-base.js';
-import { fileError, readVideoMeta } from '../core/media-file.js';
-import { validate, required, maxLen } from '../core/validate.js';
+import { fileError, readVideoMeta, videoLengthError } from '../core/media-file.js';
+import { validate, required, maxLen, maxNumber } from '../core/validate.js';
 
 const blankForm = () => ({
     name: '',
@@ -112,7 +112,17 @@ export function registerCampaignsTable(Alpine) {
                         const meta = await readVideoMeta(file);
                         // Another file was chosen while this one was measured: its numbers are
                         // not that file's, and must not ride along with its upload.
-                        if (this.selectedFile === file) this.clientMeta = meta;
+                        if (this.selectedFile === file) {
+                            this.clientMeta = meta;
+
+                            // One break at most (Campaign::MAX_AD_SECONDS): said now, not after the upload.
+                            const tooLong = videoLengthError(meta, this.maxBreakSeconds, 'An advert');
+                            if (tooLong) {
+                                this.formErrors = { file: [tooLong] };
+                                this.selectedFile = null;
+                                this.preparing = false;
+                            }
+                        }
                     } finally {
                         if (this.selectedFile === file) this.preparing = false;
                     }
@@ -141,7 +151,12 @@ export function registerCampaignsTable(Alpine) {
                     name: [required('Name'), maxLen('Name', 120)],
                     advertiser_name: [maxLen('Advertiser', 120)],
                     // Only an image has seconds; a video's field is not even shown.
-                    ...(this.isVideoAd() ? {} : { duration_seconds: [required('Seconds')] }),
+                    ...(this.isVideoAd() ? {} : {
+                        duration_seconds: [
+                            required('Seconds'),
+                            maxNumber(`An advert may be on screen for at most ${this.maxBreakSeconds} seconds: one break.`, this.maxBreakSeconds),
+                        ],
+                    }),
                 });
 
                 if (! this.editingItem && ! this.selectedFile) {

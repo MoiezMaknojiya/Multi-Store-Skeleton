@@ -26,8 +26,8 @@
                 @endcan
 
                 <p class="text-sm text-gray-500 dark:text-gray-400" dusk="assets-scope-note">
-                    Pictures and videos used inside ads. Separate from the media library, which is what your
-                    screens play.
+                    Pictures and videos used inside ads, a video 5 minutes at most. Separate from the media library,
+                    which is what your screens play.
                     @if ($stores !== [])
                         An upload goes to the shop chosen in the Shop list.
                     @endif
@@ -48,6 +48,9 @@
                 <x-crud.search-input placeholder="Search assets..." />
             </div>
         </div>
+
+        {{-- The shelf counts toward the shop's 512 MB like its library does. --}}
+        <x-storage-meter />
 
         <div class="card">
             <div class="p-5">

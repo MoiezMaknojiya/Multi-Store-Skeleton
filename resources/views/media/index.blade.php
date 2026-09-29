@@ -57,6 +57,10 @@
                     <option value="expiry_desc">Expiry latest</option>
                 </select>
             </div>
+
+            {{-- The shop's 512 MB: its own inside a store, the chosen shop's above the stores, none for the
+                 platform's own library. --}}
+            <x-storage-meter />
         </div>
 
         <x-crud.table-wrapper title="All Media" searchPlaceholder="Search media (title, description...)" :columns="6">
@@ -147,7 +151,7 @@
                                       file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0
                                       file:text-sm file:font-medium file:bg-blue-600 file:text-white
                                       hover:file:bg-blue-700">
-                        <p class="mt-1 text-xs text-gray-400">Images (JPG, PNG, GIF, WEBP) and videos (MP4, WEBM), up to 250 MB.</p>
+                        <p class="mt-1 text-xs text-gray-400">Images (JPG, PNG, GIF, WEBP) and videos (MP4, WEBM), up to 250 MB. A video may be at most 5 minutes long.</p>
                     </x-crud.form-field>
 
                     <x-crud.form-field label="Title" field="title">

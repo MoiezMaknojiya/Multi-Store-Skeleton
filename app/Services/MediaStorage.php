@@ -4,23 +4,35 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Models\BuilderAsset;
 use App\Models\Media;
+use Closure;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Puts an uploaded file on disk and works out everything the library needs to
- * describe it: type, dimensions, orientation and a thumbnail.
+ * describe it: type, dimensions, orientation, length and a thumbnail.
  *
  * Thumbnails are made with GD, which ships with PHP — no image package is added
  * for this. GD cannot open a video, and ffmpeg is not available, so a video's
  * poster frame is captured in the BROWSER at upload time (a <video> drawn onto a
- * <canvas>) and posted alongside the file as a data URL. Same for a video's
- * duration and dimensions, which the browser already knows.
+ * <canvas>) and posted alongside the file as a data URL, with its dimensions. Its
+ * LENGTH is read from the file itself (VideoDuration): the browser's is a number
+ * anybody can write by hand.
+ *
+ * A shop's files are kept only while the shop has room for them (StoreStorage).
  */
 class MediaStorage
 {
+    public function __construct(
+        private readonly VideoDuration $durations,
+        private readonly StoreStorage $quota,
+    ) {}
+
     /** Longest edge of a generated thumbnail, in pixels. */
     private const THUMB_MAX = 480;
 
@@ -52,11 +64,77 @@ class MediaStorage
      */
     public function addToLibrary(UploadedFile $file, ?int $storeId, array $clientMeta, ?string $typedTitle, ?int $createdBy): Media
     {
-        return Media::create([
+        // A full shop is told before its upload is even written. The platform's own library has no wall.
+        if ($storeId !== null) {
+            $this->quota->assertRoomFor($storeId, (int) $file->getSize());
+        }
+
+        $attributes = [
             ...$this->store($file, $storeId, $clientMeta),
             'title' => $this->titleFor($typedTitle, $file),
             'created_by' => $createdBy,
-        ]);
+        ];
+
+        if ($storeId === null) {
+            return Media::create($attributes);
+        }
+
+        /** @var Media */
+        return $this->keptWithinTheWall($storeId, $attributes, fn () => Media::create($attributes));
+    }
+
+    /**
+     * Put a file on a shop's Ad Builder shelf and make its row — its files count toward the shop's storage like
+     * the library's (the shelf is a way onto the disk as much as the Media page is).
+     *
+     * @param  array<string, mixed>  $clientMeta  browser-measured width/height/poster
+     */
+    public function addBuilderAsset(UploadedFile $file, int $storeId, array $clientMeta, string $title, ?int $createdBy): BuilderAsset
+    {
+        $this->quota->assertRoomFor($storeId, (int) $file->getSize());
+
+        $stored = $this->storeBuilderAsset($file, $storeId, $clientMeta);
+
+        /** @var BuilderAsset */
+        return $this->keptWithinTheWall($storeId, $stored, fn () => BuilderAsset::fromStoredFile($storeId, $title, $stored, $createdBy));
+    }
+
+    /**
+     * Make the row for files just written, only while the shop has room for them and their preview — decided
+     * under the shop's lock (StoreStorage::withRoom). Refused, or failed for any reason, the files go again:
+     * nothing is left on disk that no row names.
+     *
+     * @param  array<string, mixed>  $stored
+     * @param  Closure(): Model  $create
+     */
+    private function keptWithinTheWall(int $storeId, array $stored, Closure $create): Model
+    {
+        try {
+            return $this->quota->withRoom($storeId, $this->bytesOf($stored), $create);
+        } catch (Throwable $refused) {
+            $this->deleteFiles((string) $stored['disk'], (string) $stored['path'], $stored['thumbnail_path']);
+
+            throw $refused;
+        }
+    }
+
+    /**
+     * What a stored file weighs: itself, as its row records it, and its preview on disk.
+     *
+     * @param  array<string, mixed>  $stored
+     */
+    private function bytesOf(array $stored): int
+    {
+        return (int) $stored['size'] + ($stored['thumbnail_path'] === null ? 0 : $this->sizeOnDisk((string) $stored['disk'], (string) $stored['thumbnail_path']));
+    }
+
+    private function sizeOnDisk(string $disk, string $path): int
+    {
+        try {
+            return (int) Storage::disk($disk)->size($path);
+        } catch (Throwable) {
+            return 0;
+        }
     }
 
     /**
@@ -126,6 +204,11 @@ class MediaStorage
         $mime = (string) $file->getMimeType();
         $type = str_starts_with($mime, 'video/') ? Media::TYPE_VIDEO : Media::TYPE_IMAGE;
 
+        // A video's length, from its own bytes — the upload's validation read the same file (App\Rules\VideoLength),
+        // so this is remembered, not read twice. Only a caller that never validated falls back to the browser's.
+        $measured = $type === Media::TYPE_VIDEO ? $this->durations->seconds((string) $file->getRealPath()) : null;
+        $clientSeconds = isset($clientMeta['duration_seconds']) ? (int) $clientMeta['duration_seconds'] : null;
+
         // The extension comes from the type read off the BYTES, never from the name the client sent:
         // `mimes:` judges the bytes, so a real PNG named `promo.html` passes it — and kept as .html it
         // would be served as a page from the panel's own address, running whatever its text chunks held.
@@ -157,8 +240,8 @@ class MediaStorage
             'size' => $file->getSize(),
             'width' => $width,
             'height' => $height,
-            'duration_seconds' => $type === Media::TYPE_VIDEO && isset($clientMeta['duration_seconds'])
-                ? (int) $clientMeta['duration_seconds']
+            'duration_seconds' => $type === Media::TYPE_VIDEO
+                ? ($measured !== null ? (int) round($measured) : $clientSeconds)
                 : null,
             'orientation' => $this->orientation($width, $height),
         ];
@@ -240,16 +323,32 @@ class MediaStorage
     }
 
     /**
-     * An image the BROWSER drew, handed over as a data URI, written to a path we choose.
+     * An image the BROWSER drew, handed over as a data URI, written to a path we choose — a shop's design's
+     * poster, kept only while the shop has room for it, in place of the poster it had.
      *
      * The Ad Builder's poster comes this way: an ad is HTML, and there is no headless browser on the
      * server to photograph it, so the editor captures its own stage and sends the picture along with the
      * save. Anything that is not a small PNG or JPEG data URI is quietly refused — a listing without a
-     * poster is a nuisance, a listing with somebody's arbitrary bytes in it is a problem.
+     * poster is a nuisance, a listing with somebody's arbitrary bytes in it is a problem. A poster is a
+     * nicety, so a full shop keeps the one it had (or none) and the save goes on: nothing is ever refused
+     * for a photograph of a design (StoreStorage).
      */
-    public function storePoster(string $target, ?string $dataUrl, string $disk = 'public'): ?string
+    public function storePosterWithin(int $storeId, string $target, ?string $dataUrl, Closure $record, string $disk = 'public'): ?string
     {
-        return $this->savePoster($disk, $target, $dataUrl);
+        $jpeg = $this->encodePoster($dataUrl);
+
+        if ($jpeg === null) {
+            return null;
+        }
+
+        // Written and recorded ($record names it on its row) inside the lock, so the poster is counted from the
+        // moment it exists.
+        return $this->quota->withRoomOrSkip($storeId, strlen($jpeg) - $this->sizeOnDisk($disk, $target), function () use ($disk, $target, $jpeg, $record) {
+            Storage::disk($disk)->put($target, $jpeg);
+            $record($target);
+
+            return $target;
+        });
     }
 
     /**
@@ -263,6 +362,20 @@ class MediaStorage
      * cosmetic loss, never a failed upload.
      */
     private function savePoster(string $disk, string $target, ?string $dataUrl): ?string
+    {
+        $jpeg = $this->encodePoster($dataUrl);
+
+        if ($jpeg === null) {
+            return null;
+        }
+
+        Storage::disk($disk)->put($target, $jpeg);
+
+        return $target;
+    }
+
+    /** GD's own JPEG of a browser-drawn poster, or null for anything that is not a small, real picture. */
+    private function encodePoster(?string $dataUrl): ?string
     {
         if (! $dataUrl || ! preg_match('#^data:image/(jpeg|png);base64,#', $dataUrl, $match)) {
             return null;
@@ -293,12 +406,6 @@ class MediaStorage
         imagejpeg($image, null, 85);
         $jpeg = (string) ob_get_clean();
 
-        if ($jpeg === '') {
-            return null;
-        }
-
-        Storage::disk($disk)->put($target, $jpeg);
-
-        return $target;
+        return $jpeg === '' ? null : $jpeg;
     }
 }

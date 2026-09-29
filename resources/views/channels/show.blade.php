@@ -235,7 +235,7 @@
                                    accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm">
                         </x-crud.form-field>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" dusk="channel-ad-upload-note">
-                            JPG, PNG, GIF, WEBP, MP4 or WEBM &mdash; up to 250 MB. Ads play with no sound.
+                            JPG, PNG, GIF, WEBP, MP4 or WEBM &mdash; up to 250 MB, a video 5 minutes at most. Ads play with no sound.
                             It joins <span x-text="uploadsJoin"></span>.
                             <span x-show="preparing" x-cloak>Reading the video&hellip;</span>
                         </p>

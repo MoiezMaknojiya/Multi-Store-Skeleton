@@ -10,6 +10,7 @@ use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\Store;
 use App\Services\MediaStorage;
+use App\Services\StoreStorage;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,7 +29,7 @@ class BuilderAssetController extends Controller
 {
     use HandlesCrudData;
 
-    public function __construct(private readonly MediaStorage $storage) {}
+    public function __construct(private readonly MediaStorage $storage, private readonly StoreStorage $quota) {}
 
     public function index(): View
     {
@@ -38,6 +39,19 @@ class BuilderAssetController extends Controller
             : [];
 
         return view('builder.assets', ['stores' => $stores]);
+    }
+
+    /**
+     * The storage of the shop the shelf is showing: inside a store its own; above the stores the shop chosen
+     * in the Shop list, or none while every shop's shelf is listed.
+     *
+     * @return array{used: int, limit: int}|null
+     */
+    private function storageOf(?int $chosenStoreId): ?array
+    {
+        $storeId = auth()->user()->globalRole() !== null ? $chosenStoreId : ((int) session('current_store_id') ?: null);
+
+        return $storeId !== null && Store::whereKey($storeId)->exists() ? $this->quota->summary($storeId) : null;
     }
 
     /** The shelf, newest first, each row saying which ads use it. */
@@ -51,7 +65,7 @@ class BuilderAssetController extends Controller
             ->with('store:id,name')
             ->latest();
 
-        return $this->paginatedResponse(
+        $listing = $this->paginatedResponse(
             $request,
             $query,
             ['title'],
@@ -67,6 +81,11 @@ class BuilderAssetController extends Controller
                 });
             },
         );
+
+        return $listing->setData([
+            ...$listing->getData(true),
+            'storage' => $this->storageOf(isset($filters['store_id']) ? (int) $filters['store_id'] : null),
+        ]);
     }
 
     /** Put a file on the shelf. */
@@ -75,18 +94,18 @@ class BuilderAssetController extends Controller
         $storeId = $this->targetStoreId($request->validated());
 
         $file = $request->file('file');
-        $stored = $this->storage->storeBuilderAsset($file, $storeId, $request->validated());
 
-        $asset = BuilderAsset::fromStoredFile(
+        $asset = $this->storage->addBuilderAsset(
+            $file,
             $storeId,
+            $request->validated(),
             $this->titleFor($request->input('title'), $file->getClientOriginalName()),
-            $stored,
             auth()->id(),
         );
 
         ActivityLog::record('ad_asset.uploaded', $asset, "Uploaded {$asset->title} to the ad builder", storeId: $storeId);
 
-        return response()->json(['message' => 'Uploaded', 'asset' => $asset]);
+        return response()->json(['message' => 'Uploaded', 'asset' => $asset, 'storage' => $this->quota->summary($storeId)]);
     }
 
     /**
@@ -116,7 +135,7 @@ class BuilderAssetController extends Controller
 
         ActivityLog::record('ad_asset.deleted', null, "Deleted ad asset {$title}", storeId: $storeId);
 
-        return response()->json(['message' => 'Deleted']);
+        return response()->json(['message' => 'Deleted', 'storage' => $this->quota->summary($storeId)]);
     }
 
     /**

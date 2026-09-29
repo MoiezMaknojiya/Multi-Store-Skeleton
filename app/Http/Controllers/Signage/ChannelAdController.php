@@ -11,6 +11,7 @@ use App\Models\ChannelAd;
 use App\Models\Media;
 use App\Models\PlaylistItem;
 use App\Services\MediaStorage;
+use App\Services\StoreStorage;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -36,7 +37,7 @@ class ChannelAdController extends Controller implements HasMiddleware
 {
     use HandlesCrudData;
 
-    public function __construct(private readonly MediaStorage $storage) {}
+    public function __construct(private readonly MediaStorage $storage, private readonly StoreStorage $quota) {}
 
     /**
      * Every action here reaches one channel, and only a channel within reach — checked before anything else
@@ -64,10 +65,10 @@ class ChannelAdController extends Controller implements HasMiddleware
         ];
     }
 
-    /** The channel's ads, in the order they play. */
+    /** The channel's ads, in the order they play — and how full the library an upload here joins is. */
     public function index(Channel $channel): JsonResponse
     {
-        return response()->json(['ads' => $this->adsPayload($channel)]);
+        return response()->json(['ads' => $this->adsPayload($channel), 'storage' => $this->quota->summary($channel->store_id)]);
     }
 
     /**
@@ -115,10 +116,14 @@ class ChannelAdController extends Controller implements HasMiddleware
     {
         $validated = $request->validated();
 
-        $ad = DB::transaction(function () use ($request, $validated, $channel) {
-            if ($request->hasFile('file')) {
+        // An upload joins the library first, in a transaction of its own under the shop's lock (StoreStorage) —
+        // inside this one, what the shop holds would be read as this transaction first saw it, not as it is now.
+        $uploaded = $request->hasFile('file') ? $this->uploadIntoLibrary($request, $channel) : null;
+
+        $ad = DB::transaction(function () use ($request, $validated, $channel, $uploaded) {
+            if ($uploaded !== null) {
                 // A file uploaded this moment is on no playlist.
-                $media = $this->uploadIntoLibrary($request, $channel);
+                $media = $uploaded;
             } else {
                 $media = $request->chosenMedia();
                 $this->refuseAFileAPlaylistHolds($media);
@@ -139,7 +144,7 @@ class ChannelAdController extends Controller implements HasMiddleware
 
         ActivityLog::record('channel.ad_added', $channel, "Added ad {$ad->title} to channel {$channel->name}");
 
-        return response()->json(['message' => 'Ad added', 'ads' => $this->adsPayload($channel)]);
+        return response()->json(['message' => 'Ad added', 'ads' => $this->adsPayload($channel), 'storage' => $this->quota->summary($channel->store_id)]);
     }
 
     /**
@@ -150,16 +155,19 @@ class ChannelAdController extends Controller implements HasMiddleware
     {
         $validated = $request->validated();
 
-        DB::transaction(function () use ($request, $validated, $channel, $ad) {
+        // An upload joins the library first, in a transaction of its own: see store().
+        $uploaded = $request->hasFile('file') ? $this->uploadIntoLibrary($request, $channel) : null;
+
+        DB::transaction(function () use ($request, $validated, $ad, $uploaded) {
             $media = match (true) {
-                $request->hasFile('file') => $this->uploadIntoLibrary($request, $channel),
+                $uploaded !== null => $uploaded,
                 filled($validated['media_id'] ?? null) => $request->chosenMedia(),
                 default => $ad->media,
             };
 
             // The file the ad already shows is its own, and one uploaded this moment is on no playlist: only a
             // library file coming INTO the channel is asked about.
-            if (! $request->hasFile('file') && (int) $media->id !== (int) $ad->media_id) {
+            if ($uploaded === null && (int) $media->id !== (int) $ad->media_id) {
                 $this->refuseAFileAPlaylistHolds($media);
             }
 
@@ -174,7 +182,7 @@ class ChannelAdController extends Controller implements HasMiddleware
 
         ActivityLog::record('channel.ad_updated', $channel, "Updated ad {$ad->title} in channel {$channel->name}");
 
-        return response()->json(['message' => 'Ad updated', 'ads' => $this->adsPayload($channel)]);
+        return response()->json(['message' => 'Ad updated', 'ads' => $this->adsPayload($channel), 'storage' => $this->quota->summary($channel->store_id)]);
     }
 
     /** Take an ad out of the channel. Its file stays in its library. */

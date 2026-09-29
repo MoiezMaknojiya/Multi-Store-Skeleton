@@ -119,8 +119,10 @@ class CampaignController extends Controller
                 // A video's own length decides how long the break runs; the typed
                 // seconds only govern an image.
                 'media_duration_seconds' => $file['duration_seconds'],
-                // A video's form sends no typed seconds; its measured length stands in.
-                'duration_seconds' => $validated['duration_seconds'] ?? $file['duration_seconds'] ?? 15,
+                // A video's form sends no typed seconds; its length, read from the file, stands in.
+                'duration_seconds' => $file['type'] === Media::TYPE_VIDEO
+                    ? ($file['duration_seconds'] ?? 15)
+                    : ($validated['duration_seconds'] ?? 15),
                 'created_by' => auth()->id(),
             ]);
 
@@ -152,7 +154,9 @@ class CampaignController extends Controller
                     ...$attributes,
                     ...$file,
                     'media_duration_seconds' => $file['duration_seconds'],
-                    'duration_seconds' => $validated['duration_seconds'] ?? $file['duration_seconds'] ?? $campaign->duration_seconds,
+                    'duration_seconds' => $file['type'] === Media::TYPE_VIDEO
+                        ? ($file['duration_seconds'] ?? $campaign->duration_seconds)
+                        : ($validated['duration_seconds'] ?? $campaign->duration_seconds),
                 ];
             } elseif ($campaign->type !== Media::TYPE_VIDEO) {
                 // Retimed without a new file. Only an image has seconds to change — a

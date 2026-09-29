@@ -47,3 +47,6 @@ export const lettersNumbersSpaces = (label) => (value) =>
 
 export const minCount = (message, min = 1) => (value) =>
     !Array.isArray(value) || value.length < min ? message : null;
+
+export const maxNumber = (message, max) => (value) =>
+    !empty(value) && Number(value) > max ? message : null;

@@ -108,6 +108,8 @@ export function createCrudTable({
                 this.currentPage = data.currentPage;
                 this.lastPage = data.lastPage;
                 this.refreshFailed = false;
+                /* A listing may say more than its rows — the media library says how full its shop is. */
+                if (typeof this.afterFetch === 'function') this.afterFetch(data);
             } catch (error) {
                 if (requestToken !== this.fetchToken) return;
                 console.error(`Failed to fetch ${entityLabel}s:`, error);

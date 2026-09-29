@@ -5,6 +5,7 @@ namespace App\Http\Requests\Signage;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
+use App\Rules\VideoLength;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Database\Eloquent\Builder;
@@ -54,13 +55,16 @@ class ChannelAdRequest extends FormRequest
                     }
                 },
             ],
+            // `bail`: the length is read only from a file that passed everything before it.
             'file' => [
+                'bail',
                 $editing ? 'nullable' : 'required_without:media_id',
                 'nullable',
                 'prohibits:media_id',
                 'file',
                 'mimes:'.StoreMediaRequest::ALLOWED_MIMES,
                 'max:'.StoreMediaRequest::MAX_KILOBYTES,
+                new VideoLength(Media::MAX_VIDEO_SECONDS),
             ],
             // Blank takes the file's own title.
             'title' => ['nullable', 'string', 'max:255'],
@@ -77,7 +81,7 @@ class ChannelAdRequest extends FormRequest
             'duration_seconds' => ['nullable', 'integer', 'min:0', 'max:86400'],
             'width' => ['nullable', 'integer', 'min:1', 'max:16384'],
             'height' => ['nullable', 'integer', 'min:1', 'max:16384'],
-            'poster' => ['nullable', 'string', 'starts_with:data:image/'],
+            'poster' => ['nullable', 'string', 'starts_with:data:image/', 'max:'.StoreMediaRequest::POSTER_MAX_CHARACTERS],
 
             // Both blank means "until it is taken out".
             'starts_on' => ['nullable', 'date_format:Y-m-d'],

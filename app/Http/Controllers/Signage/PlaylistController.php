@@ -509,8 +509,16 @@ class PlaylistController extends Controller
         // to a television the other way round.
         ksort($items);
 
+        // A video runs to its own end and has no seconds anywhere in the panel (owner's rule): its line keeps
+        // the length read from the file, whatever a request sends — the player's backstop is that length, so a
+        // line written by hand cannot let a longer video run past it.
+        $videoSeconds = Media::whereIn('id', collect($items)->pluck('media_id')->filter()->map(fn (int|string $id) => (int) $id)->all())
+            ->where('type', Media::TYPE_VIDEO)
+            ->pluck('duration_seconds', 'id');
+
         foreach (array_values($items) as $position => $item) {
             $isChannel = filled($item['channel_id'] ?? null);
+            $isVideo = ! $isChannel && $videoSeconds->has((int) $item['media_id']);
 
             $created = PlaylistItem::create([
                 'screen_id' => $screen->id,
@@ -518,7 +526,11 @@ class PlaylistController extends Controller
                 'channel_id' => $isChannel ? $item['channel_id'] : null,
                 'position' => $position,
                 // A channel line lasts as long as its ads do; only a file keeps a length.
-                'duration_seconds' => $isChannel ? null : $item['duration_seconds'],
+                'duration_seconds' => match (true) {
+                    $isChannel => null,
+                    $isVideo => $videoSeconds[(int) $item['media_id']] ?: ChannelAd::UNMEASURED_VIDEO_SECONDS,
+                    default => $item['duration_seconds'],
+                },
             ]);
 
             // A line's rules are rebuilt the same way — one missing a key that another has can

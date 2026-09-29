@@ -360,6 +360,15 @@ Not built (said rather than half-built): typewriter, mask reveal and marquee.
 
 ## 9. Output and playback
 
+**The shop's 512 MB (owner, 2026-09-28).** The Builder writes into its shop's storage in three places, each
+through `App\Services\StoreStorage` (`.claude/rules/02-project-conventions.md`, **Upload limits**): the shelf's
+uploads (`MediaStorage::addBuilderAsset` — refused when they do not fit, and a video is 5 minutes at most, as in
+the library), a published page with its poster's copy (`AdPublisher::publish` — what it adds less what the
+version before held has to fit, else "Not enough storage…" under `publish` and the screens keep what they have),
+and a design's poster (`MediaStorage::storePosterWithin`, and the copy a duplicate starts with) — a nicety,
+simply not written when there is no room, never a refusal of the save. `builder:recompile` and Discard changes
+rewrite what is already there and are not asked.
+
 **Publish** compiles the document into one self-contained document:
 
 ```html

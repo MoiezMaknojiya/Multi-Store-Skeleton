@@ -135,7 +135,7 @@
                                accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm">
                     </x-crud.form-field>
                     <p class="text-xs text-gray-500 dark:text-gray-400 -mt-2">
-                        JPG, PNG, GIF, WEBP, MP4 or WEBM &mdash; up to 250 MB. Adverts play with no sound.
+                        JPG, PNG, GIF, WEBP, MP4 or WEBM &mdash; up to 250 MB, 60 seconds at most. Adverts play with no sound.
                         <span x-show="editingItem" x-cloak>Leave empty to keep the current advert.</span>
                         <span x-show="preparing" x-cloak>Reading the video&hellip;</span>
                     </p>

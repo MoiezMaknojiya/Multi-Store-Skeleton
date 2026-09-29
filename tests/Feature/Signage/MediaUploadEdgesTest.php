@@ -4,6 +4,7 @@ use App\Models\Media;
 use App\Models\Store;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Tests\Support\VideoFiles;
 
 /*
 |--------------------------------------------------------------------------
@@ -131,7 +132,8 @@ test('a file right on the limit is still accepted', function () {
     $this->actingAs($actor)
         ->withSession(['current_store_id' => $store->id])
         ->post('/media', [
-            'file' => UploadedFile::fake()->create('feature.mp4', 256_000, 'video/mp4'),
+            // A real video's bytes, reporting exactly the ceiling's size.
+            'file' => VideoFiles::upload(VideoFiles::mp4(120), 'feature.mp4', 256_000),
         ])
         ->assertOk();
 

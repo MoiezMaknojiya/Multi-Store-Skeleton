@@ -11,6 +11,7 @@ use App\Models\BuilderAd;
 use App\Models\Media;
 use App\Models\Store;
 use App\Services\MediaStorage;
+use App\Services\StoreStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -52,7 +53,7 @@ class MediaController extends Controller
      * reads one library at a time — `library=platform` for the platform's own, or a shop's id — and with no
      * `library` every library within reach; inside a store there is only the store's, whatever is sent.
      */
-    public function data(Request $request): JsonResponse
+    public function data(Request $request, StoreStorage $quota): JsonResponse
     {
         $filters = $request->validate([
             'type' => ['nullable', Rule::in([Media::TYPE_IMAGE, Media::TYPE_VIDEO, Media::TYPE_HTML])],
@@ -82,17 +83,31 @@ class MediaController extends Controller
         [$column, $direction] = self::SORTS[$filters['sort'] ?? 'newest'] ?? self::SORTS['newest'];
         $query->orderBy($column, $direction);
 
-        return $this->paginatedResponse($request, $query, ['title', 'description'], 'media', ['*'],
+        $listing = $this->paginatedResponse($request, $query, ['title', 'description'], 'media', ['*'],
             // Why a file may not be deleted yet, so the panel says it before anybody confirms (spec §5).
             function (Collection $files) {
                 $refusals = Media::stillInChannelsMessages($files->pluck('id')->all());
 
                 $files->each(fn (Media $media) => $media->setAttribute('in_channels_message', $refusals[$media->id] ?? null));
             });
+
+        // How full the library on the page is — the shop's own, or above the stores the shop chosen; the
+        // platform's own library has no wall (StoreStorage).
+        return $listing->setData([...$listing->getData(true), 'storage' => $quota->summary($this->libraryOnThePage($filters['library'] ?? null))]);
+    }
+
+    /** The shop whose library the page shows, or null for the platform's own (or every library at once). */
+    private function libraryOnThePage(?string $library): ?int
+    {
+        if (auth()->user()->globalRole() === null) {
+            return (int) session('current_store_id') ?: null;
+        }
+
+        return $library !== null && $library !== 'platform' && Store::whereKey((int) $library)->exists() ? (int) $library : null;
     }
 
     /** Upload a file into a library: the current store's, or — above the stores — the one the page chose. */
-    public function store(StoreMediaRequest $request, MediaStorage $storage): JsonResponse
+    public function store(StoreMediaRequest $request, MediaStorage $storage, StoreStorage $quota): JsonResponse
     {
         $media = $storage->addToLibrary(
             $request->file('file'),
@@ -105,7 +120,7 @@ class MediaController extends Controller
         ActivityLog::record('media.uploaded', $media, "Uploaded {$media->type} {$media->title}"
             .($media->isPlatformOwned() ? " to the platform's library" : ''));
 
-        return response()->json(['message' => 'File uploaded successfully', 'media' => $media]);
+        return response()->json(['message' => 'File uploaded successfully', 'media' => $media, 'storage' => $quota->summary($media->store_id)]);
     }
 
     /** Rename a file, describe it, or set its schedule window. */
@@ -123,7 +138,7 @@ class MediaController extends Controller
     }
 
     /** Delete a file, its thumbnail and its row. */
-    public function destroy(Media $media, MediaStorage $storage): JsonResponse
+    public function destroy(Media $media, MediaStorage $storage, StoreStorage $quota): JsonResponse
     {
         $media = Media::visibleTo(auth()->user())->findOrFail($media->id);
         $title = $media->title;
@@ -150,7 +165,7 @@ class MediaController extends Controller
 
         ActivityLog::record('media.deleted', null, "Deleted media {$title}", storeId: $media->store_id);
 
-        return response()->json(['message' => 'Media deleted successfully']);
+        return response()->json(['message' => 'Media deleted successfully', 'storage' => $quota->summary($media->store_id)]);
     }
 
     /**

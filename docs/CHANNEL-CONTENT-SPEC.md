@@ -203,6 +203,19 @@ plays twice in one pass, so:
 - An Ad Builder ad ticked "Show in playlists" follows the same rule: while a channel shows it, the playlist's
   picker leaves it out.
 
+## 8b. A channel's Upload is held to the library's limits (owner, 2026-09-28)
+
+A file uploaded inside a channel joins a library, so it meets the library's two walls
+(`.claude/rules/02-project-conventions.md`, **Upload limits**):
+
+- A video is **5 minutes** at most, measured by the server from the file itself (`App\Rules\VideoLength`), on
+  the Add ad and on an ad's change of file alike. A file chosen from the library was measured when it went in.
+- A shop's channel fills that **shop's 512 MB** like its Media page does (`MediaStorage::addToLibrary`,
+  `StoreStorage`); the platform's channel fills the platform's own library, which has no wall. The Add-ad form
+  reads how full the library is from `/channels/{channel}/ads` and refuses a file bigger than what is left
+  before a byte is sent; the server decides. Taking an ad out frees nothing, because the file stays in its
+  library — deleting it there does.
+
 ---
 
 ## 9. Questions already answered, so nobody asks again

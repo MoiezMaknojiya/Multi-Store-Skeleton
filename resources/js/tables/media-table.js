@@ -16,7 +16,7 @@ import axios from 'axios';
 import { createCrudTable } from '../core/crud-table-base.js';
 /* Shared with the advertising campaigns page — both upload the same kinds of file
  * and both need a video measured in the browser. */
-import { fileError, readVideoMeta } from '../core/media-file.js';
+import { fileError, readVideoMeta, videoLengthError, storageError, storageUsedText, storagePercent } from '../core/media-file.js';
 import { validate, required, maxLen } from '../core/validate.js';
 
 /** ISO instant -> the value a datetime-local input expects, in the viewer's own
@@ -56,6 +56,8 @@ export function registerMediaTable(Alpine) {
             selectedFile: null,
             clientMeta: {},
             preparing: false,
+            // How full the library on the page is ({used, limit}), or null for one with no wall (the platform's).
+            storage: null,
         },
 
         defaultForm: { title: '', description: '', starts_at: '', expires_at: '' },
@@ -92,6 +94,18 @@ export function registerMediaTable(Alpine) {
                 this.fetchItems();
             },
 
+            afterFetch(data) {
+                this.storage = data.storage ?? null;
+            },
+
+            storageText() {
+                return storageUsedText(this.storage);
+            },
+
+            storageLevel() {
+                return storagePercent(this.storage);
+            },
+
             /* ── Upload ────────────────────────────────────────────────── */
             openUploadModal() {
                 this.uploadForm = { title: '' };
@@ -121,7 +135,8 @@ export function registerMediaTable(Alpine) {
                 this.preparing = false;
                 if (!file) return;
 
-                const error = fileError(file);
+                // The formats, the size, and whether it fits the shop — before a byte is sent.
+                const error = fileError(file) ?? storageError(file, this.storage);
                 if (error) {
                     this.formErrors = { file: [error] };
                     this.selectedFile = null;
@@ -134,7 +149,17 @@ export function registerMediaTable(Alpine) {
                         const meta = await readVideoMeta(file);
                         // Another file was chosen while this one was measured: its numbers are
                         // not that file's, and must not ride along with its upload.
-                        if (this.selectedFile === file) this.clientMeta = meta;
+                        if (this.selectedFile === file) {
+                            this.clientMeta = meta;
+
+                            // Five minutes at most: said now rather than after the whole upload.
+                            const tooLong = videoLengthError(meta);
+                            if (tooLong) {
+                                this.formErrors = { file: [tooLong] };
+                                this.selectedFile = null;
+                                this.preparing = false;
+                            }
+                        }
                     } finally {
                         if (this.selectedFile === file) this.preparing = false;
                     }

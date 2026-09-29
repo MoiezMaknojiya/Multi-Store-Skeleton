@@ -3,7 +3,9 @@
 namespace App\Http\Requests\Advertising;
 
 use App\Http\Requests\Signage\StoreMediaRequest;
+use App\Models\Campaign;
 use App\Models\Media;
+use App\Rules\VideoLength;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -40,22 +42,26 @@ class CampaignRequest extends FormRequest
             // migration of this one.
             'advertiser_name' => ['nullable', 'string', 'max:120'],
 
+            // An advert is one break long at most (owner's rule, 2026-09-28), a video's length read from the
+            // file itself. `bail`: that length is read only from a file that passed everything before it.
             'file' => [
+                'bail',
                 $editing ? 'nullable' : 'required',
                 'file',
                 'mimes:'.StoreMediaRequest::ALLOWED_MIMES,
                 'max:'.StoreMediaRequest::MAX_KILOBYTES,
+                new VideoLength(Campaign::MAX_AD_SECONDS, 'An advert'),
             ],
 
             // An IMAGE's seconds on screen — or, for a video, the length the browser
             // measured. A video's form has no seconds field at all (it runs to its own
-            // end), so for one this may simply be missing.
-            'duration_seconds' => [$this->describesVideo() ? 'nullable' : 'required', 'integer', 'min:1', 'max:300'],
+            // end), so for one this may simply be missing, and what is kept is the file's own.
+            'duration_seconds' => [$this->describesVideo() ? 'nullable' : 'required', 'integer', 'min:1', 'max:'.($this->describesVideo() ? 86400 : Campaign::MAX_AD_SECONDS)],
             // Browser-measured facts about a video — never trusted for identity, only
             // for shape. Same contract as a media upload.
             'width' => ['nullable', 'integer', 'min:1', 'max:16384'],
             'height' => ['nullable', 'integer', 'min:1', 'max:16384'],
-            'poster' => ['nullable', 'string', 'starts_with:data:image/'],
+            'poster' => ['nullable', 'string', 'starts_with:data:image/', 'max:'.StoreMediaRequest::POSTER_MAX_CHARACTERS],
 
             // The contract period. Both blank means "until I switch it off".
             'starts_on' => ['nullable', 'date_format:Y-m-d'],
@@ -101,7 +107,7 @@ class CampaignRequest extends FormRequest
             'file.mimes' => 'Only '.StoreMediaRequest::FORMATS_IN_WORDS.' can be uploaded.',
             'file.max' => StoreMediaRequest::tooLargeMessage(),
             'screen_ids.*.exists' => 'One of the chosen screens no longer exists. Reload the page and choose again.',
-            'duration_seconds.max' => 'A single advert may not run longer than 5 minutes.',
+            'duration_seconds.max' => 'An advert may be on screen for at most '.Campaign::MAX_AD_SECONDS.' seconds: one break.',
             'ends_on.after_or_equal' => 'The end date cannot be before the start date.',
             'start_time.required_with' => 'Give both a start and an end time, or leave both blank to run all day.',
             'end_time.required_with' => 'Give both a start and an end time, or leave both blank to run all day.',

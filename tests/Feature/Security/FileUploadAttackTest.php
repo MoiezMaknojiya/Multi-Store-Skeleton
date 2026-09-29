@@ -5,6 +5,7 @@ use App\Models\Permission;
 use App\Models\Store;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Tests\Support\VideoFiles;
 
 /*
 |--------------------------------------------------------------------------
@@ -123,7 +124,7 @@ test('a filename is never trusted as a title, and browser-measured numbers are b
         ['width' => 'abc'],
         ['poster' => 'javascript:alert(1)'],
     ] as $extra) {
-        $this->postJson('/media', ['file' => UploadedFile::fake()->create('clip.mp4', 20, 'video/mp4'), ...$extra])
+        $this->postJson('/media', ['file' => VideoFiles::upload(VideoFiles::mp4(20), 'clip.mp4'), ...$extra])
             ->assertStatus(422)
             ->assertJsonValidationErrors(array_key_first($extra));
     }
@@ -132,17 +133,24 @@ test('a filename is never trusted as a title, and browser-measured numbers are b
 
     // A poster label with nothing after it is a picture the browser failed to draw: the video still goes
     // up, just without a thumbnail.
-    $this->postJson('/media', ['file' => UploadedFile::fake()->create('clip.mp4', 20, 'video/mp4'), 'poster' => 'data:image/png;base64,'])
+    $this->postJson('/media', ['file' => VideoFiles::upload(VideoFiles::mp4(20), 'clip.mp4'), 'poster' => 'data:image/png;base64,'])
         ->assertOk();
 
     expect(Media::count())->toBe(2)
         ->and(Media::latest('id')->first()->thumbnail_path)->toBeNull();
+
+    // A poster the length of the upload itself is refused before anybody decodes it.
+    $this->postJson('/media', ['file' => VideoFiles::upload(VideoFiles::mp4(20), 'clip.mp4'), 'poster' => 'data:image/png;base64,'.str_repeat('A', 3_100_000)])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('poster');
+
+    expect(Media::count())->toBe(2);
 });
 
 test('a video’s poster is stored only as a picture the server drew — never the bytes that were sent', function () {
     // A script under an image label: the video goes up, its "poster" does not.
     $this->postJson('/media', [
-        'file' => UploadedFile::fake()->create('clip.mp4', 20, 'video/mp4'),
+        'file' => VideoFiles::upload(VideoFiles::mp4(20), 'clip.mp4'),
         'poster' => 'data:image/jpeg;base64,'.base64_encode('<?php system($_GET["c"]); ?>'),
     ])->assertOk();
 
@@ -156,7 +164,7 @@ test('a video’s poster is stored only as a picture the server drew — never t
     $png = (string) ob_get_clean();
 
     $this->postJson('/media', [
-        'file' => UploadedFile::fake()->create('second.mp4', 20, 'video/mp4'),
+        'file' => VideoFiles::upload(VideoFiles::mp4(20), 'second.mp4'),
         'poster' => 'data:image/png;base64,'.base64_encode($png),
     ])->assertOk();
 

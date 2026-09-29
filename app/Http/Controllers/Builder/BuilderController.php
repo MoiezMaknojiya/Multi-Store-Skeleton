@@ -14,6 +14,7 @@ use App\Models\Store;
 use App\Services\AdCompiler;
 use App\Services\AdPublisher;
 use App\Services\MediaStorage;
+use App\Services\StoreStorage;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -36,7 +37,7 @@ class BuilderController extends Controller
 {
     use ConfirmsPassword, HandlesCrudData;
 
-    public function __construct(private readonly MediaStorage $storage) {}
+    public function __construct(private readonly MediaStorage $storage, private readonly StoreStorage $quota) {}
 
     /** The Ads tab: everything this person may open — and, above the stores, a filter by shop. */
     public function index(): View
@@ -190,12 +191,17 @@ class BuilderController extends Controller
         ]);
 
         // The poster is the design's picture, so the copy starts with it — as a file of its own. Sharing the
-        // original's file would let deleting the original take the copy's picture with it.
+        // original's file would let deleting the original take the copy's picture with it. A shop with no room
+        // for it gets its copy without one: a poster is never a reason to refuse (StoreStorage).
         if ($ad->thumbnail_path && Storage::disk('public')->exists($ad->thumbnail_path)) {
             $poster = $copy->storageDirectory().'/poster.jpg';
 
-            Storage::disk('public')->copy($ad->thumbnail_path, $poster);
-            $copy->update(['thumbnail_path' => $poster]);
+            $this->quota->withRoomOrSkip($copy->store_id, (int) Storage::disk('public')->size($ad->thumbnail_path), function () use ($ad, $copy, $poster) {
+                Storage::disk('public')->copy($ad->thumbnail_path, $poster);
+                $copy->update(['thumbnail_path' => $poster]);
+
+                return true;
+            });
         }
 
         ActivityLog::record('ad.duplicated', $copy, "Duplicated ad {$ad->name} as {$copy->name}");
@@ -430,13 +436,12 @@ class BuilderController extends Controller
             return;
         }
 
-        $path = $this->storage->storePoster("{$ad->storageDirectory()}/poster.jpg", $dataUri);
-
-        // A photograph of the design is not a change to it: it must not move `updated_at`, which would make a
+        // Only while the shop has room for it — written and recorded on the design under the shop's lock, so it is
+        // counted from the moment it exists; without room the design keeps the poster it had (StoreStorage). A
+        // photograph of the design is not a change to it: it must not move `updated_at`, which would make a
         // published ad read as edited since — a draft, off every screen (BuilderAd::isPublished()).
-        if ($path !== null) {
-            BuilderAd::withoutTimestamps(fn () => $ad->update(['thumbnail_path' => $path]));
-        }
+        $this->storage->storePosterWithin($ad->store_id, "{$ad->storageDirectory()}/poster.jpg", $dataUri,
+            fn (string $path) => BuilderAd::withoutTimestamps(fn () => $ad->update(['thumbnail_path' => $path])));
     }
 
     /** "Winter sale" → "Winter sale (copy)", and "(copy 2)" after that. */

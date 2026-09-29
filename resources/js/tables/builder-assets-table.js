@@ -6,7 +6,7 @@
  */
 import axios from 'axios';
 import { createCrudTable } from '../core/crud-table-base.js';
-import { fileError, readVideoMeta } from '../core/media-file.js';
+import { fileError, readVideoMeta, videoLengthError, storageError, storageUsedText, storagePercent } from '../core/media-file.js';
 
 export function registerBuilderAssetsTable(Alpine) {
     Alpine.data('builderAssetsTable', createCrudTable({
@@ -19,6 +19,8 @@ export function registerBuilderAssetsTable(Alpine) {
             uploading: false,
             /* Above the stores: one shop, or every shop (empty). */
             filterStore: '',
+            /* How full the shop on the shelf is ({used, limit}): its own inside a store, the one chosen above. */
+            storage: null,
         },
 
         extraMethods: {
@@ -32,6 +34,18 @@ export function registerBuilderAssetsTable(Alpine) {
                 this.fetchItems();
             },
 
+            afterFetch(data) {
+                this.storage = data.storage ?? null;
+            },
+
+            storageText() {
+                return storageUsedText(this.storage);
+            },
+
+            storageLevel() {
+                return storagePercent(this.storage);
+            },
+
             /** The file picker's change handler: check, measure, send. */
             async upload(event) {
                 const file = event.target.files?.[0];
@@ -39,7 +53,7 @@ export function registerBuilderAssetsTable(Alpine) {
 
                 if (!file || this.uploading) return;
 
-                const problem = fileError(file);
+                const problem = fileError(file) ?? storageError(file, this.storage);
 
                 if (problem) {
                     window.toast(problem);
@@ -60,6 +74,13 @@ export function registerBuilderAssetsTable(Alpine) {
                     // A video's length, size and first frame are measured here, because the server cannot.
                     if (file.type.startsWith('video/')) {
                         const meta = await readVideoMeta(file);
+                        const tooLong = videoLengthError(meta);
+
+                        if (tooLong) {
+                            window.toast(tooLong);
+
+                            return;
+                        }
 
                         if (meta.duration_seconds) form.append('duration_seconds', meta.duration_seconds);
                         if (meta.width) form.append('width', meta.width);

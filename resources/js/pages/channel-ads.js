@@ -15,7 +15,7 @@
  * page is given its seconds; a video has none to give — it plays to its own end (owner's rule).
  */
 import axios from 'axios';
-import { fileError, readVideoMeta } from '../core/media-file.js';
+import { fileError, readVideoMeta, videoLengthError, storageError } from '../core/media-file.js';
 
 const blankForm = () => ({ title: '', seconds: 10, starts_on: '', ends_on: '' });
 
@@ -59,6 +59,8 @@ export function registerChannelAds(Alpine) {
         selectedFile: null,
         clientMeta: {},
         preparing: false,
+        // How full the library an upload here joins is ({used, limit}), or null for the platform's own.
+        storage: null,
 
         init() {
             this.load();
@@ -69,6 +71,7 @@ export function registerChannelAds(Alpine) {
             try {
                 const { data } = await axios.get(`/channels/${this.channelId}/ads`);
                 this.ads = data.ads;
+                this.storage = data.storage ?? null;
             } catch (error) {
                 window.toast(error.response?.data?.message ?? 'Could not load the ads.');
             } finally {
@@ -220,7 +223,8 @@ export function registerChannelAds(Alpine) {
             this.preparing = false;
             if (! file) return;
 
-            const error = fileError(file);
+            // The formats, the size, and whether it fits the shop — before a byte is sent.
+            const error = fileError(file) ?? storageError(file, this.storage);
             if (error) {
                 this.formErrors = { ...this.formErrors, file: [error] };
                 this.selectedFile = null;
@@ -233,7 +237,17 @@ export function registerChannelAds(Alpine) {
                     const meta = await readVideoMeta(file);
                     // Another file was chosen while this one was measured: its numbers are
                     // not that file's, and must not ride along with its upload.
-                    if (this.selectedFile === file) this.clientMeta = meta;
+                    if (this.selectedFile === file) {
+                        this.clientMeta = meta;
+
+                        // Five minutes at most: said now rather than after the whole upload.
+                        const tooLong = videoLengthError(meta);
+                        if (tooLong) {
+                            this.formErrors = { ...this.formErrors, file: [tooLong] };
+                            this.selectedFile = null;
+                            this.preparing = false;
+                        }
+                    }
                 } finally {
                     if (this.selectedFile === file) this.preparing = false;
                 }
@@ -316,6 +330,7 @@ export function registerChannelAds(Alpine) {
 
                 const { data } = await axios.post(url, payload);
                 this.ads = data.ads;
+                this.storage = data.storage ?? this.storage;
                 this.closeAdModal();
                 window.toast(data.message, 'success');
             } catch (error) {

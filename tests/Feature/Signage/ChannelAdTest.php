@@ -6,6 +6,7 @@ use App\Models\Media;
 use App\Models\Store;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Tests\Support\VideoFiles;
 
 /*
 |--------------------------------------------------------------------------
@@ -112,10 +113,10 @@ test('an image may not hold the screen longer than the ceiling', function () {
 
 test('a video has no seconds at all — any that arrive are thrown away, and its own length is kept', function () {
     uploadChannelAd($this, [
-        'file' => UploadedFile::fake()->create('monster.mp4', 800, 'video/mp4'),
+        'file' => VideoFiles::upload(VideoFiles::mp4(45), 'monster.mp4'),
         'seconds' => 99,
-        // What the browser measured.
-        'duration_seconds' => 45,
+        // What the browser says it measured — display only: the file's own length is what is kept.
+        'duration_seconds' => 12,
     ])->assertOk();
 
     $ad = ChannelAd::firstWhere('title', 'monster');
@@ -125,10 +126,29 @@ test('a video has no seconds at all — any that arrive are thrown away, and its
         ->and($ad->play_seconds)->toBe(45);
 });
 
-test('a video the browser could not measure still gets a safe backstop', function () {
-    uploadChannelAd($this, ['file' => UploadedFile::fake()->create('monster.mp4', 800, 'video/mp4')])->assertOk();
+test('a video the browser could not measure is measured by the server all the same', function () {
+    uploadChannelAd($this, ['file' => VideoFiles::upload(VideoFiles::webm(50, ['with_duration' => false]), 'monster.webm')])->assertOk();
 
-    expect(ChannelAd::firstWhere('title', 'monster')->play_seconds)->toBe(ChannelAd::UNMEASURED_VIDEO_SECONDS);
+    expect(ChannelAd::firstWhere('title', 'monster')->play_seconds)->toBe(50);
+});
+
+test('a video nobody can measure is refused, and nothing is kept', function () {
+    uploadChannelAd($this, ['file' => UploadedFile::fake()->create('monster.mp4', 800, 'video/mp4')])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['file' => 'We could not read how long this video is. Save it again as an MP4 and upload that file.']);
+
+    expect(Media::count())->toBe(0)->and(ChannelAd::count())->toBe(0)
+        ->and(Storage::disk('public')->allFiles())->toBe([]);
+});
+
+test('an old video with no length on record still gets a safe backstop', function () {
+    // Uploaded before the server measured every video: nothing in its row says how long it is.
+    $ad = ChannelAd::factory()->create([
+        'channel_id' => $this->channel->id,
+        'media_id' => Media::factory()->platformOwned()->create(['type' => Media::TYPE_VIDEO, 'mime_type' => 'video/mp4', 'duration_seconds' => null])->id,
+    ]);
+
+    expect($ad->fresh()->play_seconds)->toBe(ChannelAd::UNMEASURED_VIDEO_SECONDS);
 });
 
 test('only the formats a television can play are accepted', function () {
@@ -346,7 +366,7 @@ test('an image replaced by a video loses its seconds', function () {
     $ad = ChannelAd::first();
 
     editChannelAd($this, $ad, [
-        'file' => UploadedFile::fake()->create('coke.mp4', 500, 'video/mp4'), 'duration_seconds' => 30,
+        'file' => VideoFiles::upload(VideoFiles::mp4(30), 'coke.mp4'), 'duration_seconds' => 30,
     ])->assertOk();
 
     $ad->refresh();

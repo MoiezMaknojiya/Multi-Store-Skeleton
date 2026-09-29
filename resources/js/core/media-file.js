@@ -20,6 +20,10 @@ const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm'];
 /* Mirrors StoreMediaRequest::MAX_KILOBYTES. */
 const MAX_BYTES = 256000 * 1024;
 
+/* Mirrors Media::MAX_VIDEO_SECONDS: the longest video a library, a channel or the Ad Builder's shelf
+ * takes. The server measures the file itself and decides; this only spares an upload it would refuse. */
+export const MAX_VIDEO_SECONDS = 300;
+
 const POSTER_MAX_EDGE = 480;
 const METADATA_TIMEOUT_MS = 8000;
 
@@ -36,6 +40,72 @@ export function fileError(file) {
     }
 
     return null;
+}
+
+/** 432 as "7:12", 3600 as "1:00:00" — as App\Rules\VideoLength::clock says it. */
+export function clock(seconds) {
+    const total = Math.max(0, Math.round(seconds));
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const rest = String(total % 60).padStart(2, '0');
+
+    return hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${rest}` : `${minutes}:${rest}`;
+}
+
+/** 300 as "5 minutes", 60 as "60 seconds" — as App\Rules\VideoLength::inWords says it. */
+function lengthInWords(seconds) {
+    if (seconds <= 60) return `${seconds} ${seconds === 1 ? 'second' : 'seconds'}`;
+
+    const minutes = Math.floor(seconds / 60);
+    const rest = seconds % 60;
+
+    return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}` + (rest > 0 ? ` ${rest} ${rest === 1 ? 'second' : 'seconds'}` : '');
+}
+
+/** Why a measured video is too long, or null — in the server's own words. */
+export function videoLengthError(meta, maxSeconds = MAX_VIDEO_SECONDS, noun = 'A video') {
+    const seconds = Number(meta?.duration_seconds);
+
+    if (! Number.isFinite(seconds) || seconds <= maxSeconds) return null;
+
+    return `${noun} may be at most ${lengthInWords(maxSeconds)} long. This one is ${clock(seconds)}.`;
+}
+
+/** 1536 as "2 KB", 126 353 408 as "120.5 MB", 536 870 912 as "512 MB" — as App\Services\StoreStorage says it. */
+export function bytesInWords(bytes) {
+    if (bytes <= 0) return '0 KB';
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.ceil(bytes / 1024))} KB`;
+
+    const megabytes = bytes / (1024 * 1024);
+
+    return `${Number.isInteger(megabytes) ? megabytes : megabytes.toFixed(1)} MB`;
+}
+
+/**
+ * Why a file will not fit its shop's storage, or null. `storage` is what the server said — {used, limit} —
+ * or null for a library with no wall (the platform's own). Only the file is counted here; the server counts
+ * its preview too, and decides.
+ */
+export function storageError(file, storage) {
+    if (! storage || ! file) return null;
+
+    const left = Math.max(0, storage.limit - storage.used);
+
+    if (file.size <= left) return null;
+
+    return `Not enough storage: this needs ${bytesInWords(file.size)}, and this shop has `
+        + (left > 0 ? `${bytesInWords(left)} left` : 'no space left')
+        + ` of its ${bytesInWords(storage.limit)}. Delete files you no longer use to make room.`;
+}
+
+/** "120.5 MB of 512 MB used", for the storage meter. */
+export function storageUsedText(storage) {
+    return storage ? `${bytesInWords(storage.used)} of ${bytesInWords(storage.limit)} used` : '';
+}
+
+/** How full, from 0 to 100, for the storage meter's bar. */
+export function storagePercent(storage) {
+    return storage && storage.limit > 0 ? Math.min(100, Math.round((storage.used / storage.limit) * 100)) : 0;
 }
 
 /**

@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Http\Controllers\Platform\ImpersonateController;
 use App\Models\Permission;
 use App\Models\User;
+use App\Services\VideoDuration;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -16,7 +17,11 @@ use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
-    public function register(): void {}
+    public function register(): void
+    {
+        // One per request: an upload's length is read by its validation and again by its storage, from one memo.
+        $this->app->singleton(VideoDuration::class);
+    }
 
     public function boot(): void
     {

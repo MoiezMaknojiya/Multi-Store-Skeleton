@@ -51,6 +51,13 @@ class Campaign extends Model
      */
     public const MAX_BREAK_SECONDS = 60;
 
+    /**
+     * The longest one advert runs, a picture's seconds or a video's own length (owner's rule, 2026-09-28): one
+     * whole break. A longer one could only ever play alone and hold the break past its ceiling (trimToBreak lets
+     * the first advert through whatever its length), and 15 seconds is what the industry sells.
+     */
+    public const MAX_AD_SECONDS = self::MAX_BREAK_SECONDS;
+
     protected $fillable = [
         'name', 'advertiser_name', 'type', 'mime_type', 'disk', 'path', 'thumbnail_path',
         'size', 'width', 'height', 'media_duration_seconds', 'duration_seconds',

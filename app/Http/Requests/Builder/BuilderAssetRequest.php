@@ -3,6 +3,8 @@
 namespace App\Http\Requests\Builder;
 
 use App\Http\Requests\Signage\StoreMediaRequest;
+use App\Models\Media;
+use App\Rules\VideoLength;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -21,14 +23,16 @@ class BuilderAssetRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'file' => ['required', 'file', 'mimes:'.StoreMediaRequest::ALLOWED_MIMES, 'max:'.StoreMediaRequest::MAX_KILOBYTES],
+            // A video on the shelf is no longer than the library's: no page plays longer, and the shelf's files
+            // reach a television inside a page as much as the library's do. `bail`: see StoreMediaRequest.
+            'file' => ['bail', 'required', 'file', 'mimes:'.StoreMediaRequest::ALLOWED_MIMES, 'max:'.StoreMediaRequest::MAX_KILOBYTES, new VideoLength(Media::MAX_VIDEO_SECONDS)],
             'title' => ['nullable', 'string', 'max:255'],
 
             // Browser-measured facts about a video, never trusted for anything but display.
             'duration_seconds' => ['nullable', 'integer', 'min:0', 'max:86400'],
             'width' => ['nullable', 'integer', 'min:1', 'max:16384'],
             'height' => ['nullable', 'integer', 'min:1', 'max:16384'],
-            'poster' => ['nullable', 'string', 'starts_with:data:image/'],
+            'poster' => ['nullable', 'string', 'starts_with:data:image/', 'max:'.StoreMediaRequest::POSTER_MAX_CHARACTERS],
 
             // The shop, said by the platform team only (a store's person uploads to the store they stand
             // in, and whatever they send here is not read). Whether it exists is the controller's.

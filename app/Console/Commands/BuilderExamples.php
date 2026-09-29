@@ -57,7 +57,15 @@ class BuilderExamples extends Command
             $this->installFonts($fonts, $examples->families());
         }
 
-        $assets = $this->putArtworkOnTheShelf($store, $artwork, $storage);
+        // The examples take room in the shop like anything else it keeps (StoreStorage): a full shop is told so.
+        try {
+            $assets = $this->putArtworkOnTheShelf($store, $artwork, $storage);
+        } catch (ValidationException $full) {
+            $this->error((string) collect($full->errors())->flatten()->first());
+
+            return self::FAILURE;
+        }
+
         $request = new BuilderAdRequest;
         $rows = [];
 
@@ -90,7 +98,14 @@ class BuilderExamples extends Command
             $state = 'draft';
 
             if (! $this->option('no-publish')) {
-                $media = $publisher->publish($ad);
+                try {
+                    $media = $publisher->publish($ad);
+                } catch (ValidationException $full) {
+                    $this->error((string) collect($full->errors())->flatten()->first());
+
+                    return self::FAILURE;
+                }
+
                 $state = "published (media #{$media->id})";
 
                 // An example exists to be put on a screen, so it is one of the ads a playlist may pick
@@ -150,12 +165,10 @@ class BuilderExamples extends Command
             try {
                 file_put_contents($path, $artwork->png($piece));
 
-                $stored = $storage->storeBuilderAsset(new UploadedFile($path, "{$piece}.png", 'image/png', null, true), $store->id);
+                $asset = $storage->addBuilderAsset(new UploadedFile($path, "{$piece}.png", 'image/png', null, true), $store->id, [], $title, null);
             } finally {
                 @unlink($path);
             }
-
-            $asset = BuilderAsset::fromStoredFile($store->id, $title, $stored, null);
 
             ActivityLog::record('ad_asset.uploaded', $asset, "Added {$asset->title} to the ad builder", storeId: $store->id);
 

@@ -39,6 +39,14 @@ class Media extends Model
      */
     public const TYPE_HTML = 'html';
 
+    /**
+     * The longest video a library, a channel or the Ad Builder's shelf takes (owner's rule, 2026-09-28): five
+     * minutes, measured from the file (App\Rules\VideoLength). A shop's screen is watched for seconds by people
+     * walking past, and 250 MB of 1080p runs out near seven minutes anyway. Mirrored by MAX_VIDEO_SECONDS in
+     * resources/js/core/media-file.js.
+     */
+    public const MAX_VIDEO_SECONDS = 300;
+
     protected $fillable = [
         'store_id', 'title', 'description', 'type', 'mime_type', 'disk', 'path',
         'thumbnail_path', 'size', 'width', 'height', 'duration_seconds',

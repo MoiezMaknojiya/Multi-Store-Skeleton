@@ -6,6 +6,7 @@ use App\Models\Media;
 use App\Models\Store;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Tests\Support\VideoFiles;
 
 test('guests cannot access any media endpoint', function () {
     // Every route under /media, read from the route table — so one added later is asked too.
@@ -236,10 +237,10 @@ test('the formats a player can actually render are accepted', function () {
 
     // Both video formats too, so the list in ALLOWED_MIMES is covered end to end
     // and not just its image half.
-    foreach ([['clip.mp4', 'video/mp4'], ['clip.webm', 'video/webm']] as [$name, $mime]) {
+    foreach (['clip.mp4' => VideoFiles::mp4(20), 'clip.webm' => VideoFiles::webm(20)] as $name => $bytes) {
         $this->actingAs($actor)
             ->withSession(['current_store_id' => $store->id])
-            ->post('/media', ['file' => UploadedFile::fake()->create($name, 2048, $mime)])
+            ->post('/media', ['file' => VideoFiles::upload($bytes, $name)])
             ->assertOk();
         $this->flushSession();
     }

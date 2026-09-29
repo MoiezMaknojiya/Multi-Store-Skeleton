@@ -21,18 +21,39 @@ use Illuminate\Support\Facades\Storage;
  */
 class AdPublisher
 {
-    public function __construct(private readonly AdCompiler $compiler) {}
+    public function __construct(private readonly AdCompiler $compiler, private readonly StoreStorage $quota) {}
 
-    /** Compile and publish; returns the media row a playlist plays. */
+    /**
+     * Compile and publish; returns the media row a playlist plays.
+     *
+     * A published page is a file in the shop's library, so it takes room like an upload (StoreStorage): what
+     * the page and its poster's copy add, less what the version before them held, has to fit — decided under
+     * the shop's lock, before anything is written. A shop with no room is told so, and its screens keep the
+     * version they have.
+     */
     public function publish(BuilderAd $ad, ?int $actorId = null): Media
     {
         $disk = Storage::disk('public');
         $html = $this->compiler->compile($ad);
         $path = $ad->storageDirectory().'/index.html';
+        $media = $ad->media ?? new Media;
+
+        $copy = $ad->storageDirectory().'/published.jpg';
+        $poster = $ad->thumbnail_path && $disk->exists($ad->thumbnail_path) ? (int) $disk->size($ad->thumbnail_path) : 0;
+        $before = $media->exists
+            ? (int) $media->size + ($media->thumbnail_path === $copy && $disk->exists($copy) ? (int) $disk->size($copy) : 0)
+            : 0;
+
+        return $this->quota->withRoom($ad->store_id, strlen($html) + $poster - $before, fn () => $this->write($ad, $media, $path, $html, $actorId), 'publish');
+    }
+
+    /** The page on disk and its row, with the published version kept. */
+    private function write(BuilderAd $ad, Media $media, string $path, string $html, ?int $actorId): Media
+    {
+        $disk = Storage::disk('public');
 
         $disk->put($path, $html);
 
-        $media = $ad->media ?? new Media;
         $poster = $this->posterFor($ad, $media);
 
         // Published and last changed at the very same moment: two separate clocks could straddle a

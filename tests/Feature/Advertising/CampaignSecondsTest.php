@@ -3,6 +3,7 @@
 use App\Models\Campaign;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Tests\Support\VideoFiles;
 
 /*
 |--------------------------------------------------------------------------
@@ -26,24 +27,28 @@ function advertFields(array $overrides = []): array
     return array_replace(['name' => 'Coca-Cola', 'is_active' => '1', 'screen_ids' => []], $overrides);
 }
 
-test('a video advert needs no seconds — the length the browser measured stands in', function () {
+test('a video advert needs no seconds — its own length, read from the file, stands in', function () {
     $this->actingAs($this->admin)->post('/campaigns', advertFields([
-        'file' => UploadedFile::fake()->create('coke.mp4', 800, 'video/mp4'),
-        'duration_seconds' => 30,
+        'file' => VideoFiles::upload(VideoFiles::mp4(30), 'coke.mp4'),
+        // What the browser says is display only: a number written by hand is not what is kept.
+        'duration_seconds' => 5,
     ]), ['Accept' => 'application/json'])->assertOk();
 
     $campaign = Campaign::firstWhere('name', 'Coca-Cola');
     expect($campaign->type)->toBe('video');
     expect($campaign->media_duration_seconds)->toBe(30);
+    expect($campaign->duration_seconds)->toBe(30);
     expect($campaign->play_seconds)->toBe(30);
 });
 
 test('even when the browser could not measure it', function () {
     $this->actingAs($this->admin)->post('/campaigns', advertFields([
-        'file' => UploadedFile::fake()->create('coke.mp4', 800, 'video/mp4'),
+        'file' => VideoFiles::upload(VideoFiles::mp4(12, ['moov_at_end' => true]), 'coke.mp4'),
     ]), ['Accept' => 'application/json'])->assertOk();
 
-    expect(Campaign::firstWhere('name', 'Coca-Cola')->type)->toBe('video');
+    expect(Campaign::firstWhere('name', 'Coca-Cola'))
+        ->type->toBe('video')
+        ->media_duration_seconds->toBe(12);
 });
 
 test('an image advert still needs its seconds', function () {
