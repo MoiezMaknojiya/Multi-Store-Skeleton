@@ -181,12 +181,16 @@ export function renumberDepth(doc) {
  * the element itself, a circle, or deeper than groups go, reads as the top level); every group's box is
  * the box around its children; and every element gets its own place in the stacking order.
  */
-export function normaliseDocument(doc) {
+export function normaliseDocument(doc, { minSeconds = null, maxSeconds = null } = {}) {
     const object = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
     const numbers = (value) => (Array.isArray(value) ? value.map(Number).filter(Number.isFinite) : []);
 
-    // The ad's length (seconds on screen): a whole number from one up, or none at all — then the ad says ten.
+    // The ad's length (seconds on screen): a whole number from one up, or none at all — then the ad says its
+    // default. Opened in the editor it is held inside the limits it is given (BuilderAd::MIN_SECONDS, ::MAX_SECONDS),
+    // so a design saved before them is saved again inside them rather than refused on every save.
     if ('duration' in doc && !(Number.isInteger(doc.duration) && doc.duration >= 1)) delete doc.duration;
+    if (Number.isInteger(doc.duration) && minSeconds !== null) doc.duration = Math.max(minSeconds, doc.duration);
+    if (Number.isInteger(doc.duration) && maxSeconds !== null) doc.duration = Math.min(maxSeconds, doc.duration);
 
     doc.stage = object(doc.stage);
     doc.stage.background = object(doc.stage.background);
@@ -203,6 +207,16 @@ export function normaliseDocument(doc) {
     doc.elements.forEach((element) => {
         element.style = object(element.style);
         element.animations = object(element.animations);
+
+        // Nothing starts after the longest an ad may be (AdAnimations::NUMBERS): a design saved before that limit has
+        // its later times brought in to it, where they still come after any ad's end.
+        if (maxSeconds !== null) {
+            [['in', 'delay'], ['loop', 'delay'], ['out', 'at']].forEach(([slot, key]) => {
+                const current = element.animations[slot];
+
+                if (current && typeof current[key] === 'number' && current[key] > maxSeconds) current[key] = maxSeconds;
+            });
+        }
 
         const parent = parentIdOf(element);
 

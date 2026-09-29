@@ -103,6 +103,10 @@ export function registerScreenPlaylist(Alpine) {
         /* ── The schedule editor, open over one item at a time ──────────── */
         scheduleIndex: null,
         scheduleRules: [],
+        /* What is wrong with each rule, by its index — said under it when OK is pressed (ruleProblems). */
+        scheduleErrors: [],
+        /* Why the server could not build the preview, instead of "nothing in the next 7 days". */
+        previewError: '',
         preview: [],
         previewing: false,
         previewTimer: null,
@@ -179,6 +183,9 @@ export function registerScreenPlaylist(Alpine) {
 
         /* ── Editing ───────────────────────────────────────────────────── */
         addItem(media) {
+            // Not while a save is on its way: its answer replaces the list, and this line would go with it.
+            if (this.saving) return;
+
             this.items.push({
                 key: this.nextKey++,
                 media_id: media.id,
@@ -188,7 +195,7 @@ export function registerScreenPlaylist(Alpine) {
                 thumbnail_url: media.thumbnail_url,
                 // A picture stays up for as long as the line says. A video runs to its own end — its
                 // measured length, or a generous backstop for one nobody could measure (never an image's
-                // ten seconds, which would cut it off) — and an Ad Builder page for the length its design
+                // six seconds, which would cut it off) — and an Ad Builder page for the length its design
                 // says; a page published before designs had a length is timed like a picture.
                 duration_seconds: media.type === 'video'
                     ? (media.duration_seconds || PlaylistItemDefaults.unmeasuredVideoSeconds)
@@ -210,6 +217,8 @@ export function registerScreenPlaylist(Alpine) {
          * and new ones arrive without anybody coming back here.
          */
         addChannel(channel) {
+            if (this.saving) return;
+
             this.items.push({
                 key: this.nextKey++,
                 media_id: null,
@@ -229,18 +238,20 @@ export function registerScreenPlaylist(Alpine) {
         },
 
         removeItem(index) {
+            if (this.saving) return;
+
             this.items.splice(index, 1);
             this.dirty = true;
         },
 
         moveUp(index) {
-            if (index === 0) return;
+            if (index === 0 || this.saving) return;
             [this.items[index - 1], this.items[index]] = [this.items[index], this.items[index - 1]];
             this.dirty = true;
         },
 
         moveDown(index) {
-            if (index >= this.items.length - 1) return;
+            if (index >= this.items.length - 1 || this.saving) return;
             [this.items[index + 1], this.items[index]] = [this.items[index], this.items[index + 1]];
             this.dirty = true;
         },
@@ -248,13 +259,18 @@ export function registerScreenPlaylist(Alpine) {
         async save() {
             if (this.saving || !this.dirty) return;
 
-            // A picture stays on screen for at least six seconds (PlaylistItem::MIN_IMAGE_SECONDS): said here, in
-            // the server's own words, before anything is sent.
-            const short = this.items.find((item) => this.isTimed(item)
-                && (Number(item.duration_seconds) || PlaylistItemDefaults.imageSeconds) < PlaylistItemDefaults.minImageSeconds);
+            // Every timed line's seconds, checked here in the server's own words before anything is sent: each line
+            // with a problem gets its red border, and the first is said, with its title.
+            let first = null;
 
-            if (short) {
-                window.toast(`${short.title}: a picture stays on screen for at least ${PlaylistItemDefaults.minImageSeconds} seconds.`);
+            this.items.forEach((item) => {
+                item.secondsError = this.secondsProblem(item);
+
+                if (item.secondsError && first === null) first = item;
+            });
+
+            if (first) {
+                window.toast(`${first.title}: ${first.secondsError}`);
 
                 return;
             }
@@ -286,6 +302,14 @@ export function registerScreenPlaylist(Alpine) {
                 window.toast('Playlist saved', 'success');
             } catch (error) {
                 const errors = error.response?.data?.errors;
+
+                // A line's own refusal goes back to that line's box, as a red border (the lines went in this order).
+                Object.entries(errors ?? {}).forEach(([key, messages]) => {
+                    const line = key.match(/^items\.(\d+)\.duration_seconds$/);
+
+                    if (line && this.items[Number(line[1])]) this.items[Number(line[1])].secondsError = messages[0];
+                });
+
                 window.toast(
                     errors ? Object.values(errors)[0][0] : (error.response?.data?.message ?? 'Could not save the playlist.')
                 );
@@ -294,9 +318,31 @@ export function registerScreenPlaylist(Alpine) {
             }
         },
 
+        /**
+         * What is wrong with a timed line's seconds — worded as the server says it, starting small so the line's
+         * title can go in front — or null. A video, an ad page with a length of its own and a channel have none.
+         */
+        secondsProblem(item) {
+            if (!this.isTimed(item)) return null;
+
+            const typed = item.duration_seconds;
+
+            if (typed === '' || typed === null || typed === undefined) return 'say how many seconds it stays on screen.';
+
+            const seconds = Number(typed);
+
+            if (!Number.isInteger(seconds)) return 'give the seconds as a whole number.';
+            if (seconds < PlaylistItemDefaults.minImageSeconds) return `a picture stays on screen for at least ${PlaylistItemDefaults.minImageSeconds} seconds.`;
+            if (seconds > PlaylistItemDefaults.maxImageSeconds) return 'a picture stays on screen for at most 24 hours.';
+
+            return null;
+        },
+
         /* ── The schedule editor ───────────────────────────────────────── */
 
         openSchedule(index) {
+            if (this.saving) return;
+
             this.scheduleIndex = index;
             // A working copy: Cancel has to leave the item exactly as it was, and the
             // rules are nested objects, so a shallow copy would not be one.
@@ -317,9 +363,66 @@ export function registerScreenPlaylist(Alpine) {
          *  the playlist's own Save Changes, in one atomic write. */
         applySchedule() {
             if (this.scheduleIndex === null) return;
+
+            // Each rule checked as the server will check it: the window stays open, with the reason under the rule.
+            const errors = this.scheduleRules.map((rule) => this.ruleProblems(rule));
+            this.unreadableRuleFields().forEach(([index, field, message]) => { errors[index] = { ...errors[index], [field]: message }; });
+
+            if (errors.some((problems) => Object.keys(problems).length > 0)) {
+                this.scheduleErrors = errors;
+
+                return;
+            }
+
             this.items[this.scheduleIndex].rules = this.scheduleRules;
             this.dirty = true;
             this.closeSchedule();
+        },
+
+        /** What is wrong with one rule, as {field: message} — the server's own rules and words (ruleMessages). */
+        ruleProblems(rule) {
+            const problems = {};
+            const whole = (value, from, to) => Number.isInteger(Number(value)) && String(value).trim() !== ''
+                && Number(value) >= from && Number(value) <= to;
+
+            if (rule.day_mode === 'range' && rule.starts_on && rule.ends_on && rule.ends_on < rule.starts_on) {
+                problems.ends_on = 'The end date cannot be before the start date.';
+            }
+
+            if (rule.day_mode === 'repeat') {
+                if (!whole(rule.recurrence_interval, 1, 52)) problems.recurrence_interval = 'Repeat every: enter a whole number from 1 to 52.';
+                if (rule.recurrence_type === 'weekly' && rule.recurrence_weekdays.length === 0) problems.recurrence_weekdays = 'Choose at least one day of the week.';
+                if (rule.recurrence_type === 'monthly_day' && !whole(rule.recurrence_monthday, 1, 31)) problems.recurrence_monthday = 'On day: enter a day of the month from 1 to 31.';
+                if (rule.starts_on && rule.recurrence_until && rule.recurrence_until < rule.starts_on) problems.recurrence_until = 'The repeat cannot end before the schedule starts.';
+            }
+
+            return problems;
+        },
+
+        /**
+         * The window's dates and numbers the browser could not read — typed only in part — which it hands over as ''
+         * and would save as no date at all: [rule index, field, message] each (validity.badInput).
+         */
+        unreadableRuleFields() {
+            const fields = {
+                'rule-starts-on': 'starts_on', 'rule-ends-on': 'ends_on', 'rule-repeat-start': 'starts_on',
+                'rule-until': 'recurrence_until', 'rule-interval': 'recurrence_interval', 'rule-monthday': 'recurrence_monthday',
+            };
+
+            return [...document.querySelectorAll('[dusk^="rule-"]')]
+                .filter((input) => input.validity?.badInput)
+                .map((input) => {
+                    const [, name, index] = input.getAttribute('dusk').match(/^(rule-[a-z-]+)-(\d+)$/) ?? [];
+
+                    return fields[name] ? [Number(index), fields[name], input.type === 'date'
+                        ? 'Enter the whole date, or leave it blank.' : 'Enter a number.'] : null;
+                })
+                .filter(Boolean);
+        },
+
+        /** The rule's first problem, said under it — or ''. */
+        ruleError(index) {
+            return Object.values(this.scheduleErrors[index] ?? {})[0] ?? '';
         },
 
         addRule() {
@@ -354,6 +457,9 @@ export function registerScreenPlaylist(Alpine) {
         refreshPreview() {
             if (this.previewTimer) clearTimeout(this.previewTimer);
 
+            // A change is a new try: what OK said about the rules as they were no longer stands.
+            this.scheduleErrors = [];
+
             // Taken when the rules change, not when the request goes: every change overtakes a
             // preview already on its way, so a slow answer for the rules as they WERE — or for the
             // item whose schedule was open before this one — never lands over the current one.
@@ -381,11 +487,13 @@ export function registerScreenPlaylist(Alpine) {
                     });
                     if (token !== this.previewToken) return;
                     this.preview = data.occurrences;
-                } catch {
+                    this.previewError = '';
+                } catch (error) {
                     if (token !== this.previewToken) return;
-                    // A preview that cannot be built is not worth an error banner —
-                    // the save itself will say what is wrong with the rule.
+                    // Said in place of the preview — never "nothing in the next 7 days" for rules that cannot be read.
                     this.preview = [];
+                    const errors = error.response?.data?.errors;
+                    this.previewError = errors ? Object.values(errors)[0][0] : '';
                 } finally {
                     if (token === this.previewToken) this.previewing = false;
                 }

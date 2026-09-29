@@ -35,8 +35,9 @@ class BuilderAdFactory extends Factory
             'media_id' => fn (array $attributes) => Media::factory()->adPage()->create([
                 'store_id' => $attributes['store_id'],
                 'title' => $attributes['name'],
-                // The length its design says, as AdPublisher writes it (Media::ownLength()).
-                'duration_seconds' => BuilderAd::lengthOf($attributes['document']),
+                // The length its design says, as AdPublisher writes it (Media::ownLength()) — none for a design
+                // with no length of its own (BuilderAd::hasOwnLength), whose lines keep their seconds.
+                'duration_seconds' => BuilderAd::hasOwnLength($attributes['document']) ? BuilderAd::lengthOf($attributes['document']) : null,
             ])->id,
             'published_at' => $now,
             'published_document' => fn (array $attributes) => $attributes['document'],

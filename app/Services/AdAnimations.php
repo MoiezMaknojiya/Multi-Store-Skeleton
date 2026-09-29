@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\BuilderAd;
+
 /**
  * What an element's animations may be (docs/AD-BUILDER-SPEC.md §8).
  *
@@ -52,21 +54,22 @@ class AdAnimations
             'degrees' => [-720, 720, -90],
             'blur' => [0, 100, 20],
             'duration' => [0.05, 60, 0.8],
-            'delay' => [0, 600, 0],
+            // Nothing can start after the longest an ad may be (BuilderAd::MAX_SECONDS): it would never be seen.
+            'delay' => [0, BuilderAd::MAX_SECONDS, 0],
         ],
         'loop' => [
             'amount' => [-2000, 2000, 10],
             'amountX' => [-2000, 2000, 0],
             'amountY' => [-2000, 2000, 0],
             'duration' => [0.1, 120, 2],
-            'delay' => [0, 600, 0],
+            'delay' => [0, BuilderAd::MAX_SECONDS, 0],
         ],
         'out' => [
             'distance' => [0, 2000, 80],
             'scale' => [0, 5, 0.6],
             'degrees' => [-720, 720, -90],
             'blur' => [0, 100, 20],
-            'at' => [0, 3600, 5],
+            'at' => [0, BuilderAd::MAX_SECONDS, 5],
             'duration' => [0.05, 60, 0.6],
         ],
     ];

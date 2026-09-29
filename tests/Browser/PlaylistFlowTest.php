@@ -579,6 +579,19 @@ class PlaylistFlowTest extends DuskTestCase
                 true,
             ));
             $this->assertSame(0, PlaylistItem::where('screen_id', $screen->id)->count(), 'nothing was saved');
+            $this->assertTrue($browser->script('return document.querySelector(\'[dusk="playlist-duration-0"]\').parentElement.classList.contains("crud-field-error");')[0],
+                "the line's box is outlined in red, as every field with an error is");
+
+            // A fraction is said the same way — and typing clears the red first.
+            $this->jsType($browser, '@playlist-duration-0', '6.5');
+            $this->assertFalse($browser->script('return document.querySelector(\'[dusk="playlist-duration-0"]\').parentElement.classList.contains("crud-field-error");')[0]);
+            $this->jsClick($browser, '@playlist-save');
+            $browser->waitUsing(5, 100, fn () => in_array(
+                'Poster Two: give the seconds as a whole number.',
+                $browser->script('return Alpine.store("toasts").items.map((toast) => toast.message);')[0],
+                true,
+            ));
+            $this->assertSame(0, PlaylistItem::where('screen_id', $screen->id)->count(), 'nothing was saved');
 
             // -- Retime an image -------------------------------------------------
             // Poster Two is first now, so this is its line.

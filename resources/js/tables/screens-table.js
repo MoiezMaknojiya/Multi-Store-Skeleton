@@ -8,7 +8,7 @@
  */
 import axios from 'axios';
 import { createCrudTable } from '../core/crud-table-base.js';
-import { validate, required, maxLen } from '../core/validate.js';
+import { validate, required, maxLen, requiredMessage } from '../core/validate.js';
 
 const ORIENTATION_LABELS = {
     landscape: 'Landscape',
@@ -137,8 +137,9 @@ export function registerScreensTable(Alpine) {
                 const isNew = this.pairForm.mode === 'new';
                 const rules = { code: [required('Pairing code')] };
                 if (isNew) {
-                    rules.name = [required('Screen name'), maxLen('Screen name', 255)];
-                    rules.orientation = [required('Orientation')];
+                    // In the server's own words (ScreenController::pair).
+                    rules.name = [requiredMessage('Give the screen a name.'), maxLen('Screen name', 255)];
+                    rules.orientation = [requiredMessage('Choose how the screen is mounted.')];
                 }
 
                 const errors = validate(this.pairForm, rules);

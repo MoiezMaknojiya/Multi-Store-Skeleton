@@ -30,7 +30,7 @@ export function registerChannelsTable(Alpine) {
             /* Mirrors ChannelRequest. The server still decides — uniqueness is its alone. */
             validateForm: (form) => {
                 const errors = validate(form, {
-                    name: [required('Name'), maxLen('Name', 120)],
+                    name: [required('Channel name'), maxLen('Channel name', 120)],
                 });
 
                 const perPass = String(form.ads_per_pass ?? '').trim();

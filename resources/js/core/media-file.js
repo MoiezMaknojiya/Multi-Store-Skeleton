@@ -57,7 +57,7 @@ export function clock(seconds) {
 }
 
 /** 300 as "5 minutes", 60 as "60 seconds" — as App\Rules\VideoLength::inWords says it. */
-function lengthInWords(seconds) {
+export function lengthInWords(seconds) {
     if (seconds <= 60) return `${seconds} ${seconds === 1 ? 'second' : 'seconds'}`;
 
     const minutes = Math.floor(seconds / 60);
@@ -68,9 +68,17 @@ function lengthInWords(seconds) {
 
 /** Why a measured video is too long, or null — in the server's own words. */
 export function videoLengthError(meta, maxSeconds = MAX_VIDEO_SECONDS, noun = 'A video') {
-    const seconds = Number(meta?.duration_seconds);
+    // Nothing measured is the server's to judge (it reads the file itself), never a length of nought.
+    if (meta?.duration_seconds === null || meta?.duration_seconds === undefined || meta?.duration_seconds === '') return null;
 
-    if (! Number.isFinite(seconds) || seconds <= maxSeconds) return null;
+    const seconds = Number(meta.duration_seconds);
+
+    if (! Number.isFinite(seconds)) return null;
+
+    // Under half a second rounds to nothing — App\Rules\VideoLength refuses it in the same words.
+    if (seconds < 1) return `${noun} must be at least 1 second long.`;
+
+    if (seconds <= maxSeconds) return null;
 
     return `${noun} may be at most ${lengthInWords(maxSeconds)} long. This one is ${clock(seconds)}.`;
 }

@@ -15,8 +15,9 @@
  * page is given its seconds; a video has none to give — it plays to its own end (owner's rule).
  */
 import axios from 'axios';
-import { fileError, readVideoMeta, videoLengthError, storageError } from '../core/media-file.js';
+import { fileError, lengthInWords, readVideoMeta, videoLengthError, storageError } from '../core/media-file.js';
 import { PlaylistItemDefaults } from '../core/playlist-defaults.js';
+import { unreadableFields } from '../core/validate.js';
 
 const blankForm = () => ({ title: '', seconds: PlaylistItemDefaults.imageSeconds, starts_on: '', ends_on: '' });
 
@@ -287,18 +288,21 @@ export function registerChannelAds(Alpine) {
             }
 
             if (String(this.form.title ?? '').length > 255) {
-                errors.title = ['The title may not be longer than 255 characters.'];
+                errors.title = ['Title may not be longer than 255 characters.'];
             }
 
             if (! this.runsOwnLength()) {
-                const seconds = Number(this.form.seconds);
+                const typed = this.form.seconds;
+                const seconds = Number(typed);
 
-                if (! Number.isInteger(seconds) || seconds < 1) {
+                if (typed === '' || typed === null || typed === undefined) {
                     errors.seconds = ['Say how many seconds it stays on screen.'];
+                } else if (! Number.isInteger(seconds)) {
+                    errors.seconds = ['Give the seconds as a whole number.'];
                 } else if (seconds < PlaylistItemDefaults.minImageSeconds) {
                     errors.seconds = [`A picture stays on screen for at least ${PlaylistItemDefaults.minImageSeconds} seconds.`];
                 } else if (seconds > this.maxImageSeconds) {
-                    errors.seconds = [`It may not stay up longer than ${this.maxImageSeconds} seconds.`];
+                    errors.seconds = [`A picture stays on screen for at most ${lengthInWords(this.maxImageSeconds)}.`];
                 }
             }
 
@@ -311,10 +315,11 @@ export function registerChannelAds(Alpine) {
 
         /** POST, with FormData, for an edit too: an edit may carry a new file, and PHP does
          *  not parse a multipart body sent as PUT. */
-        async saveAd() {
+        async saveAd(event) {
             if (this.saving || this.preparing) return;
 
-            const errors = this.validateAd();
+            // A date typed only in part reads as '' — said under it, never saved as no date at all.
+            const errors = { ...this.validateAd(), ...unreadableFields(event?.target) };
             if (Object.keys(errors).length > 0) {
                 this.formErrors = errors;
                 return;

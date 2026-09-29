@@ -91,6 +91,21 @@ test('anything that is not a video it can read has no length at all', function (
     'a WebM header of all ones' => ["\x1A\x45\xDF\xA3".str_repeat("\xFF", 64)],
 ]);
 
+test("a phone maker's trailer after the last box is no reason to refuse a video; bytes before the movie still are", function () {
+    // The brute-force round, 2026-09-29: Samsung writes its SEF trailer after an MP4's last box, and such a file,
+    // which plays, was refused as unreadable. A player reads the movie and stops at what is no box; so does this —
+    // and a trailer hides nothing, since the movie's own claims are what the length is.
+    // As Samsung writes it: binary entries, then a directory ("SEFH") and a footer ending in "SEFT".
+    $sef = "\x00\x00\x01\x0A\x0E\x00\x00\x00Image_UTC_Data1727600000000".'SEFH'.pack('V3', 106, 1, 0x0A01).pack('V', 60).'SEFT';
+
+    expect(lengthOf(VideoFiles::mp4(10).$sef))->toBe(10.0)
+        ->and(lengthOf(VideoFiles::mp4(10, ['moov_at_end' => true]).$sef))->toBe(10.0)
+        ->and(lengthOf(VideoFiles::mp4(10).str_repeat("\x01", 33)))->toBe(10.0)
+        ->and(lengthOf(VideoFiles::mp4(3600).$sef))->toBe(3600.0)
+        ->and(lengthOf(str_repeat("\x01", 40).VideoFiles::mp4(10)))->toBeNull()
+        ->and(lengthOf(VideoFiles::webm(10).str_repeat("\x01", 1000)))->toBe(10.0);
+});
+
 test('a 64-bit length past 2^63 is a broken file, never a short one', function () {
     // PHP reads such a number as negative; summed in, it would shrink an hour to nothing.
     $negative = VideoFiles::box('ftyp', 'isom', pack('N', 0), 'isom')

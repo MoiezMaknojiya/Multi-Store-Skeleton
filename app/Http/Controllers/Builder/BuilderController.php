@@ -222,23 +222,39 @@ class BuilderController extends Controller
      * same-origin with the player, behind the page's own policy — docs §15): even a page that somehow carried something it
      * should not could reach nothing of this app — not its cookies, not its session, not its forms.
      */
-    public function preview(BuilderAd $ad, AdCompiler $compiler): Response
+    public function preview(Request $request, BuilderAd $ad, AdCompiler $compiler): Response
     {
         // Whoever may look at the ads, and whoever may change this one: previewing is part of designing.
         abort_unless(auth()->user()->canAny(['ad-view', 'ad-update']), 403);
 
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
 
-        // As a screen shows it: for the ad's own length, then from the start again, as a playlist of this one ad
-        // would — a video in it cut at the end. A published page never carries this: the player times it.
-        $refresh = '<meta http-equiv="refresh" content="'.BuilderAd::lengthOf($ad->document).'">';
-        $page = Str::replaceFirst('<meta charset="utf-8">', '<meta charset="utf-8">'."\n".$refresh, $compiler->compile($ad));
-
-        return response($page, 200, [
+        // A preview reloads itself at the ad's length for as long as its tab is open: it is compiled again only when
+        // the draft has changed since (the brute-force round, 2026-09-29 — a tab left open overnight compiled the
+        // ad thousands of times on a one-core server). The browser keeps it privately and asks every time.
+        $etag = '"'.hash('sha256', AdCompiler::VERSION.'|'.$ad->id.'|'.$ad->updated_at?->toIso8601String().'|'.json_encode($ad->document)).'"';
+        $headers = [
             'Content-Type' => 'text/html; charset=UTF-8',
             'Content-Security-Policy' => 'sandbox allow-scripts',
-            'Cache-Control' => 'no-store, private',
-        ]);
+            'Cache-Control' => 'no-cache, private',
+            'ETag' => $etag,
+        ];
+
+        if (in_array($etag, $request->getETags(), true)) {
+            return response('', 304, $headers);
+        }
+
+        // As a screen shows it: for the ad's own length, then from the start again, as a playlist of this one ad
+        // would — a video in it cut at the end. A published page never carries this: the player times it. A design
+        // with no length of its own has none to go by: each screen gives it its own.
+        $page = $compiler->compile($ad);
+
+        if (BuilderAd::hasOwnLength($ad->document)) {
+            $refresh = '<meta http-equiv="refresh" content="'.BuilderAd::lengthOf($ad->document).'">';
+            $page = Str::replaceFirst('<meta charset="utf-8">', '<meta charset="utf-8">'."\n".$refresh, $page);
+        }
+
+        return response($page, 200, $headers);
     }
 
     /**
@@ -420,8 +436,7 @@ class BuilderController extends Controller
             // draft | published | changed — changed: on the screens, with saved changes they do not show yet.
             'status' => $ad->status(),
             'has_published_version' => $ad->hasPublishedVersion(),
-            // On the screens since before designs had a length: each line keeps its own seconds until Publish.
-            'timed_by_its_lines' => $ad->isTimedByItsLines(),
+
             // May a shop's own playlist play it, or is it for channels only (showInPlaylists)?
             'in_playlists' => (bool) $ad->in_playlists,
             'updated_at' => $ad->updated_at?->toIso8601String(),

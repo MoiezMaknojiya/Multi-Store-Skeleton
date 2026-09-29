@@ -2,11 +2,13 @@
 
 namespace Tests\Browser;
 
+use App\Models\BuilderAd;
 use App\Models\Campaign;
 use App\Models\Media;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
 use App\Models\Store;
+use App\Services\AdPublisher;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Dusk\Browser;
@@ -256,6 +258,57 @@ class NetworkAdBreakTest extends DuskTestCase
             $this->assertSame(0, $tv->script('return document.getElementById("layer-ad").children.length;')[0]);
             $this->assertLessThanOrEqual(2, $tv->script('return document.querySelectorAll("video").length;')[0],
                 'video elements are accumulating — one of the layers is not being cleared');
+
+            $tv->visit('/login');
+            $tv->script('localStorage.clear();');
+        });
+    }
+
+    /**
+     * An Ad Builder page under a break is let go while the advert plays — its runtime cannot be paused from the
+     * player, and running on under the break it came back past its exit, its video still decoding (the brute-force
+     * round, 2026-09-29) — and comes back from the start in a fresh frame when the break is over.
+     */
+    public function test_an_ad_page_under_a_break_is_let_go_and_comes_back_from_the_start(): void
+    {
+        [$store, $screen] = $this->setUpScreen('page-break-token');
+
+        $document = BuilderAd::blankDocument();
+        $document['duration'] = 120;    // long enough that the break lands in it
+        $document['elements'] = [[
+            'id' => 'el_text', 'type' => 'text', 'name' => 'Headline', 'text' => 'Back from the break',
+            'x' => 160, 'y' => 400, 'w' => 1600, 'h' => 240, 'rotation' => 0, 'opacity' => 1, 'z' => 0, 'locked' => false, 'visible' => true,
+            'style' => ['fontSize' => 120, 'color' => '#ffffff'], 'animations' => ['in' => ['effect' => 'fade', 'duration' => 0.5]],
+        ]];
+        $ad = BuilderAd::create([
+            'store_id' => $store->id, 'name' => 'Back from the break', 'orientation' => BuilderAd::LANDSCAPE,
+            'document' => $document, 'in_playlists' => true,
+        ]);
+        $page = app(AdPublisher::class)->publish($ad);
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->id, 'position' => 0, 'duration_seconds' => null]);
+
+        $this->browse(function (Browser $tv) use ($ad) {
+            $tv->visit('/login');
+            $tv->script("localStorage.clear(); localStorage.setItem('signage.device.token', 'page-break-token');");
+            $tv->visit('/player');
+
+            $frame = 'document.querySelector("#layer-a:not([hidden]) iframe, #layer-b:not([hidden]) iframe")';
+            $isThePage = "(({$frame} || {}).dataset || {}).src && {$frame}.dataset.src.includes('/ads/{$ad->id}/')";
+
+            // The page comes on, and its frame is noted.
+            $tv->waitUsing(30, 200, fn () => (bool) $tv->script("return {$isThePage};")[0]);
+            $tv->script("window.__first = {$frame};");
+
+            // The break: the page is let go under the advert, hidden.
+            $tv->waitUsing(30, 200, fn () => $tv->script('return !document.getElementById("layer-ad").hidden;')[0]);
+            $tv->waitUsing(5, 100, fn () => $tv->script('return window.__first.getAttribute("src") === "about:blank";')[0]);
+            $this->assertSame('hidden', $tv->script('return window.__first.style.visibility;')[0]);
+
+            // After it: the page again, from the start, in a frame of its own — shown.
+            $tv->waitUsing(30, 200, fn () => $tv->script('return document.getElementById("layer-ad").hidden;')[0]);
+            $tv->waitUsing(15, 200, fn () => (bool) $tv->script(
+                "const f = {$frame}; return !!f && f !== window.__first && {$isThePage} && f.style.visibility !== 'hidden';"
+            )[0], 'the page did not come back in a fresh frame');
 
             $tv->visit('/login');
             $tv->script('localStorage.clear();');

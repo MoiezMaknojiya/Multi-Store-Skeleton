@@ -177,7 +177,7 @@
 
         {{-- Invite an owner: offered only for a store that has none --}}
         <x-modal name="invite-store-owner" :show="false" maxWidth="md" focusable>
-            <form @submit.prevent="sendOwnerInvite()" class="p-6 space-y-4" dusk="invite-owner-form">
+            <form @submit.prevent="sendOwnerInvite()" novalidate class="p-6 space-y-4" dusk="invite-owner-form">
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Give <span x-text="ownerStore?.name"></span> an owner</h2>
                     <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
@@ -204,7 +204,7 @@
             <div class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
                     x-text="editingItem ? 'Edit Store' : 'Add Store'"></h2>
-                <form @submit.prevent="saveItem" dusk="store-form" class="mt-4 space-y-4">
+                <form @submit.prevent="saveItem" novalidate dusk="store-form" class="mt-4 space-y-4">
 
                     <x-crud.form-field label="Store Name" field="name" :required="true">
                         <x-text-input x-model="form.name" dusk="store-name" class="block w-full" autocomplete="off" />

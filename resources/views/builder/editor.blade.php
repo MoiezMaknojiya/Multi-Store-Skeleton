@@ -117,8 +117,7 @@
              'published' => (bool) $ad?->isPublished(),
              'hasChanges' => (bool) $ad?->hasUnpublishedChanges(),
              'hasPublishedVersion' => (bool) $ad?->hasPublishedVersion(),
-             // On the screens since before designs had a length: each line keeps its own seconds until Publish.
-             'timedByItsLines' => (bool) $ad?->isTimedByItsLines(),
+
              // May a shop's own playlist play it, or is it for channels only (owner's rule, 2026-09-22)?
              'inPlaylists' => (bool) $ad?->in_playlists,
              'hasPoster' => (bool) $ad?->thumbnail_path,
@@ -155,8 +154,9 @@
 
                 {{-- The name is not part of the design, so renaming is not a step undo could take back: it
                      only marks the ad unsaved. Narrower on a laptop, where the bar has to hold everything. --}}
-                <input type="text" x-model="name" @change="markChanged()" maxlength="120"
-                       class="form-input h-9 w-36 text-sm font-medium xl:w-52" dusk="ad-name" aria-label="Ad name" />
+                <input type="text" x-model="name" @change="markChanged()" @input="nameError = ''" maxlength="120"
+                       class="form-input h-9 w-36 text-sm font-medium xl:w-52" dusk="ad-name" aria-label="Ad name"
+                       x-bind:class="nameError ? '!border-red-500' : ''" x-bind:title="nameError" />
 
                 {{-- The shape this ad is for, fixed when it was made (§12): said beside the name so nobody
                      designs a menu board for the wrong wall. --}}
@@ -592,7 +592,7 @@
                 <p class="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-xs text-gray-500 dark:text-gray-400"
                    dusk="stage-size-note"
                    x-text="previewing === 'all'
-                       ? 'Playing for ' + adSeconds() + ' seconds, then from the start — the way a screen shows it. Click the stage or press Esc to stop.'
+                       ? (hasOwnLength() ? 'Playing for ' + adSeconds() + ' seconds, then from the start — the way a screen shows it.' : 'Playing — the way a screen shows it.') + ' Click the stage or press Esc to stop.'
                        : stageSizeNote() + ' · ? for shortcuts'"></p>
             </main>
 

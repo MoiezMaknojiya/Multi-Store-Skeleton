@@ -46,7 +46,7 @@ class BuilderAssetRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'file.mimes' => 'Only '.StoreMediaRequest::FORMATS_IN_WORDS.' can be used in an ad.',
+            'file.mimes' => 'Only '.StoreMediaRequest::FORMATS_IN_WORDS.' can be uploaded.',
             'file.max' => StoreMediaRequest::tooLargeMessage(),
         ];
     }

@@ -1142,6 +1142,15 @@ function pauseContent() {
     // pause(), never a seek: the element keeps its position and its buffer, so
     // resuming a two-hour video costs nothing and cannot stutter.
     if (node && node.tagName === 'VIDEO') node.pause();
+
+    // An Ad Builder page cannot be paused from here — its runtime is its own — and left running
+    // under the break it came back past its exit, its video decoding behind the advert all along
+    // (the brute-force round, 2026-09-29). It is let go, hidden so nothing white shows, and shown
+    // again from the start when the break is over (resumeContent).
+    if (node && node.tagName === 'IFRAME') {
+        node.style.visibility = 'hidden';
+        node.src = 'about:blank';
+    }
 }
 
 /** Put the shop's content back exactly where it was. */
@@ -1149,6 +1158,14 @@ function resumeContent() {
     const node = frontNode();
 
     if (! node) return;
+
+    // A page let go for the break: shown again from the start, for its whole length, as if it had
+    // just come on — never the rest of a run whose exit already played.
+    if (node.tagName === 'IFRAME') {
+        playCurrent();
+
+        return;
+    }
 
     if (node.tagName === 'VIDEO') {
         node.play().catch(() => {});

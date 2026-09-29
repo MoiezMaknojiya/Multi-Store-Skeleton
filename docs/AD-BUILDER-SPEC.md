@@ -15,7 +15,7 @@
 | Where the Builder's images and videos live | **Its own shelf** (`builder/{store}/assets/…`), not the store's Media library. |
 | Delivery | **Staged**, with the owner looking at each stage before the next. |
 | Canvas | **A television's, fixed: 1920×1080 landscape or 1080×1920 portrait**, chosen when the ad is made (§12). No other size, no aspect-ratio change, no responsive breakpoints. Content outside the frame is clipped. The reason, from the owner on 2026-09-19: every screen they sell to is Full HD or better — "is se kum ha hi nahi" — and a portrait television is that same panel turned on the wall, which the player turns the picture with (`#stage[data-orientation]`). A portrait canvas was declined that day and asked for on 2026-09-23, for menu boards ("Portrait Boards … lazmi"). |
-| Duration | ~~The playlist line carries the seconds, exactly like an image.~~ **The design's own** (owner, 2026-09-28, the industry's way — Xibo's layout duration, Canva's page duration): a length in seconds set in the Stage panel (`document.duration`, 6 by default and 6 at least like a picture, 300 at most), published onto the page's media row, and every playlist and channel plays the ad that long. A video inside it repeats when it is shorter and is cut when the ad ends; animations loop for as long as the ad is on screen, and each one the length cuts says so under its timing — an entrance or an exit that starts after the end, one still running at it, a loop that only starts after it. The editor's Play and the Preview tab show it the same way: for its length, then from the start again. A page published before designs had a length keeps each line's seconds until it is published again. |
+| Duration | ~~The playlist line carries the seconds, exactly like an image.~~ **The design's own** (owner, 2026-09-28, the industry's way — Xibo's layout duration, Canva's page duration): a length in seconds set in the Stage panel (`document.duration`, 6 by default and 6 at least like a picture, 300 at most), published onto the page's media row, and every playlist and channel plays the ad that long. A video inside it repeats when it is shorter and is cut when the ad ends; animations loop for as long as the ad is on screen, and each one the length cuts says so under its timing — an entrance or an exit that starts after the end, one still running at it, a loop that only starts after it. The editor's Play and the Preview tab show it the same way: for its length, then from the start again. A design made before designs had a length keeps each line's seconds — published again or not — until somebody types a Length (the brute-force round, 2026-09-29). |
 
 ---
 
@@ -546,7 +546,8 @@ button of the panels; then both full suites, and the ads played on a real player
 headline from inside the sandboxed frame once its animation has brought it in.
 
 **Not in scope** (say so rather than half-build it): no flow layout, no responsive breakpoints, no custom
-CSS box, no third-party embeds, no per-ad duration, no animation timeline scrubber (the ad is not a video).
+CSS box, no third-party embeds, no per-ad duration (since 2026-09-28 the design owns its length — see the Duration
+row of the decisions table), no animation timeline scrubber (the ad is not a video).
 
 ---
 

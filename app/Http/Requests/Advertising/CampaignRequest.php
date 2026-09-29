@@ -59,8 +59,10 @@ class CampaignRequest extends FormRequest
             // end), so for one this may simply be missing, and what is kept is the file's own.
             // A picture's seconds: six at least, like every picture (PlaylistItem::MIN_IMAGE_SECONDS), one break at
             // most. A video's form sends none — its length is read from the file.
+            // A video's number is only what the browser measured (hidden, never shown): the file is measured here, so
+            // it refuses nothing.
             'duration_seconds' => $this->describesVideo()
-                ? ['nullable', 'integer', 'min:1', 'max:86400']
+                ? ['nullable', 'integer', 'min:0', 'max:86400']
                 : ['required', 'integer', 'min:'.PlaylistItem::MIN_IMAGE_SECONDS, 'max:'.Campaign::MAX_AD_SECONDS],
             // Browser-measured facts about a video — never trusted for identity, only
             // for shape. Same contract as a media upload.
@@ -109,10 +111,14 @@ class CampaignRequest extends FormRequest
     {
         return [
             'file.required' => 'Choose the advert to upload.',
+            'name.required' => 'Campaign name is required.',
+            'name.max' => 'Campaign name may not be longer than 120 characters.',
             'file.mimes' => 'Only '.StoreMediaRequest::FORMATS_IN_WORDS.' can be uploaded.',
             'file.max' => StoreMediaRequest::tooLargeMessage(),
             'screen_ids.*.exists' => 'One of the chosen screens no longer exists. Reload the page and choose again.',
-            'duration_seconds.max' => 'An advert may be on screen for at most '.Campaign::MAX_AD_SECONDS.' seconds: one break.',
+            'duration_seconds.required' => 'Say how many seconds it stays on screen.',
+            'duration_seconds.integer' => 'Give the seconds as a whole number.',
+            'duration_seconds.max' => 'An advert stays on screen for at most '.Campaign::MAX_AD_SECONDS.' seconds: one break.',
             'duration_seconds.min' => 'An advert stays on screen for at least '.PlaylistItem::MIN_IMAGE_SECONDS.' seconds.',
             'ends_on.after_or_equal' => 'The end date cannot be before the start date.',
             'start_time.required_with' => 'Give both a start and an end time, or leave both blank to run all day.',

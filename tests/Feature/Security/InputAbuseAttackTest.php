@@ -12,6 +12,7 @@ use App\Models\Role;
 use App\Models\Screen;
 use App\Models\Store;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -224,7 +225,7 @@ test('a file one picker leaves out cannot be forced past it by id, either way ro
 });
 
 test("an ad is on screen for its design's length alone: no document, line or channel ad posted by hand stretches it", function () {
-    // Owner, 2026-09-28: the design owns its length — a whole number of seconds from 1 to BuilderAd::MAX_SECONDS —
+    // Owner, 2026-09-28: the design owns its length — a whole number of seconds from six to BuilderAd::MAX_SECONDS —
     // and every screen and channel plays the ad that long. Text, a truth value or a fraction is no length the editor
     // would show, so the server takes none either; and the seconds a line or a channel ad posts are not the ad's.
     $ad = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id, 'name' => 'Short one', 'in_playlists' => true]);
@@ -289,6 +290,68 @@ test('a picture cannot be flashed by for less than six seconds, whatever shape t
     expect(PlaylistItem::count())->toBe(0)
         ->and(ChannelAd::count())->toBe(0)
         ->and(Campaign::count())->toBe(0);
+});
+
+test('seconds of every shape, hundreds of times, at every door that takes them: never a 500, never a picture under six', function () {
+    // The owner's brute-force round, 2026-09-29. A fixed seed, so a failure replays exactly. The panel's own limiter
+    // (throttle:admin) would turn most of these into 429s long before the rules saw them; it has tests of its own.
+    mt_srand(20260929);
+    $this->withoutMiddleware(ThrottleRequests::class);
+    $screen = Screen::factory()->create(['store_id' => $this->store->id]);
+    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Our Deals']);
+    $poster = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Poster']);
+    $flyer = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Flyer']);
+    $design = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id, 'name' => 'Fuzz']);
+
+    $shapes = [
+        fn () => mt_rand(-1_000_000, 1_000_000),
+        fn () => mt_rand(0, 12),
+        fn () => mt_rand(250, 350),
+        fn () => mt_rand(0, 12) + mt_rand(1, 99) / 100,
+        fn () => (string) mt_rand(0, 12),
+        fn () => ' '.mt_rand(0, 12).' ',
+        fn () => '+'.mt_rand(0, 12),
+        fn () => mt_rand(0, 12).'e1',
+        fn () => '0x'.dechex(mt_rand(0, 12)),
+        fn () => ['٦', '６', 'six', '', '-0', '00006', '6.0', 'NaN', 'Infinity', "6\u{0000}"][mt_rand(0, 9)],
+        fn () => [true, false, null][mt_rand(0, 2)],
+        fn () => [mt_rand(0, 12)],
+        fn () => ['seconds' => mt_rand(0, 12)],
+        fn () => PHP_INT_MAX,
+        fn () => PHP_INT_MIN,
+        fn () => 1e300,
+    ];
+
+    $answers = [];
+
+    for ($i = 0; $i < 150; $i++) {
+        $seconds = $shapes[mt_rand(0, count($shapes) - 1)]();
+
+        $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
+        $answers['playlist'][] = $this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => [
+            ['media_id' => $poster->id, 'duration_seconds' => $seconds],
+        ]])->status();
+
+        $answers['channel'][] = $this->postJson("/channels/{$channel->id}/ads", ['media_id' => $flyer->id, 'seconds' => $seconds])->status();
+
+        $answers['ad'][] = $this->putJson("/builder/{$design->id}", [
+            'name' => 'Fuzz', 'document' => [...$design->document, 'duration' => $seconds],
+        ])->status();
+    }
+
+    // Every door answered, and every answer was a yes or a refusal: nothing broke.
+    foreach ($answers as $door => $statuses) {
+        expect(array_diff(array_unique($statuses), [200, 400, 422]))->toBe([], "{$door} answered ".json_encode(array_count_values($statuses)))
+            ->and($statuses)->toContain(200)
+            ->and($statuses)->toContain(422);
+    }
+
+    // And whatever was kept is a whole number inside the door's own limits — never a picture or an ad under six.
+    expect(PlaylistItem::pluck('duration_seconds')->every(fn (mixed $s) => is_int($s) && $s >= 6 && $s <= 86400))->toBeTrue()
+        ->and(ChannelAd::pluck('duration_seconds')->every(fn (mixed $s) => is_int($s) && $s >= 6 && $s <= ChannelAd::MAX_IMAGE_SECONDS))->toBeTrue();
+
+    $length = $design->fresh()->document['duration'] ?? null;
+    expect($length === null || (is_int($length) && $length >= BuilderAd::MIN_SECONDS && $length <= BuilderAd::MAX_SECONDS))->toBeTrue();
 });
 
 test('ids that are not ids answer 422 or 404 — never a 500', function () {

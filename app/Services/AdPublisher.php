@@ -73,8 +73,9 @@ class AdPublisher
             'thumbnail_path' => $poster,
             'size' => strlen($html),
             // How long the ad is on screen, as its design says: from here every playlist and channel plays it
-            // that long (Media::ownLength()), and a video inside it repeats or is cut to fit.
-            'duration_seconds' => BuilderAd::lengthOf($ad->document),
+            // that long (Media::ownLength()), and a video inside it repeats or is cut to fit. A design with no
+            // length of its own writes none, and each line keeps its seconds (BuilderAd::hasOwnLength).
+            'duration_seconds' => BuilderAd::hasOwnLength($ad->document) ? BuilderAd::lengthOf($ad->document) : null,
             // The ad's own shape (docs/AD-BUILDER-SPEC.md §12), so every picker that says "portrait" for a
             // photograph says it for this page the same way.
             'width' => $ad->stageWidth(),

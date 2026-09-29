@@ -191,16 +191,6 @@ class BuilderAd extends Model
         return $this->wouldChangeWith($this->published_name ?? $this->name, $this->published_document);
     }
 
-    /**
-     * On the screens since before designs had a length (2026-09-28): its page's row says none, so every playlist
-     * line and channel ad keeps the seconds it was given there until the ad is published again — which is when
-     * its own length reaches the screens. The editor says so under Length.
-     */
-    public function isTimedByItsLines(): bool
-    {
-        return $this->isPublished() && $this->media !== null && $this->media->ownLength() === null;
-    }
-
     /** On the screens, with the version they show kept (every publish since 2026-09-21 keeps it)? */
     public function hasPublishedVersion(): bool
     {
@@ -313,6 +303,19 @@ class BuilderAd extends Model
             ],
             'elements' => [],
         ];
+    }
+
+    /**
+     * Does the design say its own length? Every new design does (blankDocument). One made before designs had a length
+     * (2026-09-28) does not until its designer types one: until then publishing it — again, or after Unpublish —
+     * writes no length onto its page's row, and every playlist line and channel ad keeps the seconds it was given
+     * there (the brute-force round, 2026-09-29: a typo fixed and published re-timed a 15 s ad to 6 on every screen).
+     */
+    public static function hasOwnLength(?array $document): bool
+    {
+        $seconds = $document['duration'] ?? null;
+
+        return is_int($seconds) && $seconds >= 1;
     }
 
     /**

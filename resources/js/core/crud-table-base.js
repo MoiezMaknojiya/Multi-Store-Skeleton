@@ -6,6 +6,7 @@
  * (roles, playlists and channel ads have their own components instead).
  */
 import axios from 'axios';
+import { unreadableFields } from './validate.js';
 
 /**
  * Rows per page, for every listing in the app.
@@ -201,17 +202,21 @@ export function createCrudTable({
         },
 
         /* ── Save (create or update) ───────────────────────────────────── */
-        async saveItem() {
+        async saveItem(event) {
             if (this.saving) return;
 
             /* Client-side pre-validation: obviously-invalid input never reaches the
-             * server. The backend still validates everything — this only saves the trip. */
-            if (validateForm) {
-                const errors = validateForm(this.form, this.editingItem);
-                if (Object.keys(errors).length > 0) {
-                    this.formErrors = errors;
-                    return;
-                }
+             * server. The backend still validates everything — this only saves the trip.
+             * A field the browser could not read (a date typed only in part) is said
+             * under it, never saved as left blank (unreadableFields). */
+            const errors = {
+                ...(validateForm ? validateForm(this.form, this.editingItem) : {}),
+                ...unreadableFields(event?.target),
+            };
+
+            if (Object.keys(errors).length > 0) {
+                this.formErrors = errors;
+                return;
             }
             this.formErrors = {};
             this.saving = true;

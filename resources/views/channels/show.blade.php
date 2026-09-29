@@ -196,7 +196,9 @@
                         <p x-show="!picker.loading && picker.items.length === 0" x-cloak dusk="channel-ad-picker-empty"
                            class="py-6 text-center text-sm text-gray-500 dark:text-gray-400" x-text="pickerEmptyText()"></p>
 
-                        <div class="grid max-h-80 grid-cols-2 gap-3 overflow-y-auto pr-1 sm:grid-cols-3" dusk="channel-ad-picker">
+                        {{-- Nothing chosen: the picker is outlined in red, as a field with an error is. --}}
+                        <div class="grid max-h-80 grid-cols-2 gap-3 overflow-y-auto pr-1 sm:grid-cols-3" dusk="channel-ad-picker"
+                             x-bind:class="formErrors.media_id ? 'rounded-md ring-2 ring-red-500' : ''">
                             <template x-for="item in picker.items" :key="item.id">
                                 <button type="button" @click="pick(item)" x-bind:dusk="'channel-ad-pick-' + item.id"
                                         x-bind:aria-pressed="chosen?.id === item.id"

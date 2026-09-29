@@ -106,7 +106,8 @@ export function motionPanel(motion) {
         timingNote(slot) {
             const animations = this.selected?.animations ?? {};
 
-            if (!animations[slot]?.effect) return '';
+            // With no length of its own each screen gives the ad its own seconds: there is no one end to measure by.
+            if (!animations[slot]?.effect || !this.hasOwnLength()) return '';
 
             const end = this.adSeconds();
             const number = (from, key) => {
@@ -132,7 +133,7 @@ export function motionPanel(motion) {
             if (slot === 'out') {
                 const start = number('out', 'at');
 
-                if (start >= end) return `After the ad ends at ${end} s: nobody will see it.`;
+                if (start >= end) return `Leaves after the ad ends at ${end} s: nobody will see it.`;
                 if (start + number('out', 'duration') > end) return `Still leaving when the ad ends at ${end} s.`;
             }
 
@@ -343,10 +344,12 @@ export function motionPanel(motion) {
                 });
 
                 // For the ad's own length, then from the start again — a playlist of this one ad, a video in it
-                // cut at the end however long it is.
-                motion.lengthTimer = window.setTimeout(() => {
-                    if (this.previewing === 'all') this.playAll();
-                }, this.adSeconds() * 1000);
+                // cut at the end however long it is. A design with no length of its own plays on until stopped.
+                if (this.hasOwnLength()) {
+                    motion.lengthTimer = window.setTimeout(() => {
+                        if (this.previewing === 'all') this.playAll();
+                    }, this.adSeconds() * 1000);
+                }
             });
         },
 

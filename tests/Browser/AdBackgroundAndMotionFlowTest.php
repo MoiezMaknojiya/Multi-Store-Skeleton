@@ -216,7 +216,7 @@ class AdBackgroundAndMotionFlowTest extends DuskTestCase
 
             // The ad is six seconds long (the Stage panel's default, owner's rule 2026-09-28) and leaves the screen
             // then, however its elements move: the panel says so where each time is set.
-            $browser->waitFor('@anim-out-timing')->assertSeeIn('@anim-out-timing', 'After the ad ends at 6 s: nobody will see it.')
+            $browser->waitFor('@anim-out-timing')->assertSeeIn('@anim-out-timing', 'Leaves after the ad ends at 6 s: nobody will see it.')
                 ->assertMissing('@anim-in-timing')
                 ->assertMissing('@anim-loop-timing');
 

@@ -75,7 +75,7 @@ class RecompilePublishedAds extends Command
             // one keeps its lines' seconds: writing a page again never changes how long the screens show it.
             $media->forceFill([
                 'size' => strlen($html),
-                'duration_seconds' => isset($ad->published_document['duration'])
+                'duration_seconds' => BuilderAd::hasOwnLength($ad->published_document)
                     ? BuilderAd::lengthOf($ad->published_document)
                     : $media->duration_seconds,
                 'updated_at' => now(),

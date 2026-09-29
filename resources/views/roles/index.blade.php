@@ -146,7 +146,7 @@
 
         {{-- Create / edit --}}
         <x-modal name="role-form" :show="false" maxWidth="2xl" focusable>
-            <form @submit.prevent="save()" class="p-6 space-y-5" dusk="role-form">
+            <form @submit.prevent="save()" novalidate class="p-6 space-y-5" dusk="role-form">
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
                         x-text="editingRole ? 'Edit ' + editingRole.name : {{ Js::from($store ? 'Create custom role' : 'Create role') }}"></h2>

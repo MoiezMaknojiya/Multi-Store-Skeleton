@@ -187,7 +187,7 @@ test('numbers outside what the compiler writes are refused, with a name a person
     'a layer’s opacity' => ['stage.background.layers.0.opacity', 3, 'The background layer opacity field must be between 0 and 1.'],
     'an entrance’s duration' => ['elements.0.animations.in.duration', 0, 'The entrance duration field must be between 0.05 and 60.'],
     'a loop’s amount' => ['elements.0.animations.loop.amount', 99999, 'The loop amount field must be between -2000 and 2000.'],
-    'an exit’s start' => ['elements.0.animations.out.at', -1, 'The exit at field must be between 0 and 3600.'],
+    'an exit’s start' => ['elements.0.animations.out.at', -1, 'The exit at field must be between 0 and 300.'],
     'a rotation' => ['elements.0.rotation', 400, 'The rotation field must be between -360 and 360.'],
 ]);
 

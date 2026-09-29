@@ -176,12 +176,31 @@ test('the preview is the saved design as a screen would show it, sandboxed, and 
     $response = $this->get("/builder/{$ad->id}/preview")->assertOk();
 
     expect($response->headers->get('Content-Security-Policy'))->toBe('sandbox allow-scripts')
-        ->and($response->headers->get('Cache-Control'))->toContain('no-store')
+        ->and($response->headers->get('Cache-Control'))->toContain('no-cache')->toContain('private')
         ->and($response->headers->get('Content-Type'))->toContain('text/html')
         ->and($response->getContent())->toContain('Saved words')->toContain('<!doctype html>')
         ->and(Media::count())->toBe(0)
         ->and(Storage::disk('public')->allFiles())->toBe([])
         ->and($ad->fresh()->published_at)->toBeNull();
+});
+
+test('a preview left open is compiled again only when the draft has changed', function () {
+    // The brute-force round, 2026-09-29: the preview reloads itself at the ad's length, and each reload compiled the
+    // whole ad again. Now the browser asks with the version it has, and an unchanged draft answers 304, empty.
+    $ad = BuilderAd::factory()->withText('Saved words')->create(['store_id' => $this->store->id]);
+
+    $first = $this->get("/builder/{$ad->id}/preview")->assertOk();
+    $etag = $first->headers->get('ETag');
+
+    expect($etag)->not->toBeEmpty();
+    $this->get("/builder/{$ad->id}/preview", ['If-None-Match' => $etag])->assertStatus(304)->assertContent('');
+
+    // Changed: the next reload gets the new design.
+    $this->putJson("/builder/{$ad->id}", ['name' => $ad->name, 'document' => [...$ad->document, 'elements' => [
+        [...$ad->document['elements'][0], 'text' => 'New words'],
+    ]]])->assertOk();
+
+    expect($this->get("/builder/{$ad->id}/preview", ['If-None-Match' => $etag])->assertOk()->getContent())->toContain('New words');
 });
 
 test('the preview keeps the store wall and asks for ad-view or ad-update', function () {

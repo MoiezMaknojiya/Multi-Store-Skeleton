@@ -10,7 +10,7 @@ import axios from 'axios';
 import { windowLabel as clockRange } from '../core/clock.js';
 import { createCrudTable } from '../core/crud-table-base.js';
 import { fileError, readVideoMeta, videoLengthError } from '../core/media-file.js';
-import { validate, required, maxLen, maxNumber, minNumber } from '../core/validate.js';
+import { validate, required, maxLen, maxNumber, minNumber, requiredMessage, unreadableFields, wholeNumber } from '../core/validate.js';
 import { PlaylistItemDefaults } from '../core/playlist-defaults.js';
 
 const blankForm = () => ({
@@ -50,7 +50,11 @@ export function registerCampaignsTable(Alpine) {
         mapItemToForm: (campaign) => ({
             name: campaign.name,
             advertiser_name: campaign.advertiser_name ?? '',
-            duration_seconds: campaign.duration_seconds ?? PlaylistItemDefaults.imageSeconds,
+            // A picture saved before the six-second rule, or before the one-break ceiling, opens as its row says and
+            // a screen plays it — never at a number the form would refuse on any change at all (Campaign::play_seconds).
+            duration_seconds: campaign.type === 'image'
+                ? (campaign.play_seconds ?? PlaylistItemDefaults.imageSeconds)
+                : (campaign.duration_seconds ?? PlaylistItemDefaults.imageSeconds),
             starts_on: campaign.starts_on ? String(campaign.starts_on).slice(0, 10) : '',
             ends_on: campaign.ends_on ? String(campaign.ends_on).slice(0, 10) : '',
             start_time: (campaign.start_time ?? '').slice(0, 5),
@@ -144,19 +148,27 @@ export function registerCampaignsTable(Alpine) {
              * PHP does not parse multipart bodies on PUT, and _method=PUT would turn
              * the request INTO a PUT and miss the route entirely.
              */
-            async saveCampaign() {
+            /** Why the chosen screens were refused (a screen deleted meanwhile, say), or '' — shown under the list. */
+            screensError() {
+                const key = Object.keys(this.formErrors ?? {}).find((field) => field === 'screen_ids' || field.startsWith('screen_ids.'));
+
+                return key ? this.formErrors[key][0] : '';
+            },
+
+            async saveCampaign(event) {
                 // Not while a video is still being measured: it would go without its length and poster.
                 if (this.saving || this.preparing) return;
 
                 const errors = validate(this.form, {
-                    name: [required('Name'), maxLen('Name', 120)],
+                    name: [required('Campaign name'), maxLen('Campaign name', 120)],
                     advertiser_name: [maxLen('Advertiser', 120)],
                     // Only an image has seconds; a video's field is not even shown.
                     ...(this.isVideoAd() ? {} : {
                         duration_seconds: [
-                            required('Seconds'),
+                            requiredMessage('Say how many seconds it stays on screen.'),
+                            wholeNumber('Give the seconds as a whole number.'),
                             minNumber(`An advert stays on screen for at least ${PlaylistItemDefaults.minImageSeconds} seconds.`, PlaylistItemDefaults.minImageSeconds),
-                            maxNumber(`An advert may be on screen for at most ${this.maxBreakSeconds} seconds: one break.`, this.maxBreakSeconds),
+                            maxNumber(`An advert stays on screen for at most ${this.maxBreakSeconds} seconds: one break.`, this.maxBreakSeconds),
                         ],
                     }),
                 });
@@ -167,7 +179,8 @@ export function registerCampaignsTable(Alpine) {
 
                 // Mirrors the backend: both ends of the window, or neither.
                 if (!! this.form.start_time !== !! this.form.end_time) {
-                    errors.end_time = ['Give both a start and an end time, or leave both blank to run all day.'];
+                    // Under the one left empty, as the server says it.
+                    errors[this.form.start_time ? 'end_time' : 'start_time'] = ['Give both a start and an end time, or leave both blank to run all day.'];
                 } else if (this.form.start_time && this.form.start_time === this.form.end_time) {
                     errors.end_time = ['The start and end time cannot be the same. To run past midnight, set an end time EARLIER than the start.'];
                 }
@@ -175,6 +188,9 @@ export function registerCampaignsTable(Alpine) {
                 if (this.form.starts_on && this.form.ends_on && this.form.ends_on < this.form.starts_on) {
                     errors.ends_on = ['The end date cannot be before the start date.'];
                 }
+
+                // A date or a time typed only in part reads as '' — said under it, never saved as no date at all.
+                Object.assign(errors, unreadableFields(event?.target));
 
                 if (Object.keys(errors).length > 0) {
                     this.formErrors = errors;
@@ -226,6 +242,15 @@ export function registerCampaignsTable(Alpine) {
                 } catch (error) {
                     if (error.response?.status === 422 && error.response.data.errors) {
                         this.formErrors = error.response.data.errors;
+
+                        // A refusal the form has no place for (a video's measurements) would otherwise say nothing at
+                        // all; the screens' own refusal is said under the list (screensError).
+                        const shown = ['name', 'advertiser_name', 'file', 'starts_on', 'ends_on', 'start_time', 'end_time',
+                            ...(this.isVideoAd() ? [] : ['duration_seconds'])];
+                        const unseen = Object.keys(this.formErrors)
+                            .find((field) => ! shown.includes(field) && ! field.startsWith('screen_ids'));
+
+                        if (unseen) window.toast(this.formErrors[unseen][0]);
                     } else {
                         window.toast(error.response?.data?.message ?? 'Could not save the campaign.');
                     }

@@ -7,8 +7,8 @@
         <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-400">Length</h4>
         <label class="mt-2 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
             <input type="number" x-bind:min="adSecondsMin" x-bind:max="adSecondsMax" step="1" class="form-input w-24 text-sm"
-                   x-bind:value="adSeconds()" @change="$el.value = setAdSeconds($el.value)"
-                   aria-label="Seconds on screen" dusk="ad-length" />
+                   x-bind:value="hasOwnLength() ? adSeconds() : ''" @change="$el.value = setAdSeconds($el.value)"
+                   placeholder="Not set" aria-label="Seconds on screen" dusk="ad-length" />
             <span>seconds on screen</span>
         </label>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" dusk="ad-length-note">
@@ -16,10 +16,11 @@
             {{ \App\Rules\VideoLength::inWords(\App\Models\BuilderAd::MAX_SECONDS) }} at most. A video in it that is
             shorter repeats; a longer one is cut when the ad ends.
         </p>
-        {{-- An ad on the screens since before designs had a length: its lines keep their own seconds until Publish. --}}
-        <p x-show="timedByItsLines" x-cloak class="mt-1 text-xs text-amber-600 dark:text-amber-400" dusk="ad-length-earlier">
-            Published before ads had a length: the screens and channels still show it for the seconds each was
-            given, until you publish it again.
+        {{-- A design made before designs had a length: every screen keeps its own seconds, published or not, until
+             the designer types one (BuilderAd::hasOwnLength). --}}
+        <p x-show="!hasOwnLength()" x-cloak class="mt-1 text-xs text-amber-600 dark:text-amber-400" dusk="ad-length-earlier">
+            No length of its own yet: each screen and channel shows it for the seconds it was given there. Type a
+            length to use it everywhere.
         </p>
     </div>
 

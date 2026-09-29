@@ -85,7 +85,7 @@
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
                     x-text="editingItem ? 'Edit Daypart' : 'Add Daypart'"></h2>
 
-                <form @submit.prevent="saveItem" dusk="daypart-form" class="mt-4 space-y-4">
+                <form @submit.prevent="saveItem" novalidate dusk="daypart-form" class="mt-4 space-y-4">
 
                     <div x-show="!hasStore && !editingItem" x-cloak
                          class="rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">

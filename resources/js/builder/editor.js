@@ -52,7 +52,10 @@ export function registerAdEditor(Alpine) {
             /* Which way the screen is mounted (§12). Posted with the first save and fixed after: the
              * server measures every later save against the ad's own orientation, never this value. */
             orientation: config.orientation === 'portrait' ? 'portrait' : 'landscape',
-            doc: normaliseDocument(clone(config.document)),
+            doc: normaliseDocument(clone(config.document), {
+                minSeconds: config.adSeconds?.min ?? null,
+                maxSeconds: config.adSeconds?.max ?? null,
+            }),
             assets: config.assets ?? [],
             storeId: config.storeId ?? null,
             /* The platform team making a NEW ad says which shop it is for; until they have, no shelf is
@@ -101,8 +104,7 @@ export function registerAdEditor(Alpine) {
             inPlaylists: config.inPlaylists ?? false,
             playlistUseSaving: false,
             hasPublishedVersion: config.hasPublishedVersion ?? false,
-            // On the screens since before designs had a length: every line keeps its own seconds until Publish.
-            timedByItsLines: config.timedByItsLines ?? false,
+
             unpublishing: false,
             discarding: false,
             publishMenuOpen: false,
@@ -111,6 +113,10 @@ export function registerAdEditor(Alpine) {
             autosave: readPreference('autosave', true),
             lastSavedAt: null,
             lastSaveWasAuto: false,
+            /* What the last failed autosave said: a refusal that keeps coming is said once, not every half minute. */
+            lastAutosaveError: null,
+            /* Why the name was refused — its box goes red until it is changed. */
+            nameError: '',
             /* Every change bumps this, so a save knows whether something changed while it was on its way. */
             revision: 0,
             /* Whether the poster no longer shows the design (Publish then saves a fresh one first). */
@@ -233,11 +239,31 @@ export function registerAdEditor(Alpine) {
                     : this.adSecondsDefault;
             },
 
-            /** Set the ad's length, held between the shortest and the longest the server takes. */
+            /**
+             * Does the design say its own length? One made before designs had a length does not until it is given
+             * one: until then every screen and channel keeps the seconds it gave it (BuilderAd::hasOwnLength).
+             */
+            hasOwnLength() {
+                return Number.isInteger(this.doc.duration);
+            },
+
+            /**
+             * Set the ad's length, held between the shortest and the longest the server takes. Emptied, the ad has
+             * no length of its own again, and each screen keeps the seconds it gives it.
+             */
             setAdSeconds(value) {
+                if (String(value ?? '').trim() === '') {
+                    if (this.hasOwnLength()) {
+                        delete this.doc.duration;
+                        this.commit('Length');
+                    }
+
+                    return '';
+                }
+
                 const seconds = Math.round(Number(value));
 
-                if (! Number.isFinite(seconds)) return this.adSeconds();
+                if (! Number.isFinite(seconds)) return this.hasOwnLength() ? this.adSeconds() : '';
 
                 this.doc.duration = Math.min(this.adSecondsMax, Math.max(this.adSecondsMin, seconds));
                 this.commit('Length');
@@ -1180,6 +1206,16 @@ export function registerAdEditor(Alpine) {
                     return false;
                 }
 
+                // An ad needs a name (BuilderAdRequest, in its words): said before anything is sent, on its box.
+                if (String(this.name ?? '').trim() === '') {
+                    this.nameError = 'Give the ad a name.';
+
+                    if (!auto || this.lastAutosaveError !== this.nameError) window.toast(this.nameError);
+                    if (auto) this.lastAutosaveError = this.nameError;
+
+                    return false;
+                }
+
                 this.saving = true;
 
                 try {
@@ -1221,13 +1257,18 @@ export function registerAdEditor(Alpine) {
 
                     if (payload.thumbnail && !this.dirty) this.posterStale = false;
                     if (!auto) window.toast(data.message, 'success');
+                    this.lastAutosaveError = null;
 
                     return true;
                 } catch (error) {
                     const errors = error.response?.data?.errors ?? {};
-                    const first = Object.values(errors)[0]?.[0];
+                    const said = Object.values(errors)[0]?.[0] ?? error.response?.data?.message ?? 'Could not save this ad.';
 
-                    window.toast(first ?? error.response?.data?.message ?? 'Could not save this ad.');
+                    if (errors.name) this.nameError = errors.name[0];
+
+                    // A save by hand always says why; an autosave that keeps failing for the same reason says it once.
+                    if (!auto || said !== this.lastAutosaveError) window.toast(said);
+                    if (auto) this.lastAutosaveError = said;
 
                     return false;
                 } finally {
@@ -1265,7 +1306,7 @@ export function registerAdEditor(Alpine) {
                 this.published = ad.is_published ?? false;
                 this.hasChanges = ad.status === 'changed';
                 this.hasPublishedVersion = ad.has_published_version ?? false;
-                this.timedByItsLines = ad.timed_by_its_lines ?? false;
+
                 this.inPlaylists = ad.in_playlists ?? false;
             },
 

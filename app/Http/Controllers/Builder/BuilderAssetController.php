@@ -122,7 +122,7 @@ class BuilderAssetController extends Controller
             throw ValidationException::withMessages([
                 'title' => 'Still used by '.implode(', ', array_slice($used, 0, 3))
                     .(count($used) > 3 ? ' and '.(count($used) - 3).' more' : '')
-                    .'. Take it out of those ads first.',
+                    .'. Take it out of those ads first, and publish the ones whose screens still show it.',
             ]);
         }
 
@@ -157,9 +157,11 @@ class BuilderAssetController extends Controller
         $usage = [];
 
         BuilderAd::whereIn('store_id', $storeIds)
-            ->get(['id', 'name', 'document'])
+            ->get(['id', 'name', 'document', 'published_document'])
             ->each(function (BuilderAd $ad) use ($assetIds, &$usage) {
-                $document = json_encode($ad->document);
+                // The draft and the version on the screens alike: a file only the published page still shows is in
+                // use on every television carrying it (the brute-force round, 2026-09-29 — deleting it broke them).
+                $document = json_encode([$ad->document, $ad->published_document]);
 
                 foreach ($assetIds as $assetId) {
                     // The document keeps asset ids as numbers under `assetId`, in elements and in

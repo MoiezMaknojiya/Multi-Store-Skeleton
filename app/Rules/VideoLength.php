@@ -9,12 +9,15 @@ use Illuminate\Http\UploadedFile;
 
 /**
  * A video no longer than a ceiling — measured from the file itself (App\Services\VideoDuration), never taken
- * from the browser, whose number is a field anybody can write by hand (owner's rule, 2026-09-28: 5 minutes in
- * a library, a channel or the Ad Builder's shelf, 60 seconds in the ads network).
+ * from the browser, whose number is a field anybody can write by hand (owner's rules, 2026-09-28: 5 minutes in
+ * a library or a channel, 30 seconds on the Ad Builder's shelf, 60 seconds in the ads network).
  *
  * A picture passes untouched, and so does anything that is not an upload (the rules before this one say so).
  * A video the server cannot measure is refused: a file whose length nobody can read is not one a screen gets.
- * Its length is rounded to the nearest second, as a phone shows it, so a "5:00" video is 5 minutes.
+ * Its length is rounded to the nearest second, as a phone shows it, so a "5:00" video is 5 minutes — and one
+ * under half a second, which rounds to nothing, is refused too (the owner's brute-force round, 2026-09-29): it
+ * was kept with no length, so a playlist timed it as an unmeasured video of two minutes and a break counted it
+ * as nought.
  */
 class VideoLength implements ValidationRule
 {
@@ -34,8 +37,16 @@ class VideoLength implements ValidationRule
             return;
         }
 
-        if ((int) round($seconds) > $this->maxSeconds) {
-            $fail("{$this->noun} may be at most ".self::inWords($this->maxSeconds).' long. This one is '.self::clock((int) round($seconds)).'.');
+        $rounded = (int) round($seconds);
+
+        if ($rounded < 1) {
+            $fail("{$this->noun} must be at least 1 second long.");
+
+            return;
+        }
+
+        if ($rounded > $this->maxSeconds) {
+            $fail("{$this->noun} may be at most ".self::inWords($this->maxSeconds).' long. This one is '.self::clock($rounded).'.');
         }
     }
 

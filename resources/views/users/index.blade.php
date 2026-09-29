@@ -133,7 +133,7 @@
 
         {{-- Invite to the platform team --}}
         <x-modal name="invite-platform-member" :show="false" maxWidth="md" focusable>
-            <form @submit.prevent="sendInvite()" class="p-6 space-y-4" dusk="invite-platform-form">
+            <form @submit.prevent="sendInvite()" novalidate class="p-6 space-y-4" dusk="invite-platform-form">
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Invite to the platform team</h2>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">

@@ -181,6 +181,10 @@ test('the preview shows the draft as a screen does: for its length, then from th
 
     // The page the screens play has none: the player times it, and moves on to the next item.
     expect(Storage::disk('public')->get($ad->fresh()->media->path))->not->toContain('http-equiv="refresh"');
+
+    // A design with no length of its own has none to go by: each screen gives it its own seconds.
+    $this->putJson("/builder/{$ad->id}", ['name' => $ad->name, 'document' => collect($ad->document)->except('duration')->all()])->assertOk();
+    expect($this->get("/builder/{$ad->id}/preview")->assertOk()->getContent())->not->toContain('http-equiv="refresh"');
 });
 
 test("builder:recompile writes the published version's length, never the draft's", function () {
@@ -192,24 +196,28 @@ test("builder:recompile writes the published version's length, never the draft's
     expect($ad->fresh()->media->duration_seconds)->toBe(8);
 });
 
-test('an ad on the screens since before designs had a length says so in the editor, until it is published again', function () {
-    // As AdPublisher left a page before 2026-09-28: no length on its row, so each line keeps its own seconds.
-    $ad = adLasting(8);
-    $ad->media->update(['duration_seconds' => null]);
+test("a design made before designs had a length keeps each line's seconds, published again or not, until it is given one", function () {
+    // The brute-force round, 2026-09-29: a typo fixed and published re-timed a 15 s ad to 6 on every screen.
+    $ad = BuilderAd::factory()->withText('Old sale')->create(['store_id' => $this->store->id, 'name' => 'Old sale', 'in_playlists' => true]);
+    $earlier = collect($ad->document)->except('duration')->all();
+    BuilderAd::withoutTimestamps(fn () => $ad->forceFill(['document' => $earlier])->save());
 
-    // The editor is told (Js::from writes each quote as \u0022).
-    expect($ad->fresh()->isTimedByItsLines())->toBeTrue();
-    $this->get("/builder/{$ad->id}")->assertOk()->assertSee('\u0022timedByItsLines\u0022:true', false);
+    expect(BuilderAd::hasOwnLength($earlier))->toBeFalse();
+    $this->postJson("/builder/{$ad->id}/publish")->assertOk();
+    expect($ad->fresh()->media->duration_seconds)->toBeNull();
 
-    // Publishing it again gives the screens its own length, and the editor's note goes.
-    $this->postJson("/builder/{$ad->id}/publish")->assertOk()->assertJsonPath('ad.timed_by_its_lines', false);
+    savePlaylist([['media_id' => $ad->fresh()->media_id, 'duration_seconds' => 15]]);
+    expect(secondsOnTheTelevision())->toBe(['html' => 15]);
 
-    expect($ad->fresh()->media->duration_seconds)->toBe(8)
-        ->and($ad->fresh()->isTimedByItsLines())->toBeFalse();
-    $this->get("/builder/{$ad->id}")->assertOk()->assertSee('\u0022timedByItsLines\u0022:false', false);
+    // A typo fixed, published again: still each line's own.
+    $this->putJson("/builder/{$ad->id}", ['name' => 'Old sale!', 'document' => $earlier])->assertOk();
+    $this->postJson("/builder/{$ad->id}/publish")->assertOk();
+    expect(secondsOnTheTelevision())->toBe(['html' => 15]);
 
-    // A design never published is on no screen, so it has nothing to say.
-    expect(BuilderAd::factory()->create(['store_id' => $this->store->id])->isTimedByItsLines())->toBeFalse();
+    // Given a length of its own, and published: now every screen plays that.
+    $this->putJson("/builder/{$ad->id}", ['name' => 'Old sale!', 'document' => [...$earlier, 'duration' => 9]])->assertOk();
+    $this->postJson("/builder/{$ad->id}/publish")->assertOk();
+    expect(secondsOnTheTelevision())->toBe(['html' => 9]);
 });
 
 test('builder:recompile never gives a page published before designs had a length one: its lines keep their seconds', function () {

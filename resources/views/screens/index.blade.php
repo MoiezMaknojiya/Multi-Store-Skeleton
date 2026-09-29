@@ -206,10 +206,10 @@
                         ? 'Open the player on the new device and type the code it shows. This screen keeps its name and settings.'
                         : 'Open the player on your TV and type the 6-character code it shows.'"></p>
 
-                <form @submit.prevent="pairScreen" dusk="screen-pair-form" class="mt-4 space-y-4">
+                <form @submit.prevent="pairScreen" novalidate dusk="screen-pair-form" class="mt-4 space-y-4">
                     <div x-show="!hasStore && pairForm.mode === 'new'" x-cloak
                          class="rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
-                        Select a store first - a screen belongs to the store it is paired in.
+                        Select a store first &mdash; a screen belongs to the store it is paired in.
                     </div>
 
                     <x-crud.form-field label="Pairing code" field="code" :required="true">
@@ -253,7 +253,7 @@
             <div class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Edit Screen</h2>
 
-                <form @submit.prevent="saveItem" dusk="screen-form" class="mt-4 space-y-4">
+                <form @submit.prevent="saveItem" novalidate dusk="screen-form" class="mt-4 space-y-4">
                     <x-crud.form-field label="Screen name" field="name" :required="true">
                         <x-text-input x-model="form.name" dusk="screen-edit-name" class="block w-full" autocomplete="off" />
                     </x-crud.form-field>

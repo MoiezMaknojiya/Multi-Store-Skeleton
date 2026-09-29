@@ -165,4 +165,11 @@ test('an advert saved before the rule plays for six, and a break counts it so', 
 
     $booked = collect($this->getJson('/campaigns/screens')->assertOk()->json('screens'))->firstWhere('id', $this->screen->id);
     expect($booked['booked_seconds'])->toBe(6);
+
+    // And one saved before the one-break ceiling at 90 s plays for sixty — never past a break — and is counted so.
+    $advert->update(['duration_seconds' => 90]);
+
+    expect($advert->fresh()->play_seconds)->toBe(60);
+    $booked = collect($this->getJson('/campaigns/screens')->assertOk()->json('screens'))->firstWhere('id', $this->screen->id);
+    expect($booked['booked_seconds'])->toBe(60);
 });

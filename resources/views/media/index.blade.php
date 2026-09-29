@@ -135,7 +135,7 @@
             <div class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Upload File</h2>
 
-                <form @submit.prevent="uploadFile" dusk="media-upload-form" class="mt-4 space-y-4">
+                <form @submit.prevent="uploadFile" novalidate dusk="media-upload-form" class="mt-4 space-y-4">
                     @if ($libraries !== null)
                         <p class="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200"
                            dusk="media-upload-library">
@@ -144,18 +144,19 @@
                     @endif
 
                     <x-crud.form-field label="File" field="file" :required="true">
+                        {{-- A border of its own, so a refused file is outlined in red like every other field. --}}
                         <input type="file" x-ref="fileInput" dusk="media-file"
                                accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm"
                                @change="onFileSelected($event)"
-                               class="block w-full text-sm text-gray-600 dark:text-gray-300
+                               class="form-input block w-full text-sm text-gray-600 dark:text-gray-300
                                       file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0
                                       file:text-sm file:font-medium file:bg-blue-600 file:text-white
                                       hover:file:bg-blue-700">
-                        <p class="mt-1 text-xs text-gray-400">Images (JPG, PNG, GIF, WEBP) and videos (MP4, WEBM), up to 250 MB. A video may be at most 5 minutes long.</p>
                     </x-crud.form-field>
+                    <p class="-mt-2 text-xs text-gray-400">Images (JPG, PNG, GIF, WEBP) and videos (MP4, WEBM), up to 250 MB. A video may be at most 5 minutes long.</p>
 
                     <x-crud.form-field label="Title" field="title">
-                        <x-text-input x-model="uploadForm.title" dusk="media-title" class="block w-full"
+                        <x-text-input x-model="uploadForm.title" dusk="media-title" class="block w-full" maxlength="255"
                                       placeholder="Leave blank to use the file name" autocomplete="off" />
                     </x-crud.form-field>
 
@@ -176,7 +177,7 @@
             <div class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Edit File</h2>
 
-                <form @submit.prevent="saveItem" dusk="media-form" class="mt-4 space-y-4">
+                <form @submit.prevent="saveItem" novalidate dusk="media-form" class="mt-4 space-y-4">
                     <x-crud.form-field label="Title" field="title" :required="true">
                         <x-text-input x-model="form.title" dusk="media-edit-title" class="block w-full" autocomplete="off" />
                     </x-crud.form-field>

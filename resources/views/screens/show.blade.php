@@ -139,10 +139,12 @@
                                      lasts as long as the ads it plays that day, which nobody sets here. --}}
                                 <div class="flex items-center gap-1">
                                     <template x-if="isTimed(item)">
-                                        <span class="flex items-center gap-1">
-                                            <input type="number" min="{{ \App\Models\PlaylistItem::MIN_IMAGE_SECONDS }}" max="86400" x-model.number="item.duration_seconds"
-                                                @input="dirty = true" x-bind:dusk="'playlist-duration-' + index"
-                                                x-bind:disabled="!canEdit"
+                                        {{-- A refused number paints this line's box red (crud-field-error), and the toast
+                                             says why, with the line's title. --}}
+                                        <span class="flex items-center gap-1" x-bind:class="{ 'crud-field-error': item.secondsError }">
+                                            <input type="number" min="{{ \App\Models\PlaylistItem::MIN_IMAGE_SECONDS }}" max="{{ \App\Models\PlaylistItem::MAX_IMAGE_SECONDS }}" step="1" x-model.number="item.duration_seconds"
+                                                @input="dirty = true; item.secondsError = null" x-bind:dusk="'playlist-duration-' + index"
+                                                x-bind:disabled="!canEdit || saving" x-bind:title="item.secondsError || ''"
                                                 class="form-input w-20 text-sm text-right">
                                             <span class="text-xs text-gray-400">secs</span>
                                         </span>
@@ -156,16 +158,17 @@
 
                                 @can('screen-playlist')
                                 <div class="flex items-center gap-1">
-                                    <button @click="openSchedule(index)" x-bind:dusk="'playlist-schedule-' + index"
-                                        class="btn-row-neutral whitespace-nowrap" title="When this item plays">Schedule</button>
-                                    <button @click="moveUp(index)" x-bind:disabled="index === 0"
+                                    {{-- Still while a save is on its way: its answer replaces the list. --}}
+                                    <button @click="openSchedule(index)" x-bind:dusk="'playlist-schedule-' + index" x-bind:disabled="saving"
+                                        class="btn-row-neutral whitespace-nowrap disabled:opacity-30" title="When this item plays">Schedule</button>
+                                    <button @click="moveUp(index)" x-bind:disabled="index === 0 || saving"
                                         x-bind:dusk="'playlist-up-' + index"
                                         class="btn-row-neutral disabled:opacity-30" title="Move up">&uarr;</button>
-                                    <button @click="moveDown(index)" x-bind:disabled="index === items.length - 1"
+                                    <button @click="moveDown(index)" x-bind:disabled="index === items.length - 1 || saving"
                                         x-bind:dusk="'playlist-down-' + index"
                                         class="btn-row-neutral disabled:opacity-30" title="Move down">&darr;</button>
-                                    <button @click="removeItem(index)" x-bind:dusk="'playlist-remove-' + index"
-                                        class="btn-row-danger" title="Remove">&times;</button>
+                                    <button @click="removeItem(index)" x-bind:dusk="'playlist-remove-' + index" x-bind:disabled="saving"
+                                        class="btn-row-danger disabled:opacity-30" title="Remove">&times;</button>
                                 </div>
                                 @endcan
                             </div>
@@ -186,7 +189,7 @@
                 <div class="card-header">
                     <h3 class="text-subheading">Content library</h3>
                     <div class="relative w-full max-w-xs">
-                        <input x-model="search" type="text" placeholder="Search files..." autocomplete="new-password"
+                        <input x-model="search" type="text" placeholder="Search files..." autocomplete="new-password" maxlength="255"
                             dusk="media-picker-search" class="form-input" />
                     </div>
                 </div>
@@ -228,8 +231,8 @@
                             </div>
 
                             @can('screen-playlist')
-                            <button @click="addItem(media)" x-bind:dusk="'playlist-add-' + media.id"
-                                class="btn-row-neutral">Add</button>
+                            <button @click="addItem(media)" x-bind:dusk="'playlist-add-' + media.id" x-bind:disabled="saving"
+                                class="btn-row-neutral disabled:opacity-30">Add</button>
                             @endcan
                         </div>
                     </template>
@@ -281,8 +284,8 @@
                                         x-text="openChannelId === channel.id ? 'Hide ads' : 'Show ads'"></button>
 
                                 @can('screen-playlist')
-                                <button @click="addChannel(channel)" x-bind:dusk="'playlist-add-channel-' + channel.id"
-                                    class="btn-row-neutral">Add</button>
+                                <button @click="addChannel(channel)" x-bind:dusk="'playlist-add-channel-' + channel.id" x-bind:disabled="saving"
+                                    class="btn-row-neutral disabled:opacity-30">Add</button>
                                 @endcan
                             </div>
 
@@ -353,10 +356,12 @@
                                 <template x-if="rule.day_mode === 'range'">
                                     <div class="flex items-center gap-2">
                                         <input type="date" x-model="rule.starts_on" @change="refreshPreview()"
-                                               x-bind:dusk="'rule-starts-on-' + ruleIndex" class="form-input w-40">
+                                               x-bind:dusk="'rule-starts-on-' + ruleIndex" class="form-input w-40"
+                                               x-bind:class="scheduleErrors[ruleIndex]?.starts_on ? '!border-red-500' : ''">
                                         <span class="text-gray-400">&rarr;</span>
                                         <input type="date" x-model="rule.ends_on" @change="refreshPreview()"
-                                               x-bind:dusk="'rule-ends-on-' + ruleIndex" class="form-input w-40">
+                                               x-bind:dusk="'rule-ends-on-' + ruleIndex" class="form-input w-40"
+                                               x-bind:class="scheduleErrors[ruleIndex]?.ends_on ? '!border-red-500' : ''">
                                     </div>
                                 </template>
                             </div>
@@ -368,9 +373,10 @@
                                 <div class="pl-16 space-y-3">
                                     <div class="flex flex-wrap items-center gap-2">
                                         <span class="text-sm text-gray-500 dark:text-gray-400">Repeat every</span>
-                                        <input type="number" min="1" max="52" x-model.number="rule.recurrence_interval"
+                                        <input type="number" min="1" max="52" step="1" x-model.number="rule.recurrence_interval"
                                                @input="refreshPreview()" x-bind:dusk="'rule-interval-' + ruleIndex"
-                                               class="form-input w-20 text-right">
+                                               class="form-input w-20 text-right"
+                                               x-bind:class="scheduleErrors[ruleIndex]?.recurrence_interval ? '!border-red-500' : ''">
                                         <select x-model="rule.recurrence_type" @change="refreshPreview()"
                                                 x-bind:dusk="'rule-type-' + ruleIndex" class="form-select w-56">
                                             @foreach ($recurrenceTypes as $value => $label)
@@ -397,9 +403,10 @@
                                     <template x-if="rule.recurrence_type === 'monthly_day'">
                                         <div class="flex items-center gap-2">
                                             <span class="text-sm text-gray-500 dark:text-gray-400">On day</span>
-                                            <input type="number" min="1" max="31" x-model.number="rule.recurrence_monthday"
+                                            <input type="number" min="1" max="31" step="1" x-model.number="rule.recurrence_monthday"
                                                    @input="refreshPreview()" x-bind:dusk="'rule-monthday-' + ruleIndex"
-                                                   class="form-input w-20 text-right">
+                                                   class="form-input w-20 text-right"
+                                                   x-bind:class="scheduleErrors[ruleIndex]?.recurrence_monthday ? '!border-red-500' : ''">
                                             <span class="text-xs text-gray-400">
                                                 A 31st simply does not occur in a 30-day month.
                                             </span>
@@ -427,10 +434,12 @@
                                     <div class="flex flex-wrap items-center gap-2">
                                         <span class="text-sm text-gray-500 dark:text-gray-400 w-20">Starting</span>
                                         <input type="date" x-model="rule.starts_on" @change="refreshPreview()"
-                                               x-bind:dusk="'rule-repeat-start-' + ruleIndex" class="form-input w-40">
+                                               x-bind:dusk="'rule-repeat-start-' + ruleIndex" class="form-input w-40"
+                                               x-bind:class="scheduleErrors[ruleIndex]?.starts_on ? '!border-red-500' : ''">
                                         <span class="text-sm text-gray-500 dark:text-gray-400">until</span>
                                         <input type="date" x-model="rule.recurrence_until" @change="refreshPreview()"
-                                               x-bind:dusk="'rule-until-' + ruleIndex" class="form-input w-40">
+                                               x-bind:dusk="'rule-until-' + ruleIndex" class="form-input w-40"
+                                               x-bind:class="scheduleErrors[ruleIndex]?.recurrence_until ? '!border-red-500' : ''">
                                         <span class="text-xs text-gray-400">Leave the end blank to repeat forever.</span>
                                     </div>
                                 </div>
@@ -455,6 +464,11 @@
                                    class="text-xs text-blue-600 dark:text-blue-400 hover:underline">New daypart</a>
                                 @endcan
                             </div>
+
+                            {{-- What OK found wrong with this rule, said under it (ruleProblems). --}}
+                            <template x-if="ruleError(ruleIndex)">
+                                <p class="form-error" x-bind:dusk="'rule-error-' + ruleIndex" x-text="ruleError(ruleIndex)"></p>
+                            </template>
 
                             <div class="flex items-start justify-between gap-3 pt-1">
                                 <p class="text-xs text-gray-500 dark:text-gray-400"
@@ -481,9 +495,8 @@
                                 <span>Plays whenever the screen is on.</span>
                             </template>
                             <template x-if="scheduleRules.length > 0 && preview.length === 0">
-                                <span class="text-amber-600 dark:text-amber-400">
-                                    Nothing in the next 7 days.
-                                </span>
+                                <span class="text-amber-600 dark:text-amber-400" dusk="schedule-preview-note"
+                                      x-text="previewError || 'Nothing in the next 7 days.'"></span>
                             </template>
                             <template x-for="(slot, i) in preview" :key="i">
                                 <span class="inline-block mr-3 whitespace-nowrap">

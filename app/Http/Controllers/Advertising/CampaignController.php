@@ -107,8 +107,8 @@ class CampaignController extends Controller
             // least — which an advert saved before it simply plays for.
             ->selectRaw(
                 'SUM(CASE WHEN campaigns.type = ? THEN COALESCE(NULLIF(campaigns.media_duration_seconds, 0), campaigns.duration_seconds)'
-                .' WHEN campaigns.duration_seconds < ? THEN ? ELSE campaigns.duration_seconds END) as seconds',
-                [Media::TYPE_VIDEO, PlaylistItem::MIN_IMAGE_SECONDS, PlaylistItem::MIN_IMAGE_SECONDS],
+                .' WHEN campaigns.duration_seconds < ? THEN ? WHEN campaigns.duration_seconds > ? THEN ? ELSE campaigns.duration_seconds END) as seconds',
+                [Media::TYPE_VIDEO, PlaylistItem::MIN_IMAGE_SECONDS, PlaylistItem::MIN_IMAGE_SECONDS, Campaign::MAX_AD_SECONDS, Campaign::MAX_AD_SECONDS],
             )
             ->pluck('seconds', 'screen_id');
     }

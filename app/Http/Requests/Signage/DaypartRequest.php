@@ -96,9 +96,10 @@ class DaypartRequest extends FormRequest
             'end_time.different' => 'The start and end time cannot be the same. To run past midnight, set an end time EARLIER than the start.',
             'exceptions.*.weekday.distinct' => 'Each day can only be listed once.',
             'exceptions.*.weekday.required' => 'Choose a day for this exception.',
-            'exceptions.*.start_time.required_with' => 'Give both a start and an end time, or leave both blank to close that day.',
-            'exceptions.*.end_time.required_with' => 'Give both a start and an end time, or leave both blank to close that day.',
-            'exceptions.*.end_time.different' => 'The start and end time cannot be the same.',
+            // The row itself offers "is closed" for a day with no hours: that is what the message points to.
+            'exceptions.*.start_time.required_with' => 'Give both a start and an end time, or choose "is closed".',
+            'exceptions.*.end_time.required_with' => 'Give both a start and an end time, or choose "is closed".',
+            'exceptions.*.end_time.different' => 'The start and end time cannot be the same. To run past midnight, set an end time EARLIER than the start.',
         ];
     }
 

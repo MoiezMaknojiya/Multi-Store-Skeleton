@@ -92,8 +92,12 @@ class ChannelRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'ads_per_pass.min' => 'Play at least one ad each time, or leave it blank to play them all.',
-            'ads_per_pass.max' => 'A channel can play at most '.Channel::MAX_ADS_PER_PASS.' ads each time.',
+            // The same words as the form's own check (channels-table.js), for every way the number can be wrong.
+            'ads_per_pass.integer' => 'Enter a number from 1 to '.Channel::MAX_ADS_PER_PASS.', or leave it blank to play every ad.',
+            'ads_per_pass.min' => 'Enter a number from 1 to '.Channel::MAX_ADS_PER_PASS.', or leave it blank to play every ad.',
+            'ads_per_pass.max' => 'Enter a number from 1 to '.Channel::MAX_ADS_PER_PASS.', or leave it blank to play every ad.',
+            'name.required' => 'Channel name is required.',
+            'name.max' => 'Channel name may not be longer than 120 characters.',
         ];
     }
 }

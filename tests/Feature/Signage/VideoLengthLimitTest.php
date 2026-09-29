@@ -115,6 +115,21 @@ test('a video nobody can measure is refused at every door', function (string $do
         ->assertJsonValidationErrors(['file' => 'We could not read how long this video is. Save it again as an MP4 and upload that file.']);
 })->with('doors');
 
+test('a video under half a second rounds to nothing and is refused at every door; half a second is one', function (string $door) {
+    // The owner's brute-force round, 2026-09-29: kept with no length, a 0.4 s clip played as an unmeasured video of
+    // two minutes on a playlist and as nought in a break.
+    uploadVideoThrough($door, VideoFiles::upload(VideoFiles::mp4(0.4), 'blink.mp4'))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['file' => 'A video must be at least 1 second long.']);
+
+    expect(Media::count() + BuilderAsset::count() + ChannelAd::count())->toBe(0)
+        ->and(Storage::disk('public')->allFiles())->toBe([]);
+
+    uploadVideoThrough($door, VideoFiles::upload(VideoFiles::mp4(0.5), 'blink.mp4'))->assertOk();
+
+    expect(lengthKeptBy($door))->toBe(1);
+})->with('doors');
+
 test('a picture has no length to measure and goes in as before', function (string $door) {
     uploadVideoThrough($door, UploadedFile::fake()->image('menu.jpg', 800, 600), ['seconds' => 10])->assertOk();
 })->with('doors');

@@ -117,7 +117,7 @@ class UploadLimitsTest extends DuskTestCase
             $this->choose($browser, 'campaign-file', "new Promise((resolve) => { const c = document.createElement('canvas'); c.width = 64; c.height = 64; c.toBlob((blob) => resolve(new File([blob], 'advert.png', { type: 'image/png' })), 'image/png'); })");
             $browser->type('@campaign-name', 'Coca-Cola')->clear('@campaign-seconds')->type('@campaign-seconds', '61');
             $this->jsClick($browser, '@campaign-save');
-            $browser->waitForText('An advert may be on screen for at most 60 seconds: one break.');
+            $browser->waitForText('An advert stays on screen for at most 60 seconds: one break.');
 
             $this->assertSame(0, Campaign::count(), 'nothing was saved');
         });

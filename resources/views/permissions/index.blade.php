@@ -70,7 +70,7 @@
             <div class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
                     x-text="editingItem ? 'Edit Permission' : 'Add Permission'"></h2>
-                <form @submit.prevent="saveItem" class="mt-4 space-y-4">
+                <form @submit.prevent="saveItem" novalidate class="mt-4 space-y-4">
                     <x-crud.form-field label="Label (optional)" field="label">
                         <x-text-input x-model="form.label" class="block w-full" placeholder="Human-readable name shown in the UI" autocomplete="off"
                             @input="restrictLabelInput($event)" @keydown="restrictLabelInput($event)" />

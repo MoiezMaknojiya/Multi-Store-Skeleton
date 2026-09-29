@@ -61,7 +61,7 @@
                            @change="$el.value = setSlot('loop', 'duration', $el.value)" dusk="anim-loop-duration" />
                 </label>
                 <label class="text-xs text-gray-500 dark:text-gray-400">Wait first (s)
-                    <input type="number" step="0.1" min="0" max="600" class="form-input mt-1 w-full text-sm"
+                    <input type="number" step="0.1" min="0" x-bind:max="animationNumbers.loop.delay[1]" class="form-input mt-1 w-full text-sm"
                            x-bind:value="slotOf('loop')?.delay ?? 0"
                            @change="$el.value = setSlot('loop', 'delay', $el.value)" dusk="anim-loop-delay" />
                 </label>
@@ -112,20 +112,20 @@
             <div class="grid grid-cols-2 gap-2">
                 @if ($slot === 'out')
                     <label class="text-xs text-gray-500 dark:text-gray-400">Starts at (s)
-                        <input type="number" step="0.1" min="0" max="3600" class="form-input mt-1 w-full text-sm"
+                        <input type="number" step="0.1" min="0" x-bind:max="animationNumbers.out.at[1]" class="form-input mt-1 w-full text-sm"
                                x-bind:value="slotOf('out')?.at ?? 5"
                                @change="$el.value = setSlot('out', 'at', $el.value)" dusk="anim-out-at" />
                     </label>
                 @else
                     <label class="text-xs text-gray-500 dark:text-gray-400">Wait first (s)
-                        <input type="number" step="0.1" min="0" max="600" class="form-input mt-1 w-full text-sm"
+                        <input type="number" step="0.1" min="0" x-bind:max="animationNumbers.in.delay[1]" class="form-input mt-1 w-full text-sm"
                                x-bind:value="slotOf('in')?.delay ?? 0"
                                @change="$el.value = setSlot('in', 'delay', $el.value)" dusk="anim-in-delay" />
                     </label>
                 @endif
                 <label class="text-xs text-gray-500 dark:text-gray-400">Takes (s)
                     <input type="number" step="0.05" min="0.05" max="60" class="form-input mt-1 w-full text-sm"
-                           x-bind:value="slotOf('{{ $slot }}')?.duration ?? 0.8"
+                           x-bind:value="slotOf('{{ $slot }}')?.duration ?? animationNumbers['{{ $slot }}'].duration[2]"
                            @change="$el.value = setSlot('{{ $slot }}', 'duration', $el.value)" dusk="anim-{{ $slot }}-duration" />
                 </label>
             </div>

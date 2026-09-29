@@ -167,8 +167,10 @@ class ChannelAdRequest extends FormRequest
             'file.mimes' => 'Only '.StoreMediaRequest::FORMATS_IN_WORDS.' can be uploaded.',
             'file.max' => StoreMediaRequest::tooLargeMessage(),
             'seconds.required' => 'Say how many seconds it stays on screen.',
+            'seconds.integer' => 'Give the seconds as a whole number.',
             'seconds.min' => 'A picture stays on screen for at least '.PlaylistItem::MIN_IMAGE_SECONDS.' seconds.',
-            'seconds.max' => 'It may not stay up longer than '.ChannelAd::MAX_IMAGE_SECONDS.' seconds.',
+            'seconds.max' => 'A picture stays on screen for at most '.VideoLength::inWords(ChannelAd::MAX_IMAGE_SECONDS).'.',
+            'title.max' => 'Title may not be longer than 255 characters.',
             'ends_on.after_or_equal' => 'The end date cannot be before the start date.',
         ];
     }

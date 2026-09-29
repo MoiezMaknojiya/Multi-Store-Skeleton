@@ -146,7 +146,7 @@
                          field is not shown at all, rather than shown and then ignored (owner's rule). --}}
                     <div x-show="!isVideoAd()" x-cloak class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <x-crud.form-field label="Seconds on screen" field="duration_seconds" :required="true">
-                            <x-text-input type="number" min="{{ \App\Models\PlaylistItem::MIN_IMAGE_SECONDS }}" max="300" x-model.number="form.duration_seconds"
+                            <x-text-input type="number" min="{{ \App\Models\PlaylistItem::MIN_IMAGE_SECONDS }}" x-bind:max="maxBreakSeconds" step="1" x-model.number="form.duration_seconds"
                                           dusk="campaign-seconds" class="block w-full" />
                         </x-crud.form-field>
                     </div>
@@ -239,6 +239,9 @@
                                 </div>
                             </template>
                         </div>
+                        <template x-if="screensError()">
+                            <p class="form-error" x-text="screensError()" dusk="campaign-screens-error"></p>
+                        </template>
                     </div>
 
                     <div class="flex items-center">

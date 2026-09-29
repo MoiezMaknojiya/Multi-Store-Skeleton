@@ -39,10 +39,18 @@ test('a video advert of 60 seconds goes in; one of 61 is refused, saying how lon
     expect(Campaign::count())->toBe(1);
 });
 
+test('a video advert under half a second rounds to nothing and is refused; it never counts as nought in a break', function () {
+    $this->postJson('/campaigns', advert(['file' => VideoFiles::upload(VideoFiles::mp4(0.4), 'blink.mp4')]))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['file' => 'An advert must be at least 1 second long.']);
+
+    expect(Campaign::count())->toBe(0);
+});
+
 test('a picture advert is on screen for 60 seconds at most', function () {
     $this->postJson('/campaigns', advert(['file' => UploadedFile::fake()->image('coke.jpg'), 'duration_seconds' => 61]))
         ->assertStatus(422)
-        ->assertJsonValidationErrors(['duration_seconds' => 'An advert may be on screen for at most 60 seconds: one break.']);
+        ->assertJsonValidationErrors(['duration_seconds' => 'An advert stays on screen for at most 60 seconds: one break.']);
 
     $this->postJson('/campaigns', advert(['file' => UploadedFile::fake()->image('coke.jpg'), 'duration_seconds' => 60]))->assertOk();
     expect(Campaign::sole()->play_seconds)->toBe(60);

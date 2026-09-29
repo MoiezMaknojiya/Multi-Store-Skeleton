@@ -98,6 +98,26 @@ test('a file an ad still uses cannot be pulled out from under it', function () {
     expect(BuilderAsset::find($asset->id))->not->toBeNull();
 });
 
+test('a file only the published version still shows cannot be pulled out from under the screens', function () {
+    // The brute-force round, 2026-09-29: taken out of the draft, a file the page on the screens still shows was
+    // deletable — and every television without a copy lost it.
+    $asset = BuilderAsset::factory()->create(['store_id' => $this->store->id, 'title' => 'Logo']);
+
+    $document = BuilderAd::blankDocument();
+    $document['elements'] = [[
+        'id' => 'el_1', 'type' => 'image', 'x' => 0, 'y' => 0, 'w' => 400, 'h' => 300,
+        'assetId' => $asset->id, 'style' => [], 'animations' => [],
+    ]];
+    $ad = BuilderAd::factory()->published()->create(['store_id' => $this->store->id, 'name' => 'Winter sale', 'document' => $document]);
+    BuilderAd::withoutTimestamps(fn () => $ad->forceFill(['document' => BuilderAd::blankDocument()])->save());
+
+    $this->deleteJson("/builder/assets/{$asset->id}")
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['title' => 'Still used by Winter sale. Take it out of those ads first, and publish the ones whose screens still show it.']);
+
+    expect(BuilderAsset::find($asset->id))->not->toBeNull();
+});
+
 test('an unused file goes, and takes its bytes with it', function () {
     $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('spare.jpg')])->assertOk();
 

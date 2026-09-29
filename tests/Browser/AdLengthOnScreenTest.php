@@ -2,6 +2,7 @@
 
 namespace Tests\Browser;
 
+use App\Models\ActivityLog;
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\Media;
@@ -196,14 +197,16 @@ class AdLengthOnScreenTest extends DuskTestCase
     }
 
     /** An ad on the screens since before designs had a length says so under Length, until Publish gives it one. */
-    public function test_an_ad_published_before_lengths_says_so_until_it_is_published_again(): void
+    public function test_a_design_with_no_length_of_its_own_keeps_each_screens_seconds_until_it_is_given_one(): void
     {
         $this->seedSuperAdmin();
         $store = Store::factory()->create(['name' => 'Alpha Mart']);
         $owner = $this->storeMember($store, Role::OWNER, 'owner@example.com');
 
-        // As AdPublisher left a page before 2026-09-28: no length on its row.
+        // As designs were before 2026-09-28: no length in the design, none on its page's row.
         $ad = BuilderAd::factory()->withText('Old sale')->published()->create(['store_id' => $store->id, 'name' => 'Old sale']);
+        $earlier = collect($ad->document)->except('duration')->all();
+        BuilderAd::withoutTimestamps(fn () => $ad->forceFill(['document' => $earlier, 'published_document' => $earlier])->save());
         $ad->media->update(['duration_seconds' => null]);
 
         $this->browse(function (Browser $panel) use ($owner, $store, $ad) {
@@ -214,14 +217,24 @@ class AdLengthOnScreenTest extends DuskTestCase
             $panel->visit('/builder/'.$ad->id);
             $this->waitForAlpine($panel);
             $panel->waitFor('@ad-length-earlier')
-                ->assertSeeIn('@ad-length-earlier', 'Published before ads had a length')
-                ->assertInputValue('@ad-length', (string) BuilderAd::DEFAULT_SECONDS);
+                ->assertSeeIn('@ad-length-earlier', 'No length of its own yet')
+                ->assertInputValue('@ad-length', '');
 
+            // Published again as it is (a typo fixed, say): every screen keeps its own seconds.
+            $published = ActivityLog::where('action', 'ad.published')->count();
             $this->jsClick($panel, '@ad-publish');
-            $panel->waitUsing(25, 250, fn () => $ad->media->fresh()->duration_seconds !== null);
-            $panel->waitUntilMissing('@ad-length-earlier', 10);
+            $panel->waitUsing(25, 250, fn () => ActivityLog::where('action', 'ad.published')->count() > $published);
+            $this->assertNull($ad->media->fresh()->duration_seconds);
+            $panel->assertVisible('@ad-length-earlier');
 
-            $this->assertSame(BuilderAd::DEFAULT_SECONDS, $ad->media->fresh()->duration_seconds);
+            // Given a length of its own, and published: now every screen plays that.
+            $panel->script(
+                'const el = document.querySelector(\'[dusk="ad-length"]\'); el.value = "8";'
+                .'el.dispatchEvent(new Event("change", { bubbles: true }));'
+            );
+            $panel->waitUntilMissing('@ad-length-earlier', 5);
+            $this->jsClick($panel, '@ad-publish');
+            $panel->waitUsing(25, 250, fn () => $ad->media->fresh()->duration_seconds === 8);
         });
     }
 }

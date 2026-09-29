@@ -1,9 +1,13 @@
 <?php
 
+use App\Models\Channel;
+use App\Models\ChannelAd;
 use App\Models\Media;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
 use App\Models\Store;
+use Illuminate\Database\Events\TransactionBeginning;
+use Illuminate\Support\Facades\Event;
 
 /*
 |--------------------------------------------------------------------------
@@ -21,6 +25,38 @@ use App\Models\Store;
 | that was already happening.
 |
 */
+
+test('a file or a channel deleted while a save is on its way is refused with a reason, never a 500', function () {
+    // The brute-force round, 2026-09-29: deleted between the checks and the write, a file ended the save on the
+    // foreign key. Under the lock the save now sees it gone and says so.
+    $store = Store::factory()->create();
+    $keeper = createStoreUser($store, ['screen-view', 'screen-playlist'], 'Keeper');
+    $screen = Screen::factory()->create(['store_id' => $store->id]);
+    $poster = Media::factory()->create(['store_id' => $store->id, 'title' => 'Poster']);
+    $channel = Channel::factory()->create(['store_id' => $store->id, 'name' => 'Deals']);
+    ChannelAd::factory()->create(['channel_id' => $channel->id]);
+    $this->actingAs($keeper)->withSession(['current_store_id' => $store->id]);
+
+    foreach ([
+        'file' => [['media_id' => $poster->id, 'duration_seconds' => 8]],
+        'channel' => [['channel_id' => $channel->id]],
+    ] as $kind => $lines) {
+        $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
+        $gone = $kind === 'file' ? $poster : $channel;
+        $listener = function () use ($gone) {
+            $gone->newQuery()->whereKey($gone->getKey())->delete();
+        };
+        Event::listen(TransactionBeginning::class, $listener);
+
+        $this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => $lines])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['items' => "A {$kind} on the playlist was deleted meanwhile. Reload the page and save again."]);
+
+        Event::forget(TransactionBeginning::class);
+    }
+
+    expect(PlaylistItem::count())->toBe(0);
+});
 
 test('a save built on a stale copy is refused instead of wiping the other person\'s work', function () {
     $store = Store::factory()->create();

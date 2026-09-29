@@ -63,6 +63,7 @@ class StoreMediaRequest extends FormRequest
         return [
             'file.mimes' => 'Only '.self::FORMATS_IN_WORDS.' can be uploaded.',
             'file.max' => self::tooLargeMessage(),
+            'title.max' => 'Title may not be longer than 255 characters.',
         ];
     }
 }

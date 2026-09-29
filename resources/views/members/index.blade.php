@@ -166,7 +166,7 @@
 
         {{-- Invite --}}
         <x-modal name="invite-member" :show="false" maxWidth="md" focusable>
-            <form @submit.prevent="sendInvite()" class="p-6 space-y-4" dusk="invite-form">
+            <form @submit.prevent="sendInvite()" novalidate class="p-6 space-y-4" dusk="invite-form">
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Invite a member</h2>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -194,7 +194,7 @@
 
         {{-- Change role --}}
         <x-modal name="change-member-role" :show="false" maxWidth="md" focusable>
-            <form @submit.prevent="saveRole()" class="p-6 space-y-4" dusk="change-role-form">
+            <form @submit.prevent="saveRole()" novalidate class="p-6 space-y-4" dusk="change-role-form">
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">
                         Change role for <span x-text="selectedMember?.name"></span>

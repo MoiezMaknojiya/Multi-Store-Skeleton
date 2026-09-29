@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Builder;
 
 use App\Models\BuilderAd;
+use App\Rules\VideoLength;
 use App\Services\AdAnimations;
 use App\Services\AdCompiler;
 use Closure;
@@ -90,7 +91,7 @@ class BuilderAdRequest extends FormRequest
             'document.version' => ['required', 'integer', 'in:1'],
 
             // How long the ad is on screen (BuilderAd::DEFAULT_SECONDS): every playlist and channel plays it this
-            // long, and a video inside it repeats or is cut to fit. A design saved before it had one says ten.
+            // long, and a video inside it repeats or is cut to fit. A design saved before it had one says the default.
             // A real number only (`strict`): "8" or true passes the loose rule, and the editor would show the
             // default for either while the screens played something else. Six seconds at least, like a picture.
             'document.duration' => ['nullable', 'integer:strict', 'min:'.BuilderAd::MIN_SECONDS, 'max:'.BuilderAd::MAX_SECONDS],
@@ -243,6 +244,8 @@ class BuilderAdRequest extends FormRequest
             'name.required' => 'Give the ad a name.',
             'orientation.in' => 'An ad is landscape or portrait.',
             'document.duration.min' => 'An ad stays on screen for at least '.BuilderAd::MIN_SECONDS.' seconds.',
+            'document.duration.max' => 'An ad stays on screen for at most '.VideoLength::inWords(BuilderAd::MAX_SECONDS).'.',
+            'document.duration.integer' => "Give the ad's length as a whole number of seconds.",
             'document.stage.width.in' => $size,
             'document.stage.height.in' => $size,
             'document.elements.max' => 'An ad may hold at most '.self::MAX_ELEMENTS.' elements.',

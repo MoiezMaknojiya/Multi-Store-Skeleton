@@ -175,6 +175,13 @@ export function registerMediaTable(Alpine) {
                     return;
                 }
 
+                // Said before a byte of what may be 250 MB is sent (StoreMediaRequest, in its words).
+                const titleErrors = validate(this.uploadForm, { title: [maxLen('Title', 255)] });
+                if (Object.keys(titleErrors).length > 0) {
+                    this.formErrors = titleErrors;
+                    return;
+                }
+
                 this.formErrors = {};
                 this.saving = true;
                 try {

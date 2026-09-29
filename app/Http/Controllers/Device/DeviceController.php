@@ -101,9 +101,7 @@ class DeviceController extends Controller
         // §15): a television working from a cached manifest, once everything in it has
         // expired, falls back to it the way the server would have.
         $fallback = $screen->defaultMedia;
-        $fallback = $fallback?->isPlayableNow($now) ? $this->manifestItem(
-            0, $fallback, $fallback->duration_seconds ?: PlaylistItem::DEFAULT_IMAGE_SECONDS
-        ) : null;
+        $fallback = $fallback?->isPlayableNow($now) ? $this->manifestItem(0, $fallback, $fallback->playSeconds()) : null;
 
         return response()->json([
             'screen' => [
@@ -150,11 +148,9 @@ class DeviceController extends Controller
         // player needs no idea that it is a fallback. Id 0, because no playlist row
         // stands behind it.
         if ($items === [] && $resolved['fallback']) {
-            $items = [$this->manifestItem(
-                0,
-                $resolved['fallback'],
-                $resolved['fallback']->duration_seconds ?: PlaylistItem::DEFAULT_IMAGE_SECONDS
-            )];
+            // A holding video with no recorded length is held by the unmeasured backstop like any video line —
+            // never a picture's seconds, which cut it at eleven on every screen (Media::playSeconds).
+            $items = [$this->manifestItem(0, $resolved['fallback'], $resolved['fallback']->playSeconds())];
         }
 
         return ['items' => $items, 'blank' => $resolved['blank']];
@@ -248,11 +244,11 @@ class DeviceController extends Controller
     /**
      * How long a file line plays: its file's own length — a video's, or an Ad Builder page's as its design says —
      * and only a picture (or a page published before designs had a length) the seconds the line was given, never
-     * under the least (PlaylistItem::secondsForAPicture).
+     * under the least (Media::playSeconds, PlaylistItem::secondsForAPicture).
      */
     private function lineSeconds(PlaylistItem $line): int
     {
-        return $line->media?->ownLength() ?? PlaylistItem::secondsForAPicture($line->duration_seconds);
+        return $line->media?->playSeconds($line->duration_seconds) ?? PlaylistItem::secondsForAPicture($line->duration_seconds);
     }
 
     /** One entry in the manifest, whatever it was resolved from. The id identifies

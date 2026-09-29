@@ -33,9 +33,9 @@ class Media extends Model
 
     /**
      * A page, not a file somebody uploaded: an advert designed in the Ad Builder and published into the
-     * library (docs/AD-BUILDER-SPEC.md §9). It behaves like an image everywhere it matters — the playlist
-     * line says how long it stays up, the schedule rules work the same — and only the player treats it
-     * differently, by showing it in a frame of its own so its animations can run.
+     * library (docs/AD-BUILDER-SPEC.md §9). It is placed like an image — the schedule rules work the same —
+     * but plays for the length its design says (ownLength()), and the player shows it in a frame of its own
+     * so its animations can run.
      */
     public const TYPE_HTML = 'html';
 
@@ -179,9 +179,27 @@ class Media extends Model
      */
     public function ownLength(): ?int
     {
-        return in_array($this->type, [self::TYPE_VIDEO, self::TYPE_HTML], true) && (int) $this->duration_seconds > 0
-            ? (int) $this->duration_seconds
-            : null;
+        if ((int) $this->duration_seconds <= 0) {
+            return null;
+        }
+
+        return match ($this->type) {
+            self::TYPE_VIDEO => (int) $this->duration_seconds,
+            // Never under the least an ad may be — which a page published before the six-second rule may still carry.
+            self::TYPE_HTML => max(BuilderAd::MIN_SECONDS, (int) $this->duration_seconds),
+            default => null,
+        };
+    }
+
+    /**
+     * How long this file holds a screen when it is on: its own length when it has one; for a video with none
+     * recorded (uploaded before the server measured videos) the unmeasured backstop, never a picture's seconds —
+     * the player moves on at its real end anyway; and for a picture the seconds it was given, never under the least.
+     */
+    public function playSeconds(?int $given = null): int
+    {
+        return $this->ownLength()
+            ?? ($this->type === self::TYPE_VIDEO ? ChannelAd::UNMEASURED_VIDEO_SECONDS : PlaylistItem::secondsForAPicture($given));
     }
 
     /** The shop whose library this is; null for the platform's. */

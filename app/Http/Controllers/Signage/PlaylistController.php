@@ -135,7 +135,7 @@ class PlaylistController extends Controller
             'items.*.media_id' => ['nullable', 'integer', 'min:1', 'required_without:items.*.channel_id'],
             'items.*.channel_id' => ['nullable', 'integer', 'min:1'],
             // A file needs a length; a channel line lasts as long as its ads do.
-            'items.*.duration_seconds' => ['nullable', 'integer', 'min:1', 'max:86400', 'required_with:items.*.media_id'],
+            'items.*.duration_seconds' => ['nullable', 'integer', 'min:1', 'max:'.PlaylistItem::MAX_IMAGE_SECONDS, 'required_with:items.*.media_id'],
             // What the client had on screen when it started editing.
             'version' => ['required', 'string'],
 
@@ -149,6 +149,10 @@ class PlaylistController extends Controller
             'items.max' => 'A playlist cannot hold more than '.self::MAX_ITEMS.' items.',
             'items.*.media_id.required_without' => 'Each line of the playlist needs a file or a channel.',
             'items.*.duration_seconds.required_with' => 'Each file on the playlist needs a duration.',
+            // Said per line — the page puts the red border on that line's box; its own check says them first.
+            'items.*.duration_seconds.integer' => 'Line :position: give the seconds as a whole number.',
+            'items.*.duration_seconds.min' => 'Line :position: a picture stays on screen for at least '.PlaylistItem::MIN_IMAGE_SECONDS.' seconds.',
+            'items.*.duration_seconds.max' => 'Line :position: a picture stays on screen for at most 24 hours.',
             ...$this->ruleMessages(),
         ]);
 
@@ -304,7 +308,7 @@ class PlaylistController extends Controller
             'rules' => ['present', 'array', 'max:'.self::MAX_RULES],
             'rules.*' => ['array'],
             'days' => ['nullable', 'integer', 'min:1', 'max:60'],
-        ]);
+        ], collect($this->ruleMessages())->mapWithKeys(fn (string $message, string $key) => [$rekey($key) => $message])->all());
 
         // From the screen's own today, not the server's — a preview shown to somebody
         // setting up a television in another timezone has to agree with what that
@@ -424,12 +428,28 @@ class PlaylistController extends Controller
     {
         $ids = collect($items)->pluck('media_id')->reject(fn (int|string|null $id) => $id === null)->unique();
 
-        if ($ids->isEmpty()) {
-            return;
+        if ($ids->isNotEmpty()) {
+            $locked = Media::whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get(['id']);
+
+            // A file deleted between the checks above and this lock would otherwise end the save on the foreign key
+            // (a 500); held here, none can go until the lines are written (the brute-force round, 2026-09-29).
+            if ($locked->count() < $ids->count()) {
+                throw ValidationException::withMessages([
+                    'items' => 'A file on the playlist was deleted meanwhile. Reload the page and save again.',
+                ]);
+            }
+
+            $this->assertFilesAreInNoChannel($items);
         }
 
-        Media::whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get(['id']);
-        $this->assertFilesAreInNoChannel($items);
+        // The same for a channel deleted meanwhile, which a playlist of channels alone must be told too.
+        $channelIds = collect($items)->pluck('channel_id')->reject(fn (int|string|null $id) => $id === null)->unique();
+
+        if ($channelIds->isNotEmpty() && Channel::whereIn('id', $channelIds)->orderBy('id')->lockForUpdate()->count() < $channelIds->count()) {
+            throw ValidationException::withMessages([
+                'items' => 'A channel on the playlist was deleted meanwhile. Reload the page and save again.',
+            ]);
+        }
     }
 
     /**
@@ -679,6 +699,15 @@ class PlaylistController extends Controller
             'items.*.rules.*.recurrence_monthday.required_if' => 'Choose which day of the month.',
             'items.*.rules.*.recurrence_ordinal.required_if' => 'Choose which occurrence — first, second, and so on.',
             'items.*.rules.*.recurrence_weekday.required_if' => 'Choose which weekday.',
+            // The same words the schedule window says before OK (screen-playlist.js ruleProblems).
+            'items.*.rules.*.recurrence_interval.integer' => 'Repeat every: enter a whole number from 1 to 52.',
+            'items.*.rules.*.recurrence_interval.min' => 'Repeat every: enter a whole number from 1 to 52.',
+            'items.*.rules.*.recurrence_interval.max' => 'Repeat every: enter a whole number from 1 to 52.',
+            'items.*.rules.*.recurrence_monthday.integer' => 'On day: enter a day of the month from 1 to 31.',
+            'items.*.rules.*.recurrence_monthday.between' => 'On day: enter a day of the month from 1 to 31.',
+            'items.*.rules.*.starts_on.date_format' => 'Enter the whole date, or leave it blank.',
+            'items.*.rules.*.ends_on.date_format' => 'Enter the whole date, or leave it blank.',
+            'items.*.rules.*.recurrence_until.date_format' => 'Enter the whole date, or leave it blank.',
         ];
     }
 

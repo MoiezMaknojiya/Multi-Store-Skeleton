@@ -123,6 +123,7 @@ class VideoDuration
         $this->trexDurations = [];
         $this->fragmentRunning = [];
         $this->fragmentEnds = [];
+        $movieRead = false;
 
         for ($offset = 0; $offset + 8 <= $fileSize;) {
             if (++$this->steps > self::MAX_STEPS) {
@@ -130,9 +131,19 @@ class VideoDuration
             }
 
             fseek($handle, $offset);
-            [$type, $headerSize, $boxSize] = $this->boxHeader((string) fread($handle, 16), $fileSize - $offset);
+            $bytes = (string) fread($handle, 16);
+            [$type, $headerSize, $boxSize] = $this->boxHeader($bytes, $fileSize - $offset);
 
             if ($type === null) {
+                // Bytes after the last box that are no box at all — the trailer a phone maker writes (Samsung's
+                // SEF) or padding — end the walk once the movie itself has been read, as a player's walk ends
+                // there too (the brute-force round, 2026-09-29: such a file played and was refused). A real box
+                // header running past the end is a file cut short, and is refused as before; so is anything
+                // before the movie, which no player can read either.
+                if ($movieRead && preg_match('/^[\x20-\x7E]{4}$/', substr($bytes, 4, 4)) !== 1) {
+                    break;
+                }
+
                 return null;
             }
 
@@ -151,6 +162,7 @@ class VideoDuration
                 }
 
                 $type === 'moov' ? $this->moov($payload) : $this->moof($payload);
+                $movieRead = true;
             }
 
             $offset += $boxSize;

@@ -20,6 +20,9 @@ class PlaylistItem extends Model
     /** What an image shows for when nothing else says otherwise (owner's rule, 2026-09-28: six, like the least). */
     public const DEFAULT_IMAGE_SECONDS = 6;
 
+    /** The longest one picture holds a playlist's screen: a whole day. A channel's picture is held to less. */
+    public const MAX_IMAGE_SECONDS = 86400;
+
     protected $fillable = ['screen_id', 'media_id', 'channel_id', 'position', 'duration_seconds'];
 
     protected function casts(): array

@@ -130,7 +130,25 @@ class ScheduleUiTest extends DuskTestCase
                 ->waitFor('@rule-type-0')
                 ->select('@rule-type-0', 'weekly');
 
+            // OK before a day is chosen: the window stays open, and says why under the rule.
+            $this->jsClick($browser, '@schedule-ok');
+            $browser->waitFor('@rule-error-0')
+                ->assertSeeIn('@rule-error-0', 'Choose at least one day of the week.')
+                ->assertVisible('@schedule-modal');
+
             $this->jsClick($browser, '@rule-weekday-5-0');
+            $browser->waitUntilMissing('@rule-error-0', 5);
+
+            // A repeat of sixty weeks is none the server takes: the box goes red, the reason is said under the rule,
+            // and the preview says it too rather than "nothing in the next 7 days".
+            $this->jsType($browser, '@rule-interval-0', '60');
+            $browser->waitUsing(10, 250, fn () => str_contains($browser->text('@schedule-preview'), 'Repeat every: enter a whole number from 1 to 52.'));
+            $this->jsClick($browser, '@schedule-ok');
+            $browser->waitFor('@rule-error-0')->assertSeeIn('@rule-error-0', 'Repeat every: enter a whole number from 1 to 52.');
+            $this->assertStringContainsString('border-red-500', (string) $browser->attribute('@rule-interval-0', 'class'));
+
+            $this->jsType($browser, '@rule-interval-0', '1');
+            $browser->waitUntilMissing('@rule-error-0', 5);
 
             // WHAT TIME: the lunch window.
             $browser->select('@rule-daypart-0', (string) $lunch->id);

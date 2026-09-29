@@ -153,7 +153,8 @@ test('numbers are held inside AdAnimations::NUMBERS, whatever the document says'
     ])]);
     $animations = animationsOf($html)['a'];
 
-    expect($animations['in'])->toMatchArray(['duration' => 0.05, 'delay' => 600.0, 'scale' => 0.0, 'distance' => 2000.0])
+    // Nothing starts after the longest an ad may be (BuilderAd::MAX_SECONDS, the brute-force round of 2026-09-29).
+    expect($animations['in'])->toMatchArray(['duration' => 0.05, 'delay' => 300.0, 'scale' => 0.0, 'distance' => 2000.0])
         ->and($animations['loop'])->toMatchArray(['amount' => -2000.0, 'duration' => 2.0, 'yoyo' => true])
         ->and($animations['out'])->toMatchArray(['at' => 0.0, 'duration' => 60.0]);
 });

@@ -42,16 +42,31 @@ export function registerDaypartsTable(Alpine) {
         },
 
         /* Mirrors DaypartRequest. The backend stays the source of truth. */
-        validateForm: (form) => validate(form, {
-            name: [required('Name'), maxLen('Name', 100)],
-            start_time: [required('Start time')],
-            end_time: [
-                required('End time'),
-                (value, f) => clock(value) && clock(value) === clock(f.start_time)
-                    ? 'The start and end time cannot be the same. To run past midnight, set an end time EARLIER than the start.'
-                    : null,
-            ],
-        }),
+        validateForm: (form) => {
+            const errors = validate(form, {
+                name: [required('Name'), maxLen('Name', 100)],
+                start_time: [required('Start time')],
+                end_time: [
+                    required('End time'),
+                    (value, f) => clock(value) && clock(value) === clock(f.start_time)
+                        ? 'The start and end time cannot be the same. To run past midnight, set an end time EARLIER than the start.'
+                        : null,
+                ],
+            });
+
+            // A day that opens at other hours needs both of them, and two different ones — as the server says it.
+            (form.exceptions ?? []).forEach((row, index) => {
+                if (row.mode !== 'hours') return;
+
+                if (!row.start_time || !row.end_time) {
+                    errors[`exceptions.${index}.${row.start_time ? 'end_time' : 'start_time'}`] = ['Give both a start and an end time, or choose "is closed".'];
+                } else if (clock(row.start_time) === clock(row.end_time)) {
+                    errors[`exceptions.${index}.end_time`] = ['The start and end time cannot be the same. To run past midnight, set an end time EARLIER than the start.'];
+                }
+            });
+
+            return errors;
+        },
 
         mapItemToForm: (daypart) => ({
             name: daypart.name,
