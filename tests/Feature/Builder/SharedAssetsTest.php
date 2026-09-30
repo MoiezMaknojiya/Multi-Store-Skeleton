@@ -183,13 +183,14 @@ test('above the stores the Shop list shows everything, what is shared, or one sh
     $ids = fn (string $query) => collect($this->getJson('/builder/assets/data'.$query)->assertOk()->json('assets'))->pluck('id')->sort()->values()->all();
 
     expect($ids(''))->toBe(collect([$shared->id, $alpha->id, $beta->id])->sort()->values()->all())
-        ->and($ids('?store_id=shared'))->toBe([$shared->id])
         ->and($ids('?store_id='.$this->other->id))->toBe(collect([$shared->id, $beta->id])->sort()->values()->all());
 
     $labels = collect($this->getJson('/builder/assets/data')->json('assets'))->pluck('owner_label', 'id');
     expect($labels[$shared->id])->toBe('Every shop')->and($labels[$beta->id])->toBe('Beta Deli');
 
+    // All shops is the one option for every shop: there is no "shared" to ask for besides.
     $this->getJson('/builder/assets/data?store_id=nope')->assertStatus(422);
+    $this->getJson('/builder/assets/data?store_id=shared')->assertStatus(422);
 });
 
 test('above the stores a shared file in use says which shops\' ads use it, and stays', function () {

@@ -1,7 +1,8 @@
-<x-guest-layout>
+<x-guest-layout title="Choose a new password">
     {{-- The page the emailed link opens (NewPasswordController::create). A plain POST form on the auth track,
          like sign-in and sign-up: x-auth.form-field for the fields, the eye toggle for the passwords. $email
          arrives as a plain string (?email[]=x reads as none), so the link cannot break the page. --}}
+    <h1 class="text-2xl font-bold text-gray-800 mb-6">Choose a new password</h1>
     <form method="POST" action="{{ route('password.store') }}" class="space-y-5" dusk="reset-password-form"
         x-data="resetPasswordForm()" @submit="handleSubmit($event)">
         @csrf

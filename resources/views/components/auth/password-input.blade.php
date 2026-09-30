@@ -11,7 +11,7 @@
         class="form-input-auth pr-11 @error($name) border-red-500 @enderror">
 
     <button type="button" @click="toggle()" :aria-label="show ? 'Hide password' : 'Show password'"
-        class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600">
+        class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-gray-600">
         {{-- Eye open icon (password hidden) --}}
         <svg x-show="!show" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

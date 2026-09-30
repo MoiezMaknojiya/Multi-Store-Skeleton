@@ -34,8 +34,8 @@
                    x-bind:value="stop.at"
                    @change="$el.value = setStop('{{ $target }}', index, 'at', $el.value)"
                    x-bind:dusk="'{{ $prefix }}-gradient-stop-' + index + '-at'" aria-label="Stop position" />
-            <span class="text-xs text-gray-400">%</span>
-            <button type="button" class="ml-auto text-gray-400 hover:text-red-500"
+            <span class="text-xs text-gray-500">%</span>
+            <button type="button" class="ml-auto text-gray-500 hover:text-red-500"
                     x-show="(gradientOf('{{ $target }}')?.stops?.length ?? 0) > 2"
                     @click="removeStop('{{ $target }}', index)" title="Remove this colour"
                     x-bind:dusk="'{{ $prefix }}-gradient-stop-' + index + '-remove'">✕</button>

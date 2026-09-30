@@ -3,7 +3,7 @@
      and the platform team is invited below. What each row allows comes from the server (`can`). --}}
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Users') }}</h2>
+        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Users') }}</h1>
     </x-slot>
 
     <div x-data="usersTable({{ Js::from(['isSuperAdmin' => auth()->user()->isSuperAdmin()]) }})"
@@ -11,7 +11,7 @@
 
         <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div>
-                <h1 class="text-lg font-semibold text-gray-900 dark:text-white">All accounts</h1>
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">All accounts</h2>
                 {{-- Stores (putting a person in a store) is the super admin's alone, so only they are told of it. --}}
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
                     People join a store by invitation from that store.
@@ -50,7 +50,7 @@
                                         <span x-show="item.is_you" class="badge-neutral">You</span>
                                         <span x-show="item.is_primary" class="badge-info" title="The first super admin — cannot be removed">Primary</span>
                                     </p>
-                                    <p class="text-xs text-gray-400 truncate" x-text="item.email"></p>
+                                    <p class="text-xs text-gray-500 truncate" x-text="item.email"></p>
                                 </div>
                             </div>
                         </td>
@@ -62,7 +62,7 @@
                                 <template x-for="membership in item.memberships" :key="membership.store_id">
                                     <span x-bind:class="roleBadgeClass(membership.role_key)" x-text="membershipLabel(membership)"></span>
                                 </template>
-                                <span x-show="!item.platform_role && item.memberships.length === 0" class="text-xs text-gray-400">No access</span>
+                                <span x-show="!item.platform_role && item.memberships.length === 0" class="text-xs text-gray-500">No access</span>
                             </div>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300 whitespace-nowrap" x-text="formatDate(item.created_at)"></td>

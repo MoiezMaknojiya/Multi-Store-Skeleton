@@ -1,5 +1,5 @@
-<x-guest-layout>
-    <h2 class="text-2xl font-bold text-gray-800 mb-1">Create your account</h2>
+<x-guest-layout title="Create your account">
+    <h1 class="text-2xl font-bold text-gray-800 mb-1">Create your account</h1>
     <p class="text-sm text-gray-500 mb-8">
         Already have an account?
         <a href="{{ route('login') }}" class="text-blue-600 hover:underline font-medium">Sign in</a>
@@ -16,7 +16,7 @@
         @csrf
 
         {{-- Section 1: the owner --}}
-        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400">Your Details</h3>
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Your Details</h3>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <x-auth.form-field name="first_name" label="First Name" placeholder="First name" maxlength="255" autocomplete="given-name" :required="true" />
@@ -42,7 +42,7 @@
         </div>
 
         {{-- Section 2: their store --}}
-        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400 pt-2 border-t border-gray-100">Your Store</h3>
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 pt-2 border-t border-gray-100">Your Store</h3>
 
         <x-auth.form-field name="store_name" label="Store Name" placeholder="e.g. Fresh Mart" maxlength="255" :required="true" />
 

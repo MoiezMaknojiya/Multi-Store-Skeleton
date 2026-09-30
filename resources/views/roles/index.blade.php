@@ -5,7 +5,7 @@
      the server (can_edit, can_delete); the form's checklist from /roles/assignable. --}}
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Roles') }}</h2>
+        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Roles') }}</h1>
     </x-slot>
 
     <div x-data="rolesPage({{ Js::from([
@@ -16,9 +16,9 @@
 
         <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div class="min-w-0 sm:flex-1">
-                <h1 class="text-lg font-semibold text-gray-900 dark:text-white">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                     {{ $store ? 'Roles in '.$store->name : 'All roles' }}
-                </h1>
+                </h2>
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-3xl">
                     @if ($store)
                         A role decides what a member can do in this store. Store roles come from the platform and are the same in

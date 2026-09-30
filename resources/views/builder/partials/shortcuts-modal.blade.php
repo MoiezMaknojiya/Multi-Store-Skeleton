@@ -50,7 +50,7 @@
                 ],
             ] as $group => $shortcuts)
                 <div>
-                    <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ $group }}</h4>
+                    <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500">{{ $group }}</h4>
                     <dl class="mt-2 space-y-1.5">
                         @foreach ($shortcuts as [$keys, $does])
                             <div class="flex items-baseline justify-between gap-4 text-sm">

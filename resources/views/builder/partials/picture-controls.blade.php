@@ -3,7 +3,7 @@
      AdCompiler writes. --}}
 <div class="space-y-3">
     <div class="flex items-center justify-between">
-        <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-400"
+        <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500"
             x-text="selected.type === 'video' ? 'Video' : 'Picture'"></h4>
         <button type="button" class="text-xs text-blue-600 hover:underline dark:text-blue-400"
                 @click="openAssetPicker('replace', selected.type === 'video' ? 'video' : 'image')"

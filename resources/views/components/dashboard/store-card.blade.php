@@ -1,7 +1,7 @@
-{{-- Store card on the store-selection page. Shows store name, location, role,
-     slug and active status, and switches the session store when picked.
+{{-- Store card on the store-selection page. Shows store name, location, role
+     and active status, and switches the session store when picked.
 
-     The WHOLE card is the click target, not just the "Manage Store" words: the
+     The WHOLE card is the click target, not just the "Open store" words: the
      card is what a person reads as one thing, so it is what they aim at. That is
      done with the stretch-to-box utility on the button — an overlay that covers
      this box — rather than by wrapping everything in a <button>, which would put
@@ -39,15 +39,9 @@
             </span>
         </div>
 
-        {{-- Meta details: slug and role --}}
+        {{-- What the person is there (the store's internal slug is nobody's business on this page). --}}
         <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
             <div class="flex items-center justify-between text-xs">
-                <span class="text-gray-500 dark:text-gray-400">Slug</span>
-                <code class="bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded-md text-gray-700 dark:text-gray-300">
-                    {{ $store['slug'] }}
-                </code>
-            </div>
-            <div class="flex items-center justify-between text-xs mt-2">
                 <span class="text-gray-500 dark:text-gray-400">Your Role</span>
                 <span class="font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-md">
                     {{ $store['role'] }}
@@ -55,17 +49,17 @@
             </div>
         </div>
 
-        {{-- Manage Store action. Still a real button inside a real form — keyboard
+        {{-- Open store. Still a real button inside a real form — keyboard
              and screen readers get an ordinary control; stretch-to-box only widens
              where a mouse may land. --}}
         <div class="mt-4">
             <form method="POST" action="{{ route('store.switch') }}">
                 @csrf
                 <input type="hidden" name="store_id" value="{{ $store['id'] }}">
-                <button type="submit" dusk="switch-store-{{ $store['id'] }}"
+                <button type="submit" dusk="switch-store-{{ $store['id'] }}" aria-label="Open {{ $store['name'] }}"
                     class="stretch-to-box cursor-pointer text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 inline-flex items-center gap-1 focus:outline-none">
-                    Manage Store
-                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    Open store
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                     </svg>
                 </button>

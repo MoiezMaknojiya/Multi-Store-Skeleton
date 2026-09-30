@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Channels') }}</h2>
+        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Channels') }}</h1>
     </x-slot>
 
     {{-- Js::from, not @json: @json leaves its quotes raw and the first string would
@@ -57,7 +57,7 @@
                                 <span class="badge-info whitespace-nowrap" x-bind:dusk="'channel-from-platform-' + item.id">From the platform</span>
                             </div>
                             @endunless
-                            <p class="text-xs text-gray-400" x-text="item.created_by_name ? 'by ' + item.created_by_name : ''"></p>
+                            <p class="text-xs text-gray-500" x-text="item.created_by_name ? 'by ' + item.created_by_name : ''"></p>
                         </td>
 
                         <td class="px-5 py-4 text-sm text-gray-600 dark:text-gray-300">

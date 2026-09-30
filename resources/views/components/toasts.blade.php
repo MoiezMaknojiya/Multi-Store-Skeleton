@@ -5,7 +5,8 @@
      themselves, so those never become a toast. --}}
 @php($__flash = session('status'))
 
-<div x-data class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-80 max-w-[calc(100vw-2rem)] space-y-2 pointer-events-none">
+{{-- A live region: a screen reader says each toast as it appears, without moving the focus. --}}
+<div x-data role="status" aria-live="polite" class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-80 max-w-[calc(100vw-2rem)] space-y-2 pointer-events-none">
     <template x-for="toast in $store.toasts.items" :key="toast.id">
         <div x-transition.opacity.duration.300ms
             class="pointer-events-auto rounded-md px-4 py-3 text-sm text-white shadow-lg flex items-start gap-2"

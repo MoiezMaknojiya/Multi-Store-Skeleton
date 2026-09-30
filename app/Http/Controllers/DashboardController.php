@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Role;
 use App\Models\Store;
+use App\Services\DashboardSummary;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
@@ -12,20 +13,21 @@ class DashboardController extends Controller
 {
     /**
      * Landing page after login. Three audiences:
-     *  - Global users (Super-Admin / custom global role): the aggregate stats view;
+     *  - Global users (Super-Admin / custom global role): the platform's summary;
      *    they span every store and never pick one.
-     *  - Store users with a store in context: that ONE store's dashboard.
+     *  - Store users with a store in context: that ONE store's summary — what it has,
+     *    what needs doing and its first steps (DashboardSummary).
      *  - Store users with no store chosen yet: smart default — a single store is
      *    auto-selected, several stores send them to the selection page.
      */
-    public function index(): View|RedirectResponse
+    public function index(DashboardSummary $summary): View|RedirectResponse
     {
         $user = auth()->user();
 
         if ($user->globalRole() !== null) {
             return view('dashboard.index', [
                 'view' => 'global',
-                'totalStores' => Store::count(),
+                'summary' => $summary->forPlatform($user),
             ]);
         }
 
@@ -38,15 +40,18 @@ class DashboardController extends Controller
         // Smart default: auto-select a single store; several stores need a pick. A flash that came
         // here with a redirect ("Invitation declined.", a deleted store's goodbye) is kept for one
         // more request, so the picker shows it instead of it vanishing on the way through.
-        if ($this->resolveCurrentStore($stores) === null) {
+        $store = $this->resolveCurrentStore($stores);
+
+        if ($store === null) {
             session()->reflash();
 
             return redirect()->route('stores.select');
         }
 
-        // The active store is shown by the header switcher; the dashboard body is a
-        // clean slate for future store-specific content.
-        return view('dashboard.index', ['view' => 'store']);
+        return view('dashboard.index', [
+            'view' => 'store',
+            'summary' => $summary->forStore($store, $user),
+        ]);
     }
 
     /**
@@ -73,7 +78,6 @@ class DashboardController extends Controller
         $myStores = $stores->map(fn (Store $store) => [
             'id' => $store->id,
             'name' => $store->name,
-            'slug' => $store->slug,
             'city' => $store->city,
             'state' => $store->state,
             'role' => $roleNames[$store->pivot->role_id] ?? 'No role',

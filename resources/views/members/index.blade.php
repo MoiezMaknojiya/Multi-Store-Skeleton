@@ -2,7 +2,7 @@
      route permissions here; what may be done to each ROW comes from the server (can_manage). --}}
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Members') }}</h2>
+        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Members') }}</h1>
     </x-slot>
 
     <div x-data="membersPage({{ Js::from(['storeName' => $store->name]) }})"
@@ -11,7 +11,7 @@
         {{-- Page intro + actions --}}
         <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div>
-                <h1 class="text-lg font-semibold text-gray-900 dark:text-white">Team of {{ $store->name }}</h1>
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Team of {{ $store->name }}</h2>
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
                     Everyone who can work in this store, and the invitations still waiting for an answer.
                 </p>
@@ -81,7 +81,7 @@
                                                 <span x-text="member.name"></span>
                                                 <span x-show="member.is_you" class="badge-neutral">You</span>
                                             </p>
-                                            <p class="text-xs text-gray-400 truncate" x-text="member.email"></p>
+                                            <p class="text-xs text-gray-500 truncate" x-text="member.email"></p>
                                         </div>
                                     </div>
                                 </td>
@@ -99,7 +99,7 @@
                                         <button type="button" class="btn-row-danger" x-show="member.can_manage"
                                             x-on:click="confirmRemove(member)" :dusk="'remove-member-' + member.id">Remove</button>
                                         @endcan
-                                        <span x-show="!member.can_manage" class="text-xs text-gray-400">—</span>
+                                        <span x-show="!member.can_manage" class="text-xs text-gray-500">—</span>
                                     </div>
                                 </td>
                             </tr>
@@ -155,7 +155,7 @@
                                             :dusk="'revoke-invitation-' + invitation.id">Revoke</button>
                                         @endcan
                                     </div>
-                                    <span x-show="!invitation.can_manage" class="block text-right text-xs text-gray-400">—</span>
+                                    <span x-show="!invitation.can_manage" class="block text-right text-xs text-gray-500">—</span>
                                 </td>
                             </tr>
                         </template>

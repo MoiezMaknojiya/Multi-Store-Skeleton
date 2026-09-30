@@ -114,12 +114,6 @@ class BuilderAsset extends Model
         return $query->where(fn (Builder $query) => $query->where('store_id', $storeId)->orWhereNull('store_id'));
     }
 
-    /** What the platform shares with every shop. */
-    public function scopeShared(Builder $query): Builder
-    {
-        return $query->whereNull('store_id');
-    }
-
     /** The platform's, shared with every shop — no shop's own. */
     public function isShared(): bool
     {

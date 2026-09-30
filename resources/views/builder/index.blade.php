@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Ad Builder') }}</h2>
+        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Ad Builder') }}</h1>
     </x-slot>
 
     <div x-data="adsTable()" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
@@ -112,7 +112,7 @@
                                            class="truncate font-medium text-gray-800 dark:text-white" x-text="item.name"></p>
                                     @endcan
 
-                                    <p class="mt-1 text-xs text-gray-400">
+                                    <p class="mt-1 text-xs text-gray-500">
                                         <span x-show="item.store_name" x-cloak x-text="item.store_name + ' · '"></span>
                                         <span x-text="item.updated_by_name ? 'by ' + item.updated_by_name : ''"></span>
                                     </p>

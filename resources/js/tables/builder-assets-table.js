@@ -18,7 +18,7 @@ export function registerBuilderAssetsTable(Alpine) {
         extraState: {
             // Several files arriving together refresh the list once.
             refreshTimer: null,
-            /* Above the stores: one shop (its id), the files shared with every shop ('shared'), or everything (''). */
+            /* Above the stores: one shop (its id), or All shops (''), where an upload is shared with every shop. */
             filterStore: '',
             /* How full the shop on the shelf is ({used, limit}): its own inside a store, the one chosen above. */
             storage: null,

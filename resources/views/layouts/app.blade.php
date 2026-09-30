@@ -5,7 +5,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ config('app.name', 'Laravel') }}</title>
+    {{-- The tab says which page it is ("Screens · Digital Lifts"): the page's own title, or its header's words. --}}
+    @php($__pageTitle = trim(preg_replace('/\s+/', ' ', html_entity_decode(strip_tags((string) ($title ?? $header ?? '')), ENT_QUOTES | ENT_HTML5))))
+    <title>{{ $__pageTitle !== '' ? $__pageTitle.' · ' : '' }}{{ config('app.name', 'Laravel') }}</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap" rel="stylesheet">
@@ -34,6 +36,9 @@
 <body class="font-sans antialiased bg-gray-100 dark:bg-gray-900"
     x-data="layoutHandler">
 
+    {{-- The first thing a keyboard reaches: straight past the sidebar to the page. --}}
+    <a href="#main-content" class="skip-link" dusk="skip-to-content">Skip to main content</a>
+
     {{-- Mobile Backdrop --}}
     <div x-show="sidebarOpen"
         class="fixed inset-0 z-20 bg-black/50 lg:hidden"
@@ -57,7 +62,7 @@
             </x-header>
 
             {{-- Content Slot --}}
-            <main class="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-100 dark:bg-gray-900">
+            <main id="main-content" tabindex="-1" class="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-100 focus:outline-none dark:bg-gray-900">
                 {{ $slot }}
             </main>
         </div>

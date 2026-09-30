@@ -45,14 +45,14 @@
                     <span class="hidden max-w-[9rem] truncate font-medium text-gray-700 dark:text-gray-300 sm:block">
                         {{ $__currentStore['name'] ?? 'Select store' }}
                     </span>
-                    <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <svg class="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
                     </svg>
                 </button>
 
                 <div x-show="storeMenu" @click.outside="storeMenu = false" x-cloak
                     class="absolute right-0 mt-2 w-60 max-h-72 overflow-y-auto rounded-xs shadow-lg z-50 py-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
-                    <p class="px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Switch store</p>
+                    <p class="px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-500">Switch store</p>
                     @foreach($__stores as $__s)
                         <form method="POST" action="{{ route('store.switch') }}">
                             @csrf

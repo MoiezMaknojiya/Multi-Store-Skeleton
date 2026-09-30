@@ -125,8 +125,9 @@ shape as a role that somebody still holds).
 **The shared shelf** (owner, 2026-09-29: "mujhe sub store k liya upload karna ho toh takay woo mere asset ko use
 kar sake aur agar permission du toh woo delete bhi kar sake"). An asset with no shop — `builder_assets.store_id`
 NULL, under `builder/platform/assets/` — is the platform's, shared with every shop. Above the stores the Assets tab's
-Shop list offers All shops, Shared with every shop, and each shop: an upload with a shop chosen is that shop's, and
-with none it is shared (the page says which under its note). Every shop's shelf lists the shared files beside its own,
+Shop list offers All shops and each shop: an upload with a shop chosen is that shop's, and with All shops it is shared
+(the page says which under its note; owner, 2026-09-30: "all shop ka option araha ha toh shared with everyone q araha
+ha" — one option, not two saying the same). Every shop's shelf lists the shared files beside its own,
 marked "From the platform", and the editor's picker offers them for any shop (`BuilderAsset::onShelfOf`,
 `AdCompiler::assetsFor`, `onThisShelf`). A shared file counts to no shop's 512 MB (the server's reserve still holds),
 and a deleted shop takes its own files, never the shared ones. It is deleted with **Delete Shared Assets**

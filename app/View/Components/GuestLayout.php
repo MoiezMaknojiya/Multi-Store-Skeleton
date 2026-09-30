@@ -7,6 +7,9 @@ use Illuminate\View\View;
 
 class GuestLayout extends Component
 {
+    /** The page's name for the browser tab ("Sign in · Digital Lifts"). */
+    public function __construct(public ?string $title = null) {}
+
     /**
      * Get the view / contents that represents the component.
      */

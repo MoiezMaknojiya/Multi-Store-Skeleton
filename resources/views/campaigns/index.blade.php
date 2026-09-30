@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Advertising') }}</h2>
+        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Advertising') }}</h1>
     </x-slot>
 
     {{-- Js::from, not @json: @json leaves its quotes raw and the first string would
@@ -49,13 +49,13 @@
                                              x-bind:class="Number(item.height) > Number(item.width) ? 'object-contain' : 'object-cover'">
                                     </template>
                                     <template x-if="!item.thumbnail_url">
-                                        <span class="text-[10px] text-gray-400" x-text="item.type"></span>
+                                        <span class="text-[10px] text-gray-500" x-text="item.type"></span>
                                     </template>
                                 </div>
                                 <div class="min-w-0">
                                     <p class="font-medium text-gray-800 dark:text-white whitespace-nowrap"
                                        x-bind:dusk="'campaign-name-' + item.id" x-text="item.name"></p>
-                                    <p class="text-xs text-gray-400 whitespace-nowrap"
+                                    <p class="text-xs text-gray-500 whitespace-nowrap"
                                        x-text="item.advertiser_name || 'No advertiser named'"></p>
                                 </div>
                             </div>
@@ -63,12 +63,12 @@
 
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300 text-xs">
                             <span class="block whitespace-nowrap" x-text="datesLabel(item)"></span>
-                            <span class="block text-gray-400 whitespace-nowrap" x-text="windowLabel(item)"></span>
+                            <span class="block text-gray-500 whitespace-nowrap" x-text="windowLabel(item)"></span>
                         </td>
 
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300 text-sm whitespace-nowrap">
                             <span x-text="item.play_seconds + 's'"></span>
-                            <span class="block text-xs text-gray-400 capitalize" x-text="item.type"></span>
+                            <span class="block text-xs text-gray-500 capitalize" x-text="item.type"></span>
                         </td>
 
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300 text-xs">
@@ -202,7 +202,7 @@
                         </p>
 
                         <template x-if="!loadingScreens && allScreens.length === 0">
-                            <p class="text-sm text-gray-400 dark:text-gray-500" dusk="campaign-no-screens">
+                            <p class="text-sm text-gray-500 dark:text-gray-500" dusk="campaign-no-screens">
                                 There are no screens yet.
                             </p>
                         </template>
@@ -231,7 +231,7 @@
                                             {{-- A greyed row that explains ITSELF beats a screen
                                                  that is silently not in the list. --}}
                                             <template x-if="!screen.carries_ads">
-                                                <span class="text-xs text-gray-400" x-text="blockedReason(screen)"></span>
+                                                <span class="text-xs text-gray-500" x-text="blockedReason(screen)"></span>
                                             </template>
 
                                             {{-- And one that can be chosen says what choosing it
@@ -239,7 +239,7 @@
                                             <template x-if="screen.carries_ads">
                                                 <span class="text-xs"
                                                       x-bind:class="isOversold(screen)
-                                                            ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-gray-400'"
+                                                            ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-gray-500'"
                                                       x-text="bookedLabel(screen)"></span>
                                             </template>
                                         </label>

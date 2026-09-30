@@ -14,14 +14,14 @@
 <x-app-layout>
     <x-slot name="header">
         <div class="flex min-w-0 items-center gap-3">
-            <a href="{{ route('screens.view') }}" class="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" dusk="back-to-screens"
+            <a href="{{ route('screens.view') }}" class="flex-shrink-0 text-gray-500 hover:text-gray-600 dark:hover:text-gray-200" dusk="back-to-screens"
                aria-label="Back to screens">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
             </a>
-            <h2 class="min-w-0 truncate font-semibold text-xl text-gray-800 dark:text-white leading-tight" title="{{ $screen->name }}">{{ $screen->name }}</h2>
-            <span class="hidden flex-shrink-0 text-sm text-gray-400 sm:inline">{{ $orientations[$screen->orientation] ?? $screen->orientation }}</span>
+            <h1 class="min-w-0 truncate font-semibold text-xl text-gray-800 dark:text-white leading-tight" title="{{ $screen->name }}">{{ $screen->name }}</h1>
+            <span class="hidden flex-shrink-0 text-sm text-gray-500 sm:inline">{{ $orientations[$screen->orientation] ?? $screen->orientation }}</span>
         </div>
     </x-slot>
 
@@ -48,7 +48,7 @@
                 <div class="card-header">
                     <div>
                         <h3 class="text-subheading">Playlist</h3>
-                        <p class="text-xs text-gray-400 mt-0.5" dusk="playlist-summary" x-text="summary()"></p>
+                        <p class="text-xs text-gray-500 mt-0.5" dusk="playlist-summary" x-text="summary()"></p>
                     </div>
                     @can('screen-playlist')
                     <div class="flex flex-wrap items-center gap-2">
@@ -88,7 +88,7 @@
                         {{-- A line that is not playing — an Ad Builder page taken off the screens (unpublished) — is drawn faded. --}}
                         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 p-2 rounded-md border border-gray-200 dark:border-gray-700"
                              x-bind:class="item.is_draft ? 'opacity-60' : ''">
-                            <span class="w-6 text-xs text-gray-400 text-center" x-text="index + 1"></span>
+                            <span class="w-6 text-xs text-gray-500 text-center" x-text="index + 1"></span>
 
                             <div class="w-20 h-12 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
                                 {{-- An upright picture is shown whole, not cut to its middle (docs/AD-BUILDER-SPEC.md §12). --}}
@@ -97,13 +97,13 @@
                                          x-bind:class="(item.thumbnail_orientation ?? item.orientation) === 'portrait' ? 'object-contain' : 'object-cover'">
                                 </template>
                                 <template x-if="!item.thumbnail_url">
-                                    <span class="text-[10px] text-gray-400" x-text="typeLabel(item)"></span>
+                                    <span class="text-[10px] text-gray-500" x-text="typeLabel(item)"></span>
                                 </template>
                             </div>
 
                             <div class="flex-1 min-w-0">
                                 <p class="text-sm font-medium text-gray-800 dark:text-white truncate" x-text="item.title"></p>
-                                <p class="text-xs text-gray-400">
+                                <p class="text-xs text-gray-500">
                                     <span x-text="typeLabel(item)"></span>
                                     <span x-show="item.expires_at" class="text-amber-600 dark:text-amber-400"
                                           x-text="' - expires ' + new Date(item.expires_at).toLocaleDateString()"></span>
@@ -144,9 +144,10 @@
                                         <span class="flex items-center gap-1" x-bind:class="{ 'crud-field-error': item.secondsError }">
                                             <input type="number" min="{{ \App\Models\PlaylistItem::MIN_IMAGE_SECONDS }}" max="{{ \App\Models\PlaylistItem::MAX_IMAGE_SECONDS }}" step="1" x-model.number="item.duration_seconds"
                                                 @input="dirty = true; item.secondsError = null" x-bind:dusk="'playlist-duration-' + index"
+                                                x-bind:aria-label="'Seconds on screen for ' + item.title"
                                                 x-bind:disabled="!canEdit || saving" x-bind:title="item.secondsError || ''"
                                                 class="form-input w-20 text-sm text-right">
-                                            <span class="text-xs text-gray-400">secs</span>
+                                            <span class="text-xs text-gray-500">secs</span>
                                         </span>
                                     </template>
                                     <template x-if="!isTimed(item)">
@@ -189,7 +190,7 @@
                 <div class="card-header">
                     <h3 class="text-subheading">Content library</h3>
                     <div class="relative w-full max-w-xs">
-                        <input x-model="search" type="text" placeholder="Search files..." autocomplete="new-password" maxlength="255"
+                        <input x-model="search" type="search" placeholder="Search files..." aria-label="Search files" autocomplete="new-password" maxlength="255"
                             dusk="media-picker-search" class="form-input" />
                     </div>
                 </div>
@@ -214,13 +215,13 @@
                                          x-bind:class="media.orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                                 </template>
                                 <template x-if="!media.thumbnail_url">
-                                    <span class="text-[10px] text-gray-400" x-text="typeLabel(media)"></span>
+                                    <span class="text-[10px] text-gray-500" x-text="typeLabel(media)"></span>
                                 </template>
                             </div>
 
                             <div class="flex-1 min-w-0">
                                 <p class="text-sm font-medium text-gray-800 dark:text-white truncate" x-text="media.title"></p>
-                                <p class="text-xs text-gray-400">
+                                <p class="text-xs text-gray-500">
                                     <span x-text="typeLabel(media)"></span>
                                     {{-- Which way the file is — or, when that is not the screen's way, why it matters:
                                          it would play with bars (§12). One or the other, never "portrait · Portrait". --}}
@@ -247,7 +248,7 @@
             <div class="card" x-show="channels.length > 0" x-cloak dusk="channel-picker">
                 <div class="card-header">
                     <h3 class="text-subheading">Channels</h3>
-                    <p class="text-xs text-gray-400">Add one once &mdash; its new ads arrive on their own.</p>
+                    <p class="text-xs text-gray-500">Add one once &mdash; its new ads arrive on their own.</p>
                 </div>
 
                 <div class="p-4 space-y-2">
@@ -260,7 +261,7 @@
                                              x-bind:class="channel.thumbnail_orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                                     </template>
                                     <template x-if="!channel.thumbnail_url">
-                                        <span class="text-[10px] text-gray-400">channel</span>
+                                        <span class="text-[10px] text-gray-500">channel</span>
                                     </template>
                                 </div>
 
@@ -273,7 +274,7 @@
                                               x-bind:dusk="'channel-picker-own-' + channel.id">This store</span>
                                     </p>
                                     <p class="text-xs"
-                                       x-bind:class="channelWarning(channel) ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'"
+                                       x-bind:class="channelWarning(channel) ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500'"
                                        x-bind:dusk="'channel-picker-info-' + channel.id"
                                        x-text="channelInfo(channel)"></p>
                                 </div>
@@ -301,11 +302,11 @@
                                                      x-bind:class="ad.orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                                             </template>
                                             <template x-if="!ad.thumbnail_url">
-                                                <span class="text-[10px] text-gray-400" x-text="ad.type"></span>
+                                                <span class="text-[10px] text-gray-500" x-text="ad.type"></span>
                                             </template>
                                         </div>
                                         <p class="mt-1 truncate text-gray-700 dark:text-gray-200" x-text="ad.title"></p>
-                                        <p class="text-gray-400" x-text="adLine(ad)"></p>
+                                        <p class="text-gray-500" x-text="adLine(ad)"></p>
                                         {{-- The other way round from this screen: it plays with bars, as a file on the list would. --}}
                                         <p x-show="orientationNote(ad)" x-cloak class="text-amber-600 dark:text-amber-400"
                                            x-bind:dusk="'channel-ad-orientation-' + ad.id" x-text="orientationNote(ad)"></p>
@@ -332,7 +333,7 @@
 
                 <div class="mt-5 space-y-4">
                     <template x-if="scheduleRules.length === 0">
-                        <p class="text-sm text-gray-400 dark:text-gray-500" dusk="schedule-always">
+                        <p class="text-sm text-gray-500 dark:text-gray-500" dusk="schedule-always">
                             Always &mdash; no schedule set.
                         </p>
                     </template>
@@ -358,7 +359,7 @@
                                         <input type="date" x-model="rule.starts_on" @change="refreshPreview()"
                                                x-bind:dusk="'rule-starts-on-' + ruleIndex" class="form-input w-40"
                                                x-bind:class="scheduleErrors[ruleIndex]?.starts_on ? '!border-red-500' : ''">
-                                        <span class="text-gray-400">&rarr;</span>
+                                        <span class="text-gray-500">&rarr;</span>
                                         <input type="date" x-model="rule.ends_on" @change="refreshPreview()"
                                                x-bind:dusk="'rule-ends-on-' + ruleIndex" class="form-input w-40"
                                                x-bind:class="scheduleErrors[ruleIndex]?.ends_on ? '!border-red-500' : ''">
@@ -407,7 +408,7 @@
                                                    @input="refreshPreview()" x-bind:dusk="'rule-monthday-' + ruleIndex"
                                                    class="form-input w-20 text-right"
                                                    x-bind:class="scheduleErrors[ruleIndex]?.recurrence_monthday ? '!border-red-500' : ''">
-                                            <span class="text-xs text-gray-400">
+                                            <span class="text-xs text-gray-500">
                                                 A 31st simply does not occur in a 30-day month.
                                             </span>
                                         </div>
@@ -440,7 +441,7 @@
                                         <input type="date" x-model="rule.recurrence_until" @change="refreshPreview()"
                                                x-bind:dusk="'rule-until-' + ruleIndex" class="form-input w-40"
                                                x-bind:class="scheduleErrors[ruleIndex]?.recurrence_until ? '!border-red-500' : ''">
-                                        <span class="text-xs text-gray-400">Leave the end blank to repeat forever.</span>
+                                        <span class="text-xs text-gray-500">Leave the end blank to repeat forever.</span>
                                     </div>
                                 </div>
                             </template>
@@ -487,7 +488,7 @@
                          is answered with — a preview from a second implementation
                          would be worse than none at all. --}}
                     <div class="rounded-md bg-gray-50 dark:bg-gray-700/40 px-4 py-3">
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
+                        <p class="text-xs uppercase tracking-wide text-gray-500">
                             Next 7 days <span x-show="previewing" x-cloak class="normal-case">&mdash; working&hellip;</span>
                         </p>
                         <p class="text-sm text-gray-700 dark:text-gray-200 mt-1" dusk="schedule-preview">
@@ -501,7 +502,7 @@
                             <template x-for="(slot, i) in preview" :key="i">
                                 <span class="inline-block mr-3 whitespace-nowrap">
                                     <span x-text="new Date(slot.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })"></span>
-                                    <span class="text-gray-400" x-show="slot.start" x-text="slotLabel(slot)"></span>
+                                    <span class="text-gray-500" x-show="slot.start" x-text="slotLabel(slot)"></span>
                                 </span>
                             </template>
                         </p>
@@ -526,7 +527,7 @@
 
                 <div class="mt-4 space-y-2 max-h-80 overflow-y-auto">
                     <template x-if="copyTargets.length === 0">
-                        <p class="text-sm text-gray-400 dark:text-gray-500" dusk="copy-no-targets">
+                        <p class="text-sm text-gray-500 dark:text-gray-500" dusk="copy-no-targets">
                             There are no other screens in this store.
                         </p>
                     </template>
@@ -543,7 +544,7 @@
                                  BEFORE they press the button. --}}
                             <span class="text-xs"
                                   x-bind:class="target.playlist_items_count > 0
-                                        ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'"
+                                        ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500'"
                                   x-text="target.playlist_items_count > 0
                                         ? target.playlist_items_count + ' item' + (target.playlist_items_count === 1 ? '' : 's') + ' will be replaced'
                                         : 'empty'"></span>

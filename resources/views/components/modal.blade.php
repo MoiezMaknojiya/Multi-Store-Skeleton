@@ -22,7 +22,8 @@ $maxWidth = [
     x-on:open-modal.window="openEvent($event)"
     x-on:close-modal.window="closeEvent($event)"
     x-on:close.stop="closeMe"
-    x-on:keydown.escape.window="closeMe"
+    x-on:keydown.escape.window="closeOnEscape"
+    x-on:keydown.tab.window="keepFocusInside($event)"
     x-show="show"
     class="fixed inset-0 z-50 flex items-center-safe justify-center overflow-y-auto p-2 sm:p-0"
     style="display: none;"
@@ -35,11 +36,16 @@ $maxWidth = [
     >
     </div>
 
-    {{-- MODAL PANEL (mobile: almost full width, desktop: respects maxWidth) --}}
+    {{-- MODAL PANEL (mobile: almost full width, desktop: respects maxWidth). A dialog to a screen reader, named by
+         its first heading (customModal.nameTheDialog); while it is open Tab stays inside it and Escape closes it. --}}
     <div
         x-show="show"
+        x-ref="panel"
+        role="dialog"
+        aria-modal="true"
+        tabindex="-1"
         x-on:click.stop
-        class="relative z-10 bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-[calc(100%-1rem)] sm:w-full {{ $maxWidth }} sm:mx-auto"
+        class="relative z-10 focus:outline-none bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-[calc(100%-1rem)] sm:w-full {{ $maxWidth }} sm:mx-auto"
     >
         <div class="p-6">
             {{ $slot }}

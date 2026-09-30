@@ -4,7 +4,7 @@
     {{-- How long the ad is on screen — the design's own, as a layout's duration is in Xibo and a page's in Canva
          (owner, 2026-09-28): every playlist and channel plays it this long. --}}
     <div>
-        <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-400">Length</h4>
+        <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Length</h4>
         <label class="mt-2 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
             <input type="number" x-bind:min="adSecondsMin" x-bind:max="adSecondsMax" step="1" class="form-input w-24 text-sm"
                    x-bind:value="hasOwnLength() ? adSeconds() : ''" @change="$el.value = setAdSeconds($el.value)"
@@ -25,7 +25,7 @@
     </div>
 
     <div>
-        <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-400">Background</h4>
+        <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Background</h4>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
             Select something on the stage to change it — or build the background here, one layer on another.
         </p>
@@ -38,8 +38,8 @@
 
     <div>
         <div class="flex items-center justify-between">
-            <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-400">Layers</h4>
-            <span class="text-xs text-gray-400" x-text="doc.stage.background.layers.length + ' / ' + maxLayers"></span>
+            <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Layers</h4>
+            <span class="text-xs text-gray-500" x-text="doc.stage.background.layers.length + ' / ' + maxLayers"></span>
         </div>
 
         <div class="mt-2 grid grid-cols-2 gap-1">
@@ -53,7 +53,7 @@
                     x-bind:disabled="!canAddLayer()" dusk="bg-add-video">+ Video</button>
         </div>
 
-        <p x-show="doc.stage.background.layers.length === 0" x-cloak class="mt-3 text-xs text-gray-400">
+        <p x-show="doc.stage.background.layers.length === 0" x-cloak class="mt-3 text-xs text-gray-500">
             No layers yet — the stage colour fills the frame.
         </p>
 
@@ -65,7 +65,7 @@
                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200'
                          : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700/50'"
                      @click="selectLayer(layer)" x-bind:dusk="'bg-layer-' + layer.id">
-                    <button type="button" class="text-gray-400 hover:text-gray-600"
+                    <button type="button" class="text-gray-500 hover:text-gray-600"
                             @click.stop="toggleLayer(layer)"
                             x-bind:title="layer.visible === false ? 'Show' : 'Hide'"
                             x-bind:dusk="'bg-layer-visible-' + layer.id"
@@ -73,16 +73,16 @@
                     <span class="h-4 w-4 shrink-0 rounded border border-gray-300 dark:border-gray-600"
                           x-bind:style="layerSwatch(layer)"></span>
                     <span class="min-w-0 flex-1 truncate" x-text="layerName(layer)"></span>
-                    <button type="button" class="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                    <button type="button" class="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-200"
                             @click.stop="moveLayer(layer, 1)" title="Bring forward"
                             x-bind:dusk="'bg-layer-up-' + layer.id">▲</button>
-                    <button type="button" class="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                    <button type="button" class="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-200"
                             @click.stop="moveLayer(layer, -1)" title="Send backward"
                             x-bind:dusk="'bg-layer-down-' + layer.id">▼</button>
-                    <button type="button" class="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                    <button type="button" class="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-200"
                             @click.stop="duplicateLayer(layer)" title="Duplicate"
                             x-bind:dusk="'bg-layer-duplicate-' + layer.id">⧉</button>
-                    <button type="button" class="text-xs text-gray-400 hover:text-red-500"
+                    <button type="button" class="text-xs text-gray-500 hover:text-red-500"
                             @click.stop="removeLayer(layer)" title="Delete"
                             x-bind:dusk="'bg-layer-delete-' + layer.id">✕</button>
                 </div>
@@ -93,7 +93,7 @@
     {{-- The layer being edited. --}}
     <template x-if="selectedLayer()">
         <div class="space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700" dusk="bg-layer-settings">
-            <h4 class="truncate text-xs font-semibold uppercase tracking-wide text-gray-400" x-text="layerName(selectedLayer())"></h4>
+            <h4 class="truncate text-xs font-semibold uppercase tracking-wide text-gray-500" x-text="layerName(selectedLayer())"></h4>
 
             <div class="grid grid-cols-2 gap-2">
                 <label class="text-xs text-gray-500 dark:text-gray-400">

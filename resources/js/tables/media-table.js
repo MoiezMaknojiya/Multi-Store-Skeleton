@@ -12,6 +12,7 @@
  *    carries the server's own words for it.
  */
 import axios from 'axios';
+import { takeAddressFlag } from '../core/address-flag.js';
 import { createCrudTable } from '../core/crud-table-base.js';
 import { storageUsedText, storagePercent } from '../core/media-file.js';
 import { validate, required, maxLen } from '../core/validate.js';
@@ -65,6 +66,11 @@ export function registerMediaTable(Alpine) {
         }),
 
         extraMethods: {
+            /** Sent here to upload (the dashboard's Upload files): the uploader at once, for somebody who may upload. */
+            onInit() {
+                if (takeAddressFlag('upload') && document.querySelector('[dusk="upload-media"]')) this.$nextTick(() => this.openUploadModal());
+            },
+
             /* ── Listing filters ───────────────────────────────────────── */
             extraParams() {
                 return {

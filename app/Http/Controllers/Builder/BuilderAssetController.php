@@ -36,8 +36,9 @@ class BuilderAssetController extends Controller
 
     public function index(): View
     {
-        // Above the stores the shelf can be narrowed to one shop, or to what is shared with every shop; a store's
-        // own people see theirs and the shared ones.
+        // Above the stores the shelf lists every shop's and the shared files, or one shop's and the shared (owner,
+        // 2026-09-29: All shops is where a file for every shop goes, so there is no second option saying the same); a
+        // store's own people see theirs and the shared ones.
         $stores = $this->aboveTheStores()
             ? Store::orderBy('name')->get(['id', 'name'])->toArray()
             : [];
@@ -47,15 +48,13 @@ class BuilderAssetController extends Controller
 
     /**
      * The storage of the shop the shelf is showing: inside a store its own; above the stores the shop chosen
-     * in the Shop list, or none while every shop's shelf, or the shared one, is listed.
+     * in the Shop list, or none while All shops is listed.
      *
      * @return array{used: int, limit: int}|null
      */
-    private function storageOf(?string $shelf): ?array
+    private function storageOf(?int $chosenStoreId): ?array
     {
-        $storeId = $this->aboveTheStores()
-            ? ($shelf !== null && ctype_digit($shelf) ? (int) $shelf : null)
-            : ((int) session('current_store_id') ?: null);
+        $storeId = $this->aboveTheStores() ? $chosenStoreId : ((int) session('current_store_id') ?: null);
 
         return $storeId !== null && Store::whereKey($storeId)->exists() ? $this->quota->summary($storeId) : null;
     }
@@ -63,14 +62,13 @@ class BuilderAssetController extends Controller
     /** The shelf, newest first, each row saying whose it is, which ads use it and whether this person may delete it. */
     public function data(Request $request): JsonResponse
     {
-        // A shop's id, or `shared` for what the platform shares with every shop; nothing lists everything in reach.
-        $filters = $request->validate(['store_id' => ['bail', 'nullable', 'string', 'regex:/^(shared|[1-9][0-9]{0,18})$/']]);
-        $shelf = $filters['store_id'] ?? null;
+        // A shop's id — that shop's files and the shared ones; nothing lists everything in reach.
+        $filters = $request->validate(['store_id' => ['nullable', 'integer', 'min:1']]);
+        $shelf = isset($filters['store_id']) ? (int) $filters['store_id'] : null;
 
         // Only ever narrows what visibleTo allows — see BuilderController::data.
         $query = BuilderAsset::visibleTo(auth()->user())
-            ->when($shelf === 'shared', fn (Builder $query) => $query->shared())
-            ->when($shelf !== null && $shelf !== 'shared', fn (Builder $query) => $query->onShelfOf((int) $shelf))
+            ->when($shelf !== null, fn (Builder $query) => $query->onShelfOf($shelf))
             ->with('store:id,name')
             ->latest();
 

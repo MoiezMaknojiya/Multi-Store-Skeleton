@@ -1,13 +1,13 @@
 <x-app-layout>
     <x-slot name="header">
         <div class="flex min-w-0 items-center gap-3">
-            <a href="{{ route('channels.view') }}" class="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" dusk="back-to-channels"
+            <a href="{{ route('channels.view') }}" class="flex-shrink-0 text-gray-500 hover:text-gray-600 dark:hover:text-gray-200" dusk="back-to-channels"
                aria-label="Back to channels">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
             </a>
-            <h2 class="min-w-0 truncate font-semibold text-xl text-gray-800 dark:text-white leading-tight" title="{{ $channel->name }}">{{ $channel->name }}</h2>
+            <h1 class="min-w-0 truncate font-semibold text-xl text-gray-800 dark:text-white leading-tight" title="{{ $channel->name }}">{{ $channel->name }}</h1>
             @unless ($channel->is_active)
                 <span class="badge-neutral flex-shrink-0">Paused</span>
             @endunless
@@ -38,7 +38,7 @@
             <div class="card-header">
                 <div>
                     <h3 class="text-subheading">Ads</h3>
-                    <p class="text-xs text-gray-400 mt-0.5" dusk="channel-ads-summary" x-text="summary()"></p>
+                    <p class="text-xs text-gray-500 mt-0.5" dusk="channel-ads-summary" x-text="summary()"></p>
                 </div>
                 @if (! $readOnly)
                     @can('channel-update')
@@ -66,7 +66,7 @@
                     <div class="flex flex-wrap items-center gap-x-3 gap-y-2 p-2 rounded-md border border-gray-200 dark:border-gray-700"
                          x-bind:class="ad.status !== 'running' ? 'opacity-60' : ''"
                          x-bind:dusk="'channel-ad-row-' + ad.id">
-                        <span class="w-6 text-xs text-gray-400 text-center" x-text="index + 1"></span>
+                        <span class="w-6 text-xs text-gray-500 text-center" x-text="index + 1"></span>
 
                         <div class="w-20 h-12 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
                             {{-- An upright picture is shown whole, not cut to its middle (docs/AD-BUILDER-SPEC.md §12). --}}
@@ -75,14 +75,14 @@
                                      x-bind:class="ad.orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                             </template>
                             <template x-if="!ad.thumbnail_url">
-                                <span class="text-[10px] text-gray-400" x-text="typeLabel(ad.type)"></span>
+                                <span class="text-[10px] text-gray-500" x-text="typeLabel(ad.type)"></span>
                             </template>
                         </div>
 
                         <div class="flex-1 min-w-0">
                             <p class="text-sm font-medium text-gray-800 dark:text-white truncate"
                                x-bind:dusk="'channel-ad-title-' + ad.id" x-text="ad.title"></p>
-                            <p class="text-xs text-gray-400">
+                            <p class="text-xs text-gray-500">
                                 <span x-text="typeLabel(ad.type)"></span>
                                 {{-- A portrait file on a channel plays with bars on a landscape screen (§12): said here. --}}
                                 <span x-show="ad.orientation === 'portrait'" x-cloak x-bind:dusk="'channel-ad-orientation-' + ad.id">&middot; portrait</span>
@@ -214,7 +214,7 @@
                                     </div>
                                     <div class="px-2 py-1.5">
                                         <p class="truncate text-xs font-medium text-gray-800 dark:text-gray-100" x-text="item.title"></p>
-                                        <p class="text-[11px] text-gray-400"
+                                        <p class="text-[11px] text-gray-500"
                                            x-text="typeLabel(item.type) + (item.orientation === 'portrait' ? ' · portrait' : '')"></p>
                                     </div>
                                 </button>

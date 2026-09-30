@@ -17,9 +17,9 @@ test('super admin dashboard shows the real store count', function () {
     $response = $this->actingAs($admin)->get('/dashboard');
 
     $response->assertOk();
-    $response->assertViewHas('totalStores', 3);
-    // The number on the Total Stores card itself — a bare "3" turns up all over a page.
-    expect($response->getContent())->toMatch('/>\s*3\s*<\/div>\s*<div[^>]*>\s*Total Stores\s*</');
+    $response->assertViewHas('summary', fn (array $summary) => collect($summary['cards'])->firstWhere('key', 'stores')['value'] === 3);
+    // The number on the Stores card itself — a bare "3" turns up all over a page.
+    expect($response->getContent())->toMatch('/dusk="dashboard-card-stores"[^>]*>[\s\S]*?>\s*3\s*<\/div>\s*<div[^>]*>\s*Stores\s*</');
 });
 
 test('the store selection page runs the same number of queries for ten stores as for two', function () {
@@ -60,7 +60,7 @@ test('a user with a custom global role sees the global stats dashboard, not the 
     $response = $this->actingAs($user)->get('/dashboard');
 
     $response->assertOk();
-    $response->assertSee('Total Stores');
+    $response->assertSee('dusk="dashboard-card-stores"', false);
     $response->assertDontSee("You're not a member of any store yet", false);
 });
 
@@ -79,7 +79,7 @@ test('a global user always gets the global stats dashboard — the global tier w
 
     $response->assertOk();
     $response->assertViewHas('view', 'global');
-    $response->assertSee('Total Stores');
+    $response->assertSee('dusk="dashboard-card-stores"', false);
 });
 
 test('super admin dashboard reflects zero stores when none exist', function () {
@@ -88,7 +88,7 @@ test('super admin dashboard reflects zero stores when none exist', function () {
     $response = $this->actingAs($admin)->get('/dashboard');
 
     $response->assertOk();
-    $response->assertViewHas('totalStores', 0);
+    $response->assertViewHas('summary', fn (array $summary) => collect($summary['cards'])->firstWhere('key', 'stores')['value'] === 0);
 });
 
 test('a single-store user is auto-selected into that store (smart default)', function () {

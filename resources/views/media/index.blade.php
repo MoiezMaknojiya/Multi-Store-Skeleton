@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Media Library') }}</h2>
+        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Media Library') }}</h1>
     </x-slot>
 
     {{-- Js::from, not @json: @json leaves its quotes raw and the first shop's name would close this
@@ -37,18 +37,18 @@
                         @endforeach
                     </select>
                 @endif
-                <select x-model="filterType" @change="applyFilters()" dusk="media-filter-type" class="form-select text-sm">
+                <select x-model="filterType" @change="applyFilters()" dusk="media-filter-type" class="form-select text-sm" aria-label="File type">
                     <option value="">All types</option>
                     <option value="image">Images</option>
                     <option value="video">Videos</option>
                     <option value="html">Ad pages</option>
                 </select>
-                <select x-model="filterOrientation" @change="applyFilters()" dusk="media-filter-orientation" class="form-select text-sm">
+                <select x-model="filterOrientation" @change="applyFilters()" dusk="media-filter-orientation" class="form-select text-sm" aria-label="Orientation">
                     <option value="">Any orientation</option>
                     <option value="landscape">Landscape</option>
                     <option value="portrait">Portrait</option>
                 </select>
-                <select x-model="sort" @change="applyFilters()" dusk="media-sort" class="form-select text-sm">
+                <select x-model="sort" @change="applyFilters()" dusk="media-sort" class="form-select text-sm" aria-label="Sort by">
                     <option value="newest">Newest first</option>
                     <option value="oldest">Oldest first</option>
                     <option value="title_asc">Title A-Z</option>
@@ -86,7 +86,7 @@
                                          x-bind:class="item.orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                                 </template>
                                 <template x-if="!item.thumbnail_url">
-                                    <span class="text-xs text-gray-400" x-text="typeLabel(item)"></span>
+                                    <span class="text-xs text-gray-500" x-text="typeLabel(item)"></span>
                                 </template>
                                 <template x-if="item.duration_seconds">
                                     <span class="absolute bottom-1 right-1 px-1 rounded bg-black/70 text-white text-[10px]"
@@ -96,12 +96,12 @@
                         </td>
                         <td class="cell-prose px-5 py-4">
                             <p class="font-medium text-gray-800 dark:text-white" x-text="item.title"></p>
-                            <p class="text-xs text-gray-400" x-show="item.description" x-text="item.description"></p>
+                            <p class="text-xs text-gray-500" x-show="item.description" x-text="item.description"></p>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">
                             {{-- An Ad Builder page is stored as "html" — shown as what it is, an ad page. --}}
                             <span x-text="typeLabel(item)"></span>
-                            <span class="block text-xs text-gray-400" x-text="item.orientation ?? '-'"></span>
+                            <span class="block text-xs text-gray-500" x-text="item.orientation ?? '-'"></span>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300 whitespace-nowrap" x-text="formatSize(item.size)"></td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300 text-xs">

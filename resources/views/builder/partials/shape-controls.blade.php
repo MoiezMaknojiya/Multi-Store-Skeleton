@@ -2,7 +2,7 @@
      shadow — enough for a price badge, a ribbon, a glow behind a product. A line (§14) keeps only what a
      line has: its thickness, its dash pattern and its colour. --}}
 <div class="space-y-3">
-    <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-400">Shape</h4>
+    <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Shape</h4>
 
     <div class="grid grid-cols-3 gap-1">
         @foreach ($shapes as $shape => $label)
@@ -37,7 +37,7 @@
                        @change="setStyle('fill', $el.value)" dusk="line-color" />
             </label>
 
-            <p class="text-xs text-gray-400">Its length is the box's width; turn the box to angle it.</p>
+            <p class="text-xs text-gray-500">Its length is the box's width; turn the box to angle it.</p>
         </div>
     </template>
 

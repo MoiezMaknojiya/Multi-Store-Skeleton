@@ -2,7 +2,7 @@
      register (no account yet), login (an account exists), accept (signed in as the invitee),
      mismatch (signed in as somebody else). $place — the store, or the platform team — comes from
      InvitationResponseController::placeName, the same words its log lines and welcome use. --}}
-<x-guest-layout>
+<x-guest-layout :title="'Join '.$place">
     <div dusk="invitation-page" data-state="{{ $state }}">
         <span class="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -11,7 +11,7 @@
             Invitation
         </span>
 
-        <h2 class="mt-4 text-2xl font-bold text-gray-800">Join {{ $place }}</h2>
+        <h1 class="mt-4 text-2xl font-bold text-gray-800">Join {{ $place }}</h1>
 
         <div class="mt-5 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3.5">
             <p class="text-sm text-gray-700">
@@ -24,7 +24,7 @@
                 <span class="font-semibold" dusk="invitation-role">{{ $invitation->role->name }}</span>.
             </p>
             <p class="mt-1 text-xs text-gray-500">{{ $invitation->role->description() }}</p>
-            <p class="mt-2 text-xs text-gray-400">Expires {{ $invitation->expires_at->toFormattedDayDateString() }}.</p>
+            <p class="mt-2 text-xs text-gray-500">Expires {{ $invitation->expires_at->toFormattedDayDateString() }}.</p>
         </div>
 
         @if (session('error'))

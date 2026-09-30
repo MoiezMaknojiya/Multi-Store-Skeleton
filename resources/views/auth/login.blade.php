@@ -1,5 +1,5 @@
-<x-guest-layout>
-    <h2 class="text-2xl font-bold text-gray-800 mb-1">Sign In</h2>
+<x-guest-layout title="Sign in">
+    <h1 class="text-2xl font-bold text-gray-800 mb-1">Sign In</h1>
     <p class="text-sm text-gray-500 mb-8">
         Don't have an account?
         <a href="{{ route('register') }}" class="text-blue-600 hover:underline font-medium">Create one</a>

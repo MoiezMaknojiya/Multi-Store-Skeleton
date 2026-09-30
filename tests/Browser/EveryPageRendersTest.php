@@ -19,7 +19,8 @@ use Tests\DuskTestCase;
  *      stuck on "Loading..." is exactly what a broken `x-data` looks like, and the page still
  *      returns 200 while it happens (see the Blade and Alpine gotchas in
  *      .claude/rules/02-project-conventions.md, both of which shipped as a 200 with a dead table);
- *   2. the browser console stayed clean.
+ *   2. the browser console stayed clean;
+ *   3. a screen reader can use it: a title, one h1, and a name for every control and picture on it.
  */
 class EveryPageRendersTest extends DuskTestCase
 {
@@ -115,7 +116,47 @@ class EveryPageRendersTest extends DuskTestCase
                 ->assertDontSee('Undefined variable');
 
             $this->assertCleanConsole($browser, $page);
+            $this->assertEverythingIsNamed($browser, $page);
         }
+    }
+
+    /**
+     * What a screen reader needs from every page (rule 02, "Every page speaks to a keyboard and a screen reader"): a
+     * tab title of its own, one <h1>, and a name for every control it shows — a button's words or aria-label, a field's
+     * label (a placeholder is not one) — and an alt for every picture.
+     */
+    private function assertEverythingIsNamed(Browser $browser, string $page): void
+    {
+        $found = $browser->script(<<<'JS'
+            const shown = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+            const text = (el) => (el ? (el.innerText || el.textContent || '') : '').replace(/\s+/g, ' ').trim();
+            const nameOf = (el) => {
+                const by = el.getAttribute('aria-labelledby');
+                if (by && by.split(/\s+/).map((id) => text(document.getElementById(id))).join('').trim()) return true;
+                if ((el.getAttribute('aria-label') || '').trim()) return true;
+                if (['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)) {
+                    if (['submit', 'button', 'reset'].includes(el.type) && el.value) return true;
+                    return [...(el.labels || [])].some((label) => text(label)) || !!(el.title || '').trim();
+                }
+                return !!(text(el) || [...el.querySelectorAll('img[alt]')].some((img) => img.alt.trim())
+                    || text(el.querySelector('svg title')) || (el.title || '').trim());
+            };
+            const describe = (el) => el.tagName.toLowerCase() + (el.type ? '[' + el.type + ']' : '')
+                + (el.getAttribute('dusk') ? ' dusk=' + el.getAttribute('dusk') : '') + ' "' + el.outerHTML.slice(0, 120) + '"';
+
+            return {
+                title: document.title,
+                h1: [...document.querySelectorAll('h1')].filter(shown).map(text),
+                unnamed: [...document.querySelectorAll('button, a[href], input:not([type="hidden"]), select, textarea, [role="tab"], [role="button"], [role="switch"]')]
+                    .filter((el) => shown(el) && !nameOf(el)).map(describe),
+                noAlt: [...document.querySelectorAll('img')].filter((img) => shown(img) && !img.hasAttribute('alt')).map((img) => img.outerHTML.slice(0, 120)),
+            };
+        JS)[0];
+
+        $this->assertStringEndsWith(' · '.config('app.name'), $found['title'], "{$page} has no title of its own");
+        $this->assertCount(1, $found['h1'], "{$page} should have one h1, it has: ".json_encode($found['h1']));
+        $this->assertSame([], $found['unnamed'], "{$page} shows controls a screen reader cannot name");
+        $this->assertSame([], $found['noAlt'], "{$page} shows pictures with no alt");
     }
 
     /** Anything the browser logged as an error since the last check — its own noise aside. */

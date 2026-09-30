@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Dayparts') }}</h2>
+        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Dayparts') }}</h1>
     </x-slot>
 
     {{-- Js::from, not @json: @json leaves its quotes RAW, so the first string in the
@@ -131,7 +131,7 @@
                         </p>
 
                         <template x-if="form.exceptions.length === 0">
-                            <p class="mt-3 text-sm text-gray-400 dark:text-gray-500" dusk="daypart-no-exceptions">
+                            <p class="mt-3 text-sm text-gray-500 dark:text-gray-500" dusk="daypart-no-exceptions">
                                 No exceptions &mdash; the hours above apply every day.
                             </p>
                         </template>
@@ -166,7 +166,7 @@
                                             <div class="flex items-center gap-2">
                                                 <x-text-input type="time" x-model="row.start_time" class="w-32"
                                                               x-bind:dusk="'daypart-exception-start-' + index" />
-                                                <span class="text-gray-400">&ndash;</span>
+                                                <span class="text-gray-500">&ndash;</span>
                                                 <x-text-input type="time" x-model="row.end_time" class="w-32"
                                                               x-bind:dusk="'daypart-exception-end-' + index" />
                                             </div>
@@ -190,7 +190,7 @@
 
                     {{-- What the four inputs above actually add up to, in words. --}}
                     <div class="rounded-md bg-gray-50 dark:bg-gray-700/40 px-4 py-3">
-                        <p class="text-xs uppercase tracking-wide text-gray-400">This daypart is open</p>
+                        <p class="text-xs uppercase tracking-wide text-gray-500">This daypart is open</p>
                         <p class="text-sm text-gray-700 dark:text-gray-200 mt-0.5" dusk="daypart-summary"
                            x-text="summary() || '—'"></p>
                     </div>

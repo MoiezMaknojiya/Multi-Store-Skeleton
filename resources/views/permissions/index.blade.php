@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Permissions') }}</h2>
+        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Permissions') }}</h1>
     </x-slot>
 
     <div x-data="permissionsTable()" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
@@ -26,7 +26,7 @@
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                         <td class="px-5 py-4">
                             <p class="font-medium text-gray-800 dark:text-white" x-text="item.display_name"></p>
-                            <p x-show="item.label" class="text-xs text-gray-400 dark:text-gray-500" x-text="item.name"></p>
+                            <p x-show="item.label" class="text-xs text-gray-500 dark:text-gray-500" x-text="item.name"></p>
                         </td>
                         <td class="px-5 py-4">
                             <x-crud.table-actions editClick="openFormModal(item)" deleteClick="confirmDelete(item)" editCan="permission-update" deleteCan="permission-destroy" dusk="permission" />

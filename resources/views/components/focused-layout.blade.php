@@ -5,7 +5,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ config('app.name', 'Laravel') }}</title>
+    @php($__pageTitle = trim(preg_replace('/\s+/', ' ', html_entity_decode(strip_tags((string) ($header ?? '')), ENT_QUOTES | ENT_HTML5))))
+    <title>{{ $__pageTitle !== '' ? $__pageTitle.' · ' : '' }}{{ config('app.name', 'Laravel') }}</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap" rel="stylesheet">
@@ -23,6 +24,8 @@
 {{-- A focused, sidebar-less shell for pages that stand on their own (e.g. the store
      picker). Just a slim top bar with the brand and the user menu, then the content. --}}
 <body class="font-sans antialiased bg-gray-100 dark:bg-gray-900" x-data="layoutHandler">
+    <a href="#main-content" class="skip-link" dusk="skip-to-content">Skip to main content</a>
+
     <div class="min-h-screen flex flex-col">
         {{-- Impersonation Banner — "Log in as" a member of several stores lands here first --}}
         <x-impersonation-banner />
@@ -75,10 +78,10 @@
             </div>
         </header>
 
-        <main class="flex-1 p-4 sm:p-6">
+        <main id="main-content" tabindex="-1" class="flex-1 p-4 sm:p-6 focus:outline-none">
             <div class="max-w-5xl mx-auto">
                 @isset($header)
-                    <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">{{ $header }}</h2>
+                    <h1 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">{{ $header }}</h1>
                 @endisset
                 {{ $slot }}
             </div>

@@ -12,7 +12,7 @@
 
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Stores') }}</h2>
+        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Stores') }}</h1>
     </x-slot>
 
     <div x-data="storesTable()"
@@ -80,7 +80,7 @@
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">
                             <span x-text="item.city"></span><br>
-                            <span class="text-xs text-gray-400" x-text="item.state + ' ' + item.zip_code"></span>
+                            <span class="text-xs text-gray-500" x-text="item.state + ' ' + item.zip_code"></span>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300" x-text="item.members_count" x-bind:dusk="'store-members-' + item.id"></td>
                         <td class="px-5 py-4">

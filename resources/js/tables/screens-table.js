@@ -7,6 +7,7 @@
  * a brand-new screen, or replacing the device behind an existing one.
  */
 import axios from 'axios';
+import { takeAddressFlag } from '../core/address-flag.js';
 import { createCrudTable } from '../core/crud-table-base.js';
 import { validate, required, maxLen, requiredMessage } from '../core/validate.js';
 
@@ -82,6 +83,10 @@ export function registerScreensTable(Alpine) {
                 this.$watch('editingItem', (item) => {
                     if (item) this.loadMediaOptions(item.id);
                 });
+
+                /* Sent here to pair a screen (the dashboard's Pair a screen): the code's dialog at once — for somebody
+                 * the page offers Add Screen to. */
+                if (takeAddressFlag('pair') && document.querySelector('[dusk="add-screen"]')) this.$nextTick(() => this.openPairModal());
             },
 
             async loadMediaOptions(screenId) {

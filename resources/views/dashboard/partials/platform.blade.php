@@ -1,7 +1,17 @@
-{{-- The platform dashboard: stat cards built from the reusable stat-card component --}}
-<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-6">
-    <x-crud.stat-card
-        label="Total Stores"
-        :value="$totalStores"
-        icon="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+{{-- The platform's dashboard: its numbers (each a link to its page where the person may open it), what needs a
+     look — a store with no Owner, a server running low — and what happened lately, every part by its permission
+     (App\Services\DashboardSummary::forPlatform). --}}
+<div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6" dusk="dashboard-platform">
+    @include('dashboard.partials.cards', ['cards' => $summary['cards']])
+
+    @if (! is_null($summary['attention']) || ! is_null($summary['activity']))
+        <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            @if (! is_null($summary['attention']))
+                @include('dashboard.partials.attention', ['items' => $summary['attention']])
+            @endif
+            @if (! is_null($summary['activity']))
+                @include('dashboard.partials.activity', ['entries' => $summary['activity']])
+            @endif
+        </div>
+    @endif
 </div>

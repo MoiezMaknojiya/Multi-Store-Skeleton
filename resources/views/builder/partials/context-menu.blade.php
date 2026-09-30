@@ -49,7 +49,7 @@
                     } }}"
                     @click="runMenu('{{ $item[0] }}')" dusk="{{ $item[3] }}">
                 <span>{{ $item[1] }}</span>
-                <span class="text-xs text-gray-400">{{ $item[2] }}</span>
+                <span class="text-xs text-gray-500">{{ $item[2] }}</span>
             </button>
         @endif
     @endforeach

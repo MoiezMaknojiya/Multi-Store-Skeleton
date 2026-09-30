@@ -3,7 +3,7 @@
      play. --}}
 <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-700" dusk="anim-{{ $slot }}">
     <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-300">{{ $title }}</h4>
-    <p class="mt-0.5 text-xs text-gray-400">{{ $hint }}</p>
+    <p class="mt-0.5 text-xs text-gray-500">{{ $hint }}</p>
 
     <select class="form-select mt-2 w-full text-sm" x-bind:value="slotOf('{{ $slot }}')?.effect ?? ''"
             @change="setEffect('{{ $slot }}', $el.value)" dusk="anim-{{ $slot }}-effect">

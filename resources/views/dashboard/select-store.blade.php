@@ -1,5 +1,5 @@
 <x-focused-layout>
-    <x-slot name="header">Select a Store</x-slot>
+    <x-slot name="header">Choose a store</x-slot>
 
     <div class="mb-4">
         <p class="text-sm text-gray-500 dark:text-gray-400">

@@ -6,6 +6,7 @@
  * Delete (a big delete, so the shared password confirmation).
  */
 import axios from 'axios';
+import { takeAddressFlag } from '../core/address-flag.js';
 import { createCrudTable } from '../core/crud-table-base.js';
 
 export function registerAdsTable(Alpine) {
@@ -26,17 +27,8 @@ export function registerAdsTable(Alpine) {
         extraMethods: {
             /** Sent here to start a new ad (/builder/create with no shape chosen): New ad's question, at once. */
             onInit() {
-                const params = new URLSearchParams(window.location.search);
-
-                if (params.get('new') !== '1') return;
-
-                // Asked once: a refresh or the back button does not ask again.
-                params.delete('new');
-                const query = params.toString();
-                window.history.replaceState(window.history.state, '', window.location.pathname + (query ? `?${query}` : '') + window.location.hash);
-
                 // The dialog is on the page only for somebody who may create an ad.
-                this.$nextTick(() => this.$dispatch('open-modal', 'new-ad-orientation'));
+                if (takeAddressFlag('new')) this.$nextTick(() => this.$dispatch('open-modal', 'new-ad-orientation'));
             },
 
             /* ── Listing filters ───────────────────────────────────────── */

@@ -5,7 +5,7 @@
 
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Activity Log') }}</h2>
+        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Activity Log') }}</h1>
     </x-slot>
 
     <div x-data="activityTable({ canMaintain: @json($canMaintain) })" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
@@ -29,7 +29,7 @@
                         <template x-for="p in partitions" :key="p.name">
                             <span class="badge-info" x-text="(p.year ?? 'future') + ' — ' + p.rows + (p.rows === 1 ? ' row' : ' rows')"></span>
                         </template>
-                        <span x-show="partitions.length === 0" class="text-xs text-gray-400">No data yet.</span>
+                        <span x-show="partitions.length === 0" class="text-xs text-gray-500">No data yet.</span>
                     </div>
                 </div>
                 <button @click="$dispatch('open-modal', 'confirm-activity-maintenance')"
@@ -67,8 +67,8 @@
         <div class="bg-white dark:bg-gray-800 rounded-xs border border-gray-100 dark:border-gray-700 p-4">
             <div class="flex flex-wrap items-end gap-4">
                 <div>
-                    <x-input-label value="Time Range" class="text-xs" />
-                    <select x-model="preset" @change="applyPreset(preset)" dusk="activity-range-preset" class="form-select mt-1">
+                    <x-input-label value="Time Range" class="text-xs" for="activity-range-preset" />
+                    <select id="activity-range-preset" x-model="preset" @change="applyPreset(preset)" dusk="activity-range-preset" class="form-select mt-1">
                         <option value="today">Today</option>
                         <option value="7d">Last 7 days</option>
                         <option value="30d">Last 30 days</option>
@@ -77,12 +77,12 @@
                     </select>
                 </div>
                 <div>
-                    <x-input-label value="From" class="text-xs" />
-                    <input type="date" x-model="from" @change="onDateChange()" dusk="activity-range-from" class="form-input mt-1">
+                    <x-input-label value="From" class="text-xs" for="activity-range-from" />
+                    <input id="activity-range-from" type="date" x-model="from" @change="onDateChange()" dusk="activity-range-from" class="form-input mt-1">
                 </div>
                 <div>
-                    <x-input-label value="To" class="text-xs" />
-                    <input type="date" x-model="to" @change="onDateChange()" dusk="activity-range-to" class="form-input mt-1">
+                    <x-input-label value="To" class="text-xs" for="activity-range-to" />
+                    <input id="activity-range-to" type="date" x-model="to" @change="onDateChange()" dusk="activity-range-to" class="form-input mt-1">
                 </div>
             </div>
         </div>

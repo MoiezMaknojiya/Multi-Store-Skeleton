@@ -46,7 +46,7 @@
 
         <button type="button" @click="open = !open" x-show="sidebarOpen" data-sidebar-label
             :aria-label="(open ? 'Collapse ' : 'Expand ') + {{ Js::from($label) }}"
-            class="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 flex-shrink-0">
+            class="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 flex-shrink-0">
             <svg class="w-4 h-4" :class="open ? 'rotate-90' : ''" aria-hidden="true"
                 fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />

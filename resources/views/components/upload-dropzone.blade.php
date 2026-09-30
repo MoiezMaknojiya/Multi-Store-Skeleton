@@ -69,7 +69,7 @@
             <li class="flex items-start gap-3 rounded-lg border bg-white p-3 dark:bg-gray-800"
                 :class="['failed', 'refused'].includes(item.status) ? 'border-red-300 dark:border-red-800' : 'border-gray-200 dark:border-gray-700'"
                 dusk="{{ $dusk }}-upload-row">
-                <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-md bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500">
+                <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-md bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-500">
                     <template x-if="item.preview">
                         <img :src="item.preview" alt="" class="h-full w-full object-cover">
                     </template>

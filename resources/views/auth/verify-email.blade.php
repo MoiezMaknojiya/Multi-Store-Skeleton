@@ -1,7 +1,7 @@
 {{-- "Check your inbox" (EmailVerificationController::notice): the one page an account that has not confirmed its
      email may open, beside its profile (owner's rule, 2026-09-29). It says where the link went, how to get another,
      how to fix a wrong address, and when an unconfirmed account is removed. --}}
-<x-guest-layout>
+<x-guest-layout title="Check your inbox">
     <div dusk="verify-email-page">
         @if (session('impersonating_original_id'))
             {{-- "Log in as" an account that has not confirmed: the way back is here too, as on every other page. --}}

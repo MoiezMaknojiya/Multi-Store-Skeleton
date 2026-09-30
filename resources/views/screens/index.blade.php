@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Screens') }}</h2>
+        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Screens') }}</h1>
     </x-slot>
 
     {{-- Js::from, not @json: @json leaves its quotes raw and the first string would
@@ -67,7 +67,7 @@
                         dusk="all-screens-ads-on" class="btn-row-neutral">Adverts on</button>
                 <button @click="allScreenAds(false)" x-bind:disabled="savingAds"
                         dusk="all-screens-ads-off" class="btn-row-neutral">Adverts off</button>
-                <span class="text-xs text-gray-400">
+                <span class="text-xs text-gray-500">
                     &mdash; or set them one at a time in the list below
                 </span>
             </div>
@@ -96,7 +96,7 @@
                             <a x-bind:href="'/screens/' + item.id" x-bind:dusk="'open-screen-' + item.id"
                                class="font-medium text-blue-600 hover:underline dark:text-blue-400 whitespace-nowrap"
                                x-text="item.name"></a>
-                            <p class="text-xs text-gray-400" x-text="playlistLabel(item)"></p>
+                            <p class="text-xs text-gray-500" x-text="playlistLabel(item)"></p>
                         </td>
                         <td class="px-5 py-4">
                             <span x-show="item.is_online" x-cloak
@@ -110,14 +110,14 @@
                             {{-- "Seen 2 min ago" broke over two lines and made that one
                                  row taller than its neighbours — a list of screens should
                                  have rows of one height. --}}
-                            <span class="block text-xs text-gray-400 mt-1 whitespace-nowrap" x-text="lastSeenLabel(item)"></span>
+                            <span class="block text-xs text-gray-500 mt-1 whitespace-nowrap" x-text="lastSeenLabel(item)"></span>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300 text-sm">
                             <span class="whitespace-nowrap" x-text="orientationLabel(item.orientation)"></span>
                             {{-- The clock this screen keeps. It is what every schedule
                                  on its playlist is read against, so it belongs where
                                  the screen's other physical facts are. --}}
-                            <span class="block text-xs text-gray-400 mt-1 whitespace-nowrap"
+                            <span class="block text-xs text-gray-500 mt-1 whitespace-nowrap"
                                   x-bind:dusk="'screen-timezone-' + item.id"
                                   x-text="item.timezone"></span>
                         </td>

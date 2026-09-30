@@ -143,6 +143,8 @@
 
         {{-- ── Top bar ───────────────────────────────────────────────── --}}
         <header class="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 dark:border-gray-700 dark:bg-gray-800">
+            {{-- The page's one heading, for a screen reader: the bar shows the ad's name in its field. --}}
+            <h1 class="sr-only" x-text="'Ad Builder: ' + name">Ad Builder</h1>
             <div class="flex min-w-0 items-center gap-3">
                 {{-- The editor opens with Create Ads or Update Ads, the gallery with View Ads — so the way
                      out goes to the gallery only for somebody who may see it. --}}
@@ -167,7 +169,7 @@
                       x-text="orientation === 'portrait' ? 'Portrait' : 'Landscape'"></span>
 
                 @if ($platformUser && ! $ad)
-                    <select x-model.number="storeId" class="form-select h-9 w-44 text-sm" dusk="ad-store">
+                    <select x-model.number="storeId" class="form-select h-9 w-44 text-sm" dusk="ad-store" aria-label="Shop">
                         <option value="">Choose a shop…</option>
                         @foreach ($stores as $store)
                             <option value="{{ $store['id'] }}">{{ $store['name'] }}</option>
@@ -178,7 +180,7 @@
                 {{-- Shrinks before anything else does: on a narrow bar each line is cut short, never drawn over
                      the buttons, and the whole sentence is its tooltip. --}}
                 <div class="flex min-w-0 flex-col leading-tight">
-                    <span class="truncate text-xs" x-bind:class="dirty ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'"
+                    <span class="truncate text-xs" x-bind:class="dirty ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500'"
                           x-text="saveStatus()" dusk="save-status"></span>
                     {{-- Where the ad stands with the screens — the industry's draft/publish model (docs/AD-BUILDER-SPEC.md
                          §9): changes are saved to a draft, and the screens keep the published version until they are
@@ -186,7 +188,7 @@
                     <span class="truncate text-[11px]" x-show="publicationStatus() !== ''" x-cloak dusk="publication-status"
                           x-bind:class="publicationTone()"
                           x-bind:title="publicationHint()" x-text="publicationStatus()"></span>
-                    <label class="flex items-center gap-1 truncate text-[11px] text-gray-400" title="Save a saved ad every 30 seconds">
+                    <label class="flex items-center gap-1 truncate text-[11px] text-gray-500" title="Save a saved ad every 30 seconds">
                         <input type="checkbox" class="h-3 w-3 rounded border-gray-300 dark:border-gray-600"
                                x-bind:checked="autosave" @change="toggleAutosave()" dusk="autosave-toggle" />
                         Autosave
@@ -206,12 +208,12 @@
                             dusk="history-toggle">☰</button>
                     <div x-show="historyOpen" x-cloak dusk="history-panel"
                          class="absolute right-0 top-full z-50 mt-1 max-h-80 w-64 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800">
-                        <p class="px-3 pb-1 pt-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">History</p>
+                        <p class="px-3 pb-1 pt-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">History</p>
                         <template x-for="step in historySteps()" :key="step.index">
                             <button type="button" class="flex w-full items-center justify-between px-3 py-1.5 text-left text-xs"
                                     x-bind:class="step.current
                                         ? 'bg-blue-50 font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-200'
-                                        : (step.undone ? 'text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/60' : 'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/60')"
+                                        : (step.undone ? 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700/60' : 'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/60')"
                                     @click="jumpToStep(step.index)" x-bind:dusk="'history-step-' + step.index">
                                 <span x-text="step.label"></span>
                                 <span x-show="step.current">●</span>
@@ -242,12 +244,12 @@
                         <button type="button" class="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/60"
                                 @click="toggleRulers(); moreOpen = false" dusk="toolbar-more-rulers">
                             <span>📏 Rulers and guides</span>
-                            <span class="text-xs text-gray-400" x-text="showRulers ? 'On · Shift+R' : 'Off · Shift+R'"></span>
+                            <span class="text-xs text-gray-500" x-text="showRulers ? 'On · Shift+R' : 'Off · Shift+R'"></span>
                         </button>
                         <button type="button" class="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/60"
                                 @click="shortcutsOpen = true; moreOpen = false" dusk="toolbar-more-shortcuts">
                             <span>⌨ Keyboard shortcuts</span>
-                            <span class="text-xs text-gray-400">?</span>
+                            <span class="text-xs text-gray-500">?</span>
                         </button>
                     </div>
                 </div>
@@ -327,7 +329,7 @@
             {{-- ── Left: add & layers ────────────────────────────────── --}}
             <aside class="flex w-64 shrink-0 flex-col border-r border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
                 <div class="border-b border-gray-200 p-4 dark:border-gray-700">
-                    <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400">Add</h3>
+                    <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Add</h3>
 
                     <div class="mt-3 grid grid-cols-2 gap-2">
                         <button type="button" class="btn-secondary text-sm" @click="addText()" dusk="add-text">Text</button>
@@ -338,10 +340,10 @@
                 </div>
 
                 <div class="flex min-h-0 flex-1 flex-col">
-                    <h3 class="px-4 pt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">Layers</h3>
+                    <h3 class="px-4 pt-4 text-xs font-semibold uppercase tracking-wide text-gray-500">Layers</h3>
 
                     <div class="min-h-0 flex-1 overflow-y-auto p-2" dusk="layers-panel">
-                        <p x-show="layers.length === 0" x-cloak class="px-2 py-6 text-center text-xs text-gray-400">
+                        <p x-show="layers.length === 0" x-cloak class="px-2 py-6 text-center text-xs text-gray-500">
                             Nothing on the stage yet.
                         </p>
 
@@ -368,14 +370,14 @@
 
                                 {{-- A group's folder: its chevron folds the children away. --}}
                                 <template x-if="row.group">
-                                    <button type="button" class="w-3 text-xs text-gray-400 hover:text-gray-600"
+                                    <button type="button" class="w-3 text-xs text-gray-500 hover:text-gray-600"
                                             @click.stop="toggleCollapsed(row.element)"
                                             x-bind:title="row.collapsed ? 'Show what is inside' : 'Fold'"
                                             x-bind:dusk="'layer-fold-' + row.element.id"
                                             x-text="row.collapsed ? '▸' : '▾'"></button>
                                 </template>
 
-                                <button type="button" class="text-gray-400 hover:text-gray-600"
+                                <button type="button" class="text-gray-500 hover:text-gray-600"
                                         @click.stop="toggleVisible(row.element)"
                                         x-bind:title="row.element.visible === false ? 'Show' : 'Hide'"
                                         x-bind:dusk="'layer-visible-' + row.element.id"
@@ -400,7 +402,7 @@
 
                                 <span class="text-xs text-purple-500" x-show="animates(row.element)" title="Animated">✦</span>
 
-                                <button type="button" class="text-gray-400 transition hover:text-gray-600"
+                                <button type="button" class="text-gray-500 transition hover:text-gray-600"
                                         x-bind:class="row.element.locked ? '' : 'opacity-0 group-hover:opacity-100'"
                                         @click.stop="toggleLock(row.element)"
                                         x-bind:title="row.element.locked ? 'Unlock' : 'Lock'"
@@ -418,7 +420,7 @@
                             <span class="h-3 w-3 shrink-0 rounded-sm border border-gray-300 dark:border-gray-600"
                                   x-bind:style="{ backgroundColor: stageColour() }"></span>
                             <span class="min-w-0 flex-1 truncate">Background</span>
-                            <span class="text-xs text-gray-400" x-show="doc.stage.background.layers.length > 0"
+                            <span class="text-xs text-gray-500" x-show="doc.stage.background.layers.length > 0"
                                   x-text="doc.stage.background.layers.length"></span>
                         </div>
                     </div>
@@ -669,7 +671,7 @@
 
                             {{-- Size & position --}}
                             <div>
-                                <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-400">Size &amp; position</h4>
+                                <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Size &amp; position</h4>
 
                                 <div class="mt-2 grid grid-cols-2 gap-2">
                                     <label class="text-xs text-gray-500 dark:text-gray-400">X
@@ -719,14 +721,14 @@
                                  the reason its panel stays readable. --}}
                             <template x-if="selected.type === 'text'">
                                 <div>
-                                    <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-400">Typography</h4>
+                                    <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Typography</h4>
 
                                     <label class="mt-2 block text-xs text-gray-500 dark:text-gray-400">Font
                                         <button type="button" class="form-input mt-1 flex w-full items-center justify-between text-left text-sm"
                                                 @click="openFontPicker()" dusk="text-font">
                                             <span x-text="selected.style?.fontFamily ?? 'Inter'"
                                                   x-bind:style="{ fontFamily: (selected.style?.fontFamily ?? 'Inter') + ', sans-serif' }"></span>
-                                            <span class="text-gray-400">▾</span>
+                                            <span class="text-gray-500">▾</span>
                                         </button>
                                     </label>
 
@@ -972,11 +974,11 @@
                                 <span class="block truncate text-sm text-gray-800 dark:text-white"
                                       x-bind:style="font.installed ? { fontFamily: font.family + ', sans-serif' } : {}"
                                       x-text="font.family"></span>
-                                <span class="text-xs text-gray-400" x-text="font.kind"></span>
+                                <span class="text-xs text-gray-500" x-text="font.kind"></span>
                             </span>
 
                             <span class="shrink-0 text-xs"
-                                  x-bind:class="font.installed ? 'text-green-600 dark:text-green-400' : 'text-gray-400'"
+                                  x-bind:class="font.installed ? 'text-green-600 dark:text-green-400' : 'text-gray-500'"
                                   x-text="installingFamily === font.family
                                       ? 'Installing…'
                                       : (font.installed ? 'Ready' : (canInstallFonts ? 'Install' : 'Not installed'))"></span>

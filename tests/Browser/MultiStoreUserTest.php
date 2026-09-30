@@ -73,7 +73,7 @@ class MultiStoreUserTest extends DuskTestCase
 
             // -- The picker is a focused page: no sidebar nav --------------------
             $browser->loginAs($worker)->visit('/select-store');
-            $browser->waitForText('Select a Store')
+            $browser->waitForText('Choose a store')
                 ->assertMissing('#main-sidebar')
                 ->assertSee('Alpha Store')
                 ->assertSee('Beta Store');

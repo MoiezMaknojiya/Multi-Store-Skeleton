@@ -164,7 +164,7 @@
             <div x-show="sidebarOpen" data-sidebar-label class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-gray-900 dark:text-white truncate">
                     {{ auth()->user()->name ?? 'User' }}</p>
-                <p class="text-xs text-gray-400 dark:text-gray-500 truncate">Settings</p>
+                <p class="text-xs text-gray-500 dark:text-gray-500 truncate">Settings</p>
             </div>
         </a>
     </div>

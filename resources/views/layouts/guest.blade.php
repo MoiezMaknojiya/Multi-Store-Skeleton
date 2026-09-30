@@ -4,22 +4,24 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ config('app.name', 'Laravel') }}</title>
+    <title>{{ filled($title ?? null) ? $title.' · ' : '' }}{{ config('app.name', 'Laravel') }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap" rel="stylesheet">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 
 <body class="font-sans antialiased bg-white" x-data>
+    <a href="#main-content" class="skip-link" dusk="skip-to-content">Skip to main content</a>
+
     <div class="min-h-screen flex">
         {{-- Left Auth Panel --}}
-        <div class="flex-1 flex flex-col items-center justify-center px-6 py-12 lg:px-16 bg-white">
+        <main id="main-content" tabindex="-1" class="flex-1 flex flex-col items-center justify-center px-6 py-12 lg:px-16 bg-white focus:outline-none">
             <div class="w-full max-w-md">
                 {{ $slot }}
             </div>
-        </div>
+        </main>
 
-        {{-- Right Brand Panel --}}
+        {{-- Right Brand Panel: the brand, not the page's heading (the form has that). --}}
         <div class="hidden lg:flex lg:w-1/2 bg-gray-900 flex-col items-center justify-center p-12 relative overflow-hidden">
             <div class="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-950"></div>
             <div class="relative z-10 text-center">
@@ -30,7 +32,7 @@
                         </svg>
                     </div>
                 </div>
-                <h1 class="text-3xl font-bold text-white mb-4">{{ config('app.name', 'Laravel') }}</h1>
+                <p class="text-3xl font-bold text-white mb-4">{{ config('app.name', 'Laravel') }}</p>
                 <p class="text-gray-400 text-sm max-w-xs mx-auto">Sign in to access your dashboard and manage everything from one place.</p>
             </div>
         </div>
