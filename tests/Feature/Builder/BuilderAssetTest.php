@@ -173,14 +173,12 @@ test('a deleted store leaves no ad files behind either — and takes no file its
     Storage::disk('public')->assertExists($draft->storageDirectory().'/not-ours.txt');
 });
 
-test('the platform uploads to the shop it chose, and must choose one', function () {
-    // The platform team stands in no store: the page sends the shop picked in its Shop list.
+test('the platform uploads to the shop it chose — or, with none chosen, shares the file with every shop', function () {
+    // The platform team stands in no store: the page sends the shop picked in its Shop list, or none.
     $admin = createSuperAdmin();
     $this->actingAs($admin);
     $this->flushSession();
 
-    $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png')])
-        ->assertStatus(422)->assertJsonValidationErrors('file');
     $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png'), 'store_id' => 999999])
         ->assertStatus(422)->assertJsonValidationErrors('file');
     $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png'), 'store_id' => [$this->other->id]])
@@ -195,6 +193,11 @@ test('the platform uploads to the shop it chose, and must choose one', function 
 
     expect($asset->store_id)->toBe($this->other->id)
         ->and($asset->path)->toStartWith("builder/{$this->other->id}/assets/");
+
+    // No shop named: the shelf the platform shares with every shop (tests/Feature/Builder/SharedAssetsTest.php).
+    $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('brand.png')])->assertOk();
+
+    expect(BuilderAsset::whereNull('store_id')->sole()->path)->toStartWith('builder/platform/assets/');
 });
 
 test('a store’s person uploads to the store they work in, whatever shop the request names', function () {

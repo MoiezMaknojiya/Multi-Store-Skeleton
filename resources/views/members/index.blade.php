@@ -175,7 +175,7 @@
                 </div>
 
                 <x-crud.form-field label="Email" field="email" :required="true">
-                    <x-text-input type="email" x-model="inviteForm.email" dusk="invite-email" class="block w-full" autocomplete="off" placeholder="name@example.com" />
+                    <x-text-input type="email" x-model="inviteForm.email" dusk="invite-email" class="block w-full" maxlength="255" autocomplete="off" placeholder="name@example.com" />
                 </x-crud.form-field>
 
                 <x-crud.form-field label="Role" field="role_id" :required="true">

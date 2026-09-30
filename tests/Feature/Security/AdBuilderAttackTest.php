@@ -6,6 +6,7 @@ use App\Models\BuilderFont;
 use App\Models\Media;
 use App\Models\Store;
 use App\Services\AdCompiler;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
 /*
@@ -108,6 +109,29 @@ test('another store’s asset cannot be deleted by its id, and the shelf lists t
     $titles = collect($this->getJson('/builder/assets/data')->assertOk()->json('assets'))->pluck('title');
 
     expect($titles->all())->toBe(['Our logo']);
+});
+
+test('a shop’s person never makes a file shared, and never deletes a shared one without Delete Shared Assets', function () {
+    // Whatever the request says, a store's person's upload is their shop's own.
+    $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png'), 'store_id' => ''])->assertOk();
+    expect(BuilderAsset::sole()->store_id)->toBe($this->store->id);
+
+    $shared = BuilderAsset::factory()->create(['store_id' => null, 'title' => 'Brand kit', 'path' => 'builder/platform/assets/brand.png']);
+
+    // Delete Ads is not Delete Shared Assets.
+    $this->deleteJson("/builder/assets/{$shared->id}")->assertForbidden();
+
+    // And a shared file another shop's ad uses stays, with nothing of that shop said.
+    $keeper = createStoreUser($this->store, ['ad-view', 'ad-shared-destroy'], 'Shelf keeper');
+    $this->actingAs($keeper)->withSession(['current_store_id' => $this->store->id]);
+
+    $document = attackDocument([['id' => 'a', 'type' => 'image', 'x' => 0, 'y' => 0, 'w' => 100, 'h' => 100, 'z' => 0, 'assetId' => $shared->id]]);
+    BuilderAd::factory()->create(['store_id' => $this->other->id, 'name' => 'Beta private launch', 'document' => $document]);
+
+    $answer = $this->deleteJson("/builder/assets/{$shared->id}")->assertStatus(422);
+
+    expect((string) $answer->getContent())->not->toContain('Beta private launch')->not->toContain('Beta')
+        ->and(BuilderAsset::find($shared->id))->not->toBeNull();
 });
 
 test('naming another shop in the listings’ filter finds nothing of it', function () {

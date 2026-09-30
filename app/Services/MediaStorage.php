@@ -79,24 +79,24 @@ class MediaStorage
             'created_by' => $createdBy,
         ];
 
-        if ($storeId === null) {
-            return Media::create($attributes);
-        }
-
         /** @var Media */
         return $this->keptWithinTheWall($storeId, $attributes, fn () => Media::create($attributes));
     }
 
     /**
-     * Put a file on a shop's Ad Builder shelf and make its row — its files count toward the shop's storage like
-     * the library's (the shelf is a way onto the disk as much as the Media page is).
+     * Put a file on an Ad Builder shelf and make its row: a shop's — its files count toward the shop's storage like
+     * the library's (the shelf is a way onto the disk as much as the Media page is) — or, with no shop, the shelf the
+     * platform shares with every shop, which has no wall of its own.
      *
      * @param  array<string, mixed>  $clientMeta  browser-measured width/height/poster
      */
-    public function addBuilderAsset(UploadedFile $file, int $storeId, array $clientMeta, string $title, ?int $createdBy): BuilderAsset
+    public function addBuilderAsset(UploadedFile $file, ?int $storeId, array $clientMeta, string $title, ?int $createdBy): BuilderAsset
     {
         $this->disk->assertRoomFor((int) $file->getSize());
-        $this->quota->assertRoomFor($storeId, (int) $file->getSize());
+
+        if ($storeId !== null) {
+            $this->quota->assertRoomFor($storeId, (int) $file->getSize());
+        }
 
         $stored = $this->storeBuilderAsset($file, $storeId, $clientMeta);
 
@@ -105,17 +105,17 @@ class MediaStorage
     }
 
     /**
-     * Make the row for files just written, only while the shop has room for them and their preview — decided
-     * under the shop's lock (StoreStorage::withRoom). Refused, or failed for any reason, the files go again:
-     * nothing is left on disk that no row names.
+     * Make the row for files just written: a shop's only while it has room for them and their preview — decided
+     * under the shop's lock (StoreStorage::withRoom) — and the platform's, which has no wall, at once. Refused, or
+     * failed for any reason, the files go again: nothing is left on disk that no row names.
      *
      * @param  array<string, mixed>  $stored
      * @param  Closure(): Model  $create
      */
-    private function keptWithinTheWall(int $storeId, array $stored, Closure $create): Model
+    private function keptWithinTheWall(?int $storeId, array $stored, Closure $create): Model
     {
         try {
-            return $this->quota->withRoom($storeId, $this->bytesOf($stored), $create);
+            return $storeId === null ? $create() : $this->quota->withRoom($storeId, $this->bytesOf($stored), $create);
         } catch (Throwable $refused) {
             $this->deleteFiles((string) $stored['disk'], (string) $stored['path'], $stored['thumbnail_path']);
 
@@ -195,9 +195,9 @@ class MediaStorage
      * @param  array<string, mixed>  $clientMeta  browser-measured duration/width/height/poster
      * @return array<string, mixed>
      */
-    public function storeBuilderAsset(UploadedFile $file, int $storeId, array $clientMeta = []): array
+    public function storeBuilderAsset(UploadedFile $file, ?int $storeId, array $clientMeta = []): array
     {
-        return $this->put($file, "builder/{$storeId}/assets", $clientMeta);
+        return $this->put($file, 'builder/'.($storeId ?? 'platform').'/assets', $clientMeta);
     }
 
     /**

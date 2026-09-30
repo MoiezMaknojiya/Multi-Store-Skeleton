@@ -611,7 +611,7 @@
                 <template x-if="selected">
                     <div class="space-y-4 p-4">
                         <div class="flex items-center justify-between">
-                            <input type="text" class="form-input h-8 w-40 text-sm"
+                            <input type="text" class="form-input h-8 w-40 text-sm" maxlength="120"
                                    x-bind:value="selected.name ?? selected.type"
                                    @change="rename(selected, $event.target.value)"
                                    dusk="element-name" aria-label="Element name" />
@@ -661,6 +661,7 @@
                                 <div>
                                     <label class="text-xs font-medium text-gray-500 dark:text-gray-400">Text</label>
                                     <textarea class="form-input mt-1 w-full text-sm" rows="3" dir="auto"
+                                              maxlength="{{ \App\Http\Requests\Builder\BuilderAdRequest::MAX_TEXT }}"
                                               x-bind:value="selected.text"
                                               @change="setText($event.target.value)" dusk="element-text"></textarea>
                                 </div>
@@ -951,7 +952,7 @@
             <div class="mt-16 max-h-[70vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 dark:bg-gray-800">
                 <div class="flex items-center justify-between gap-4">
                     <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Font</h3>
-                    <input type="text" x-model="fontQuery" placeholder="Search fonts..." autocomplete="new-password"
+                    <input type="text" x-model="fontQuery" placeholder="Search fonts..." autocomplete="new-password" maxlength="100"
                            class="form-input h-9 w-48 text-sm" dusk="font-search" />
                 </div>
 

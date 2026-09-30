@@ -44,17 +44,17 @@
                             @csrf
                             @method('put')
 
-                            <x-auth.form-field name="name" label="Store name" bag="storeDetails" :value="$store->name" :required="true" autocomplete="organization" />
+                            <x-auth.form-field name="name" label="Store name" bag="storeDetails" :value="$store->name" :required="true" maxlength="255" autocomplete="organization" />
 
                             <div class="grid grid-cols-1 @lg:grid-cols-3 gap-6">
                                 <div class="@lg:col-span-2">
-                                    <x-auth.form-field name="street" label="Street" bag="storeDetails" :value="$store->street" :required="true" autocomplete="address-line1" />
+                                    <x-auth.form-field name="street" label="Street" bag="storeDetails" :value="$store->street" :required="true" maxlength="255" autocomplete="address-line1" />
                                 </div>
-                                <x-auth.form-field name="suite" label="Suite / Unit" bag="storeDetails" :value="$store->suite" autocomplete="address-line2" />
+                                <x-auth.form-field name="suite" label="Suite / Unit" bag="storeDetails" :value="$store->suite" maxlength="100" autocomplete="address-line2" />
                             </div>
 
                             <div class="grid grid-cols-1 @lg:grid-cols-3 gap-6">
-                                <x-auth.form-field name="city" label="City" bag="storeDetails" :value="$store->city" :required="true" autocomplete="address-level2" />
+                                <x-auth.form-field name="city" label="City" bag="storeDetails" :value="$store->city" :required="true" maxlength="100" autocomplete="address-level2" />
 
                                 <x-auth.form-field name="state" label="State" bag="storeDetails" :required="true">
                                     <select id="state" name="state" class="form-select {{ $errors->storeDetails->has('state') ? '!border-red-500' : '' }}">
@@ -65,10 +65,10 @@
                                     </select>
                                 </x-auth.form-field>
 
-                                <x-auth.form-field name="zip_code" label="Zip code" bag="storeDetails" :value="$store->zip_code" :required="true" inputmode="numeric" autocomplete="postal-code" />
+                                <x-auth.form-field name="zip_code" label="Zip code" bag="storeDetails" :value="$store->zip_code" :required="true" data-digits="10" inputmode="numeric" autocomplete="postal-code" />
                             </div>
 
-                            <x-auth.form-field name="country" label="Country" bag="storeDetails" :value="$store->country" :required="true" autocomplete="country-name" />
+                            <x-auth.form-field name="country" label="Country" bag="storeDetails" :value="$store->country" :required="true" maxlength="100" autocomplete="country-name" />
 
                             <div class="flex items-center gap-4">
                                 <x-primary-button dusk="store-details-save">{{ __('Save changes') }}</x-primary-button>
@@ -126,17 +126,17 @@
                             </p>
                         </div>
 
-                        <x-auth.form-field name="store_name" label="Store name" bag="newStore" :required="true" autocomplete="off" dusk="open-store-name" />
+                        <x-auth.form-field name="store_name" label="Store name" bag="newStore" :required="true" maxlength="255" autocomplete="off" dusk="open-store-name" />
 
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div class="sm:col-span-2">
-                                <x-auth.form-field name="store_street" label="Street" bag="newStore" :required="true" autocomplete="off" dusk="open-store-street" />
+                                <x-auth.form-field name="store_street" label="Street" bag="newStore" :required="true" maxlength="255" autocomplete="off" dusk="open-store-street" />
                             </div>
-                            <x-auth.form-field name="store_suite" label="Suite / Unit" bag="newStore" autocomplete="off" dusk="open-store-suite" />
+                            <x-auth.form-field name="store_suite" label="Suite / Unit" bag="newStore" maxlength="100" autocomplete="off" dusk="open-store-suite" />
                         </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <x-auth.form-field name="store_city" label="City" bag="newStore" :required="true" autocomplete="off" dusk="open-store-city" />
+                            <x-auth.form-field name="store_city" label="City" bag="newStore" :required="true" maxlength="100" autocomplete="off" dusk="open-store-city" />
 
                             <x-auth.form-field name="store_state" label="State" bag="newStore" :required="true">
                                 <select id="store_state" name="store_state" dusk="open-store-state"
@@ -148,10 +148,10 @@
                                 </select>
                             </x-auth.form-field>
 
-                            <x-auth.form-field name="store_zip_code" label="Zip code" bag="newStore" :required="true" inputmode="numeric" autocomplete="off" dusk="open-store-zip" />
+                            <x-auth.form-field name="store_zip_code" label="Zip code" bag="newStore" :required="true" data-digits="10" inputmode="numeric" autocomplete="off" dusk="open-store-zip" />
                         </div>
 
-                        <x-auth.form-field name="store_country" label="Country" bag="newStore" value="USA" :required="true" autocomplete="off" dusk="open-store-country" />
+                        <x-auth.form-field name="store_country" label="Country" bag="newStore" value="USA" :required="true" maxlength="100" autocomplete="off" dusk="open-store-country" />
 
                         <div class="flex flex-wrap justify-end gap-3">
                             <x-secondary-button x-on:click="$dispatch('close')">{{ __('Cancel') }}</x-secondary-button>
@@ -180,7 +180,7 @@
                         {{-- A bound :label, not an echo inside label="": the component echoes its label itself,
                              so an echo here escaped the name twice and "Joe's" read "Joe&#039;s". --}}
                         <x-auth.form-field name="confirm_name" id="confirm_name" bag="storeDeletion" :required="true"
-                            :label="'Type '.$store->name.' to confirm'" autocomplete="off" dusk="delete-store-name" />
+                            :label="'Type '.$store->name.' to confirm'" maxlength="255" autocomplete="off" dusk="delete-store-name" />
 
                         <x-auth.form-field name="password" id="delete_password" label="Your password" type="password" bag="storeDeletion"
                             :required="true" autocomplete="current-password" dusk="delete-store-password" />

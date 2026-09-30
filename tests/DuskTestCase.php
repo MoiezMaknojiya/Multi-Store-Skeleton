@@ -301,21 +301,29 @@ abstract class DuskTestCase extends BaseTestCase
         $state = <<<JS
             const row = [...document.querySelectorAll('[dusk="{$box}-upload-row"]')]
                 .find((each) => each.querySelector('[dusk="{$box}-upload-name"]')?.textContent.trim() === {$name});
-            if (! row) return 'pending';
+            if (! row) return 'pending: no row';
             const error = row.querySelector('[dusk="{$box}-upload-error"]');
             if (error && error.offsetParent !== null && error.textContent.trim() !== '') return 'error: ' + error.textContent.trim();
-            return /^(Added|Uploaded)/.test(row.querySelector('[dusk="{$box}-upload-status"]')?.textContent.trim() ?? '') ? 'done' : 'pending';
+            const status = row.querySelector('[dusk="{$box}-upload-status"]')?.textContent.trim() ?? '';
+            return /^(Added|Uploaded)/.test(status) ? 'done' : 'pending: ' + status;
         JS;
 
-        $browser->waitUsing($seconds, 200, function () use ($browser, $state, $path) {
-            $now = $browser->script($state)[0] ?? 'pending';
+        $said = 'pending';
 
-            if (str_starts_with((string) $now, 'error: ')) {
-                throw new RuntimeException(basename($path).' was refused: '.substr((string) $now, 7));
-            }
+        try {
+            $browser->waitUsing($seconds, 200, function () use ($browser, $state, $path, &$said) {
+                $said = (string) ($browser->script($state)[0] ?? 'pending');
 
-            return $now === 'done';
-        }, 'The upload of '.basename($path).' did not arrive.');
+                if (str_starts_with($said, 'error: ')) {
+                    throw new RuntimeException(basename($path).' was refused: '.substr($said, 7));
+                }
+
+                return $said === 'done';
+            });
+        } catch (TimeoutException) {
+            // What the row said last is what finds the fault.
+            throw new RuntimeException('The upload of '.basename($path)." did not arrive in {$seconds} s. Its row said: \"{$said}\".");
+        }
     }
 
     /** Dusk keeps its first browser open from one test of a class to the next (it

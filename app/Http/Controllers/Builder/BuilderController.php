@@ -17,6 +17,7 @@ use App\Services\MediaStorage;
 use App\Services\StoreStorage;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
@@ -27,7 +28,7 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 /**
- * The Ad Builder (docs/AD-BUILDER-SPEC.md): three tabs — Create, Ads and Assets — around one editor that
+ * The Ad Builder (docs/AD-BUILDER-SPEC.md): two tabs — Ads and Assets — around one editor that
  * draws an advert the shape of a television: 1920×1080, or 1080×1920 for one mounted upright (§12).
  *
  * An ad belongs to a store, like everything else a shop makes, and the platform works above them all:
@@ -78,19 +79,19 @@ class BuilderController extends Controller
     }
 
     /**
-     * The Create tab: the editor with an empty stage of the shape the chooser asked for — portrait, or
-     * landscape for anything else, the way every ad was before (a page is forgiving; the save is not).
-     * Nothing is written until the first save. The platform team says which shop a new ad is for, so they
-     * are handed the shops to choose from.
+     * A new ad: the editor with an empty stage of the shape New ad asked for. Nothing is written until the
+     * first save. The platform team says which shop a new ad is for, so they are handed the shops to choose
+     * from.
      */
-    public function create(Request $request): View
+    public function create(Request $request): View|RedirectResponse
     {
         $orientation = $request->query('orientation');
 
         // Which way the screen is mounted comes first (docs/AD-BUILDER-SPEC.md §12): chosen once, fixed after.
-        // The Create tab lands here with no answer yet — and a word nobody offers, or a list, is no answer.
+        // With no answer — none, a word nobody offers, or a list — the address goes to the Ads tab with New ad's
+        // question open (there is no Create tab any more), so nobody reaches the editor without being asked.
         if (! in_array($orientation, [BuilderAd::LANDSCAPE, BuilderAd::PORTRAIT], true)) {
-            return view('builder.choose');
+            return redirect()->route('builder.index', ['new' => 1]);
         }
 
         return view('builder.editor', [
@@ -400,11 +401,14 @@ class BuilderController extends Controller
         ]);
     }
 
-    /** The pictures and videos the editor may put on the stage. */
+    /**
+     * The pictures and videos the editor may put on the stage: the ad's shop's own and those the platform shares
+     * with every shop (owner, 2026-09-29).
+     */
     private function assetsForEditor(?int $storeId = null): array
     {
         return BuilderAsset::visibleTo(auth()->user())
-            ->when($storeId !== null, fn (Builder $query) => $query->where('store_id', $storeId))
+            ->when($storeId !== null, fn (Builder $query) => $query->onShelfOf($storeId))
             ->latest()
             ->limit(200)
             ->get(['id', 'store_id', 'title', 'kind', 'disk', 'path', 'thumbnail_path', 'width', 'height', 'duration_seconds'])

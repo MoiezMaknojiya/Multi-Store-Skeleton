@@ -222,7 +222,7 @@
                         <div class="space-y-4">
                             <x-crud.form-field label="Screen name" field="name" :required="true">
                                 <x-text-input x-model="pairForm.name" dusk="screen-name" class="block w-full"
-                                              placeholder="Counter TV" autocomplete="off" />
+                                              placeholder="Counter TV" maxlength="255" autocomplete="off" />
                             </x-crud.form-field>
 
                             <x-crud.form-field label="Orientation" field="orientation" :required="true">
@@ -255,7 +255,7 @@
 
                 <form @submit.prevent="saveItem" novalidate dusk="screen-form" class="mt-4 space-y-4">
                     <x-crud.form-field label="Screen name" field="name" :required="true">
-                        <x-text-input x-model="form.name" dusk="screen-edit-name" class="block w-full" autocomplete="off" />
+                        <x-text-input x-model="form.name" dusk="screen-edit-name" class="block w-full" maxlength="255" autocomplete="off" />
                     </x-crud.form-field>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">

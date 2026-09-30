@@ -11,7 +11,7 @@ export function registerRegisterForm(Alpine) {
     Alpine.data('registerForm', () => ({
         handleSubmit(event) {
             runClientValidation(event,
-                ['first_name', 'last_name', 'phone', 'email', 'password', 'password_confirmation', 'store_name', 'street', 'city', 'state', 'zip_code'],
+                ['first_name', 'last_name', 'phone', 'email', 'password', 'password_confirmation', 'store_name', 'street', 'suite', 'city', 'state', 'zip_code'],
                 {
                     first_name: [required('First name'), maxLen('First name', 255)],
                     last_name: [required('Last name'), maxLen('Last name', 255)],
@@ -24,6 +24,7 @@ export function registerRegisterForm(Alpine) {
                     ],
                     store_name: [required('Store name'), maxLen('Store name', 255)],
                     street: [required('Street'), maxLen('Street', 255)],
+                    suite: [maxLen('Suite', 100)],
                     city: [required('City'), maxLen('City', 100)],
                     state: [required('State')],
                     zip_code: [required('Zip code'), digitsOnly('Zip code'), maxLen('Zip code', 10)],

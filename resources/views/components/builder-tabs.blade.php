@@ -1,10 +1,10 @@
-{{-- The Ad Builder's three tabs (docs/AD-BUILDER-SPEC.md §5). Create opens the editor on an empty stage,
-     Ads lists what has been saved, Assets holds the pictures and videos the designs are made of. Each tab
-     is a page of its own, so a refresh, a bookmark and the back button all behave. --}}
+{{-- The Ad Builder's two tabs (docs/AD-BUILDER-SPEC.md §5). Ads lists what has been saved and starts a new one
+     with New ad, Assets holds the pictures and videos the designs are made of. There is no Create tab (owner,
+     2026-09-29): New ad on the Ads tab is the one way in. Each tab is a page of its own, so a refresh, a
+     bookmark and the back button all behave. --}}
 @props(['active'])
 
 @php($__tabs = [
-    'create' => ['label' => 'Create', 'route' => 'builder.create', 'can' => 'ad-store'],
     'ads' => ['label' => 'Ads', 'route' => 'builder.index', 'can' => 'ad-view'],
     'assets' => ['label' => 'Assets', 'route' => 'builder.assets', 'can' => 'ad-view'],
 ])

@@ -12,7 +12,7 @@
         @csrf
 
         <x-auth.form-field name="email" label="Email" type="email"
-            placeholder="Enter your email" autofocus autocomplete="username" :required="true" />
+            placeholder="Enter your email" maxlength="255" autofocus autocomplete="username" :required="true" />
 
         {{-- Password with toggle --}}
         <x-auth.form-field name="password" label="Password" :required="true">

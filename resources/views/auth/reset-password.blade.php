@@ -10,7 +10,7 @@
         <input type="hidden" name="token" value="{{ $token }}">
 
         <x-auth.form-field name="email" label="Email" type="email" :value="$email"
-            autofocus autocomplete="username" :required="true" />
+            maxlength="255" autofocus autocomplete="username" :required="true" />
 
         <x-auth.form-field name="password" label="Password" :required="true">
             <x-slot name="input">

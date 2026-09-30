@@ -47,10 +47,10 @@ function orientedDocument(string $orientation): array
     ];
 }
 
-test('Create asks which way the screen is mounted before the editor opens — then opens a stage of that shape', function () {
-    // The Create tab: the choice, with both ways to go.
-    $this->get('/builder/create')->assertOk()
-        ->assertViewIs('builder.choose')
+test('a new ad asks which way the screen is mounted before the editor opens — then opens a stage of that shape', function () {
+    // No Create tab: an address with no shape goes to the Ads tab, whose New ad dialog offers both ways.
+    $this->get('/builder/create')->assertRedirect(route('builder.index', ['new' => 1]));
+    $this->get(route('builder.index', ['new' => 1]))->assertOk()
         ->assertSee(route('builder.create', ['orientation' => 'landscape']), false)
         ->assertSee(route('builder.create', ['orientation' => 'portrait']), false);
 
@@ -64,9 +64,9 @@ test('Create asks which way the screen is mounted before the editor opens — th
         ->assertViewHas('orientation', 'portrait')
         ->assertViewHas('document', fn (array $document) => $document['stage']['width'] === 1080 && $document['stage']['height'] === 1920);
 
-    // A page is forgiving: a word nobody offers, or a shape that is not a word, is no answer — the choice again.
-    $this->get('/builder/create?orientation=sideways')->assertOk()->assertViewIs('builder.choose');
-    $this->get('/builder/create?orientation[]=portrait')->assertOk()->assertViewIs('builder.choose');
+    // A page is forgiving: a word nobody offers, or a shape that is not a word, is no answer — the question again.
+    $this->get('/builder/create?orientation=sideways')->assertRedirect(route('builder.index', ['new' => 1]));
+    $this->get('/builder/create?orientation[]=portrait')->assertRedirect(route('builder.index', ['new' => 1]));
 });
 
 test('a portrait ad is saved as one, with a 1080 × 1920 stage, and says so ever after', function () {

@@ -18,7 +18,7 @@
 import axios from 'axios';
 import { arrangePanel, CLIPBOARD_KEY, readClipboard } from './arrange.js';
 import {
-    clampName, isGroup, MAX_NAME, newId, normaliseDocument, parentIdOf, readPreference, renumberDepth, syncGroupBounds,
+    clampName, isGroup, MAX_NAME, MAX_TEXT, newId, normaliseDocument, parentIdOf, readPreference, renumberDepth, syncGroupBounds,
     writePreference,
 } from './document.js';
 import { angleFromCentre, boundsOf, intersects, MIN_SIZE, normaliseAngle, resizeRotated, snapMove, stepAngle, toStage } from './geometry.js';
@@ -489,14 +489,16 @@ export function registerAdEditor(Alpine) {
             },
 
             /**
-             * Whether an asset is on this ad's shelf. For the platform team building for a shop, only that
-             * shop's is, because the compiler only ever uses an ad's own store's files; a store's own people
-             * are only ever handed their own shop's. The picker and a paste both ask.
+             * Whether an asset is on this ad's shelf: a file the platform shares with every shop always is (owner,
+             * 2026-09-29). For the platform team building for a shop, only that shop's own besides, because the
+             * compiler only ever uses an ad's own store's files and the shared ones; a store's own people are only
+             * ever handed their own shop's and the shared. The picker and a paste both ask.
              */
             onThisShelf(asset) {
+                if (!asset.store_id) return true;
                 if (this.choosesShop && !this.storeId) return false;
 
-                return !this.storeId || !asset.store_id || asset.store_id === this.storeId;
+                return !this.storeId || asset.store_id === this.storeId;
             },
 
             pickerTitle() {
@@ -869,7 +871,8 @@ export function registerAdEditor(Alpine) {
 
                 if (!element || element.type !== 'text') return;
 
-                element.text = value;
+                // No more than the server takes (the box says so too, with maxlength), so a save is never refused over it.
+                element.text = clampName(value, MAX_TEXT);
                 this.commit('Text');
             },
 
@@ -898,7 +901,8 @@ export function registerAdEditor(Alpine) {
             finishTextEdit(event, element) {
                 this.editingTextId = null;
 
-                const text = (event.target.innerText ?? '').replace(/ /g, ' ').trim();
+                // Typed on the stage there is no maxlength to stop at: cut to what the server takes instead.
+                const text = clampName((event.target.innerText ?? '').replace(/ /g, ' ').trim(), MAX_TEXT);
 
                 if (text !== element.text) {
                     element.text = text;

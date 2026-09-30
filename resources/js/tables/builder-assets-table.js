@@ -18,7 +18,7 @@ export function registerBuilderAssetsTable(Alpine) {
         extraState: {
             // Several files arriving together refresh the list once.
             refreshTimer: null,
-            /* Above the stores: one shop, or every shop (empty). */
+            /* Above the stores: one shop (its id), the files shared with every shop ('shared'), or everything (''). */
             filterStore: '',
             /* How full the shop on the shelf is ({used, limit}): its own inside a store, the one chosen above. */
             storage: null,
@@ -62,15 +62,25 @@ export function registerBuilderAssetsTable(Alpine) {
                 return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round((asset.size ?? 0) / 1024))} KB`;
             },
 
-            /** "Used by Winter sale, Eid offer" — or nothing at all, which is why it can be deleted. */
+            /** Named by any ad — this shop's, or another shop's for a file shared with every shop. */
+            isUsed(asset) {
+                return (asset.used_by ?? []).length > 0 || Number(asset.used_elsewhere ?? 0) > 0;
+            },
+
+            /**
+             * "Used by Winter sale, Eid offer" — or nothing at all, which is why it can be deleted. Another shop's ads
+             * using a shared file are counted, never named.
+             */
             usageLabel(asset) {
                 const used = asset.used_by ?? [];
+                const elsewhere = Number(asset.used_elsewhere ?? 0);
+                const others = elsewhere > 0 ? `${elsewhere} ${elsewhere === 1 ? 'ad' : 'ads'} of other shops` : '';
 
-                if (used.length === 0) return 'Not used yet';
+                if (used.length === 0) return others ? `Used by ${others}` : 'Not used yet';
 
-                return used.length <= 2
-                    ? `Used by ${used.join(', ')}`
-                    : `Used by ${used.slice(0, 2).join(', ')} +${used.length - 2}`;
+                const named = used.length <= 2 ? used.join(', ') : `${used.slice(0, 2).join(', ')} +${used.length - 2}`;
+
+                return others ? `Used by ${named} and ${others}` : `Used by ${named}`;
             },
         },
     }));

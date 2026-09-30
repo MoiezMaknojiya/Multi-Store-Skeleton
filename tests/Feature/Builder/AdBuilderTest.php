@@ -44,9 +44,10 @@ function adDocument(string $text = 'Winter sale'): array
     ];
 }
 
-test('the three tabs open for somebody who may see ads, and are shut to everybody else', function () {
-    $this->get('/builder')->assertOk()->assertSee('Ad Builder');
-    $this->get('/builder/create')->assertOk();
+test('the two tabs and a new ad open for somebody who may see ads, and are shut to everybody else', function () {
+    $this->get('/builder')->assertOk()->assertSee('Ad Builder')->assertDontSee('dusk="builder-tab-create"', false);
+    $this->get('/builder/create')->assertRedirect(route('builder.index', ['new' => 1]));
+    $this->get('/builder/create?orientation=landscape')->assertOk();
     $this->get('/builder/assets')->assertOk();
 
     // A member of the same store without the permission gets nothing.

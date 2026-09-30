@@ -228,9 +228,12 @@ export function registerUploadDropzone(Alpine) {
             metaFor() {
                 const meta = { purpose: this.purpose };
 
+                // Every key, empty when there is none: the engine sends each allowed field whatever the file holds, and
+                // one the file lacked reached the server as the word "undefined" — a shop nobody has (a shared upload
+                // on the Ad Builder's shelf was refused with "That shop no longer exists").
                 ['library', 'store', 'channel'].forEach((key) => {
                     const value = this.context[key];
-                    if (value !== null && value !== undefined && value !== '') meta[key] = String(value);
+                    meta[key] = value === null || value === undefined ? '' : String(value);
                 });
 
                 return meta;

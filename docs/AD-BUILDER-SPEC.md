@@ -105,6 +105,7 @@ Files (the `public` disk, like media and channels):
 ```
 builder/{store_id}/assets/{random}.{ext}          the asset
 builder/{store_id}/assets/thumbs/{random}.jpg     its thumbnail
+builder/platform/assets/…                         an asset the platform shares with every shop (store_id NULL)
 builder/{store_id}/ads/{ad_id}/index.html         the published ad
 builder/{store_id}/ads/{ad_id}/poster.jpg         the ad's poster
 builder/{store_id}/ads/{ad_id}/published.jpg      the published media row's own copy of that poster
@@ -121,6 +122,18 @@ media row from the library instead takes only the page and the row's copy, never
 a copy of their own). Deleting an asset is refused while an ad still uses it, and says which ads (the same
 shape as a role that somebody still holds).
 
+**The shared shelf** (owner, 2026-09-29: "mujhe sub store k liya upload karna ho toh takay woo mere asset ko use
+kar sake aur agar permission du toh woo delete bhi kar sake"). An asset with no shop — `builder_assets.store_id`
+NULL, under `builder/platform/assets/` — is the platform's, shared with every shop. Above the stores the Assets tab's
+Shop list offers All shops, Shared with every shop, and each shop: an upload with a shop chosen is that shop's, and
+with none it is shared (the page says which under its note). Every shop's shelf lists the shared files beside its own,
+marked "From the platform", and the editor's picker offers them for any shop (`BuilderAsset::onShelfOf`,
+`AdCompiler::assetsFor`, `onThisShelf`). A shared file counts to no shop's 512 MB (the server's reserve still holds),
+and a deleted shop takes its own files, never the shared ones. It is deleted with **Delete Shared Assets**
+(`ad-shared-destroy`, §4) — from every shop's shelf at once — and never while an ad of ANY shop uses it: the refusal
+names the ads of the person's own shop and only counts the others' ("Still used by 2 ads of other shops, so it
+stays…"), so one shop never learns another's designs.
+
 ---
 
 ## 4. Permissions
@@ -135,8 +148,14 @@ Four new rows in `Permission::STORE` — a store's own work, and on a platform r
 | `ad-destroy` | Delete Ads |
 
 A migration of its own inserts them, grants all four to Super-Admin, and grants them to the Owner and
-Admin starter roles by key. Assets have no separate permission: uploading one is part of creating an ad
-(`ad-store`), removing one part of `ad-destroy` — a permission has to be enough for its own job.
+Admin starter roles by key. A shop's own assets have no separate permission: uploading one is part of creating an
+ad (`ad-store`), removing one part of `ad-destroy` — a permission has to be enough for its own job.
+
+A fifth, `ad-shared-destroy` **Delete Shared Assets** (2026-09-29), takes off the shelf a file the platform shares
+with every shop (§3). It is in `Permission::PLATFORM` and `STORE_SCOPED`: a shop's role may carry it, and there it
+reaches past the shop by the owner's choice — the file goes from every shop. Only Super-Admin starts with it; the
+super admin gives it to the roles they choose. The delete route asks `delete-builder-assets` (either permission, a
+hand-written gate) and the controller the one the file needs, and each row says `can_delete`.
 
 ---
 
@@ -147,7 +166,7 @@ Inside the `['auth', 'throttle:admin']` group, sidebar item **Ad Builder** (gate
 | Method | URI | Name | Gate |
 | --- | --- | --- | --- |
 | GET | `/builder` | `builder.index` | `ad-view` |
-| GET | `/builder/create` | `builder.create` | `ad-store` |
+| GET | `/builder/create?orientation=landscape\|portrait` | `builder.create` | `ad-store` (no shape: a redirect to `/builder?new=1`) |
 | GET | `/builder/{ad}` | `builder.edit` | `ad-update` |
 | GET | `/builder/assets` | `builder.assets` | `ad-view` |
 | GET | `/builder/data` | `builder.data` | `ad-view` |
@@ -162,7 +181,7 @@ Inside the `['auth', 'throttle:admin']` group, sidebar item **Ad Builder** (gate
 | DELETE | `/builder/{ad}` | `builder.destroy` | `ad-destroy` (password) |
 | GET | `/builder/assets/data` | `builder.assets.data` | `ad-view` |
 | POST | `/builder/assets` | `builder.assets.store` | `ad-store` |
-| DELETE | `/builder/assets/{asset}` | `builder.assets.destroy` | `ad-destroy` |
+| DELETE | `/builder/assets/{asset}` | `builder.assets.destroy` | `delete-builder-assets`: `ad-destroy` for a shop's own file, `ad-shared-destroy` for a shared one (in the controller) |
 | GET | `/builder/fonts` | `builder.fonts` | `ad-view`, `ad-store` or `ad-update` (in the controller) |
 | POST | `/builder/fonts` | `builder.fonts.store` | `ad-store` or `ad-update` (in the controller) + `throttle:font-install` |
 
@@ -636,9 +655,10 @@ A portrait ad is what a menu board, a poster or a one-column price list wants.
 
 **Chosen when the ad is made, fixed afterwards** (owner: "ads banate waqt fix rakho… starting mein hi poch
 lo"). **New ad** on the Ads tab opens a chooser (`new-ad-orientation` modal; the empty gallery's "Build your
-first one" opens the same), and the **Create** tab is the same choice on a page of its own (`builder.choose`:
-`/builder/create` with no orientation — or one nobody offers, or a list — lands there, so nobody reaches the
-editor without being asked): two cards from `builder/partials/orientation-choice.blade.php`, Landscape and
+first one" opens the same). There is no Create tab (owner, 2026-09-29: "Ads k tab k ander already create ads ka
+button ha"): `/builder/create` with no orientation — or one nobody offers, or a list — goes to `/builder?new=1`,
+which opens the same chooser at once and then drops `new` from the address, so nobody reaches the editor without
+being asked. The chooser is two cards from `builder/partials/orientation-choice.blade.php`, Landscape and
 Portrait, each a link to `/builder/create?orientation=landscape|portrait`. The editor opens on a
 blank stage of that shape and says so under it ("1080 × 1920 — a portrait screen, a television mounted
 upright"), the first save posts `orientation`, and from then on the column is the truth: `BuilderAdRequest`

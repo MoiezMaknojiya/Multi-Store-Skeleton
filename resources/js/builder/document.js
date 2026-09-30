@@ -13,6 +13,9 @@ export function newId(prefix = 'el') {
 /** The longest name an element may carry: BuilderAdRequest's `elements.*.name` rule (max:120). */
 export const MAX_NAME = 120;
 
+/** The longest text a text element may carry: BuilderAdRequest::MAX_TEXT. */
+export const MAX_TEXT = 2000;
+
 /** How many groups an element may be inside: BuilderAdRequest::MAX_GROUP_DEPTH (§13). */
 export const MAX_GROUP_DEPTH = 3;
 

@@ -9,6 +9,6 @@
     </span>
     {{-- autocomplete="off" is silently ignored by Chrome on fields it heuristically treats as
          credential-related; "new-password" is a well-known, more reliable way to actually stop it --}}
-    <input x-model="search" type="text" placeholder="{{ $placeholder }}" autocomplete="new-password"
+    <input x-model="search" type="text" placeholder="{{ $placeholder }}" autocomplete="new-password" maxlength="255"
         dusk="crud-search" class="form-input pl-10" />
 </div>

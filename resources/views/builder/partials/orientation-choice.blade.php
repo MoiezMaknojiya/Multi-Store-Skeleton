@@ -1,5 +1,5 @@
-{{-- Which way is the screen mounted? (docs/AD-BUILDER-SPEC.md §12) — the same two choices on the Create tab's
-     page and in the Ads tab's New ad dialog. Links, so the editor opens on a stage of that shape. --}}
+{{-- Which way is the screen mounted? (docs/AD-BUILDER-SPEC.md §12) — the two choices in the Ads tab's New ad
+     dialog. Links, so the editor opens on a stage of that shape. --}}
 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
     <a href="{{ route('builder.create', ['orientation' => 'landscape']) }}" dusk="new-ad-landscape"
        class="group rounded-lg border-2 border-gray-200 p-4 text-center transition hover:border-blue-500 hover:bg-blue-50 focus:outline-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-gray-700 dark:hover:border-blue-400 dark:hover:bg-gray-700/50">

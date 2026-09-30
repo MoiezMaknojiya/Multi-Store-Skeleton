@@ -1035,7 +1035,7 @@ class AdCompiler
 
     /* ── Readers ───────────────────────────────────────────────────────── */
 
-    /** Every asset the design names, keyed by id — this store's only. */
+    /** Every asset the design names, keyed by id — this store's own and those the platform shares with every shop. */
     private function assetsFor(BuilderAd $ad, array $elements, array $stage): Collection
     {
         $layers = is_array($stage['background']['layers'] ?? null) ? $stage['background']['layers'] : [];
@@ -1051,7 +1051,7 @@ class AdCompiler
         }
 
         return BuilderAsset::whereIn('id', $ids)
-            ->where('store_id', $ad->store_id)
+            ->onShelfOf((int) $ad->store_id)
             ->get()
             ->keyBy('id');
     }

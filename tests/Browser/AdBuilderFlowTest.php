@@ -41,14 +41,22 @@ class AdBuilderFlowTest extends DuskTestCase
             $browser->loginAs($designer);
             $this->switchToStore($browser, $store);
 
-            /* ── 1. The section, and its three tabs ─────────────────────── */
+            /* ── 1. The section, and its two tabs (no Create: New ad is the way in) ─ */
             $browser->visit('/builder');
             $this->waitForAlpine($browser);
             $browser->waitFor('@builder-tabs')
-                ->assertVisible('@builder-tab-create')
+                ->assertMissing('@builder-tab-create')
                 ->assertVisible('@builder-tab-ads')
                 ->assertVisible('@builder-tab-assets')
                 ->waitFor('@ads-empty');
+
+            // An old address for a new ad lands on the Ads tab with New ad's question open, and asks only once.
+            $browser->visit('/builder/create');
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@new-ad-landscape')->assertVisible('@new-ad-portrait');
+            $this->assertStringEndsWith('/builder', $browser->driver->getCurrentURL());
+            $this->jsClick($browser, '@new-ad-cancel');
+            $browser->waitUntilMissing('@new-ad-landscape');
 
             /* ── 2. A new ad: which way is the screen? Then the stage, a television's ─ */
             $this->jsClick($browser, '@new-ad');
@@ -231,42 +239,61 @@ class AdBuilderFlowTest extends DuskTestCase
     }
 
     /**
-     * Above the stores the shelf belongs to no shop of its own, so an upload goes to the shop chosen in
-     * the Shop list — and with "All shops" chosen there is nowhere for it to go, which the page says.
+     * Above the stores an upload goes to the shop chosen in the Shop list — or, with none chosen, it is shared with
+     * every shop (owner, 2026-09-29: "sub store k liya upload karna ho"), and a shop's designer finds it on their
+     * shelf, marked as the platform's, and in the editor's picker.
      */
-    public function test_the_platform_uploads_a_picture_to_the_shop_chosen_in_the_shop_list(): void
+    public function test_the_platform_shares_a_picture_with_every_shop_or_gives_it_to_the_shop_chosen(): void
     {
         $admin = $this->seedSuperAdmin();
-        Store::factory()->create(['name' => 'Alpha Mart']);
+        $alpha = Store::factory()->create(['name' => 'Alpha Mart']);
         $beta = Store::factory()->create(['name' => 'Beta Deli']);
-        $picture = $this->fixtureImage('platform-logo.png', 200, 60, 30);
+        $brandPicture = $this->fixtureImage('Brand logo.png', 200, 60, 30);
+        $menuPicture = $this->fixtureImage('Beta menu.png', 30, 60, 200);
+        $designer = $this->storeMember($alpha, ['ad-view', 'ad-store', 'ad-update', 'ad-destroy'], 'designer@example.com', 'Designer');
 
-        $this->browse(function (Browser $browser) use ($admin, $beta, $picture) {
+        $this->browse(function (Browser $browser) use ($admin, $alpha, $beta, $brandPicture, $menuPicture, $designer) {
             $this->freshSession($browser);
             $browser->loginAs($admin)->visit('/builder/assets');
             $this->waitForAlpine($browser);
             $browser->waitFor('@assets-empty')
-                ->assertSelected('@assets-filter-store', '');      // "All shops"
+                ->assertSelected('@assets-filter-store', '')      // "All shops"
+                ->assertSeeIn('@assets-upload-target', 'shared with every shop');
 
-            /* ── 1. All shops: refused, with the reason ────────────────── */
-            $browser->attach('@asset-file', $picture)
-                ->waitForText("Choose the shop in the Shop list first — an ad's pictures belong to one shop.");
-            $this->assertSame(0, BuilderAsset::count(), 'a picture was put on a shelf nobody chose');
-
-            /* ── 2. One shop chosen: the picture goes onto its shelf ───── */
-            // The refused row is taken away first, as a person clears what the box said no to.
-            $this->jsClick($browser, '@asset-upload-remove');
-            $browser->waitUntilMissing('@asset-upload-row');
-            $browser->select('@assets-filter-store', (string) $beta->id)
-                ->waitFor('@assets-empty');                         // Beta's shelf, loaded and empty
-            $this->uploadThrough($browser, 'asset', $picture);
-
+            /* ── 1. All shops: the picture is shared with every shop ────── */
+            $this->uploadThrough($browser, 'asset', $brandPicture);
             $browser->waitUsing(20, 250, fn () => BuilderAsset::count() === 1);
-            $asset = BuilderAsset::sole();
-            $this->assertSame($beta->id, $asset->store_id, 'the picture went to a shop other than the one chosen');
+            $brand = BuilderAsset::sole();
+            $this->assertNull($brand->store_id, 'the picture was not shared with every shop');
+            $browser->waitFor('@asset-card-'.$brand->id)->assertSeeIn('@asset-owner-'.$brand->id, 'Every shop');
 
-            // Listed on that shop's shelf — and the reload that shows it has come back before the test ends.
-            $browser->waitFor('@asset-card-'.$asset->id);
+            /* ── 2. One shop chosen: the picture is that shop's alone ───── */
+            $browser->select('@assets-filter-store', (string) $beta->id)
+                ->waitFor('@asset-card-'.$brand->id)                // a shop's shelf shows the shared file too
+                ->assertSeeIn('@assets-upload-target', 'for its ads alone');
+            $this->uploadThrough($browser, 'asset', $menuPicture);
+            $browser->waitUsing(20, 250, fn () => BuilderAsset::count() === 2);
+            $menu = BuilderAsset::where('title', 'Beta menu')->sole();
+            $this->assertSame($beta->id, $menu->store_id, 'the picture went to a shop other than the one chosen');
+            $browser->waitFor('@asset-card-'.$menu->id)->assertSeeIn('@asset-owner-'.$menu->id, 'Beta Deli');
+
+            /* ── 3. Alpha's designer: the shared file, marked, and no Delete on it; Beta's is not theirs ── */
+            $this->freshSession($browser);
+            $browser->loginAs($designer);
+            $this->switchToStore($browser, $alpha);
+            $browser->visit('/builder/assets');
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@asset-card-'.$brand->id)
+                ->assertSeeIn('@asset-owner-'.$brand->id, 'From the platform')
+                ->assertMissing('@delete-asset-'.$brand->id)
+                ->assertMissing('@asset-card-'.$menu->id);
+
+            /* ── 4. …and puts it on a stage ─────────────────────────────── */
+            $browser->visit('/builder/create?orientation=landscape');
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@ad-stage');
+            $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
+            $browser->waitFor('@pick-asset-'.$brand->id)->assertMissing('@pick-asset-'.$menu->id);
         });
     }
 

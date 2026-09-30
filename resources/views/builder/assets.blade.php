@@ -12,17 +12,23 @@
                 <p class="text-sm text-gray-500 dark:text-gray-400" dusk="assets-scope-note">
                     Pictures and videos used inside ads. A video is 30 seconds at most, and it repeats for as long as
                     the ad is on screen. Separate from the media library, which is what your screens play.
-                    @if ($stores !== [])
-                        An upload goes to the shop chosen in the Shop list.
+                    @if ($aboveTheStores)
+                        {{-- Where an upload goes, as the Shop list stands (owner, 2026-09-29: an upload for every shop). --}}
+                        <span x-text="(filterStore && filterStore !== 'shared')
+                            ? 'An upload goes to the shop chosen in the Shop list, for its ads alone.'
+                            : 'An upload is shared with every shop: each shop can use it in its ads.'" dusk="assets-upload-target"></span>
+                    @else
+                        Files marked "From the platform" are shared with every shop to use in its ads.
                     @endif
                 </p>
             </div>
 
             <div class="flex flex-wrap items-center gap-3">
-                @if ($stores !== [])
-                    <select x-model="filterStore" @change="applyFilters()" class="form-select w-44 text-sm"
+                @if ($aboveTheStores)
+                    <select x-model="filterStore" @change="applyFilters()" class="form-select w-52 text-sm"
                             dusk="assets-filter-store" aria-label="Shop">
                         <option value="">All shops</option>
+                        <option value="shared">Shared with every shop</option>
                         @foreach ($stores as $store)
                             <option value="{{ $store['id'] }}">{{ $store['name'] }}</option>
                         @endforeach
@@ -39,11 +45,12 @@
         @can('ad-store')
             {{-- The shared uploader (docs/UPLOADS-SPEC.md): each picture or video joins the shelf as it arrives. The
                  page listens here, not on the box: an expression on the box runs with the box's own `this`. --}}
+            {{-- Above the stores a shop chosen in the Shop list gets the file; with none (All shops, or Shared with every
+                 shop) it is shared with every shop. --}}
             <div x-on:upload-added="onUploaded($event.detail)" dusk="upload-asset">
                 <x-upload-dropzone purpose="asset" mode="add" :multiple="true" add-url="/builder/assets" dusk="asset"
                     :max-video-seconds="\App\Models\BuilderAsset::MAX_VIDEO_SECONDS"
-                    :needs-store="$stores !== [] ? 'Choose the shop in the Shop list first — an ad\'s pictures belong to one shop.' : null"
-                    context="{ store: filterStore || null, fields: filterStore ? { store_id: filterStore } : {}, storage: storage }"
+                    context="{ store: (filterStore && filterStore !== 'shared') ? filterStore : null, fields: (filterStore && filterStore !== 'shared') ? { store_id: filterStore } : {}, storage: storage }"
                     hint="Pictures (JPG, PNG, GIF, WEBP) and videos (MP4, WEBM), up to 250 MB each. A video is 30 seconds at most." />
             </div>
         @endcan
@@ -80,17 +87,25 @@
                                 <p class="truncate text-sm font-medium text-gray-800 dark:text-white"
                                    x-bind:dusk="'asset-title-' + item.id" x-text="item.title"></p>
 
+                                {{-- Whose it is: above the stores its shop or "Every shop"; inside a store, the platform's. --}}
+                                <p x-show="item.owner_label" x-cloak class="flex flex-wrap items-center gap-1">
+                                    <span x-bind:class="item.shared ? 'badge-info' : 'badge-neutral'" x-text="item.owner_label"
+                                          x-bind:dusk="'asset-owner-' + item.id"></span>
+                                </p>
+
                                 <p class="text-xs text-gray-400">
                                     <span x-text="item.kind === 'video' ? 'Video' : 'Image'"></span>
                                     <span x-show="item.width" x-cloak x-text="' · ' + item.width + '×' + item.height"></span>
                                     <span x-text="' · ' + sizeLabel(item)"></span>
                                 </p>
 
-                                <p class="truncate text-xs" x-bind:class="(item.used_by ?? []).length ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'"
+                                <p class="truncate text-xs" x-bind:class="isUsed(item) ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'"
                                    x-bind:dusk="'asset-usage-' + item.id" x-text="usageLabel(item)"></p>
 
-                                @can('ad-destroy')
-                                    <div class="pt-1">
+                                {{-- A shop's own file with Delete Ads, a shared one with Delete Shared Assets: the row says which
+                                     this person holds (can_delete), the route asks again. --}}
+                                @can('delete-builder-assets')
+                                    <div class="pt-1" x-show="item.can_delete" x-cloak>
                                         <button type="button" class="btn-row-danger" @click="confirmDelete(item)"
                                                 x-bind:dusk="'delete-asset-' + item.id">Delete</button>
                                     </div>
@@ -110,6 +125,8 @@
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
                     <span class="font-medium" x-text="selectedItem?.title"></span> goes for good. An ad still using
                     it keeps it — the delete is refused and says which ad.
+                    <span x-show="selectedItem?.shared" x-cloak dusk="confirm-asset-deletion-shared">It is shared with every
+                        shop, so it goes from every shop's shelf.</span>
                 </p>
 
                 <div class="mt-6 flex flex-wrap justify-end gap-3">

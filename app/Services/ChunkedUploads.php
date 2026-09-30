@@ -263,13 +263,18 @@ class ChunkedUploads
         return null;
     }
 
-    /** The Ad Builder's shelf: the shop the person works in, or — above the stores — the one the page chose. */
-    private function shelfFor(User $user, ?string $store): int
+    /**
+     * The Ad Builder's shelf: the shop the person works in, or — above the stores — the one the page chose, or with
+     * none chosen the shelf the platform shares with every shop (owner, 2026-09-29).
+     */
+    private function shelfFor(User $user, ?string $store): ?int
     {
         abort_unless($user->can('ad-store'), 403);
 
         if ($user->globalRole() !== null) {
-            return $this->existingStore($store, 'Choose the shop in the Shop list first — an ad\'s pictures belong to one shop.');
+            return $store === null || $store === '' || $store === 'shared'
+                ? null
+                : $this->existingStore($store, 'That shop no longer exists. Reload the page and choose again.');
         }
 
         return $this->currentStore('Select a store before uploading — an ad\'s pictures belong to the shop they were uploaded for.');

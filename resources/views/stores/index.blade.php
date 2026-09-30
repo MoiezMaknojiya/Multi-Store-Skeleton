@@ -160,7 +160,7 @@
                 <div>
                     <label class="form-label" for="delete-store-name">Type <span class="font-semibold" x-text="selectedItem?.name"></span> to confirm <span class="text-red-500">*</span></label>
                     <div class="mt-1" x-bind:class="deleteErrors.confirm_name ? 'crud-field-error' : ''">
-                        <x-text-input id="delete-store-name" x-model="deleteConfirmName" dusk="delete-store-name" class="block w-full" autocomplete="off" />
+                        <x-text-input id="delete-store-name" x-model="deleteConfirmName" dusk="delete-store-name" class="block w-full" maxlength="255" autocomplete="off" />
                     </div>
                     <template x-if="deleteErrors.confirm_name">
                         <p class="form-error" x-text="deleteErrors.confirm_name[0]"></p>
@@ -189,7 +189,7 @@
                 <div>
                     <label class="form-label" for="invite-owner-email">Email <span class="text-red-500">*</span></label>
                     <div class="mt-1" x-bind:class="ownerErrors.email ? 'crud-field-error' : ''">
-                        <x-text-input id="invite-owner-email" type="email" x-model="ownerEmail" dusk="invite-owner-email" class="block w-full" autocomplete="off" placeholder="owner@example.com" />
+                        <x-text-input id="invite-owner-email" type="email" x-model="ownerEmail" dusk="invite-owner-email" class="block w-full" maxlength="255" autocomplete="off" placeholder="owner@example.com" />
                     </div>
                     <template x-if="ownerErrors.email">
                         <p class="form-error" x-text="ownerErrors.email[0]"></p>
@@ -207,23 +207,23 @@
                 <form @submit.prevent="saveItem" novalidate dusk="store-form" class="mt-4 space-y-4">
 
                     <x-crud.form-field label="Store Name" field="name" :required="true">
-                        <x-text-input x-model="form.name" dusk="store-name" class="block w-full" autocomplete="off" />
+                        <x-text-input x-model="form.name" dusk="store-name" class="block w-full" maxlength="255" autocomplete="off" />
                     </x-crud.form-field>
 
                     {{-- Street & Suite --}}
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <x-crud.form-field label="Street" field="street" :required="true">
-                            <x-text-input x-model="form.street" dusk="store-street" class="block w-full" autocomplete="off" />
+                            <x-text-input x-model="form.street" dusk="store-street" class="block w-full" maxlength="255" autocomplete="off" />
                         </x-crud.form-field>
                         <x-crud.form-field label="Suite/Unit" field="suite">
-                            <x-text-input x-model="form.suite" class="block w-full" autocomplete="off" />
+                            <x-text-input x-model="form.suite" class="block w-full" maxlength="100" autocomplete="off" />
                         </x-crud.form-field>
                     </div>
 
                     {{-- City, State, Zip --}}
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <x-crud.form-field label="City" field="city" :required="true">
-                            <x-text-input x-model="form.city" dusk="store-city" class="block w-full" autocomplete="off" />
+                            <x-text-input x-model="form.city" dusk="store-city" class="block w-full" maxlength="100" autocomplete="off" />
                         </x-crud.form-field>
                         <x-crud.form-field label="State" field="state" :required="true">
                             <select x-model="form.state" dusk="store-state" class="form-select block w-full">
@@ -234,15 +234,14 @@
                             </select>
                         </x-crud.form-field>
                         <x-crud.form-field label="Zip Code" field="zip_code" :required="true">
-                            <x-text-input type="text" inputmode="numeric" x-model="form.zip_code" dusk="store-zip" class="block w-full" autocomplete="off"
-                                @input="restrictZipInput($event)" @keydown="restrictZipInput($event)" />
+                            <x-text-input type="text" inputmode="numeric" data-digits="10" x-model="form.zip_code" dusk="store-zip" class="block w-full" autocomplete="off" />
                         </x-crud.form-field>
                     </div>
 
                     {{-- Country --}}
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <x-crud.form-field label="Country" field="country" :required="true">
-                            <x-text-input x-model="form.country" dusk="store-country" class="block w-full" autocomplete="off" />
+                            <x-text-input x-model="form.country" dusk="store-country" class="block w-full" maxlength="100" autocomplete="off" />
                         </x-crud.form-field>
                         <div></div>
                     </div>
@@ -251,7 +250,7 @@
                          through "Invite owner", or from inside the store. --}}
                     <div x-show="!editingItem" class="border-t border-gray-200 dark:border-gray-700 pt-4">
                         <x-crud.form-field label="Owner's email" field="owner_email" :required="true">
-                            <x-text-input type="email" x-model="form.owner_email" dusk="store-owner-email" class="block w-full" autocomplete="off" placeholder="owner@example.com" />
+                            <x-text-input type="email" x-model="form.owner_email" dusk="store-owner-email" class="block w-full" maxlength="255" autocomplete="off" placeholder="owner@example.com" />
                         </x-crud.form-field>
                         <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">They'll get an email invitation to own this store. Nobody can use the store until then.</p>
                     </div>

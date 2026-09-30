@@ -162,11 +162,11 @@
 
                 <form @submit.prevent="saveItem" novalidate dusk="media-form" class="mt-4 space-y-4">
                     <x-crud.form-field label="Title" field="title" :required="true">
-                        <x-text-input x-model="form.title" dusk="media-edit-title" class="block w-full" autocomplete="off" />
+                        <x-text-input x-model="form.title" dusk="media-edit-title" class="block w-full" maxlength="255" autocomplete="off" />
                     </x-crud.form-field>
 
                     <x-crud.form-field label="Description" field="description">
-                        <textarea x-model="form.description" dusk="media-edit-description" rows="3"
+                        <textarea x-model="form.description" dusk="media-edit-description" rows="3" maxlength="2000"
                                   class="form-input block w-full"></textarea>
                     </x-crud.form-field>
 

@@ -13,6 +13,7 @@ import { registerPasswordForm }      from './pages/password-form.js';
 import { registerProfileInfo }       from './pages/profile-info.js';
 import { registerDeleteAccountForm } from './pages/delete-account.js';
 import { registerFormGuard }         from './core/form-guard.js';
+import { registerDigitsOnly }        from './core/digits-only.js';
 import { registerRegisterForm }      from './pages/register-form.js';
 import { registerAuthForms }         from './pages/auth-forms.js';
 import { registerStoreSettings }     from './pages/store-settings.js';
@@ -57,6 +58,9 @@ window.toast = (message, type = 'error') => Alpine.store('toasts').push(message,
 
 /* Block double submits on plain (full-page) forms — login, profile, logout, etc. */
 registerFormGuard();
+
+/* A digits-only field (`data-digits`, a phone or a ZIP code) keeps to its digits, and to that many, on every page. */
+registerDigitsOnly();
 
 /* Register layout & UI components */
 registerHeader(Alpine);

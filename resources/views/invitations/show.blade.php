@@ -46,11 +46,11 @@
                     </x-auth.form-field>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <x-auth.form-field name="first_name" label="First Name" placeholder="First name" autocomplete="given-name" :required="true" dusk="invitation-first-name" />
-                        <x-auth.form-field name="last_name" label="Last Name" placeholder="Last name" autocomplete="family-name" :required="true" dusk="invitation-last-name" />
+                        <x-auth.form-field name="first_name" label="First Name" placeholder="First name" maxlength="255" autocomplete="given-name" :required="true" dusk="invitation-first-name" />
+                        <x-auth.form-field name="last_name" label="Last Name" placeholder="Last name" maxlength="255" autocomplete="family-name" :required="true" dusk="invitation-last-name" />
                     </div>
 
-                    <x-auth.form-field name="phone" label="Phone (10 digits)" type="tel" placeholder="1234567890" autocomplete="tel" :required="true" dusk="invitation-phone" />
+                    <x-auth.form-field name="phone" label="Phone (10 digits)" type="tel" placeholder="1234567890" data-digits="10" inputmode="numeric" autocomplete="tel-national" :required="true" dusk="invitation-phone" />
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <x-auth.form-field name="password" label="Password" :required="true">

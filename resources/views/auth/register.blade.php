@@ -19,13 +19,13 @@
         <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400">Your Details</h3>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <x-auth.form-field name="first_name" label="First Name" placeholder="First name" :required="true" />
-            <x-auth.form-field name="last_name" label="Last Name" placeholder="Last name" :required="true" />
+            <x-auth.form-field name="first_name" label="First Name" placeholder="First name" maxlength="255" autocomplete="given-name" :required="true" />
+            <x-auth.form-field name="last_name" label="Last Name" placeholder="Last name" maxlength="255" autocomplete="family-name" :required="true" />
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <x-auth.form-field name="phone" label="Phone (10 digits)" type="tel" placeholder="1234567890" :required="true" />
-            <x-auth.form-field name="email" label="Email" type="email" placeholder="Enter your email" autocomplete="username" :required="true" />
+            <x-auth.form-field name="phone" label="Phone (10 digits)" type="tel" placeholder="1234567890" data-digits="10" inputmode="numeric" autocomplete="tel-national" :required="true" />
+            <x-auth.form-field name="email" label="Email" type="email" placeholder="Enter your email" maxlength="255" autocomplete="username" :required="true" />
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -44,15 +44,15 @@
         {{-- Section 2: their store --}}
         <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400 pt-2 border-t border-gray-100">Your Store</h3>
 
-        <x-auth.form-field name="store_name" label="Store Name" placeholder="e.g. Fresh Mart" :required="true" />
+        <x-auth.form-field name="store_name" label="Store Name" placeholder="e.g. Fresh Mart" maxlength="255" :required="true" />
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <x-auth.form-field name="street" label="Street" placeholder="Street address" :required="true" />
-            <x-auth.form-field name="suite" label="Suite/Unit (optional)" placeholder="Suite" />
+            <x-auth.form-field name="street" label="Street" placeholder="Street address" maxlength="255" :required="true" />
+            <x-auth.form-field name="suite" label="Suite/Unit (optional)" placeholder="Suite" maxlength="100" />
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <x-auth.form-field name="city" label="City" placeholder="City" :required="true" />
+            <x-auth.form-field name="city" label="City" placeholder="City" maxlength="100" :required="true" />
             <x-auth.form-field name="state" label="State" :required="true">
                 <select id="state" name="state" class="form-input-auth @error('state') border-red-500 @enderror">
                     <option value="">Select State</option>
@@ -61,7 +61,7 @@
                     @endforeach
                 </select>
             </x-auth.form-field>
-            <x-auth.form-field name="zip_code" label="Zip Code" placeholder="Zip code" :required="true" />
+            <x-auth.form-field name="zip_code" label="Zip Code" placeholder="Zip code" data-digits="10" inputmode="numeric" autocomplete="postal-code" :required="true" />
         </div>
 
         <button type="submit" class="btn-primary-auth" @disabled(! $signupOpen)>

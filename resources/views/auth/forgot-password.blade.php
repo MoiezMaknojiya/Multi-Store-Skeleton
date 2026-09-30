@@ -12,7 +12,7 @@
         @csrf
 
         <x-auth.form-field name="email" label="Email" type="email" placeholder="Enter your email"
-            autofocus autocomplete="username" :required="true" />
+            maxlength="255" autofocus autocomplete="username" :required="true" />
 
         <button type="submit" class="btn-primary-auth" dusk="forgot-password-submit">
             {{ __('Email Password Reset Link') }}

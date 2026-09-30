@@ -349,7 +349,9 @@ Route::middleware(['auth', 'verified', 'throttle:admin'])->group(function () {
         Route::get('/assets', [BuilderAssetController::class, 'index'])->middleware('can:ad-view')->name('builder.assets');
         Route::get('/assets/data', [BuilderAssetController::class, 'data'])->middleware('can:ad-view')->name('builder.assets.data');
         Route::post('/assets', [BuilderAssetController::class, 'store'])->middleware('can:ad-store')->name('builder.assets.store');
-        Route::delete('/assets/{asset}', [BuilderAssetController::class, 'destroy'])->whereNumber('asset')->middleware('can:ad-destroy')->name('builder.assets.destroy');
+        // A shop's own file with Delete Ads, a shared one with Delete Shared Assets: the gate lets either through
+        // and the controller asks the one the file needs.
+        Route::delete('/assets/{asset}', [BuilderAssetController::class, 'destroy'])->whereNumber('asset')->middleware('can:delete-builder-assets')->name('builder.assets.destroy');
 
         // The fonts the editor may set text in. Installing one fetches it from Google ONCE and
         // keeps it here, so a television with no internet still shows the right typeface.

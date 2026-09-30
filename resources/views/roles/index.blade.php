@@ -154,7 +154,7 @@
                 </div>
 
                 <x-crud.form-field label="Role name" field="name" :required="true">
-                    <x-text-input x-model="form.name" dusk="role-name" class="block w-full" autocomplete="off" placeholder="e.g. Shift supervisor" />
+                    <x-text-input x-model="form.name" dusk="role-name" class="block w-full" maxlength="255" autocomplete="off" placeholder="e.g. Shift supervisor" />
                 </x-crud.form-field>
 
                 @unless ($store)

@@ -72,11 +72,11 @@
                     x-text="editingItem ? 'Edit Permission' : 'Add Permission'"></h2>
                 <form @submit.prevent="saveItem" novalidate class="mt-4 space-y-4">
                     <x-crud.form-field label="Label (optional)" field="label">
-                        <x-text-input x-model="form.label" class="block w-full" placeholder="Human-readable name shown in the UI" autocomplete="off"
+                        <x-text-input x-model="form.label" class="block w-full" placeholder="Human-readable name shown in the UI" maxlength="255" autocomplete="off"
                             @input="restrictLabelInput($event)" @keydown="restrictLabelInput($event)" />
                     </x-crud.form-field>
                     <x-crud.form-field label="Permission Name" field="name" :required="true">
-                        <x-text-input x-model="form.name" class="block w-full" autocomplete="off" />
+                        <x-text-input x-model="form.name" class="block w-full" maxlength="255" autocomplete="off" />
                     </x-crud.form-field>
                     <x-crud.form-actions savingVar="saving" />
                 </form>

@@ -17,6 +17,12 @@ use Illuminate\Support\Facades\Storage;
  * 2026-09-17): the library is what a shop PLAYS, while this is raw material — a logo, a texture, a
  * background loop — that only means anything inside a design. Same store wall, same disk, its own folder
  * (`builder/{store}/assets/…`).
+ *
+ * An asset with no shop (`store_id` NULL, `builder/platform/assets/…`) is the platform's, shared with every shop
+ * (owner, 2026-09-29): every shop's designs may use it, it counts to no shop's 512 MB, and it is deleted with Delete
+ * Shared Assets — from every shop's shelf at once, and never while any shop's ad uses it.
+ *
+ * @property int|null $store_id
  */
 class BuilderAsset extends Model
 {
@@ -68,7 +74,7 @@ class BuilderAsset extends Model
      *
      * @param  array<string, mixed>  $stored  what storeBuilderAsset() returned
      */
-    public static function fromStoredFile(int $storeId, string $title, array $stored, ?int $createdBy): self
+    public static function fromStoredFile(?int $storeId, string $title, array $stored, ?int $createdBy): self
     {
         return static::create([
             'store_id' => $storeId,
@@ -86,7 +92,11 @@ class BuilderAsset extends Model
         ]);
     }
 
-    /** Above the stores every store's; inside a store its own; with no store selected, none. */
+    /**
+     * Above the stores every store's and the shared ones; inside a store its own and the shared ones; with no store
+     * selected, none. What may be DONE to one is the controller's to ask (a shared one is deleted with its own
+     * permission).
+     */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         if ($user->globalRole() !== null) {
@@ -95,7 +105,25 @@ class BuilderAsset extends Model
 
         $storeId = (int) session('current_store_id');
 
-        return $storeId > 0 ? $query->where('store_id', $storeId) : $query->whereRaw('0 = 1');
+        return $storeId > 0 ? $query->onShelfOf($storeId) : $query->whereRaw('0 = 1');
+    }
+
+    /** What a shop's designs may use: its own and what the platform shares with every shop. */
+    public function scopeOnShelfOf(Builder $query, int $storeId): Builder
+    {
+        return $query->where(fn (Builder $query) => $query->where('store_id', $storeId)->orWhereNull('store_id'));
+    }
+
+    /** What the platform shares with every shop. */
+    public function scopeShared(Builder $query): Builder
+    {
+        return $query->whereNull('store_id');
+    }
+
+    /** The platform's, shared with every shop — no shop's own. */
+    public function isShared(): bool
+    {
+        return $this->store_id === null;
     }
 
     public function store(): BelongsTo

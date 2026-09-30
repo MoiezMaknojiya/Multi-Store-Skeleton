@@ -77,7 +77,7 @@ export function registerStoresTable(Alpine) {
             async sendOwnerInvite() {
                 if (!this.ownerStore || this.invitingOwner) return;
 
-                const errors = validate({ email: this.ownerEmail }, { email: [required('Email'), emailFormat('Email')] });
+                const errors = validate({ email: this.ownerEmail }, { email: [required('Email'), emailFormat('Email'), maxLen('Email', 255)] });
                 if (Object.keys(errors).length) {
                     this.ownerErrors = errors;
                     return;
@@ -239,21 +239,6 @@ export function registerStoresTable(Alpine) {
                 return (store.ad_screens_count ?? 0) === (store.screens_count ?? 0)
                     ? 'badge-success'
                     : 'badge-warning';
-            },
-
-            /** Restricts the zip code input to digits only, max 10 characters */
-            restrictZipInput(event) {
-                if (event.type === 'keydown') {
-                    const key = event.key;
-                    if (event.ctrlKey || event.metaKey) return; // allow Ctrl/Cmd shortcuts (paste, etc.)
-                    const allowed = ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter',
-                        'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
-                    if (allowed.includes(key) || /^\d$/.test(key)) return;
-                    event.preventDefault();
-                    return;
-                }
-                const digits = event.target.value.replace(/\D/g, '').slice(0, 10);
-                if (this.form.zip_code !== digits) this.form.zip_code = digits;
             },
         },
     })());

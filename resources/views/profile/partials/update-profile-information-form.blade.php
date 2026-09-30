@@ -15,21 +15,16 @@
         @method('patch')
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <x-auth.form-field name="first_name" label="First Name" :required="true" :value="$user->first_name" autofocus autocomplete="given-name" />
+            <x-auth.form-field name="first_name" label="First Name" :required="true" :value="$user->first_name" maxlength="255" autofocus autocomplete="given-name" />
 
-            <x-auth.form-field name="last_name" label="Last Name" :required="true" :value="$user->last_name" autocomplete="family-name" />
+            <x-auth.form-field name="last_name" label="Last Name" :required="true" :value="$user->last_name" maxlength="255" autocomplete="family-name" />
         </div>
 
-        {{-- The phone reaches Alpine through Js::from, never inside hand-written quotes (an apostrophe or a
-             backslash would break the whole component), and only as one plain value: a flashed phone[]=x
-             is an array, and an array here was a 500 on the profile page. --}}
-        @php($phone = old('phone', $user->phone))
-        <div x-data="{ phone: {{ Js::from(is_scalar($phone) ? (string) $phone : '') }} }">
-            <x-auth.form-field name="phone" label="Phone (10 digits)" type="tel" :required="true" :value="$user->phone"
-                placeholder="1234567890" x-model="phone" x-on:input="phone = phone.replace(/\D/g, '').slice(0, 10)" />
-        </div>
+        {{-- Digits only, ten at most, like every phone field (resources/js/core/digits-only.js). --}}
+        <x-auth.form-field name="phone" label="Phone (10 digits)" type="tel" :required="true" :value="$user->phone"
+            placeholder="1234567890" data-digits="10" inputmode="numeric" autocomplete="tel-national" />
 
-        <x-auth.form-field name="email" label="Email" type="email" :required="true" :value="$user->email" autocomplete="username" />
+        <x-auth.form-field name="email" label="Email" type="email" :required="true" :value="$user->email" maxlength="255" autocomplete="username" />
 
         <div class="flex items-center gap-4">
             <x-primary-button>{{ __('Update') }}</x-primary-button>

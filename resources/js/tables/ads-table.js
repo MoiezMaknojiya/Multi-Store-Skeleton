@@ -24,6 +24,21 @@ export function registerAdsTable(Alpine) {
         },
 
         extraMethods: {
+            /** Sent here to start a new ad (/builder/create with no shape chosen): New ad's question, at once. */
+            onInit() {
+                const params = new URLSearchParams(window.location.search);
+
+                if (params.get('new') !== '1') return;
+
+                // Asked once: a refresh or the back button does not ask again.
+                params.delete('new');
+                const query = params.toString();
+                window.history.replaceState(window.history.state, '', window.location.pathname + (query ? `?${query}` : '') + window.location.hash);
+
+                // The dialog is on the page only for somebody who may create an ad.
+                this.$nextTick(() => this.$dispatch('open-modal', 'new-ad-orientation'));
+            },
+
             /* ── Listing filters ───────────────────────────────────────── */
             extraParams() {
                 return this.filterStore ? { store_id: this.filterStore } : {};

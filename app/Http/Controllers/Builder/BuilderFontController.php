@@ -68,7 +68,9 @@ class BuilderFontController extends Controller
         abort_unless($request->user()->canAny(['ad-store', 'ad-update']), 403);
 
         $validated = $request->validate([
-            'family' => ['bail', 'required', 'string', 'max:120'],
+            // No longer than an ad's text may name a font (BuilderAdRequest: `style.fontFamily` max:100), so a font
+            // installed here can always be saved in an ad.
+            'family' => ['bail', 'required', 'string', 'max:100'],
         ]);
 
         $existed = BuilderFont::where('family', $validated['family'])->exists();
