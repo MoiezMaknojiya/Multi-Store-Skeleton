@@ -29,7 +29,7 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 /**
- * The Ad Builder (docs/AD-BUILDER-SPEC.md): two tabs — Ads and Assets — around one editor that
+ * The Ad Builder (docs/AD-BUILDER-SPEC.md): two pages — Ads and Assets — around one editor that
  * draws an advert the shape of a television: 1920×1080, or 1080×1920 for one mounted upright (§12).
  *
  * An ad belongs to a store, like everything else a shop makes, and the platform works above them all:
@@ -42,7 +42,7 @@ class BuilderController extends Controller
 
     public function __construct(private readonly MediaStorage $storage, private readonly StoreStorage $quota) {}
 
-    /** The Ads tab: everything this person may open — and, above the stores, a filter by shop. */
+    /** The Ads page: everything this person may open — and, above the stores, a filter by shop. */
     public function index(): View
     {
         return view('builder.index', ['stores' => $this->storesToFilterBy()]);
@@ -95,7 +95,7 @@ class BuilderController extends Controller
         $orientation = $request->query('orientation');
 
         // Which way the screen is mounted comes first (docs/AD-BUILDER-SPEC.md §12): chosen once, fixed after.
-        // With no answer — none, a word nobody offers, or a list — the address goes to the Ads tab with New ad's
+        // With no answer — none, a word nobody offers, or a list — the address goes to the Ads page with New ad's
         // question open (there is no Create tab any more), so nobody reaches the editor without being asked.
         if (! in_array($orientation, [BuilderAd::LANDSCAPE, BuilderAd::PORTRAIT], true)) {
             return redirect()->route('builder.index', ['new' => 1]);

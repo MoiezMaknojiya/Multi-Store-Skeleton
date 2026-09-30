@@ -224,7 +224,7 @@ test('the preview keeps the store wall and asks for ad-view or ad-update', funct
 
 /* ── The platform's filter ───────────────────────────────────────────── */
 
-test('above the stores, the Ads and Assets tabs narrow to one shop', function () {
+test('above the stores, the Ads and Assets pages narrow to one shop', function () {
     $admin = createSuperAdmin();
     BuilderAd::factory()->create(['store_id' => $this->store->id, 'name' => 'Alpha ad']);
     BuilderAd::factory()->create(['store_id' => $this->other->id, 'name' => 'Beta ad']);

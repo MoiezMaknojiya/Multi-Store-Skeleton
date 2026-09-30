@@ -143,7 +143,7 @@
                 {{-- novalidate: the seconds field's own min and max would stop the save with the browser's bubble
                      before saveAd could say it under the field, as every form here does (validate.js). --}}
                 <form @submit.prevent="saveAd" novalidate dusk="channel-ad-form" class="mt-4 space-y-4">
-                    {{-- Where the file comes from: a question, then its answers drawn like the Ad Builder's tabs — the
+                    {{-- Where the file comes from: a question, then its answers drawn like the panel's tabs — the
                          dialog's one blue button stays Save. --}}
                     <div>
                         <p id="channel-ad-source-label" class="form-label">Where does the ad come from?</p>

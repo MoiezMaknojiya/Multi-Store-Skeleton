@@ -21,7 +21,7 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 /**
- * The Assets tab: everything the Builder's ads are made of (docs/AD-BUILDER-SPEC.md §3).
+ * The Assets page: everything the Builder's ads are made of (docs/AD-BUILDER-SPEC.md §3).
  *
  * Its own shelf, not the store's media library — the library is what a shop PLAYS, this is raw material
  * that only means something inside a design. Same store wall as everything else — and above it, the shelf the

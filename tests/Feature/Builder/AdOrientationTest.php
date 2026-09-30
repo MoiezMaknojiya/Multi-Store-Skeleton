@@ -48,7 +48,7 @@ function orientedDocument(string $orientation): array
 }
 
 test('a new ad asks which way the screen is mounted before the editor opens — then opens a stage of that shape', function () {
-    // No Create tab: an address with no shape goes to the Ads tab, whose New ad dialog offers both ways.
+    // No Create tab: an address with no shape goes to the Ads page, whose New ad dialog offers both ways.
     $this->get('/builder/create')->assertRedirect(route('builder.index', ['new' => 1]));
     $this->get(route('builder.index', ['new' => 1]))->assertOk()
         ->assertSee(route('builder.create', ['orientation' => 'landscape']), false)

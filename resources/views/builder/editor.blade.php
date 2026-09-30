@@ -1068,8 +1068,8 @@
                    x-text="choosesShop && !storeId
                        ? 'Choose the shop this ad is for first (at the top) — its pictures come from that shop’s shelf.'
                        : (assetPickerKind === 'video'
-                           ? 'No videos on the shelf yet — upload one on the Assets tab first.'
-                           : 'Nothing on the shelf yet — upload something on the Assets tab first.')"></p>
+                           ? 'No videos yet. Upload one on the Assets page first.'
+                           : 'No files yet. Upload one on the Assets page first.')"></p>
 
                 <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
                     <template x-for="asset in pickerAssets()" :key="asset.id">

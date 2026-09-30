@@ -94,7 +94,7 @@ class AdBuilderPermissionsTest extends DuskTestCase
             $browser->assertVisible('@ad-preview')
                 ->assertVisible('@ad-publish');
 
-            // The asset picker works as ever, but offers no road to the Assets tab, which is View Ads.
+            // The asset picker works as ever, but offers no road to the Assets page, which is View Ads.
             $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
             $browser->assertSeeIn('@asset-picker', 'Choose a picture or a video')
                 ->assertDontSeeIn('@asset-picker', 'Manage assets');

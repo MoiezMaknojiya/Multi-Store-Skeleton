@@ -48,7 +48,7 @@ function documentWithPicture(int $assetId): array
     return $document;
 }
 
-/** A file the platform shares with every shop, uploaded the way the Assets tab does with no shop chosen. */
+/** A file the platform shares with every shop, uploaded the way the Assets page does with no shop chosen. */
 function shareAFile(TestCase $test, string $name = 'brand-logo.png'): BuilderAsset
 {
     $test->actingAs(createSuperAdmin())->withSession([]);

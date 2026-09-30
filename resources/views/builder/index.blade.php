@@ -5,8 +5,6 @@
 
     <div x-data="adsTable()" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        <x-builder-tabs active="ads" />
-
         {{-- The shop list (above the stores; a store sees its own only), the search and New ad on one line. --}}
         <div class="flex flex-wrap items-center justify-end gap-3">
             <div class="flex w-full flex-wrap items-center gap-3 sm:w-auto">

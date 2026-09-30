@@ -1,5 +1,5 @@
 /**
- * The Assets tab of the Ad Builder: the shelf of pictures and videos the designs are made of.
+ * The Assets page of the Ad Builder: the shelf of pictures and videos the designs are made of.
  *
  * Uploading is the shared uploader's (<x-upload-dropzone>, docs/UPLOADS-SPEC.md): it sends each file in chunks,
  * measures a video in the browser and puts each on the shelf as it arrives — this page only refreshes its list and

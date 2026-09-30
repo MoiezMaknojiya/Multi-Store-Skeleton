@@ -94,7 +94,7 @@ channel_ads
   `store_id IS NULL`, which is what a plain `where('store_id', $storeId)` already does.
 - `PlaylistController::assertMediaBelongsToTheSameStore` is unchanged and therefore already refuses a
   platform row on a screen: the walls hold without a new rule.
-- The platform's Media page gets the chooser the Ad Builder's Assets tab has: **Platform** (the default) or
+- The platform's Media page gets the chooser the Ad Builder's Assets page has: **Platform** (the default) or
   one shop. It decides both what the listing shows and where an upload lands. A shop's Media page has no
   chooser and no way to reach the platform's rows.
 
@@ -111,7 +111,7 @@ channel_ads
 - `media_id` is validated `['bail','integer','min:1']` and then resolved against the channel's own wall: a
   shop's channel takes that shop's rows, the platform's channel takes any shop's **or** the platform's own —
   anything else is a 422, never a 404-shaped guess at another shop's ids.
-- The pickers for a platform channel ask which shop first (or Platform), exactly like the Assets tab.
+- The pickers for a platform channel ask which shop first (or Platform), exactly like the Assets page.
 
 ---
 

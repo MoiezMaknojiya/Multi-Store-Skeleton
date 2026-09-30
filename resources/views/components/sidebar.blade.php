@@ -92,13 +92,18 @@
             icon="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
         @endcan
 
-        {{-- The Ad Builder: design a 1920×1080 advert, publish it, and it joins the media a playlist plays. --}}
+        {{-- The Ad Builder: design a 1920×1080 advert, publish it, and it joins the media a playlist plays. Its row
+             opens the ads; Assets — the pictures and videos the ads are made of — is its sub-link, as Roles is under
+             Users (owner, 2026-09-30: no tabs inside the pages). Both pages ask for View Ads, as their routes do. --}}
         @can('ad-view')
-        <x-sidebar.nav-item
+        <x-sidebar.nav-group
             href="{{ route('builder.index') }}"
-            routeMatch="builder.*"
+            routeMatch="builder.index"
+            :expand="['builder.assets']"
             label="Ad Builder"
-            icon="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            icon="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z">
+            <x-sidebar.nav-subitem href="{{ route('builder.assets') }}" routeMatch="builder.assets" label="Assets" />
+        </x-sidebar.nav-group>
         @endcan
 
         @unless ($__onPlatform)

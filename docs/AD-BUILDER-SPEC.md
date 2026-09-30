@@ -124,7 +124,7 @@ shape as a role that somebody still holds).
 
 **The shared shelf** (owner, 2026-09-29: "mujhe sub store k liya upload karna ho toh takay woo mere asset ko use
 kar sake aur agar permission du toh woo delete bhi kar sake"). An asset with no shop — `builder_assets.store_id`
-NULL, under `builder/platform/assets/` — is the platform's, shared with every shop. Above the stores the Assets tab's
+NULL, under `builder/platform/assets/` — is the platform's, shared with every shop. Above the stores the Assets page's
 Shop list offers All shops and each shop: an upload with a shop chosen is that shop's, and with All shops it is shared
 (the page says which under its note; owner, 2026-09-30: "all shop ka option araha ha toh shared with everyone q araha
 ha" — one option, not two saying the same). Every shop's shelf lists the shared files beside its own,
@@ -162,7 +162,7 @@ hand-written gate) and the controller the one the file needs, and each row says 
 
 ## 5. Routes
 
-Inside the `['auth', 'throttle:admin']` group, sidebar item **Ad Builder** (gated `@can('ad-view')`):
+Inside the `['auth', 'throttle:admin']` group, sidebar group **Ad Builder** (gated `@can('ad-view')`): its row opens the ads (`/builder`) and its sub-link **Assets** the shelf (`/builder/assets`), as Roles sits under Users — there are no tabs inside the pages (owner, 2026-09-30):
 
 | Method | URI | Name | Gate |
 | --- | --- | --- | --- |
@@ -550,8 +550,8 @@ store wall) answers the page the compiler would publish, from the SAVED design, 
 with `Content-Security-Policy: sandbox allow-scripts` (it runs in an opaque origin, as the player's frame does on a set no worker keeps — §15)
 and `Cache-Control: no-store, private`. Nothing is written.
 
-**Platform listing.** Above the stores, the Ads and Assets tabs gain a shop filter (`?store_id=`); inside a
-store it is not offered, and sending it cannot widen what `visibleTo` allows. On the Assets tab the same Shop
+**Platform listing.** Above the stores, the Ads and Assets pages gain a shop filter (`?store_id=`); inside a
+store it is not offered, and sending it cannot widen what `visibleTo` allows. On the Assets page the same Shop
 list says where a platform upload goes: the page sends it as `store_id`, and with no shop chosen, or one that
 does not exist, the upload answers 422 on `file` ("Choose the shop in the Shop list first…"). A store's person
 always uploads to the store they work in; a `store_id` they send is not read.
@@ -655,7 +655,7 @@ shapes a television can be, and nothing else (no free sizes: a design for a size
 A portrait ad is what a menu board, a poster or a one-column price list wants.
 
 **Chosen when the ad is made, fixed afterwards** (owner: "ads banate waqt fix rakho… starting mein hi poch
-lo"). **New ad** on the Ads tab opens a chooser (`new-ad-orientation` modal; the empty gallery's "Build your
+lo"). **New ad** on the Ads page opens a chooser (`new-ad-orientation` modal; the empty gallery's "Build your
 first one" opens the same). There is no Create tab (owner, 2026-09-29: "Ads k tab k ander already create ads ka
 button ha"): `/builder/create` with no orientation — or one nobody offers, or a list — goes to `/builder?new=1`,
 which opens the same chooser at once and then drops `new` from the address, so nobody reaches the editor without
@@ -697,7 +697,7 @@ brought onto it together, as near to where they were as fits (`bringOntoStage`);
 stays where it is, since a design may bleed off an edge on purpose.
 
 **Posters.** The editor captures the stage at its own size, 640 px along the longer edge (`poster.js`), so a
-portrait poster is 360 × 640; the Ads tab keeps its 16:9 tiles and draws a portrait poster inside one, whole
+portrait poster is 360 × 640; the Ads page keeps its 16:9 tiles and draws a portrait poster inside one, whole
 (`object-contain`), with a **Portrait** badge on the tile.
 
 **Not changed.** The device manifest (the page fits itself, so `{type: 'html', url, checksum}` is still all a

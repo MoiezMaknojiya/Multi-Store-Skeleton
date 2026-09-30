@@ -44,8 +44,11 @@ function adDocument(string $text = 'Winter sale'): array
     ];
 }
 
-test('the two tabs and a new ad open for somebody who may see ads, and are shut to everybody else', function () {
-    $this->get('/builder')->assertOk()->assertSee('Ad Builder')->assertDontSee('dusk="builder-tab-create"', false);
+test('the two pages and a new ad open for somebody who may see ads, and are shut to everybody else', function () {
+    // No tabs inside the page: the sidebar's Ad Builder opens the ads, and Assets is its sub-link.
+    $this->get('/builder')->assertOk()->assertSee('Ad Builder')
+        ->assertDontSee('dusk="builder-tabs"', false)
+        ->assertSee('href="'.route('builder.assets').'"', false);
     $this->get('/builder/create')->assertRedirect(route('builder.index', ['new' => 1]));
     $this->get('/builder/create?orientation=landscape')->assertOk();
     $this->get('/builder/assets')->assertOk();

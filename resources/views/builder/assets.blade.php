@@ -1,11 +1,10 @@
 <x-app-layout>
+    {{-- Reached from the sidebar, under Ad Builder: the page is named for what it holds. --}}
     <x-slot name="header">
-        <h1 class="page-title">{{ __('Ad Builder') }}</h1>
+        <h1 class="page-title">{{ __('Assets') }}</h1>
     </x-slot>
 
     <div x-data="builderAssetsTable()" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-
-        <x-builder-tabs active="assets" />
 
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex flex-wrap items-center gap-3">

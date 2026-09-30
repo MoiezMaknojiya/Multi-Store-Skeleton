@@ -41,16 +41,16 @@ class AdBuilderFlowTest extends DuskTestCase
             $browser->loginAs($designer);
             $this->switchToStore($browser, $store);
 
-            /* ── 1. The section, and its two tabs (no Create: New ad is the way in) ─ */
+            /* ── 1. The section: its ads, and Assets beside them in the sidebar ─ */
             $browser->visit('/builder');
             $this->waitForAlpine($browser);
-            $browser->waitFor('@builder-tabs')
-                ->assertMissing('@builder-tab-create')
-                ->assertVisible('@builder-tab-ads')
-                ->assertVisible('@builder-tab-assets')
-                ->waitFor('@ads-empty');
+            // No tabs inside the page (owner, 2026-09-30): Ad Builder's own row opens the ads, and Assets is its
+            // sub-link in the sidebar, shown under it while the ads are open.
+            $browser->waitFor('@ads-empty')
+                ->assertMissing('@builder-tabs')
+                ->assertVisible('#main-sidebar a[href$="/builder/assets"]');
 
-            // An old address for a new ad lands on the Ads tab with New ad's question open, and asks only once.
+            // An old address for a new ad lands on the Ads page with New ad's question open, and asks only once.
             $browser->visit('/builder/create');
             $this->waitForAlpine($browser);
             $browser->waitFor('@new-ad-landscape')->assertVisible('@new-ad-portrait');

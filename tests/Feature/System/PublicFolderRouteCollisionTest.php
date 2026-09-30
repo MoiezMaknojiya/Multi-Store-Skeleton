@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Route;
 |
 | The web server hands a request to Laravel only when no FILE or FOLDER of that name exists in public/ —
 | Apache's rewrite rule says `!-d`, and `php artisan serve` does the same. The Ad Builder's runtime once
-| lived in public/builder/, and from that moment `/builder` (the Ads tab) and `POST /builder` (saving a
+| lived in public/builder/, and from that moment `/builder` (the Ads page) and `POST /builder` (saving a
 | new ad) answered with the folder instead of the app: a 404 under `php artisan serve`, a directory
 | listing or a 403 under Apache — while every feature test, which never goes through a web server,
 | still passed. Only a browser test caught it.

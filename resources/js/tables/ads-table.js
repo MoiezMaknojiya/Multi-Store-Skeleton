@@ -1,5 +1,5 @@
 /**
- * The Ads tab of the Ad Builder: a gallery of saved designs.
+ * The Ads page of the Ad Builder: a gallery of saved designs.
  *
  * Unlike the other listings there is no form modal — an ad is made in the editor, not in a dialog — so
  * this adds only the two row actions the gallery offers beside Edit: Copy (a draft to work from) and
