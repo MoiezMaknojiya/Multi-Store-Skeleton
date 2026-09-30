@@ -6,28 +6,18 @@
     {{-- Js::from, not @json: @json leaves its quotes raw and the first string would
          close this attribute (see .claude/rules/02-project-conventions.md). --}}
     <div x-data="campaignsTable({{ Js::from([
-            'breakEverySeconds' => $breakEverySeconds,
             'maxBreakSeconds' => $maxBreakSeconds,
          ]) }})"
          x-on:modal-closing.window="onModalClosing($event)"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        <div class="flex flex-wrap items-center gap-3">
-            <x-crud.add-button label="Add Campaign" @click="openCampaignModal()" dusk="add-campaign" />
-
-            {{-- The two facts that govern everything on this page, stated once. --}}
-            <p class="max-w-3xl text-sm text-gray-500 dark:text-gray-400">
-                {{-- In seconds below a minute (a browser test turns it right down), in minutes above. --}}
-                One advert break every <span class="font-medium" x-text="breakEverySeconds < 60
-                    ? breakEverySeconds + (breakEverySeconds === 1 ? ' second' : ' seconds')
-                    : Math.round(breakEverySeconds / 60) + (Math.round(breakEverySeconds / 60) === 1 ? ' minute' : ' minutes')"></span>,
-                up to <span class="font-medium" x-text="maxBreakSeconds"></span> seconds long.
-                The shop's own content pauses and carries on afterwards.
-            </p>
-        </div>
-
-        <x-crud.table-wrapper title="All Campaigns" searchPlaceholder="Search by campaign or advertiser..." :columns="6"
-            description="Adverts from paying advertisers. They play in ad breaks on the screens of shops that carry adverts.">
+        {{-- The two facts that govern the page, in one line under its title (in seconds below a minute — a browser
+             test turns it right down — in minutes above); Add Campaign beside the search. --}}
+        <x-crud.table-wrapper title="All Campaigns" searchPlaceholder="Search campaigns..." :columns="6"
+            :description="'One advert break every '.\App\Rules\VideoLength::inWords($breakEverySeconds).', up to '.$maxBreakSeconds.' seconds long.'">
+            <x-slot name="actions">
+                <x-crud.add-button label="Add Campaign" @click="openCampaignModal()" dusk="add-campaign" />
+            </x-slot>
             <x-slot name="head">
                 <th class="px-5 py-3 text-left font-semibold">Campaign</th>
                 <th class="px-5 py-3 text-left font-semibold">Runs</th>
@@ -38,12 +28,7 @@
             </x-slot>
 
             <x-slot name="body">
-                <x-crud.table-empty :columns="6" itemsVar="items" message="No campaigns yet."
-                    hint="Add a campaign with the advertiser's picture or video, its dates and the screens it plays on.">
-                    <x-slot name="action">
-                        <x-crud.add-button label="Add Campaign" @click="openCampaignModal()" dusk="empty-add-campaign" />
-                    </x-slot>
-                </x-crud.table-empty>
+                <x-crud.table-empty :columns="6" itemsVar="items" message="No campaigns yet." />
 
                 <template x-for="item in items" :key="item.id">
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -153,7 +138,7 @@
                                 :max-video-seconds="\App\Models\Campaign::MAX_AD_SECONDS" video-noun="An advert"
                                 hint="JPG, PNG, GIF, WEBP, MP4 or WEBM — up to 250 MB, 60 seconds at most." />
                         </x-crud.form-field>
-                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Adverts play with no sound.</p>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Adverts play muted.</p>
 
                         {{-- Editing: the advert it plays now, which stays unless another file is chosen. --}}
                         <div x-show="editingItem && !picked" x-cloak class="mt-3 flex items-center gap-3" dusk="campaign-current-advert">
@@ -163,7 +148,7 @@
                                 </template>
                             </div>
                             <p class="text-sm text-gray-600 dark:text-gray-300"
-                               x-text="'It plays its current ' + (editingItem?.type === 'video' ? 'video' : 'picture') + ' until you choose another file.'"></p>
+                               x-text="'Current ' + (editingItem?.type === 'video' ? 'video' : 'picture') + '. Choose a file to replace it.'"></p>
                         </div>
                     </div>
 
@@ -208,8 +193,7 @@
                             </x-crud.form-field>
                         </div>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            Leave both blank to run all day. Each screen reads these on its own clock, and an
-                            end <span class="font-semibold">earlier</span> than the start runs past midnight.
+                            Leave both empty to run all day. An end before the start runs past midnight.
                         </p>
                     </div>
 
@@ -285,7 +269,7 @@
                         <input type="checkbox" x-model="form.is_active" id="campaign_is_active"
                                dusk="campaign-active" class="form-checkbox mt-0.5">
                         <label for="campaign_is_active" class="text-sm text-gray-700 dark:text-gray-300">
-                            Active &mdash; running on the screens chosen above. Untick it to pause the campaign.
+                            Active &mdash; running on the screens chosen above
                         </label>
                     </div>
 

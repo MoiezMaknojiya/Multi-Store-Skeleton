@@ -1,6 +1,7 @@
 @props(['placeholder' => 'Search...'])
 
-<div class="relative w-full max-w-xs">
+{{-- It grows to fill a phone's line beside a button, and is 16rem from 640 px up. --}}
+<div class="relative min-w-40 flex-1 sm:w-64 sm:flex-none">
     <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
         <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

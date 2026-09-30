@@ -385,6 +385,47 @@
     background-repeat: no-repeat;
 }
 
+/* ── Tabs ─────────────────────────────────────────────────────────────────
+   One look for every row of tabs (Settings, the Ad Builder, Members, a channel ad's source): grey, then blue and
+   underlined when it is the one open — which the page says with aria-current, a tab list with aria-selected and a
+   choice of ways with aria-pressed. The colours are on the tab itself, never only in an Alpine binding: before
+   Alpine starts, a border with no colour of its own is drawn in the text's colour, and the row flashed black. The
+   open tab keeps its colour under the mouse (its rule comes after the hover's). */
+@utility tab-link {
+    @apply -mb-px whitespace-nowrap border-b-2 border-transparent px-1 pb-3 text-sm font-medium transition-colors
+           focus:outline-none focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-blue-500;
+    color: var(--color-gray-500);
+
+    &:hover {
+        border-color: var(--color-gray-300);
+        color: var(--color-gray-700);
+    }
+    &[aria-current="page"], &[aria-selected="true"], &[aria-pressed="true"] {
+        border-color: var(--color-blue-600);
+        color: var(--color-blue-600);
+    }
+    &:where(.dark, .dark *) {
+        color: var(--color-gray-400);
+    }
+    &:where(.dark, .dark *):hover {
+        border-color: var(--color-gray-600);
+        color: var(--color-gray-200);
+    }
+    &:where(.dark, .dark *)[aria-current="page"], &:where(.dark, .dark *)[aria-selected="true"], &:where(.dark, .dark *)[aria-pressed="true"] {
+        border-color: var(--color-blue-400);
+        color: var(--color-blue-400);
+    }
+}
+
+/* A choice drawn as a box around its radio (a new role's Store role / Platform role): blue while its radio is
+   checked, read from the radio itself (:has), so it is right before Alpine starts and needs no binding. */
+@utility role-choice {
+    @apply flex cursor-pointer items-start gap-3 rounded-md border border-gray-200 px-3 py-2.5
+           focus-within:ring-2 focus-within:ring-blue-500
+           has-checked:border-blue-500 has-checked:bg-blue-50
+           dark:border-gray-600 dark:has-checked:border-blue-400 dark:has-checked:bg-blue-900/20;
+}
+
 /* ── Page headings ────────────────────────────────────────────────────────
    One look for every page's title: the panel's (in the header bar) and the sign-in pages' (on their card). */
 @utility page-title {

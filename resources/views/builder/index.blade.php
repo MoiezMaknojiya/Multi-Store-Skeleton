@@ -7,22 +7,9 @@
 
         <x-builder-tabs active="ads" />
 
-        <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="flex flex-wrap items-center gap-3">
-                @can('ad-store')
-                    {{-- An ad's shape is chosen before the editor opens and fixed after (docs/AD-BUILDER-SPEC.md
-                         §12), so New ad asks first. --}}
-                    <x-crud.add-button label="New ad" dusk="new-ad" @click="$dispatch('open-modal', 'new-ad-orientation')" />
-                @endcan
-
-                <p class="max-w-2xl text-sm text-gray-500 dark:text-gray-400" dusk="ads-scope-note">
-                    An ad is the size of a television — 1920 × 1080, or 1080 × 1920 for a screen mounted upright.
-                    Publish one and it joins the media a playlist can play.
-                </p>
-            </div>
-
-            <div class="flex flex-wrap items-center gap-3">
-                {{-- Above the stores the gallery can be narrowed to one shop; a store sees its own only. --}}
+        {{-- The shop list (above the stores; a store sees its own only), the search and New ad on one line. --}}
+        <div class="flex flex-wrap items-center justify-end gap-3">
+            <div class="flex w-full flex-wrap items-center gap-3 sm:w-auto">
                 @if ($stores !== [])
                     <select x-model="filterStore" @change="applyFilters()" class="form-select sm:w-44"
                             dusk="ads-filter-store" aria-label="Shop">
@@ -34,6 +21,12 @@
                 @endif
 
                 <x-crud.search-input placeholder="Search ads..." />
+
+                @can('ad-store')
+                    {{-- An ad's shape is chosen before the editor opens and fixed after (docs/AD-BUILDER-SPEC.md
+                         §12), so New ad asks first. --}}
+                    <x-crud.add-button label="New ad" dusk="new-ad" @click="$dispatch('open-modal', 'new-ad-orientation')" />
+                @endcan
             </div>
         </div>
 
@@ -69,16 +62,8 @@
                 </template>
 
                 <template x-if="!loading && items.length === 0 && !loadFailed && !search && !filterStore">
-                    <div class="mx-auto max-w-md space-y-2 py-12 text-center" dusk="ads-empty">
+                    <div class="mx-auto max-w-md py-12 text-center" dusk="ads-empty">
                         <p class="text-sm font-medium text-gray-700 dark:text-gray-200">No ads yet.</p>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">
-                            Put pictures, words and video on a television-sized stage, then publish the ad to play it on your screens.
-                        </p>
-                        @can('ad-store')
-                            <div class="flex justify-center pt-2">
-                                <x-crud.add-button label="Build your first ad" dusk="new-ad-empty" @click="$dispatch('open-modal', 'new-ad-orientation')" />
-                            </div>
-                        @endcan
                     </div>
                 </template>
 

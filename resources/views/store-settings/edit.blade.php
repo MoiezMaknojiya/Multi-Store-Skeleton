@@ -118,7 +118,7 @@
                         <div>
                             <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ __('Create store') }}</h2>
                             <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                                You will be the Owner of the new store. Switch to it from the store menu to set it up.
+                                You'll be its Owner.
                             </p>
                         </div>
 

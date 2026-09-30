@@ -12,13 +12,9 @@
 <nav class="flex gap-6 border-b border-gray-200 dark:border-gray-700" aria-label="Ad Builder" dusk="builder-tabs">
     @foreach ($__tabs as $key => $tab)
         @can($tab['can'])
-            <a href="{{ route($tab['route']) }}" dusk="builder-tab-{{ $key }}"
-               @if ($active === $key) aria-current="page" @endif
-               @class([
-                   '-mb-px border-b-2 px-1 pb-3 text-sm font-medium transition-colors',
-                   'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400' => $active === $key,
-                   'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200' => $active !== $key,
-               ])>{{ $tab['label'] }}</a>
+            {{-- The open tab is the one with aria-current; tab-link colours it (app.css). --}}
+            <a href="{{ route($tab['route']) }}" dusk="builder-tab-{{ $key }}" class="tab-link"
+               @if ($active === $key) aria-current="page" @endif>{{ $tab['label'] }}</a>
         @endcan
     @endforeach
 </nav>

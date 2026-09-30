@@ -3,7 +3,7 @@
 
     <div class="mb-4">
         <p class="text-sm text-gray-500 dark:text-gray-400">
-            You belong to more than one store. Choose the one you want to work in.
+            Choose the store you want to work in.
         </p>
     </div>
 

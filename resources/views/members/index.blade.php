@@ -8,26 +8,19 @@
     <div x-data="membersPage({{ Js::from(['storeName' => $store->name]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        {{-- The team's one action on top; leaving — the person's own step — is at the foot of the page. --}}
-        @can('member-invite')
-        <div class="flex flex-wrap items-center gap-3">
-            <x-crud.add-button label="Invite member" @click="openInvite()" dusk="invite-member" />
-        </div>
-        @endcan
-
+        {{-- Invite stands on each list's header line (beside the members' search); leaving — the person's own step —
+             is at the foot of the page. --}}
         {{-- Tabs: a tab list with its two panels, so a screen reader says "tab, 1 of 2" and which list is open. --}}
         <div class="border-b border-gray-200 dark:border-gray-700">
             <div class="-mb-px flex gap-6" role="tablist" aria-label="Team">
-                <button type="button" role="tab" id="tab-members" aria-controls="panel-members" dusk="tab-members"
-                    x-on:click="tab = 'members'" :aria-selected="tab === 'members'"
-                    :class="tab === 'members' ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
-                    class="whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium">
+                {{-- The open tab is the one with aria-selected, written as the page opens (Members) so the row is
+                     right before Alpine starts; tab-link colours it (app.css). --}}
+                <button type="button" role="tab" id="tab-members" aria-controls="panel-members" dusk="tab-members" class="tab-link"
+                    x-on:click="tab = 'members'" aria-selected="true" :aria-selected="tab === 'members' ? 'true' : 'false'">
                     Members <span class="ml-1 badge-neutral" x-text="members.length"></span>
                 </button>
-                <button type="button" role="tab" id="tab-invitations" aria-controls="panel-invitations" dusk="tab-invitations"
-                    x-on:click="tab = 'invitations'" :aria-selected="tab === 'invitations'"
-                    :class="tab === 'invitations' ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
-                    class="whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium">
+                <button type="button" role="tab" id="tab-invitations" aria-controls="panel-invitations" dusk="tab-invitations" class="tab-link"
+                    x-on:click="tab = 'invitations'" aria-selected="false" :aria-selected="tab === 'invitations' ? 'true' : 'false'">
                     Pending invitations <span class="ml-1 badge-neutral" x-text="invitations.length"></span>
                 </button>
             </div>
@@ -36,11 +29,13 @@
         {{-- Members --}}
         <div x-show="tab === 'members'" class="card" id="panel-members" role="tabpanel" aria-labelledby="tab-members" dusk="members-table">
             <div class="card-header">
-                <div class="min-w-0">
-                    <h2 class="text-subheading">Team of {{ $store->name }}</h2>
-                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Everyone who can work in this store.</p>
+                <h2 class="text-subheading min-w-0">Team of {{ $store->name }}</h2>
+                <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap sm:justify-end">
+                    <x-crud.search-input placeholder="Search by name or email" />
+                    @can('member-invite')
+                        <x-crud.add-button label="Invite member" @click="openInvite()" dusk="invite-member" />
+                    @endcan
                 </div>
-                <x-crud.search-input placeholder="Search by name or email" />
             </div>
             <div class="overflow-x-auto">
                 <table class="table-base">
@@ -114,8 +109,11 @@
             <div class="card-header">
                 <div class="min-w-0">
                     <h2 class="text-subheading">Pending invitations</h2>
-                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Links are valid for {{ \App\Models\Invitation::LIFETIME_DAYS }} days. Resending sends a new link.</p>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Links last {{ \App\Models\Invitation::LIFETIME_DAYS }} days.</p>
                 </div>
+                @can('member-invite')
+                    <x-crud.add-button label="Invite member" @click="openInvite()" dusk="invite-member-invitations" />
+                @endcan
             </div>
             <div class="overflow-x-auto">
                 <table class="table-base">
@@ -137,15 +135,7 @@
                         <template x-if="!loading && invitations.length === 0">
                             <tr>
                                 <td colspan="5" class="px-5 py-10 text-center">
-                                    <div class="mx-auto max-w-md space-y-2">
-                                        <p class="text-sm font-medium text-gray-700 dark:text-gray-200">No invitations are waiting.</p>
-                                        @can('member-invite')
-                                        <p class="text-sm text-gray-500 dark:text-gray-400">An invitation is an email with a link to join {{ $store->name }}.</p>
-                                        <div class="flex justify-center pt-2">
-                                            <x-crud.add-button label="Invite someone" x-on:click="openInvite()" dusk="invite-member-empty" />
-                                        </div>
-                                        @endcan
-                                    </div>
+                                    <p class="text-sm font-medium text-gray-700 dark:text-gray-200" dusk="invitations-empty">No invitations are waiting.</p>
                                 </td>
                             </tr>
                         </template>
@@ -187,7 +177,7 @@
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Invite a member</h2>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        They'll get an email with a link to join {{ $store->name }}. The link works for {{ \App\Models\Invitation::LIFETIME_DAYS }} days.
+                        They'll get an email with a link to join {{ $store->name }}.
                     </p>
                 </div>
 
@@ -237,8 +227,7 @@
             <form @submit.prevent="removeMember()" class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Remove <span x-text="selectedMember?.name"></span>?</h2>
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                    They lose access to {{ $store->name }} straight away. Their account is not deleted, and everything they
-                    added here — media, screens, playlists — stays with the store.
+                    They lose access to {{ $store->name }} at once. Their account and what they added stay.
                 </p>
 
                 {{-- They can be invited back, so it asks only that it is you. --}}
@@ -277,7 +266,7 @@
             <div class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Leave {{ $store->name }}?</h2>
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                    You lose access to this store straight away. To come back, someone in the store has to invite you again.
+                    You lose access at once. To come back, someone must invite you again.
                 </p>
                 <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'leave-store')">Cancel</x-secondary-button>
@@ -296,7 +285,7 @@
                 <div class="min-w-0">
                     <h2 class="text-subheading">Leave {{ $store->name }}</h2>
                     <p class="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
-                        You lose access at once. To come back, someone in the store has to invite you again.
+                        You lose access at once.
                     </p>
                 </div>
                 <button type="button" class="btn-secondary" dusk="leave-store"

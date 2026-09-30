@@ -1,10 +1,11 @@
 {{-- Full data table wrapper: title bar with search, table with head/body slots, pagination footer slot.
-     The title is the page's section heading (h2 under the page's h1), and `description`, when given, says in one
-     line what the list is for — the first thing a new person reads on the page. --}}
+     The title is the page's section heading (h2 under the page's h1); `description`, when a list needs one, is one
+     short line under it. The list's own buttons (`actions`: Add Screen, Upload Files…) stand on the search's line —
+     one row for both, and the only place the page offers them. --}}
 @props(['title', 'searchPlaceholder' => 'Search...', 'columns' => 2, 'description' => null])
 
 <div class="card" data-list-card>
-    {{-- Header row with title and search --}}
+    {{-- Header row: the title, then the search and the list's buttons --}}
     <div class="card-header">
         <div class="min-w-0">
             <h2 class="text-subheading">{{ $title }}</h2>
@@ -12,7 +13,11 @@
                 <p class="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">{{ $description }}</p>
             @endif
         </div>
-        <x-crud.search-input :placeholder="$searchPlaceholder" />
+        {{-- On a phone the line wraps before a button would be squeezed. --}}
+        <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap sm:justify-end">
+            <x-crud.search-input :placeholder="$searchPlaceholder" />
+            {{ $actions ?? '' }}
+        </div>
     </div>
 
     {{-- Table with loading/empty state built in --}}

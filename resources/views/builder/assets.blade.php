@@ -10,15 +10,12 @@
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex flex-wrap items-center gap-3">
                 <p class="max-w-3xl text-sm text-gray-500 dark:text-gray-400" dusk="assets-scope-note">
-                    Pictures and videos used inside ads. A video is 30 seconds at most, and it repeats for as long as
-                    the ad is on screen. Separate from the media library, which is what your screens play.
+                    Pictures and videos for your ads.
                     @if ($aboveTheStores)
                         {{-- Where an upload goes, as the Shop list stands (owner, 2026-09-29: an upload for every shop). --}}
                         <span x-text="filterStore
-                            ? 'An upload goes to the shop chosen in the Shop list, for its ads alone.'
-                            : 'An upload is shared with every shop: each shop can use it in its ads.'" dusk="assets-upload-target"></span>
-                    @else
-                        Files marked "From the platform" are shared with every shop to use in its ads.
+                            ? 'Uploads go to the shop chosen in the list.'
+                            : 'Uploads are shared with every shop.'" dusk="assets-upload-target">Uploads are shared with every shop.</span>
                     @endif
                 </p>
             </div>
@@ -50,7 +47,7 @@
                 <x-upload-dropzone purpose="asset" mode="add" :multiple="true" add-url="/builder/assets" dusk="asset"
                     :max-video-seconds="\App\Models\BuilderAsset::MAX_VIDEO_SECONDS"
                     context="{ store: filterStore || null, fields: filterStore ? { store_id: filterStore } : {}, storage: storage }"
-                    hint="Pictures (JPG, PNG, GIF, WEBP) and videos (MP4, WEBM), up to 250 MB each. A video is 30 seconds at most." />
+                    hint="JPG, PNG, GIF, WEBP, MP4 or WEBM, up to 250 MB each. Videos up to 30 seconds." />
             </div>
         @endcan
 
@@ -79,7 +76,7 @@
 
                 <template x-if="!loading && items.length === 0 && !loadFailed && !search">
                     <p class="py-16 text-center text-sm text-gray-500 dark:text-gray-400" dusk="assets-empty">
-                        Nothing on the shelf yet. Upload a picture or a video to use it in an ad.
+                        No files yet.
                     </p>
                 </template>
 

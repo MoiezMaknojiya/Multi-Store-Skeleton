@@ -88,8 +88,7 @@
             </svg>
             <h1 class="mt-4 text-lg font-semibold text-gray-900 dark:text-white">The Ad Builder needs a wider screen</h1>
             <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                Open it on a computer, or turn your tablet sideways. Everything else — your ads, the library and
-                your screens — works here as usual.
+                Open it on a computer, or turn your tablet sideways.
             </p>
             @can('ad-view')
                 <a href="{{ route('builder.index') }}" class="btn-primary mt-5">Back to Ads</a>
@@ -314,7 +313,7 @@
                                 <span>
                                     <span class="block text-sm text-gray-800 dark:text-gray-100">Show in playlists</span>
                                     <span class="block text-xs text-gray-500 dark:text-gray-400">
-                                        A screen can add it to its own playlist. Leave it off for an ad that only runs inside a channel.
+                                        A screen can add it to its own playlist.
                                     </span>
                                 </span>
                             </label>
@@ -689,7 +688,7 @@
                                         <span x-text="countInside(selected) === 1 ? 'element' : 'elements'"></span> in this group
                                     </p>
                                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                        Double-click the group (or press Enter) to change what is inside; Esc comes back out.
+                                        Double-click or press Enter to edit inside it. Esc comes back out.
                                     </p>
                                     <button type="button" class="btn-secondary mt-2 w-full" @click="ungroupSelection()"
                                             title="Ungroup (Ctrl+Shift+G)" dusk="ungroup">Ungroup</button>
@@ -957,11 +956,6 @@
 
                         {{-- ── Animation ─────────────────────────────────── --}}
                         <div x-show="panelTab === 'animation'" x-cloak class="space-y-3" dusk="animation-panel">
-                            <p class="text-xs text-gray-500 dark:text-gray-400">
-                                Animations start when the ad comes on screen and never depend on how long a playlist
-                                shows it: a loop simply keeps going until the next item.
-                            </p>
-
                             <button type="button" class="btn-secondary w-full"
                                     x-bind:disabled="!animates(selected)"
                                     @click="previewing === 'element' ? stopPreview() : previewElement(selected)" dusk="anim-preview">
@@ -1012,8 +1006,7 @@
                 </div>
 
                 <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    A font you pick is downloaded once and served from this server, so a television with no
-                    internet still shows it.
+                    Fonts are kept on this server, so screens with no internet still show them.
                 </p>
 
                 {{-- Loading, a list that could not be fetched, and a search that matched nothing are each said. --}}
@@ -1105,8 +1098,7 @@
                 <div class="p-6">
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Discard changes?</h2>
                     <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                        The design goes back to the version on the screens. Everything changed since it was published
-                        is lost — saved or not.
+                        The design goes back to the version on the screens. Every change since is lost.
                     </p>
                     <div class="mt-6 flex flex-wrap justify-end gap-3">
                         <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-discard-changes')">Cancel</x-secondary-button>
@@ -1120,8 +1112,7 @@
                 <div class="p-6">
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Unpublish this ad?</h2>
                     <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                        It leaves every screen and channel showing it — and the media library — until you publish it
-                        again. Nothing is deleted: every playlist and channel keeps its place for it.
+                        It leaves every screen and channel until you publish it again. Nothing is deleted.
                     </p>
                     <div class="mt-6 flex flex-wrap justify-end gap-3">
                         <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-unpublish')">Cancel</x-secondary-button>

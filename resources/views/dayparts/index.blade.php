@@ -9,15 +9,14 @@
     <div x-data="daypartsTable({{ Js::from(['hasStore' => (bool) session('current_store_id'), 'weekdays' => $weekdays]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        {{-- What a daypart is for is said once, under the list's title (its description). --}}
-        @can('daypart-store')
-        <div class="flex flex-wrap items-center gap-3">
-            <x-crud.add-button label="Add Daypart" @click="openFormModal()" dusk="add-daypart" />
-        </div>
-        @endcan
-
-        <x-crud.table-wrapper title="All Dayparts" searchPlaceholder="Search dayparts by name..." :columns="5"
-            description="Named times of the day, like Breakfast from 6:00 to 11:30. A file on a playlist can be set to play only in one.">
+        {{-- What a daypart is for, in one line under the list's title; its Add beside the search. --}}
+        <x-crud.table-wrapper title="All Dayparts" searchPlaceholder="Search dayparts..." :columns="5"
+            description="Times of day a playlist can use, like Breakfast 6:00 to 11:30.">
+            @can('daypart-store')
+                <x-slot name="actions">
+                    <x-crud.add-button label="Add Daypart" @click="openFormModal()" dusk="add-daypart" />
+                </x-slot>
+            @endcan
             <x-slot name="head">
                 <th class="px-5 py-3 text-left font-semibold">Name</th>
                 <th class="px-5 py-3 text-left font-semibold">Hours</th>
@@ -27,14 +26,7 @@
             </x-slot>
 
             <x-slot name="body">
-                <x-crud.table-empty :columns="5" itemsVar="items" message="No dayparts yet."
-                    hint="Add one for each part of the day when your screens should show something different.">
-                    @can('daypart-store')
-                        <x-slot name="action">
-                            <button type="button" class="btn-primary" @click="openFormModal()" dusk="empty-add-daypart">Add Daypart</button>
-                        </x-slot>
-                    @endcan
-                </x-crud.table-empty>
+                <x-crud.table-empty :columns="5" itemsVar="items" message="No dayparts yet." />
 
                 <template x-for="item in items" :key="item.id">
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -91,7 +83,7 @@
                 <form @submit.prevent="saveItem" novalidate dusk="daypart-form" class="mt-4 space-y-4">
 
                     <div x-show="!hasStore && !editingItem" x-cloak class="alert-warning">
-                        Select a store first &mdash; opening hours belong to the store they were set for.
+                        Select a store first.
                     </div>
 
                     <x-crud.form-field label="Name" field="name" :required="true">
@@ -110,8 +102,7 @@
                     </div>
 
                     <p class="text-xs text-gray-500 dark:text-gray-400 -mt-2">
-                        An end time <span class="font-semibold">earlier</span> than the start means the window runs
-                        past midnight &mdash; 22:00 to 02:00 is one window, not two.
+                        An end before the start runs past midnight, like 22:00 to 02:00.
                     </p>
 
                     {{-- Exceptions: the days that do not follow the hours above. Each
@@ -128,8 +119,7 @@
                             </button>
                         </div>
                         <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            Only for days that differ from the hours above &mdash; a day the shop is shut,
-                            or opens at a different time.
+                            Days that are closed or have other hours.
                         </p>
 
                         <template x-if="form.exceptions.length === 0">
@@ -201,7 +191,7 @@
                         <input type="checkbox" x-model="form.is_retired" id="daypart_is_retired"
                                dusk="daypart-retired" class="form-checkbox">
                         <label for="daypart_is_retired" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">
-                            Retired &mdash; offered to no new schedule; the schedules that use it keep working
+                            Retired &mdash; not offered for new schedules
                         </label>
                     </div>
 

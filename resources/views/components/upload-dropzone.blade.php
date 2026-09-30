@@ -31,10 +31,15 @@
      {{ $attributes->merge(['class' => 'space-y-3']) }}
      dusk="{{ $dusk }}-dropzone">
 
-    <label class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-7 text-center transition-colors focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 dark:focus-within:ring-offset-gray-800"
-           :class="dragging
-               ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-950/40'
-               : 'border-gray-300 bg-gray-50/60 hover:border-blue-400 hover:bg-blue-50/50 dark:border-gray-600 dark:bg-gray-900/40 dark:hover:border-blue-500'"
+    {{-- Its colours are written on it, never only in a binding: before Alpine starts, a border with no colour of
+         its own is drawn in the text's colour (Tailwind v4), and the box flashed black as a page opened. A file
+         held over it turns it blue (data-dragging). --}}
+    <label class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-7 text-center transition-colors
+                  border-gray-300 bg-gray-50/60 hover:border-blue-400 hover:bg-blue-50/50
+                  dark:border-gray-600 dark:bg-gray-900/40 dark:hover:border-blue-500
+                  data-[dragging=true]:border-blue-500 data-[dragging=true]:bg-blue-50 dark:data-[dragging=true]:border-blue-400 dark:data-[dragging=true]:bg-blue-950/40
+                  focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 dark:focus-within:ring-offset-gray-800"
+           x-bind:data-dragging="dragging ? 'true' : 'false'"
            @dragenter.prevent="dragging = true"
            @dragover.prevent="dragging = true; $event.dataTransfer.dropEffect = 'copy'"
            @dragleave.prevent="leaveBox($event)"
@@ -55,7 +60,7 @@
         <span class="text-sm text-gray-700 dark:text-gray-200">
             <span class="hidden font-semibold text-blue-600 pointer-coarse:inline dark:text-blue-400">{{ $multiple ? 'Tap to choose files' : 'Tap to choose a file' }}</span>
             <span class="pointer-coarse:hidden">
-                <span x-text="dragging ? 'Let go to upload' : '{{ $multiple ? 'Drop files here or' : 'Drop a file here or' }}'"></span>
+                <span x-text="dragging ? 'Let go to upload' : '{{ $multiple ? 'Drop files here or' : 'Drop a file here or' }}'">{{ $multiple ? 'Drop files here or' : 'Drop a file here or' }}</span>
                 <span x-show="! dragging" class="font-semibold text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">{{ $multiple ? 'choose files' : 'choose a file' }}</span>
             </span>
         </span>

@@ -18,20 +18,16 @@
     <div x-data="storesTable()"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        <div class="flex flex-wrap items-center justify-between gap-3">
-            @can('store-store')
-            <x-crud.add-button label="Add Store" @click="openFormModal()" dusk="add-store" />
-            @endcan
-
-            @if ($manageAds)
+        @if ($manageAds)
+        <div class="flex flex-wrap items-center justify-end gap-3">
             {{-- The bulk switch, worded with the SAME two words as the button inside a
                  shop's screens page — one action must not have two vocabularies. --}}
-            <div class="flex flex-wrap items-center gap-2 ml-auto">
+            <div class="flex flex-wrap items-center gap-2">
                 <span class="text-xs text-gray-500 dark:text-gray-400">
                     Network advertising &mdash;
                     <span x-text="selectedStoreIds.length === 0
                         ? 'tick the shops below'
-                        : selectedStoreIds.length + (selectedStoreIds.length === 1 ? ' shop' : ' shops') + ' selected'"></span>
+                        : selectedStoreIds.length + (selectedStoreIds.length === 1 ? ' shop' : ' shops') + ' selected'">tick the shops below</span>
                 </span>
                 {{-- Page actions on the ticked shops: a disabled button looks disabled by itself (btn-secondary). --}}
                 <button type="button" @click="askStoreAds(true)" dusk="stores-ads-on" class="btn-secondary"
@@ -39,11 +35,15 @@
                 <button type="button" @click="askStoreAds(false)" dusk="stores-ads-off" class="btn-secondary"
                         x-bind:disabled="selectedStoreIds.length === 0 || savingAds">Adverts off</button>
             </div>
-            @endif
         </div>
+        @endif
 
-        <x-crud.table-wrapper title="All Stores" searchPlaceholder="Search Stores (name, city...)" :columns="$columns"
-            description="Every shop on the platform, with its owners. A shop is made when a customer signs up, or here.">
+        <x-crud.table-wrapper title="All Stores" searchPlaceholder="Search stores..." :columns="$columns">
+            @can('store-store')
+                <x-slot name="actions">
+                    <x-crud.add-button label="Add Store" @click="openFormModal()" dusk="add-store" />
+                </x-slot>
+            @endcan
             <x-slot name="head">
                 @if ($manageAds)
                 <th class="px-5 py-3 text-left font-semibold w-10">
@@ -63,14 +63,7 @@
             </x-slot>
 
             <x-slot name="body">
-                <x-crud.table-empty :columns="$columns" itemsVar="items" message="No stores yet."
-                    hint="A store is made when a customer signs up, or here with Add Store.">
-                    @can('store-store')
-                        <x-slot name="action">
-                            <x-crud.add-button label="Add Store" @click="openFormModal()" dusk="empty-add-store" />
-                        </x-slot>
-                    @endcan
-                </x-crud.table-empty>
+                <x-crud.table-empty :columns="$columns" itemsVar="items" message="No stores yet." />
 
                 <template x-for="item in items" :key="item.id">
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -132,14 +125,13 @@
                         + selectedStoreIds.length + (selectedStoreIds.length === 1 ? ' shop?' : ' shops?')"></h2>
 
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                    This also switches
+                    This also switches the
                     <span class="font-semibold" x-text="selectedScreenCount() + (selectedScreenCount() === 1 ? ' screen' : ' screens')"></span>
-                    inside those shops &mdash; a shop on its own shows nothing, so the two travel together.
+                    inside those shops.
                 </p>
 
                 <p class="alert-warning mt-3" x-show="selectedScreenCount() > 0" x-cloak>
-                    Any screen you had set apart by hand is switched too. Set those again from
-                    inside the shop afterwards.
+                    Any screen you had set apart by hand is switched too.
                 </p>
 
                 <div class="mt-6 flex flex-wrap justify-end gap-3">
@@ -162,10 +154,8 @@
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Delete <span x-text="selectedItem?.name"></span>?</h2>
                     <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                        This deletes the store and everything in it — screens (they stop playing at once), media files,
-                        playlists, dayparts, custom roles, its own channels, its Ad Builder designs and assets, invitations
-                        and every member's access.
-                        People's accounts are not deleted. <span class="font-semibold text-red-600 dark:text-red-400">This cannot be undone.</span>
+                        Everything in it goes: screens, files, playlists, channels, ads and every member's access.
+                        People's accounts stay. <span class="font-semibold text-red-600 dark:text-red-400">This cannot be undone.</span>
                     </p>
                 </div>
                 <div>
@@ -197,9 +187,7 @@
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Give <span x-text="ownerStore?.name"></span> an owner</h2>
                     <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                        If this email belongs to someone already in the store, they become its Owner right away. Anyone else gets an
-                        invitation by email — sending to the same address again gives them a fresh link, and a different address
-                        replaces the earlier owner invitation.
+                        Someone already in the store becomes its Owner at once. Anyone else gets an email invitation.
                     </p>
                 </div>
                 <div>
@@ -269,7 +257,7 @@
                         <x-crud.form-field label="Owner's email" field="owner_email" :required="true">
                             <x-text-input type="email" x-model="form.owner_email" dusk="store-owner-email" maxlength="255" autocomplete="off" placeholder="owner@example.com" />
                         </x-crud.form-field>
-                        <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">They'll get an email invitation to own this store. Nobody can use the store until then.</p>
+                        <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">They'll get an email invitation to own this store.</p>
                     </div>
 
                     {{-- Active Checkbox: switching a store on or off is the platform's alone --}}

@@ -1,7 +1,7 @@
 <x-guest-layout title="Forgot password">
     <h1 class="auth-title mb-1">Forgot your password?</h1>
     <p class="mb-6 text-sm text-gray-600">
-        No problem. Type your email address and we will email you a link to choose a new one.
+        Type your email and we will send you a link to choose a new one.
     </p>
 
     <x-auth.session-status class="mb-4" :status="session('status')" />

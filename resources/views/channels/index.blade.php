@@ -8,25 +8,15 @@
     <div x-data="channelsTable({{ Js::from(['maxAdsPerPass' => $maxAdsPerPass]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        <div class="flex flex-wrap items-center gap-3">
+        {{-- A bound :title — the wrapper echoes it itself, and an echo here as well escaped a store's name twice. The
+             one fact that governs the page is its line under the title; Add Channel stands beside the search. --}}
+        <x-crud.table-wrapper :title="$store ? 'Channels of '.$store->name : 'All Channels'" searchPlaceholder="Search channels..." :columns="6"
+            :description="$store ? 'Put a channel on a screen from that screen\'s Channels box.' : 'Every shop can put these on its screens.'">
             @can('channel-store')
-            <x-crud.add-button label="Add Channel" @click="openFormModal()" dusk="add-channel" />
+                <x-slot name="actions">
+                    <x-crud.add-button label="Add Channel" @click="openFormModal()" dusk="add-channel" />
+                </x-slot>
             @endcan
-
-            {{-- The one fact that governs this page, stated once. --}}
-            <p class="max-w-3xl text-sm text-gray-500 dark:text-gray-400" dusk="channels-scope-note">
-                @if ($store)
-                    Channels made here belong to {{ $store->name }} and play only on its own screens. The platform's channels are
-                    listed too, to look at — add one to a screen from that screen's Channels box.
-                @else
-                    A channel made here is offered to every shop, and each shop decides whether to put it on a screen. A channel a
-                    store made for itself is marked with that store.
-                @endif
-            </p>
-        </div>
-
-        {{-- A bound :title — the wrapper echoes it itself, and an echo here as well escaped a store's name twice. --}}
-        <x-crud.table-wrapper :title="$store ? 'Channels of '.$store->name : 'All Channels'" searchPlaceholder="Search channels..." :columns="6">
             <x-slot name="head">
                 <th class="px-5 py-3 text-left font-semibold">Channel</th>
                 <th class="px-5 py-3 text-left font-semibold">Ads</th>
@@ -37,14 +27,7 @@
             </x-slot>
 
             <x-slot name="body">
-                <x-crud.table-empty :columns="6" itemsVar="items" message="No channels yet."
-                    hint="A channel is a set of ads. Put it on a screen's playlist and it plays a few of them each time round.">
-                    @can('channel-store')
-                        <x-slot name="action">
-                            <x-crud.add-button label="Add Channel" @click="openFormModal()" dusk="empty-add-channel" />
-                        </x-slot>
-                    @endcan
-                </x-crud.table-empty>
+                <x-crud.table-empty :columns="6" itemsVar="items" message="No channels yet." />
 
                 <template x-for="item in items" :key="item.id">
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -158,8 +141,7 @@
                                           dusk="channel-ads-per-pass" placeholder="All" />
                         </x-crud.form-field>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            How many of its ads play each time a screen's loop reaches this channel. Leave it blank to
-                            play every one; a smaller number plays the next ones the time after.
+                            Leave empty to play all its ads each time.
                         </p>
                     </div>
 
@@ -167,8 +149,7 @@
                         <input type="checkbox" x-model="form.is_active" id="channel_is_active"
                                dusk="channel-active" class="form-checkbox mt-0.5">
                         <label for="channel_is_active" class="text-sm text-gray-700 dark:text-gray-300">
-                            Active &mdash; playing on every screen that carries it. Untick it to pause the channel
-                            without taking it off any playlist.
+                            Active &mdash; playing on every screen that carries it
                         </label>
                     </div>
 

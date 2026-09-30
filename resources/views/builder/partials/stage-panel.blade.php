@@ -12,22 +12,19 @@
             <span>seconds on screen</span>
         </label>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" dusk="ad-length-note">
-            Every screen and channel shows the ad this long: {{ \App\Models\BuilderAd::MIN_SECONDS }} seconds at least,
-            {{ \App\Rules\VideoLength::inWords(\App\Models\BuilderAd::MAX_SECONDS) }} at most. A video in it that is
-            shorter repeats; a longer one is cut when the ad ends.
+            {{ \App\Models\BuilderAd::MIN_SECONDS }} seconds to {{ \App\Rules\VideoLength::inWords(\App\Models\BuilderAd::MAX_SECONDS) }}, on every screen and channel.
         </p>
         {{-- A design made before designs had a length: every screen keeps its own seconds, published or not, until
              the designer types one (BuilderAd::hasOwnLength). --}}
         <p x-show="!hasOwnLength()" x-cloak class="mt-1 text-xs text-amber-700 dark:text-amber-400" dusk="ad-length-earlier">
-            No length of its own yet: each screen and channel shows it for the seconds it was given there. Type a
-            length to use it everywhere.
+            No length of its own yet: each screen uses its own seconds. Type one to use it everywhere.
         </p>
     </div>
 
     <div>
         <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Background</h2>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Select something on the stage to change it — or build the background here, one layer on another.
+            Select something on the stage, or build the background here.
         </p>
     </div>
 

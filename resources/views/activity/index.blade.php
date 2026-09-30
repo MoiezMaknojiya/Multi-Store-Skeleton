@@ -18,7 +18,7 @@
                 <div>
                     <h2 class="text-sm font-semibold text-gray-800 dark:text-white">Yearly Storage</h2>
                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        Logs are split into yearly partitions. Maintenance opens partitions 3 years ahead and deletes everything older than 2 years — data included.
+                        Maintenance deletes every log older than 2 years.
                     </p>
                     <div class="mt-3 flex flex-wrap gap-2">
                         <template x-for="p in partitions" :key="p.name">
@@ -85,8 +85,7 @@
 
         {{-- Activity Data Table (read-only audit trail). A bound :title — the wrapper echoes it itself, and an
              echo here as well escaped a store's name twice. --}}
-        <x-crud.table-wrapper :title="$store ? 'Activity in '.$store->name : 'All Activity'" searchPlaceholder="Search activity (action, user, details...)" :columns="4"
-            :description="$store ? 'What happened in '.$store->name.' — by its people, and by the platform on its behalf.' : 'Everything done in every store and on the platform, newest first.'">
+        <x-crud.table-wrapper :title="$store ? 'Activity in '.$store->name : 'All Activity'" searchPlaceholder="Search activity..." :columns="4">
             <x-slot name="head">
                 <th class="px-5 py-3 text-left font-semibold">When</th>
                 <th class="px-5 py-3 text-left font-semibold">Who</th>

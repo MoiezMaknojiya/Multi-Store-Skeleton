@@ -90,7 +90,7 @@ export function registerDaypartsTable(Alpine) {
                out, instead of a dialog whose Delete is refused after it is confirmed. */
             askToDelete(item) {
                 if (item.in_use) {
-                    window.toast(`${item.name} is used by a playlist, so it stays. Retire it instead (Edit, then Retired): it keeps working where it is used.`);
+                    window.toast(`${item.name} is used by a playlist. Retire it instead: Edit, then tick Retired.`);
 
                     return;
                 }

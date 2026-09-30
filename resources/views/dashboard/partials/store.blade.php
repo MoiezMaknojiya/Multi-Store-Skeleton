@@ -5,7 +5,6 @@
     <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="min-w-0">
             <h2 class="text-subheading break-words" dusk="dashboard-store-name">{{ $summary['store'] }}</h2>
-            <p class="mt-1 text-sm text-muted-soft">Here is how your shop is doing.</p>
         </div>
 
         @if (count($summary['actions']))

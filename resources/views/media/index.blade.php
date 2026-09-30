@@ -8,20 +8,8 @@
     <div x-data="mediaTable({{ Js::from(['libraries' => $libraries]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        {{-- Upload on its own line, with the filters sitting in a row underneath —
-             they belong to the table below them, not to the upload button. --}}
+        {{-- The filters above the list; Upload Files beside its search. --}}
         <div class="space-y-3">
-            @can('media-store')
-            <div class="flex flex-wrap items-center gap-3">
-                <x-crud.add-button label="Upload Files" @click="openUploadModal()" dusk="upload-media" />
-                @if ($libraries !== null)
-                    <p class="text-sm text-gray-500 dark:text-gray-400" dusk="media-upload-target-note">
-                        An upload goes to the library chosen in the Library list.
-                    </p>
-                @endif
-            </div>
-            @endcan
-
             {{-- A grid, not flex: equal cells put the lists side by side on a desktop and stack them on a phone,
                  each with a visible name. Above the stores the first is the library: the platform's own (the
                  default) or one shop's — what is listed and where an upload lands (docs/CHANNEL-CONTENT-SPEC.md §3). --}}
@@ -72,8 +60,12 @@
             <x-storage-meter />
         </div>
 
-        <x-crud.table-wrapper title="All Media" searchPlaceholder="Search media (title, description...)" :columns="6"
-            description="Pictures, videos and published ads, ready to go on a screen's playlist.">
+        <x-crud.table-wrapper title="All Media" searchPlaceholder="Search media..." :columns="6">
+            @can('media-store')
+                <x-slot name="actions">
+                    <x-crud.add-button label="Upload Files" @click="openUploadModal()" dusk="upload-media" />
+                </x-slot>
+            @endcan
             <x-slot name="head">
                 <th class="px-5 py-3 text-left font-semibold">Preview</th>
                 <th class="px-5 py-3 text-left font-semibold">Title</th>
@@ -85,15 +77,8 @@
 
             <x-slot name="body">
                 <x-crud.table-empty :columns="6" itemsVar="items" message="No files yet."
-                    hint="Upload pictures and videos, several at once if you like."
                     filtered="filterType !== '' || filterOrientation !== ''"
-                    clearFilters="filterType = ''; filterOrientation = ''; applyFilters()">
-                    @can('media-store')
-                        <x-slot name="action">
-                            <x-crud.add-button label="Upload Files" @click="openUploadModal()" dusk="empty-upload-media" />
-                        </x-slot>
-                    @endcan
-                </x-crud.table-empty>
+                    clearFilters="filterType = ''; filterOrientation = ''; applyFilters()" />
 
                 <template x-for="item in items" :key="item.id">
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -168,7 +153,7 @@
 
                 <x-upload-dropzone class="mt-4" purpose="media" mode="add" :multiple="true" add-url="/media" dusk="media"
                     context="{ library: libraries !== null ? String(library) : null, fields: libraries !== null && library !== 'platform' ? { store_id: library } : {}, storage: storage }"
-                    hint="Images (JPG, PNG, GIF, WEBP) and videos (MP4, WEBM), up to 250 MB each. A video may be at most 5 minutes long." />
+                    hint="JPG, PNG, GIF, WEBP, MP4 or WEBM, up to 250 MB each. Videos up to 5 minutes." />
 
                 <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <button type="button" class="btn-secondary" @click="closeUploadModal()" dusk="media-upload-close">Close</button>
@@ -193,7 +178,7 @@
                     </x-crud.form-field>
 
                     <p class="text-sm text-gray-500 dark:text-gray-400">
-                        The file will not play on any screen before the start or after the expiry. Leave both blank to always play.
+                        Leave both empty to always play.
                     </p>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

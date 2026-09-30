@@ -68,8 +68,9 @@ class AdOrientationFlowTest extends DuskTestCase
             /* ── …and so does New ad; Portrait opens an upright stage ── */
             $panel->visit('/builder');
             $this->waitForAlpine($panel);
-            $panel->waitFor('@ads-empty');
-            $this->jsClick($panel, '@new-ad-empty');
+            // An empty gallery offers no second New ad: the one beside the search is the way in.
+            $panel->waitFor('@ads-empty')->assertMissing('@new-ad-empty');
+            $this->jsClick($panel, '@new-ad');
             $panel->waitFor('@new-ad-portrait')
                 ->assertVisible('@new-ad-landscape')
                 ->assertSee('which way is the screen')

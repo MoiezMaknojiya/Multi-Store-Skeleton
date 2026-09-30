@@ -5,16 +5,13 @@
 
     <div x-data="permissionsTable()" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        @can('permission-store')
-        <div class="flex flex-wrap items-center gap-3">
-            <x-crud.add-button label="Add Permission" @click="openFormModal()" />
-        </div>
-        @endcan
-
-        {{-- The one thing to know before touching this list, said under its title (rule 02, "Platform permissions"):
-             the names are written in the code. --}}
-        <x-crud.table-wrapper title="All Permissions" searchPlaceholder="Search by name or label" :columns="2"
-            description="A permission's name is written in the app's code. Renaming or deleting one a feature uses turns that feature off for everybody but super admins.">
+        {{-- A rename's risk is said where it is taken: in the edit form and the delete dialog. --}}
+        <x-crud.table-wrapper title="All Permissions" searchPlaceholder="Search by name or label" :columns="2">
+            @can('permission-store')
+                <x-slot name="actions">
+                    <x-crud.add-button label="Add Permission" @click="openFormModal()" dusk="add-permission" />
+                </x-slot>
+            @endcan
             <x-slot name="head">
                 <th class="px-5 py-3 text-left font-semibold">Name</th>
                 <th class="px-5 py-3 text-right font-semibold">Actions</th>
@@ -53,7 +50,7 @@
                     <span x-text="selectedItem?.name" class="font-semibold"></span>?
                 </p>
                 <p class="alert-warning mt-3">
-                    Every role loses it, and a feature whose code asks for it stops working for everybody but super admins.
+                    Every role loses it, and the feature that uses it stops working.
                 </p>
 
                 <x-crud.password-confirm id="delete-permission-password" />
@@ -78,22 +75,15 @@
                 {{-- The name first — it is what the code asks for — then the words people read. --}}
                 <form @submit.prevent="saveItem" novalidate class="mt-4 space-y-4">
                     <p x-show="editingItem" x-cloak class="alert-warning">
-                        The app's code asks for a permission by its name: renaming one a feature uses turns that feature off for
-                        everybody but super admins. Change the label instead.
+                        Renaming can turn off the feature that uses it. Change the label instead.
                     </p>
-                    <div>
-                        <x-crud.form-field label="Name" field="name" :required="true">
-                            <x-text-input x-model="form.name" maxlength="255" autocomplete="off" placeholder="screen-view" />
-                        </x-crud.form-field>
-                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Lowercase words joined by hyphens, as the code names it.</p>
-                    </div>
-                    <div>
-                        <x-crud.form-field label="Label" field="label">
-                            <x-text-input x-model="form.label" placeholder="View Screens" maxlength="255" autocomplete="off"
-                                @input="restrictLabelInput($event)" @keydown="restrictLabelInput($event)" />
-                        </x-crud.form-field>
-                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Optional: the words shown on the Roles page. Letters, numbers and spaces.</p>
-                    </div>
+                    <x-crud.form-field label="Name" field="name" :required="true">
+                        <x-text-input x-model="form.name" maxlength="255" autocomplete="off" placeholder="screen-view" />
+                    </x-crud.form-field>
+                    <x-crud.form-field label="Label" field="label">
+                        <x-text-input x-model="form.label" placeholder="View Screens" maxlength="255" autocomplete="off"
+                            @input="restrictLabelInput($event)" @keydown="restrictLabelInput($event)" />
+                    </x-crud.form-field>
                     <x-crud.form-actions savingVar="saving" />
                 </form>
             </div>

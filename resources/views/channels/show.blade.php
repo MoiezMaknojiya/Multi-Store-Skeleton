@@ -31,7 +31,7 @@
         {{-- The platform's channel seen from inside a shop: there to look at (owner, 2026-09-19). --}}
         @if ($readOnly)
             <p class="alert-info" dusk="channel-read-only-note">
-                This channel comes from the platform. You can add it to any of your screens from that screen's Channels box.
+                From the platform. Put it on a screen from that screen's Channels box.
             </p>
         @endif
 
@@ -58,7 +58,7 @@
 
                 <template x-if="!loading && ads.length === 0">
                     <p class="text-center text-muted-soft py-10" dusk="channel-ads-empty">
-                        No ads yet. Every screen carrying this channel will start showing an ad the moment it is added here.
+                        No ads yet.
                     </p>
                 </template>
 
@@ -148,24 +148,18 @@
                     <div>
                         <p id="channel-ad-source-label" class="form-label">Where does the ad come from?</p>
                         <div class="mt-1 flex flex-wrap gap-x-6 border-b border-gray-200 dark:border-gray-700" role="group" aria-labelledby="channel-ad-source-label">
+                            {{-- The chosen way is pressed, and its colours follow aria-pressed — written on the tab,
+                                 never only in a binding (a border with no colour of its own is drawn black). --}}
                             <template x-if="editingAd">
                                 <button type="button" @click="setSource('keep')" dusk="channel-ad-source-keep"
-                                        x-bind:class="source === 'keep' ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
-                                        class="-mb-px border-b-2 px-1 pb-2 text-sm font-medium"
-                                        x-bind:aria-pressed="source === 'keep'">Keep this file</button>
+                                        class="tab-link pb-2" x-bind:aria-pressed="source === 'keep' ? 'true' : 'false'">Keep this file</button>
                             </template>
                             <button type="button" @click="setSource('library')" dusk="channel-ad-source-library"
-                                    x-bind:class="source === 'library' ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
-                                    class="-mb-px border-b-2 px-1 pb-2 text-sm font-medium"
-                                    x-bind:aria-pressed="source === 'library'">Media library</button>
+                                    class="tab-link pb-2" x-bind:aria-pressed="source === 'library' ? 'true' : 'false'">Media library</button>
                             <button type="button" @click="setSource('ads')" dusk="channel-ad-source-ads"
-                                    x-bind:class="source === 'ads' ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
-                                    class="-mb-px border-b-2 px-1 pb-2 text-sm font-medium"
-                                    x-bind:aria-pressed="source === 'ads'">Ad Builder</button>
+                                    class="tab-link pb-2" x-bind:aria-pressed="source === 'ads' ? 'true' : 'false'">Ad Builder</button>
                             <button type="button" @click="setSource('upload')" dusk="channel-ad-source-upload"
-                                    x-bind:class="source === 'upload' ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
-                                    class="-mb-px border-b-2 px-1 pb-2 text-sm font-medium"
-                                    x-bind:aria-pressed="source === 'upload'">Upload</button>
+                                    class="tab-link pb-2" x-bind:aria-pressed="source === 'upload' ? 'true' : 'false'">Upload</button>
                         </div>
                     </div>
 
@@ -203,7 +197,7 @@
 
                         {{-- The picker leaves them out rather than offering and refusing them (owner, 2026-09-26). --}}
                         <p class="text-xs text-muted-soft" dusk="channel-ad-picker-note">
-                            Files on a screen's playlist are not listed here, so nothing plays twice.
+                            Files on a playlist are not listed, so nothing plays twice.
                         </p>
 
                         <p x-show="picker.loading && picker.items.length === 0" x-cloak class="py-6 text-center text-sm text-muted-soft">Loading…</p>
@@ -214,13 +208,17 @@
                         {{-- Nothing chosen: the picker is outlined in red, as a field with an error is. --}}
                         <div class="grid max-h-80 grid-cols-2 gap-3 overflow-y-auto pr-1 sm:grid-cols-3" dusk="channel-ad-picker"
                              x-bind:class="formErrors.media_id ? 'rounded-md ring-2 ring-red-500' : ''">
+                            {{-- The chosen tile says so with its own 2 px border and a tick — never a ring, a shadow
+                                 drawn outside the tile that the scrolling grid cut off at its edges. The keyboard's
+                                 ring is drawn inside (ring-inset) for the same reason. --}}
                             <template x-for="item in picker.items" :key="item.id">
                                 <button type="button" @click="pick(item)" x-bind:dusk="'channel-ad-pick-' + item.id"
-                                        x-bind:aria-pressed="chosen?.id === item.id"
-                                        class="overflow-hidden rounded-md border text-left transition"
-                                        x-bind:class="chosen?.id === item.id
-                                            ? 'border-blue-500 ring-2 ring-blue-500'
-                                            : 'border-gray-200 hover:border-gray-400 dark:border-gray-700'">
+                                        x-bind:aria-pressed="chosen?.id === item.id ? 'true' : 'false'"
+                                        class="relative overflow-hidden rounded-md border-2 border-gray-200 text-left transition-colors not-aria-pressed:hover:border-gray-400 aria-pressed:border-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 dark:border-gray-700 dark:not-aria-pressed:hover:border-gray-500 dark:aria-pressed:border-blue-400">
+                                    <span x-show="chosen?.id === item.id" x-cloak aria-hidden="true"
+                                          class="absolute right-1.5 top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm">
+                                        <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                                    </span>
                                     <div class="aspect-video bg-gray-100 dark:bg-gray-700">
                                         <template x-if="item.thumbnail_url">
                                             <img :src="item.thumbnail_url" alt="" class="h-full w-full" loading="lazy"
@@ -260,7 +258,7 @@
                                 hint="JPG, PNG, GIF, WEBP, MP4 or WEBM — up to 250 MB, a video 5 minutes at most." />
                         </x-crud.form-field>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" dusk="channel-ad-upload-note">
-                            Ads play with no sound. It joins <span x-text="uploadsJoin"></span>.
+                            Plays muted. It joins <span x-text="uploadsJoin"></span>.
                         </p>
                     </div>
 
@@ -292,7 +290,7 @@
                             </x-crud.form-field>
                         </div>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            Both days included, on each screen's own calendar. Leave both blank to run until it is taken out.
+                            Leave both empty to run with no end.
                         </p>
                     </div>
 

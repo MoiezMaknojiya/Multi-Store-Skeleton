@@ -35,7 +35,6 @@ export function registerCampaignsTable(Alpine) {
         deleteNeedsPassword: true,
 
         extraState: {
-            breakEverySeconds: config.breakEverySeconds ?? 3600,
             maxBreakSeconds: config.maxBreakSeconds ?? 60,
             /* The screen picker, fetched once when a modal first opens. */
             allScreens: [],

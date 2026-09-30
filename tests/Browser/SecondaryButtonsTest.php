@@ -103,10 +103,11 @@ class SecondaryButtonsTest extends DuskTestCase
 
             $browser->visit('/members');
             $this->waitForAlpine($browser);
-            $this->clickAndAwait($browser, '@tab-invitations', fn (Browser $b) => $b->waitFor('@invite-member-empty', 3));
+            $this->clickAndAwait($browser, '@tab-invitations', fn (Browser $b) => $b->waitFor('@invitations-empty', 3));
 
-            // The empty state's own Invite opens the same form as the header button.
-            $this->clickAndAwait($browser, '@invite-member-empty', fn (Browser $b) => $b->waitFor('@invite-form', 3));
+            // The invitations list has its own Invite on its header line (the empty list offers no second one), and it
+            // opens the same form as the members list's.
+            $this->clickAndAwait($browser, '@invite-member-invitations', fn (Browser $b) => $b->waitFor('@invite-form', 3));
             $browser->assertVisible('@invite-email');
         });
     }

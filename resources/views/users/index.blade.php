@@ -9,18 +9,13 @@
     <div x-data="usersTable({{ Js::from(['isSuperAdmin' => auth()->user()->isSuperAdmin()]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        @can('super-admin-tier')
-        <div class="flex flex-wrap items-center gap-3">
-            <x-crud.add-button label="Invite to platform team" @click="openInvite()" dusk="invite-platform-member" />
-        </div>
-        @endcan
-
-        {{-- What the list is, said once under its title. Stores (putting a person in a store) is the super admin's
-             alone, so only they are told of it. --}}
-        <x-crud.table-wrapper title="Accounts" searchPlaceholder="Search by name or email" :columns="4"
-            :description="'People join a store by invitation from that store.'
-                .(auth()->user()->can('super-admin-tier') ? ' You can also put them in one with Stores below.' : '')
-                .' They manage their own name, email and password.'">
+        {{-- Inviting to the platform team (the super admin's alone) stands beside the search. --}}
+        <x-crud.table-wrapper title="Accounts" searchPlaceholder="Search by name or email" :columns="4">
+            @can('super-admin-tier')
+                <x-slot name="actions">
+                    <x-crud.add-button label="Invite to platform team" @click="openInvite()" dusk="invite-platform-member" />
+                </x-slot>
+            @endcan
             <x-slot name="head">
                 <th class="px-5 py-3 text-left font-semibold">Account</th>
                 <th class="px-5 py-3 text-left font-semibold">Access</th>
@@ -29,8 +24,7 @@
             </x-slot>
 
             <x-slot name="body">
-                <x-crud.table-empty :columns="4" itemsVar="items" message="No accounts yet."
-                    hint="People join by signing up, or by an invitation from a store or from here." />
+                <x-crud.table-empty :columns="4" itemsVar="items" message="No accounts yet." />
 
                 <template x-for="item in items" :key="item.id">
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50" x-bind:dusk="'account-row-' + item.id">
@@ -93,7 +87,7 @@
         <div class="card" dusk="platform-invitations">
             <div class="card-header">
                 <h2 class="text-subheading">Platform team invitations</h2>
-                <p class="text-xs text-gray-500 dark:text-gray-400">Links are valid for {{ \App\Models\Invitation::LIFETIME_DAYS }} days. Resending sends a new link.</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Links last {{ \App\Models\Invitation::LIFETIME_DAYS }} days.</p>
             </div>
             <div class="overflow-x-auto">
                 <table class="table-base">
@@ -142,7 +136,7 @@
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Invite to the platform team</h2>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        Platform staff work above the stores. A store member's email cannot be invited.
+                        Platform staff work above the stores.
                     </p>
                 </div>
 
@@ -170,7 +164,7 @@
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"><span x-text="accessTarget?.name"></span>'s stores</h2>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        Add them to any store with a role, change the role they hold, or take them out. The change is immediate — nobody is invited.
+                        Add them to a store, change their role or take them out. It happens at once.
                     </p>
                 </div>
 
@@ -268,7 +262,7 @@
             <form @submit.prevent="removeRole()" class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Remove <span x-text="selectedForRole?.platform_role"></span> from <span x-text="selectedForRole?.name"></span>?</h2>
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                    They leave the platform team at once. Their account stays, with no access to anything.
+                    They leave the platform team at once. Their account stays.
                 </p>
 
                 {{-- They can be invited back, so it asks only that it is you. --}}
@@ -307,7 +301,7 @@
             <form @submit.prevent="deleteItem()" class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Delete <span x-text="selectedItem?.name"></span>'s account?</h2>
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                    The account, its access to every store, its sign-ins everywhere and any invitation waiting for its email are deleted. What they added to stores stays with those stores.
+                    The account and its access to every store are deleted. What they added stays with the stores.
                     <span class="font-semibold text-red-600 dark:text-red-400">This cannot be undone.</span>
                 </p>
                 <div x-show="selectedItem?.sole_owner_of?.length" x-cloak class="alert-warning mt-4">

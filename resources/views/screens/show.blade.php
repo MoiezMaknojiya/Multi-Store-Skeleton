@@ -84,7 +84,7 @@
                         <p class="text-center text-muted-soft py-10" dusk="playlist-empty">
                             Nothing here yet.
                             @can('screen-playlist')
-                                Add files from the Content library &mdash; or a channel &mdash; with their Add buttons.
+                                Add files or a channel from the lists.
                             @endcan
                         </p>
                     </template>
@@ -212,7 +212,7 @@
                 <div class="p-4 space-y-2" dusk="media-picker">
                     {{-- The picker leaves them out rather than offering and refusing them (owner, 2026-09-26). --}}
                     <p class="text-xs text-muted-soft" dusk="picker-channel-note">
-                        Files that play in a channel are not listed here, so nothing plays twice.
+                        Files in a channel are not listed, so nothing plays twice.
                     </p>
 
                     {{-- Loading, a search that found nothing (and the way back), or a library with nothing to add yet
@@ -558,8 +558,7 @@
             <div class="p-6" dusk="copy-modal">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Copy playlist to other screens</h2>
                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                    Everything on this screen &mdash; the files and channels, their durations and their schedules &mdash;
-                    <span class="font-semibold">replaces</span> whatever the chosen screens are playing now.
+                    This playlist, with its schedules, <span class="font-semibold">replaces</span> what the chosen screens play now.
                 </p>
 
                 <div class="mt-4 space-y-2 max-h-80 overflow-y-auto">

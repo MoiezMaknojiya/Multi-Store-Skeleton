@@ -14,28 +14,22 @@
          ]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        @can('role-store')
-        <div class="flex flex-wrap items-center gap-3">
-            <x-crud.add-button :label="$store ? 'Create custom role' : 'Create role'" @click="openForm()" x-bind:disabled="openingForm" dusk="create-role" />
-        </div>
-        @endcan
-
-        {{-- One heading for the list, and what it is for under it. --}}
+        {{-- One heading for the list, a line under it, and Create on the header's line (the list has no search). --}}
         <div class="card" dusk="roles-table">
             <div class="card-header">
                 <div class="min-w-0">
                     <h2 class="text-subheading">{{ $store ? 'Roles in '.$store->name : 'All roles' }}</h2>
                     <p class="mt-1 max-w-3xl text-sm text-gray-500 dark:text-gray-400">
                         @if ($store)
-                            A role decides what a member can do in this store. Store roles come from the platform and are the same in
-                            every store; custom roles belong to {{ $store->name }} alone.
+                            Store roles come from the platform. Custom roles are {{ $store->name }}'s own.
                         @else
-                            Make a role and say what it is for: a store role is offered in every store, a platform role is for your
-                            team above the stores. The Owner role marks who owns a store — rename it or change what it allows, but it
-                            always stays.
+                            Store roles are offered in every store. Platform roles are for your team.
                         @endif
                     </p>
                 </div>
+                @can('role-store')
+                    <x-crud.add-button :label="$store ? 'Create custom role' : 'Create role'" @click="openForm()" x-bind:disabled="openingForm" dusk="create-role" />
+                @endcan
             </div>
             <div class="overflow-x-auto">
                 <table class="table-base">
@@ -163,16 +157,14 @@
                 <fieldset x-show="!editingRole" class="min-w-0">
                     <legend class="form-label">What is this role for? <span class="text-red-600 dark:text-red-400" aria-hidden="true">*</span></legend>
                     <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <label class="flex items-start gap-3 rounded-md border px-3 py-2.5 cursor-pointer focus-within:ring-2 focus-within:ring-blue-500"
-                               x-bind:class="form.type === 'store' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-600'">
+                        <label class="role-choice">
                             <input type="radio" name="role-type" value="store" class="mt-0.5 accent-blue-600" x-model="form.type" @change="changeType('store')" dusk="role-type-store">
                             <span>
                                 <span class="block text-sm font-medium text-gray-800 dark:text-gray-100">Store role</span>
                                 <span class="block text-xs text-gray-500 dark:text-gray-400">Offered in every store. Its permissions reach the member's own store.</span>
                             </span>
                         </label>
-                        <label class="flex items-start gap-3 rounded-md border px-3 py-2.5 cursor-pointer focus-within:ring-2 focus-within:ring-blue-500"
-                               x-bind:class="form.type === 'platform' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-600'">
+                        <label class="role-choice">
                             <input type="radio" name="role-type" value="platform" class="mt-0.5 accent-blue-600" x-model="form.type" @change="changeType('platform')" dusk="role-type-platform">
                             <span>
                                 <span class="block text-sm font-medium text-gray-800 dark:text-gray-100">Platform role</span>

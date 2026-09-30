@@ -177,9 +177,9 @@ test('a file put on a playlist while it is being added to a channel is seen unde
 test('both pickers say why a file is not there', function () {
     $this->get("/screens/{$this->screen->id}")
         ->assertOk()
-        ->assertSee('Files that play in a channel are not listed here, so nothing plays twice.');
+        ->assertSee('Files in a channel are not listed, so nothing plays twice.');
 
     $this->get("/channels/{$this->channel->id}")
         ->assertOk()
-        ->assertSee("Files on a screen's playlist are not listed here, so nothing plays twice.", false);
+        ->assertSee('Files on a playlist are not listed, so nothing plays twice.');
 });

@@ -14,25 +14,6 @@
          ]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        <div class="flex flex-wrap items-center gap-3">
-            @can('screen-store')
-            <x-crud.add-button label="Add Screen" @click="openPairModal()" dusk="add-screen" />
-            @endcan
-
-            {{-- The TV's own page, which is where the pairing code that "Add Screen"
-                 asks for comes from — so the two belong next to each other. Opens in
-                 a new tab: the player is a kiosk page and must not replace the panel.
-                 Deliberately ungated, because /player is an open route (a TV has no
-                 login), so hiding the link would guard nothing. --}}
-            <a href="{{ route('player') }}" target="_blank" rel="noopener"
-               dusk="open-player" class="btn-secondary-add">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                </svg>
-                Open Player
-            </a>
-        </div>
 
         {{-- Network advertising. Rendered only inside an impersonated super-admin
              session — whether a shop carries advertising is the platform owner's
@@ -45,9 +26,7 @@
                 <div class="min-w-0">
                     <h2 class="text-subheading">Network advertising</h2>
                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-xl">
-                        Only you can see this. Turn it on once the shop has agreed &mdash; then choose which of
-                        their televisions carry adverts. Their own content pauses for the break and carries on
-                        from where it stopped.
+                        Only you see this. Turn it on once the shop agrees, then choose which screens carry adverts.
                     </p>
                 </div>
 
@@ -68,15 +47,26 @@
                         dusk="all-screens-ads-on" class="btn-row-neutral">Adverts on</button>
                 <button @click="allScreenAds(false)" x-bind:disabled="savingAds"
                         dusk="all-screens-ads-off" class="btn-row-neutral">Adverts off</button>
-                <span class="text-xs text-gray-500 dark:text-gray-400">
-                    &mdash; or set them one at a time in the list below
-                </span>
             </div>
         </div>
         @endcan
 
-        <x-crud.table-wrapper title="All Screens" searchPlaceholder="Search by name, device id or date..." :columns="5"
-            description="Every television and whether it is online. Open a screen's Playlist to choose what it shows.">
+        {{-- Add Screen and the TV's own page stand beside the search. The player opens in a new tab: it is a kiosk page
+             and must not replace the panel. It is ungated, because /player is an open route (a TV has no login). --}}
+        <x-crud.table-wrapper title="All Screens" searchPlaceholder="Search screens..." :columns="5">
+            <x-slot name="actions">
+                <a href="{{ route('player') }}" target="_blank" rel="noopener"
+                   dusk="open-player" class="btn-secondary-add" aria-label="Open Player (opens in a new tab)">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                    </svg>
+                    Open Player
+                </a>
+                @can('screen-store')
+                    <x-crud.add-button label="Add Screen" @click="openPairModal()" dusk="add-screen" />
+                @endcan
+            </x-slot>
             <x-slot name="head">
                 <th class="px-5 py-3 text-left font-semibold">Name</th>
                 <th class="px-5 py-3 text-left font-semibold">Status</th>
@@ -87,13 +77,7 @@
 
             <x-slot name="body">
                 <x-crud.table-empty :columns="5" itemsVar="items" message="No screens yet."
-                    hint="On the television, open {{ route('player') }} in its web browser. Then press Add Screen and type the code it shows.">
-                    @can('screen-store')
-                        <x-slot name="action">
-                            <button type="button" class="btn-primary" @click="openPairModal()" dusk="empty-add-screen">Add Screen</button>
-                        </x-slot>
-                    @endcan
-                </x-crud.table-empty>
+                    hint="Open {{ route('player') }} on the TV, then press Add Screen and type its code." />
 
                 <template x-for="item in items" :key="item.id">
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -223,7 +207,7 @@
 
                 <form @submit.prevent="pairScreen" novalidate dusk="screen-pair-form" class="mt-4 space-y-4">
                     <div x-show="!hasStore && pairForm.mode === 'new'" x-cloak class="alert-warning">
-                        Select a store first &mdash; a screen belongs to the store it is paired in.
+                        Select a store first.
                     </div>
 
                     <x-crud.form-field label="Pairing code" field="code" :required="true">
@@ -345,8 +329,7 @@
                         <p x-show="holdingNote()" x-cloak class="mt-1 text-xs text-amber-700 dark:text-amber-400"
                            dusk="screen-edit-default-media-note" x-text="holdingNote()"></p>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            Shown whenever nothing on this screen's playlist is due. When each file plays is set with
-                            Schedule, on its line in the screen's Playlist.
+                            Shown when nothing on the playlist is due.
                             <span x-show="loadingMedia" x-cloak>Loading the library&hellip;</span>
                             <span x-show="!loadingMedia && mediaOptions.length >= 100" x-cloak>Only the first 100 pictures are listed, by name.</span>
                         </p>

@@ -1,9 +1,10 @@
 {{-- The row a listing shows once it has loaded and holds nothing. Three cases, told apart, because they need
      different help: a list that could not be loaded (and Try again — never "nothing here yet" after a lost
      connection or an ended session); a search (or a filter) that matched nothing — said with the words searched for,
-     and the way back; and a list that is really empty — what goes here (`message`, `hint`) and, for somebody who may
-     add it, the button that does (the `action` slot, which the page gates with @can). `filtered` is the page's own
-     expression for "a filter is on", and `clearFilters` the call that takes them off. --}}
+     and the way back; and a list that is really empty — `message`, and a short `hint` only where a first step needs
+     saying. No add button here: the list's own, beside its search, is the one (owner, 2026-09-30: two of the same
+     button on one page). `filtered` is the page's own expression for "a filter is on", and `clearFilters` the call
+     that takes them off. --}}
 @props([
     'columns' => 2,
     'itemsVar',
@@ -42,9 +43,6 @@
                     @if (filled($hint))
                         <p class="text-sm text-gray-500 dark:text-gray-400">{{ $hint }}</p>
                     @endif
-                    @isset($action)
-                        <div class="flex flex-wrap justify-center gap-2 pt-2">{{ $action }}</div>
-                    @endisset
                 </div>
             </template>
         </td>
