@@ -3,7 +3,7 @@
 ## Definition of Done
 1. Relevant tests pass (`php artisan test`) — and for changes touching UI or user flows, the Dusk browser suite passes too (`php artisan dusk`, per the Testing convention).
 2. `vendor/bin/pint --dirty --format agent` reports no remaining issues.
-3. No debug leftovers (`dd()`, `dump()`, `ray()`, `var_dump()`, stray `Log::debug`).
+3. No debug leftovers (`dd()`, `dump()`, `ray()`, `var_dump()`, stray `Log::debug`) — and no dead code (owner's rule, 2026-09-30: "useless or unused code, class, id, function delete ya remove kar diya karo takay files ki kbs kum ho jaye"): a change that writes or edits CSS or JS removes, in the same commit, what it leaves unused — an Alpine method or a helper nothing calls, an import nothing reads, a config key the script no longer reads, a `@utility` or class no view uses, an id nothing points at — and the report says what the build lost in KB.
 4. Any new migration is reversible (`down()` implemented) and runs cleanly on a local DB.
 5. New env keys are added to `.env.example`.
 6. Live/localhost verification passes (see **Post-Tooling Live Verification** below).

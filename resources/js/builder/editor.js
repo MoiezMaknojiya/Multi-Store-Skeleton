@@ -287,9 +287,6 @@ export function registerAdEditor(Alpine) {
                     : null;
             },
 
-            get selectedId() {
-                return this.selectedIds.length === 1 ? this.selectedIds[0] : null;
-            },
 
             get zoomPercent() {
                 return Math.round(this.zoom * 100);

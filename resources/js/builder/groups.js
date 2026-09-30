@@ -18,10 +18,7 @@ import {
     ancestorsOf, childrenOf, clampName, descendantsOf, fitsUnder, isGroup, MAX_GROUP_DEPTH, MAX_NAME, newId,
     parentIdOf, renumberDepth, subtreeDepthOf, syncGroupBounds,
 } from './document.js';
-import { angleFromCentre, normaliseAngle, rotatePoint } from './geometry.js';
-
-/** The style keys a group has of its own: the rest belong to what it holds. */
-const GROUP_STYLE_KEYS = ['blend'];
+import { normaliseAngle, rotatePoint } from './geometry.js';
 
 export function groupPanel() {
     return {
@@ -388,10 +385,6 @@ export function groupPanel() {
             };
         },
 
-        /** The angle of the pointer about a group's centre, as the rotate handle reads it. */
-        angleAbout(box, point) {
-            return angleFromCentre(box, point.x, point.y);
-        },
 
         /* ── Copies ────────────────────────────────────────────────────── */
 
@@ -478,10 +471,6 @@ export function groupPanel() {
             this.setSelection([element.id]);
         },
 
-        /** The keys a group takes from a pasted style. */
-        groupStyleKeys() {
-            return GROUP_STYLE_KEYS;
-        },
 
         /** Whether these elements may be dropped inside `parentId` (the Layers panel's drag). */
         fitsUnder(parentId, elements) {

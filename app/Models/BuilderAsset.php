@@ -36,8 +36,8 @@ class BuilderAsset extends Model
      * The longest video on the shelf (owner's rule, 2026-09-28: "max 30 seconds"). A video in a design repeats for
      * as long as the ad is on screen, as a background layer or on the stage alike — one stretched over the whole
      * stage does a background's job, so both are held to it — and a short loop is all a design needs, and a light
-     * file for every television. The library and a channel keep five minutes (Media::MAX_VIDEO_SECONDS). Mirrored
-     * by BUILDER_VIDEO_SECONDS in resources/js/core/media-file.js.
+     * file for every television. The library and a channel keep five minutes (Media::MAX_VIDEO_SECONDS). The shelf's
+     * uploader reads this very constant (builder/assets.blade.php, :max-video-seconds), so the browser needs no copy.
      */
     public const MAX_VIDEO_SECONDS = 30;
 

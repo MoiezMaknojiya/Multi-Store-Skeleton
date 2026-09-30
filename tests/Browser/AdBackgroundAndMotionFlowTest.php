@@ -455,13 +455,13 @@ class AdBackgroundAndMotionFlowTest extends DuskTestCase
             /* ── 4. Background, at the foot of the layers, shows the stage again ── */
             $this->jsClick($browser, '@layer-background');
             $browser->waitFor('@stage-panel');
-            $this->assertNull($browser->script("return {$editor}.selectedId;")[0]);
+            $this->assertSame([], $browser->script("return {$editor}.selectedIds;")[0]);
 
             // A locked element cannot be picked up, from the stage or from the Layers panel.
             $imageId = $browser->script("return {$editor}.doc.elements.find(e => e.type === 'image').id;")[0];
             $this->jsClick($browser, '@layer-lock-'.$imageId);
             $this->jsClick($browser, '@layer-'.$imageId);
-            $this->assertNull($browser->script("return {$editor}.selectedId;")[0], 'a locked element is not selected');
+            $this->assertNotContains($imageId, $browser->script("return {$editor}.selectedIds;")[0], 'a locked element is not selected');
 
             /* ── 5. What was saved is what was done ─────────────────────────── */
             $this->jsType($browser, '@ad-name', 'Small controls');
