@@ -65,7 +65,9 @@ class ChunkedUploadFlowTest extends DuskTestCase
 
             $this->jsClick($browser, '@media-upload-close');
             $this->waitForModalClosed($browser, '@media-upload-form');
-            $browser->waitForText('Breakfast menu')->assertSee('Lunch menu')->assertSee('Dinner menu');
+            // The list refreshes 400 ms after a file joins it (onUploaded), so a refresh between two files can show the
+            // first alone for a moment: each is waited for.
+            $browser->waitForText('Breakfast menu')->waitForText('Lunch menu')->waitForText('Dinner menu');
         });
     }
 

@@ -6,20 +6,13 @@
 
     <div x-data="builderAssetsTable()" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
+        {{-- The shop's storage where a note once stood (owner, 2026-09-30), the shop list and the search beside it. The
+             meter shows only for a shop's shelf: the platform's shared one (All shops) has no wall. --}}
         <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="flex flex-wrap items-center gap-3">
-                <p class="max-w-3xl text-sm text-gray-500 dark:text-gray-400" dusk="assets-scope-note">
-                    Pictures and videos for your ads.
-                    @if ($aboveTheStores)
-                        {{-- Where an upload goes, as the Shop list stands (owner, 2026-09-29: an upload for every shop). --}}
-                        <span x-text="filterStore
-                            ? 'Uploads go to the shop chosen in the list.'
-                            : 'Uploads are shared with every shop.'" dusk="assets-upload-target">Uploads are shared with every shop.</span>
-                    @endif
-                </p>
-            </div>
+            {{-- The shelf counts toward the shop's 512 MB like its library does. --}}
+            <x-storage-meter class="w-full sm:w-96" />
 
-            <div class="flex flex-wrap items-center gap-3">
+            <div class="ml-auto flex flex-wrap items-center gap-3">
                 @if ($aboveTheStores)
                     <select x-model="filterStore" @change="applyFilters()" class="form-select sm:w-52"
                             dusk="assets-filter-store" aria-label="Shop">
@@ -33,9 +26,6 @@
                 <x-crud.search-input placeholder="Search assets..." />
             </div>
         </div>
-
-        {{-- The shelf counts toward the shop's 512 MB like its library does. --}}
-        <x-storage-meter />
 
         @can('ad-store')
             {{-- The shared uploader (docs/UPLOADS-SPEC.md): each picture or video joins the shelf as it arrives. The
@@ -82,10 +72,13 @@
                 <div x-show="!loading && items.length > 0" x-cloak
                      class="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4" dusk="assets-grid">
                     <template x-for="item in items" :key="item.id">
-                        <div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700"
+                        <div class="group overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700"
                              x-bind:dusk="'asset-card-' + item.id">
 
-                            <div class="aspect-video bg-gray-100 dark:bg-gray-900">
+                            {{-- The picture, and over it — under the mouse, or while the keyboard is in the card; always on a
+                                 touch screen, which has no hover — what the file is in the middle and Delete in the top-left
+                                 corner (owner, 2026-09-30). --}}
+                            <div class="relative aspect-video bg-gray-100 dark:bg-gray-900">
                                 {{-- An upright picture is shown whole, not cut to its middle. --}}
                                 <img x-show="item.thumbnail_url" x-cloak x-bind:src="item.thumbnail_url" alt="" loading="lazy"
                                      class="h-full w-full"
@@ -93,37 +86,38 @@
                                 <span x-show="!item.thumbnail_url" x-cloak
                                       class="flex h-full w-full items-center justify-center text-xs text-muted-soft"
                                       x-text="item.kind === 'video' ? 'Video' : 'Image'"></span>
-                            </div>
 
-                            <div class="space-y-1 p-3">
-                                <p class="truncate text-sm font-medium text-gray-800 dark:text-white" x-bind:title="item.title"
-                                   x-bind:dusk="'asset-title-' + item.id" x-text="item.title"></p>
-
-                                {{-- Whose it is: above the stores its shop or "Every shop"; inside a store, the platform's. --}}
-                                <p x-show="item.owner_label" x-cloak class="flex flex-wrap items-center gap-1">
-                                    <span x-bind:class="item.shared ? 'badge-info' : 'badge-neutral'" x-text="item.owner_label"
-                                          x-bind:dusk="'asset-owner-' + item.id"></span>
-                                </p>
-
-                                <p class="text-xs text-gray-500 dark:text-gray-400">
-                                    <span x-text="item.kind === 'video' ? 'Video' : 'Image'"></span>
-                                    <span x-show="item.width" x-cloak x-text="' · ' + item.width + '×' + item.height"></span>
-                                    <span x-text="' · ' + sizeLabel(item)"></span>
-                                </p>
-
-                                <p class="truncate text-xs" x-bind:class="isUsed(item) ? 'text-blue-700 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'"
-                                   x-bind:title="usageLabel(item)"
-                                   x-bind:dusk="'asset-usage-' + item.id" x-text="usageLabel(item)"></p>
+                                <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:bg-transparent pointer-coarse:opacity-100">
+                                    <span class="rounded-full bg-black/75 px-2.5 py-1 text-xs font-medium text-white"
+                                          x-bind:dusk="'asset-details-' + item.id" x-text="assetDetails(item)"></span>
+                                </div>
 
                                 {{-- A shop's own file with Delete Ads, a shared one with Delete Shared Assets: the row says which
                                      this person holds (can_delete), the route asks again. --}}
                                 @can('delete-builder-assets')
-                                    <div class="pt-1" x-show="item.can_delete" x-cloak>
-                                        <button type="button" class="btn-row-danger" @click="askToDelete(item)"
-                                                x-bind:aria-label="'Delete ' + item.title"
-                                                x-bind:dusk="'delete-asset-' + item.id">Delete</button>
-                                    </div>
+                                    <button type="button" x-show="item.can_delete" x-cloak @click="askToDelete(item)"
+                                            x-bind:aria-label="'Delete ' + item.title" title="Delete"
+                                            x-bind:dusk="'delete-asset-' + item.id"
+                                            class="absolute left-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-red-700 shadow-sm opacity-0 transition-opacity hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100 dark:bg-gray-800/95 dark:text-red-400 dark:hover:bg-gray-800">
+                                        <x-icon name="trash" />
+                                    </button>
                                 @endcan
+                            </div>
+
+                            <div class="space-y-2 p-3">
+                                <p class="truncate text-sm font-medium text-gray-800 dark:text-white" x-bind:title="item.title"
+                                   x-bind:dusk="'asset-title-' + item.id" x-text="item.title"></p>
+
+                                {{-- Two pills: whose it is (above the stores its shop or "Every shop"; inside a store, the
+                                     platform's) and whether an ad uses it — green in use, grey not yet. --}}
+                                <div class="flex flex-wrap items-center gap-1">
+                                    <span x-show="item.owner_label" x-cloak x-bind:class="item.shared ? 'badge-info' : 'badge-neutral'"
+                                          x-text="item.owner_label" x-bind:dusk="'asset-owner-' + item.id"></span>
+                                    <span class="max-w-full" x-bind:class="isUsed(item) ? 'badge-success' : 'badge-neutral'"
+                                          x-bind:title="usageLabel(item)" x-bind:dusk="'asset-usage-' + item.id">
+                                        <span class="min-w-0 truncate" x-text="usageLabel(item)"></span>
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     </template>

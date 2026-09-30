@@ -298,7 +298,7 @@ class DashboardSummary
         return collect([
             ['key' => 'pair', 'label' => 'Pair a screen', 'href' => route('screens.view', ['pair' => 1]), 'can' => ['screen-view', 'screen-store']],
             ['key' => 'upload', 'label' => 'Upload files', 'href' => route('media.view', ['upload' => 1]), 'can' => ['media-view', 'media-store']],
-            ['key' => 'ad', 'label' => 'New ad', 'href' => route('builder.index', ['new' => 1]), 'can' => ['ad-view', 'ad-store']],
+            ['key' => 'ad', 'label' => 'Create Ad', 'href' => route('builder.index', ['new' => 1]), 'can' => ['ad-view', 'ad-store']],
         ])->filter(fn (array $action) => collect($action['can'])->every(fn (string $permission) => $user->can($permission)))
             ->map(fn (array $action) => ['key' => $action['key'], 'label' => $action['label'], 'href' => $action['href']])
             ->values()->all();

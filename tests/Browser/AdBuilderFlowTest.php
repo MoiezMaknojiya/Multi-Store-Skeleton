@@ -256,8 +256,8 @@ class AdBuilderFlowTest extends DuskTestCase
             $browser->loginAs($admin)->visit('/builder/assets');
             $this->waitForAlpine($browser);
             $browser->waitFor('@assets-empty')
-                ->assertSelected('@assets-filter-store', '')      // "All shops"
-                ->assertSeeIn('@assets-upload-target', 'shared with every shop');
+                ->assertSelected('@assets-filter-store', '')      // "All shops": the shared shelf, with no wall
+                ->assertMissing('@storage-meter');
 
             /* ── 1. All shops: the picture is shared with every shop ────── */
             $this->uploadThrough($browser, 'asset', $brandPicture);
@@ -269,7 +269,7 @@ class AdBuilderFlowTest extends DuskTestCase
             /* ── 2. One shop chosen: the picture is that shop's alone ───── */
             $browser->select('@assets-filter-store', (string) $beta->id)
                 ->waitFor('@asset-card-'.$brand->id)                // a shop's shelf shows the shared file too
-                ->assertSeeIn('@assets-upload-target', 'go to the shop chosen');
+                ->waitFor('@storage-meter');                        // and the shop's own 512 MB where the note once was
             $this->uploadThrough($browser, 'asset', $menuPicture);
             $browser->waitUsing(20, 250, fn () => BuilderAsset::count() === 2);
             $menu = BuilderAsset::where('title', 'Beta menu')->sole();

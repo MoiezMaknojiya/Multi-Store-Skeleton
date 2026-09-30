@@ -7,9 +7,11 @@ use App\Models\ActivityLog;
 use App\Models\Role;
 use App\Models\Store;
 use App\Models\User;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -35,6 +37,14 @@ class RegisteredUserController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        // A robot, not a person: nothing is written and no email goes out. Said like any form to send again, so a
+        // person the trap ever caught by mistake simply sends it again, and a robot learns nothing.
+        if ($this->looksLikeARobot($request)) {
+            return back()
+                ->withInput($request->except(['password', 'password_confirmation', 'website', 'form_started']))
+                ->withErrors(['form' => 'Please try again.']);
+        }
+
         $role = Role::where('key', Role::OWNER)->first();
 
         if (! $role) {
@@ -111,5 +121,40 @@ class RegisteredUserController extends Controller
         return $problem === null
             ? redirect()->route('verification.notice')
             : redirect()->route('verification.notice')->with('error', $problem);
+    }
+
+    /**
+     * The form's two traps (components/auth/robot-trap.blade.php; owner, 2026-09-30: made-up names signed up all
+     * day, each sending a confirmation email to somebody's real address): the field no person sees is filled in,
+     * or — while a least time is set — the form came back sooner than a person can fill it in, too late to be the
+     * page just opened, or without the sealed moment it was opened (a robot posting straight to the address).
+     */
+    private function looksLikeARobot(Request $request): bool
+    {
+        if (filled($request->input('website'))) {
+            return true;
+        }
+
+        $least = (int) config('signage.signup_min_seconds');
+
+        if ($least <= 0) {
+            return false;
+        }
+
+        $sealed = $request->input('form_started');
+
+        if (! is_string($sealed) || $sealed === '') {
+            return true;
+        }
+
+        try {
+            $opened = (int) Crypt::decryptString($sealed);
+        } catch (DecryptException) {
+            return true;
+        }
+
+        $waited = now()->getTimestamp() - $opened;
+
+        return $waited < $least || $waited > (int) config('signage.signup_form_lifetime_seconds');
     }
 }

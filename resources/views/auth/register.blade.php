@@ -14,6 +14,11 @@
     <form method="POST" action="{{ route('register') }}" class="space-y-5" dusk="register-form" novalidate
         x-data="registerForm()" @submit="handleSubmit($event)">
         @csrf
+        <x-auth.robot-trap />
+
+        @error('form')
+            <div class="alert-error" role="alert" dusk="register-form-error">{{ $message }}</div>
+        @enderror
 
         {{-- Section 1: the owner --}}
         <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Your Details</h2>

@@ -5,9 +5,16 @@
 
     <div x-data="adsTable()" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        {{-- The shop list (above the stores; a store sees its own only), the search and New ad on one line. --}}
+        {{-- Create Ad, then the shop list (above the stores; a store sees its own only) and the search, on one line:
+             the button first, as on every page (owner, 2026-09-30). --}}
         <div class="flex flex-wrap items-center justify-end gap-3">
             <div class="flex w-full flex-wrap items-center gap-3 sm:w-auto">
+                @can('ad-store')
+                    {{-- An ad's shape is chosen before the editor opens and fixed after (docs/AD-BUILDER-SPEC.md
+                         §12), so Create Ad asks first. --}}
+                    <x-crud.add-button label="Create Ad" dusk="new-ad" @click="$dispatch('open-modal', 'new-ad-orientation')" />
+                @endcan
+
                 @if ($stores !== [])
                     <select x-model="filterStore" @change="applyFilters()" class="form-select sm:w-44"
                             dusk="ads-filter-store" aria-label="Shop">
@@ -19,12 +26,6 @@
                 @endif
 
                 <x-crud.search-input placeholder="Search ads..." />
-
-                @can('ad-store')
-                    {{-- An ad's shape is chosen before the editor opens and fixed after (docs/AD-BUILDER-SPEC.md
-                         §12), so New ad asks first. --}}
-                    <x-crud.add-button label="New ad" dusk="new-ad" @click="$dispatch('open-modal', 'new-ad-orientation')" />
-                @endcan
             </div>
         </div>
 
@@ -189,7 +190,7 @@
         @can('ad-store')
             <x-modal name="new-ad-orientation" :show="false" maxWidth="lg" focusable>
                 <div class="p-6">
-                    <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">New ad — which way is the screen?</h2>
+                    <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Create Ad — which way is the screen?</h2>
                     <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
                         Chosen once, for this ad: it cannot be changed after.
                     </p>

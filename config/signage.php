@@ -52,4 +52,18 @@ return [
         in_array(env('APP_ENV'), ['testing', 'dusk'], true) ? 0 : 10240
     ) * 1024 * 1024,
 
+    /**
+     * The fewest seconds between opening the sign-up form and sending it (owner, 2026-09-30: robots signed up all
+     * day with made-up names, and each sent a confirmation email to somebody's real address). A person needs far
+     * longer for its eleven fields; a robot answers in under one. None under the test suites unless told, like the
+     * reserve above — the trap's own tests set it (RegisteredUserController::looksLikeARobot).
+     */
+    'signup_min_seconds' => (int) env(
+        'SIGNAGE_SIGNUP_MIN_SECONDS',
+        in_array(env('APP_ENV'), ['testing', 'dusk'], true) ? 0 : 3
+    ),
+
+    /** How long a sign-up form stays good to send: a sealed moment older than this is a stale page or a replay. */
+    'signup_form_lifetime_seconds' => 2 * 60 * 60,
+
 ];

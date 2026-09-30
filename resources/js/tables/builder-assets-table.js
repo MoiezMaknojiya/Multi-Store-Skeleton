@@ -67,6 +67,15 @@ export function registerBuilderAssetsTable(Alpine) {
                 this.confirmDelete(item);
             },
 
+            /** "Image · 900×900 · 18 KB": what the file is, shown over its picture on hover. */
+            assetDetails(asset) {
+                return [
+                    asset.kind === 'video' ? 'Video' : 'Image',
+                    asset.width ? `${asset.width}×${asset.height}` : null,
+                    this.sizeLabel(asset),
+                ].filter(Boolean).join(' · ');
+            },
+
             /** "2.4 MB" — a size a person reads, not a number of bytes. */
             sizeLabel(asset) {
                 const mb = (asset.size ?? 0) / (1024 * 1024);

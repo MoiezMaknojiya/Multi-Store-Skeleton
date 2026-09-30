@@ -31,10 +31,10 @@
             <div class="card-header">
                 <h2 class="text-subheading min-w-0">Team of {{ $store->name }}</h2>
                 <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap sm:justify-end">
-                    <x-crud.search-input placeholder="Search by name or email" />
                     @can('member-invite')
                         <x-crud.add-button label="Invite member" @click="openInvite()" dusk="invite-member" />
                     @endcan
+                    <x-crud.search-input placeholder="Search by name or email" />
                 </div>
             </div>
             <div class="overflow-x-auto">

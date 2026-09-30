@@ -56,7 +56,7 @@ class DashboardFlowTest extends DuskTestCase
             $browser->visit('/dashboard')->waitFor('@dashboard-action-ad')
                 ->click('@dashboard-action-ad')
                 ->waitForLocation('/builder')
-                ->waitForText('New ad — which way is the screen?');
+                ->waitForText('Create Ad — which way is the screen?');
 
             // A card is the way to its page.
             $browser->visit('/dashboard')->waitFor('@dashboard-card-media')
