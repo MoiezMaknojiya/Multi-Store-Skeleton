@@ -10,6 +10,7 @@ use App\Models\Role;
 use App\Models\Store;
 use App\Models\User;
 use App\Services\StoreTeam;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -58,7 +59,17 @@ class UserController extends Controller
         return $this->paginatedResponse(
             $request, $query, ['first_name', 'last_name', 'email'], 'users',
             ['id', 'first_name', 'last_name', 'email', 'created_at'],
-            fn (Collection $users) => $this->attachAccess($users, $viewer)
+            fn (Collection $users) => $this->attachAccess($users, $viewer),
+            // A full name as it is shown ("Ali Khan"): its first word in the first name and the rest in the last.
+            function (Builder $name, string $search) {
+                $words = preg_split('/\s+/', trim($search), 2);
+
+                if (count($words) === 2) {
+                    $name->orWhere(fn (Builder $both) => $both
+                        ->where('first_name', 'like', "%{$words[0]}%")
+                        ->where('last_name', 'like', "%{$words[1]}%"));
+                }
+            }
         );
     }
 

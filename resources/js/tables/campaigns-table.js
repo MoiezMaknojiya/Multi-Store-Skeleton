@@ -7,7 +7,7 @@
  * runs on are chosen from every shop at once.
  */
 import axios from 'axios';
-import { windowLabel as clockRange } from '../core/clock.js';
+import { dayLabel, windowLabel as clockRange } from '../core/clock.js';
 import { createCrudTable } from '../core/crud-table-base.js';
 
 import { validate, required, maxLen, maxNumber, minNumber, requiredMessage, unreadableFields, wholeNumber } from '../core/validate.js';
@@ -45,6 +45,8 @@ export function registerCampaignsTable(Alpine) {
             picked: null,
             uploaded: null,
             uploading: false,
+            // Cancel pressed while the advert was still going up: the dialog asks before it gives the upload up.
+            confirmingClose: false,
         },
 
         defaultForm: blankForm(),
@@ -88,16 +90,38 @@ export function registerCampaignsTable(Alpine) {
             /* ── The form ──────────────────────────────────────────────── */
 
             openCampaignModal(item = null) {
+                this.confirmingClose = false;
                 this.clearFile();
                 this.openFormModal(item);
                 // A modal opened before the list arrived would show no screens at all.
                 if (this.allScreens.length === 0 && ! this.loadingScreens) this.loadScreens();
             },
 
-            /** Closing the form gives up an advert still going up, or one that arrived and was never saved. */
-            closeCampaignModal() {
+            /** Closing the form gives up an advert still going up — asked first — or one that arrived and was never
+             *  saved. */
+            closeCampaignModal(stopTheUpload = false) {
+                if (this.uploading && ! stopTheUpload) {
+                    this.confirmingClose = true;
+
+                    return;
+                }
+
+                this.confirmingClose = false;
                 this.clearFile();
                 this.closeFormModal();
+            },
+
+            /** Escape, or a click beside the dialog, while the advert is still going up: asked, as Cancel is. */
+            onModalClosing(event) {
+                if (event.detail !== 'campaign-form-modal' || ! this.uploading) return;
+
+                event.preventDefault();
+                this.confirmingClose = true;
+            },
+
+            /** "At least 6 seconds, at most 60: one break." — the limits, said before they are broken. */
+            secondsHint() {
+                return `At least ${PlaylistItemDefaults.minImageSeconds} seconds, at most ${this.maxBreakSeconds}: one break.`;
             },
 
             /** Forget the uploaded advert, and take it out of the uploader — one still going is cancelled. */
@@ -281,10 +305,17 @@ export function registerCampaignsTable(Alpine) {
                 return this.form.screen_ids.includes(id);
             },
 
+            /** Is every screen of the shop that can carry adverts chosen? Then its button clears them. */
+            storeAllChosen(group) {
+                const eligible = group.screens.filter((screen) => screen.carries_ads);
+
+                return eligible.length > 0 && eligible.every((screen) => this.isChosen(screen.id));
+            },
+
             /** Every screen in one shop that CAN carry advertising, in one click. */
             toggleStore(group) {
                 const eligible = group.screens.filter((screen) => screen.carries_ads).map((s) => s.id);
-                const allChosen = eligible.length > 0 && eligible.every((id) => this.isChosen(id));
+                const allChosen = this.storeAllChosen(group);
 
                 eligible.forEach((id) => {
                     const chosen = this.isChosen(id);
@@ -336,11 +367,28 @@ export function registerCampaignsTable(Alpine) {
 
             datesLabel(campaign) {
                 if (! campaign.starts_on && ! campaign.ends_on) return 'No end date';
+                if (campaign.starts_on && campaign.ends_on) return `From ${dayLabel(campaign.starts_on)} to ${dayLabel(campaign.ends_on)}`;
 
-                const from = campaign.starts_on ? String(campaign.starts_on).slice(0, 10) : 'always';
-                const to = campaign.ends_on ? String(campaign.ends_on).slice(0, 10) : 'forever';
+                return campaign.starts_on ? `From ${dayLabel(campaign.starts_on)}` : `Until ${dayLabel(campaign.ends_on)}`;
+            },
 
-                return `${from} → ${to}`;
+            /**
+             * Where the campaign stands today, in words and a colour: paused, over, not yet started, on no screen, or
+             * running. Read on this computer's calendar — each screen reads the dates on its own, so a screen in
+             * another time zone may be a day either side of it.
+             */
+            campaignStatus(campaign) {
+                const now = new Date();
+                const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                const starts = campaign.starts_on ? String(campaign.starts_on).slice(0, 10) : null;
+                const ends = campaign.ends_on ? String(campaign.ends_on).slice(0, 10) : null;
+
+                if (! campaign.is_active) return { label: 'Paused', badge: 'badge-neutral' };
+                if (ends && ends < today) return { label: 'Ended', badge: 'badge-neutral' };
+                if (starts && starts > today) return { label: `Starts ${dayLabel(starts)}`, badge: 'badge-info' };
+                if ((campaign.screens_count ?? 0) === 0) return { label: 'On no screen', badge: 'badge-warning' };
+
+                return { label: 'Running', badge: 'badge-success' };
             },
 
             screensLabel(campaign) {

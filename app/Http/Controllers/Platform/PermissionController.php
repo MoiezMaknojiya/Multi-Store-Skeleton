@@ -25,7 +25,8 @@ class PermissionController extends Controller
     /** Return paginated, searchable permission data as JSON */
     public function data(Request $request): JsonResponse
     {
-        return $this->paginatedResponse($request, Permission::query(), ['name'], 'permissions');
+        // Found by the words people read as well as by the name the code uses.
+        return $this->paginatedResponse($request, Permission::query(), ['name', 'label'], 'permissions');
     }
 
     /** Create a new permission */

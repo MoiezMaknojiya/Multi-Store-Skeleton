@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Ad Builder') }}</h1>
+        <h1 class="page-title">{{ __('Ad Builder') }}</h1>
     </x-slot>
 
     <div x-data="adsTable()" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
@@ -12,16 +12,10 @@
                 @can('ad-store')
                     {{-- An ad's shape is chosen before the editor opens and fixed after (docs/AD-BUILDER-SPEC.md
                          §12), so New ad asks first. --}}
-                    <button type="button" class="btn-primary-add" dusk="new-ad"
-                            @click="$dispatch('open-modal', 'new-ad-orientation')">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                        New ad
-                    </button>
+                    <x-crud.add-button label="New ad" dusk="new-ad" @click="$dispatch('open-modal', 'new-ad-orientation')" />
                 @endcan
 
-                <p class="text-sm text-gray-500 dark:text-gray-400" dusk="ads-scope-note">
+                <p class="max-w-2xl text-sm text-gray-500 dark:text-gray-400" dusk="ads-scope-note">
                     An ad is the size of a television — 1920 × 1080, or 1080 × 1920 for a screen mounted upright.
                     Publish one and it joins the media a playlist can play.
                 </p>
@@ -30,7 +24,7 @@
             <div class="flex flex-wrap items-center gap-3">
                 {{-- Above the stores the gallery can be narrowed to one shop; a store sees its own only. --}}
                 @if ($stores !== [])
-                    <select x-model="filterStore" @change="applyFilters()" class="form-select w-44 text-sm"
+                    <select x-model="filterStore" @change="applyFilters()" class="form-select sm:w-44"
                             dusk="ads-filter-store" aria-label="Shop">
                         <option value="">All shops</option>
                         @foreach ($stores as $store)
@@ -43,19 +37,47 @@
             </div>
         </div>
 
-        {{-- A gallery, not a table: an ad is a picture, and a picture is how a person finds it again. --}}
-        <div class="card">
-            <div class="p-5">
+        {{-- A gallery, not a table: an ad is a picture, and a picture is how a person finds it again. The same three
+             "nothing to show" cases as every listing (x-crud.table-empty): a list that did not load, a search or a
+             shop that matched nothing, and no ads at all. --}}
+        <div class="card" data-list-card>
+            <div class="p-5" x-bind:aria-busy="loading ? 'true' : 'false'">
                 <template x-if="loading">
-                    <p class="py-12 text-center text-sm text-muted-soft">Loading...</p>
+                    <p class="py-12 text-center text-sm text-muted-soft">
+                        <span class="inline-flex items-center gap-2"><x-spinner class="text-blue-600 dark:text-blue-400" /> Loading...</span>
+                    </p>
                 </template>
 
-                <template x-if="!loading && items.length === 0">
-                    <div class="py-16 text-center" dusk="ads-empty">
-                        <p class="text-sm text-gray-500 dark:text-gray-400">No ads yet.</p>
+                <template x-if="!loading && items.length === 0 && loadFailed">
+                    <div class="mx-auto max-w-md space-y-3 py-12 text-center" role="alert" dusk="table-load-failed">
+                        <p class="text-sm text-gray-700 dark:text-gray-200">Could not load the ads. Check the connection, then try again.</p>
+                        <button type="button" class="btn-row-neutral" @click="fetchItems()" dusk="table-try-again">Try again</button>
+                    </div>
+                </template>
+
+                <template x-if="!loading && items.length === 0 && !loadFailed && (search || filterStore)">
+                    <div class="mx-auto max-w-md space-y-3 py-12 text-center" dusk="table-no-match">
+                        <p class="text-sm text-gray-700 dark:text-gray-200">
+                            <span x-show="search">No ad matches &ldquo;<span class="font-medium" x-text="search"></span>&rdquo;.</span>
+                            <span x-show="!search">This shop has no ads yet.</span>
+                        </p>
+                        <div class="flex flex-wrap justify-center gap-2">
+                            <button type="button" x-show="search" class="btn-row-neutral" @click="search = ''" dusk="table-clear-search">Clear search</button>
+                            <button type="button" x-show="!search" class="btn-row-neutral" @click="filterStore = ''; applyFilters()" dusk="table-clear-filters">Show every shop</button>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="!loading && items.length === 0 && !loadFailed && !search && !filterStore">
+                    <div class="mx-auto max-w-md space-y-2 py-12 text-center" dusk="ads-empty">
+                        <p class="text-sm font-medium text-gray-700 dark:text-gray-200">No ads yet.</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">
+                            Put pictures, words and video on a television-sized stage, then publish the ad to play it on your screens.
+                        </p>
                         @can('ad-store')
-                            <button type="button" class="mt-2 inline-block text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
-                                    dusk="new-ad-empty" @click="$dispatch('open-modal', 'new-ad-orientation')">Build your first one</button>
+                            <div class="flex justify-center pt-2">
+                                <x-crud.add-button label="Build your first ad" dusk="new-ad-empty" @click="$dispatch('open-modal', 'new-ad-orientation')" />
+                            </div>
                         @endcan
                     </div>
                 </template>
@@ -63,16 +85,17 @@
                 <div x-show="!loading && items.length > 0" x-cloak
                      class="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3" dusk="ads-grid">
                     <template x-for="item in items" :key="item.id">
-                        <div class="group overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700"
+                        <div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700"
                              x-bind:dusk="'ad-card-' + item.id">
 
                             {{-- The poster the editor captured when the ad was saved. It opens the editor — which
-                                 is Update Ads — so it is a link only for somebody who may change the ad. --}}
+                                 is Update Ads — so it is a link only for somebody who may change the ad; a mouse's
+                                 short cut only, since the name and Edit below lead to the same place (tabindex -1). --}}
                             {{-- The tile stays a television's shape; a portrait poster is drawn inside it whole
                                  (contained, never cropped) and the tile says which way the ad is (§12). --}}
                             <div class="relative">
                                 @can('ad-update')
-                                    <a x-bind:href="'/builder/' + item.id" class="block aspect-video bg-gray-100 dark:bg-gray-900">
+                                    <a x-bind:href="'/builder/' + item.id" tabindex="-1" aria-hidden="true" class="block aspect-video bg-gray-100 dark:bg-gray-900">
                                         <img x-show="item.thumbnail_url" x-cloak x-bind:src="item.thumbnail_url" alt=""
                                              class="h-full w-full" x-bind:class="item.orientation === 'portrait' ? 'object-contain' : 'object-cover'"
                                              x-bind:dusk="'ad-poster-' + item.id" />
@@ -94,10 +117,15 @@
                                       title="For a screen mounted upright — 1080 × 1920"
                                       x-bind:dusk="'ad-orientation-' + item.id">Portrait</span>
 
-                                {{-- The saved design, full screen, the way a television would show it. --}}
+                                {{-- The saved design, full screen, the way a television would show it — in a new tab,
+                                     which its name says. --}}
                                 <a x-bind:href="'/builder/' + item.id + '/preview'" target="_blank" rel="noopener"
-                                   class="absolute right-2 top-2 rounded bg-black/60 px-2 py-1 text-xs font-medium text-white hover:bg-black/80"
-                                   x-bind:dusk="'preview-ad-' + item.id">&#9654; Preview</a>
+                                   x-bind:aria-label="'Preview ' + item.name + ' (opens in a new tab)'"
+                                   class="absolute right-2 top-2 inline-flex items-center gap-1 rounded bg-black/70 px-2 py-1 text-xs font-medium text-white hover:bg-black/85 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                                   x-bind:dusk="'preview-ad-' + item.id">
+                                    <svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6.3 2.84A1.5 1.5 0 0 0 4 4.11v11.78a1.5 1.5 0 0 0 2.3 1.27l9.34-5.89a1.5 1.5 0 0 0 0-2.54L6.3 2.84Z" /></svg>
+                                    Preview
+                                </a>
                             </div>
 
                             {{-- The buttons go under the name when the card is too narrow for both: side by
@@ -105,14 +133,14 @@
                             <div class="flex flex-wrap items-start justify-between gap-3 p-4">
                                 <div class="min-w-[8rem] flex-1">
                                     @can('ad-update')
-                                        <a x-bind:href="'/builder/' + item.id" x-bind:dusk="'ad-name-' + item.id"
+                                        <a x-bind:href="'/builder/' + item.id" x-bind:dusk="'ad-name-' + item.id" x-bind:title="item.name"
                                            class="block truncate font-medium text-gray-800 hover:underline dark:text-white" x-text="item.name"></a>
                                     @else
-                                        <p x-bind:dusk="'ad-name-' + item.id"
+                                        <p x-bind:dusk="'ad-name-' + item.id" x-bind:title="item.name"
                                            class="truncate font-medium text-gray-800 dark:text-white" x-text="item.name"></p>
                                     @endcan
 
-                                    <p class="mt-1 text-xs text-gray-500">
+                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                         <span x-show="item.store_name" x-cloak x-text="item.store_name + ' · '"></span>
                                         <span x-text="item.updated_by_name ? 'by ' + item.updated_by_name : ''"></span>
                                     </p>
@@ -140,18 +168,26 @@
                                           x-text="item.in_playlists ? 'Playlists' : 'Channels only'"></span>
                                 </div>
 
+                                {{-- Each names the ad it acts on. A design a channel shows is not deleted: said at once,
+                                     before the password (askToDelete). --}}
                                 <div class="flex shrink-0 items-center gap-2">
                                     @can('ad-update')
                                         <a x-bind:href="'/builder/' + item.id" class="btn-row-neutral"
+                                           x-bind:aria-label="'Edit ' + item.name"
                                            x-bind:dusk="'edit-ad-' + item.id">Edit</a>
                                     @endcan
                                     @can('ad-store')
                                         <button type="button" class="btn-row-neutral" @click="duplicate(item)"
                                                 x-bind:disabled="busyId === item.id"
-                                                x-bind:dusk="'duplicate-ad-' + item.id">Copy</button>
+                                                x-bind:aria-label="'Copy ' + item.name"
+                                                x-bind:dusk="'duplicate-ad-' + item.id">
+                                            <x-spinner x-show="busyId === item.id" x-cloak class="h-3 w-3" />
+                                            Copy
+                                        </button>
                                     @endcan
                                     @can('ad-destroy')
-                                        <button type="button" class="btn-row-danger" @click="confirmDelete(item)"
+                                        <button type="button" class="btn-row-danger" @click="askToDelete(item)"
+                                                x-bind:aria-label="'Delete ' + item.name"
                                                 x-bind:dusk="'delete-ad-' + item.id">Delete</button>
                                     @endcan
                                 </div>
@@ -199,7 +235,10 @@
 
                 <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-ad-deletion')">Cancel</x-secondary-button>
-                    <x-danger-button x-bind:disabled="deleting" dusk="confirm-ad-deletion-confirm">Delete ad</x-danger-button>
+                    <x-danger-button x-bind:disabled="deleting" dusk="confirm-ad-deletion-confirm">
+                        <x-spinner x-show="deleting" x-cloak />
+                        Delete ad
+                    </x-danger-button>
                 </div>
             </form>
         </x-modal>

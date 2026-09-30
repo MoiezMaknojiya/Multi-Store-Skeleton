@@ -1,4 +1,11 @@
 {{-- Header --}}
+@php
+    $__user = auth()->user();
+    $__showSwitcher = $__user && $__user->globalRole() === null;
+    $__stores = $__showSwitcher ? $__user->stores()->orderBy('name')->get(['stores.id', 'stores.name']) : collect();
+    $__currentId = (int) session('current_store_id');
+    $__currentStore = $__stores->firstWhere('id', $__currentId);
+@endphp
 <header
     class="flex items-center justify-between h-16 px-4 sm:px-6
            bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700
@@ -9,6 +16,7 @@
     <div class="flex min-w-0 flex-1 items-center gap-3">
         {{-- Icon-only buttons carry their name in aria-label, bound to what a press would do next. --}}
         <button @click="toggleSidebar()" :aria-label="sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'"
+            aria-controls="main-sidebar" :aria-expanded="sidebarOpen.toString()"
             class="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
             <svg data-sidebar-icon="closed" :class="sidebarOpen ? 'hidden' : 'block'" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -19,25 +27,28 @@
         </button>
         @isset($header)
             <div class="min-w-0 flex-1 truncate text-gray-800 dark:text-white font-semibold">
-                {{ $header }}</div>
+                {{ $header }}
+                {{-- On a phone the switcher is an icon alone: the shop being worked in is said here instead, so
+                     nobody uploads into the wrong one. --}}
+                @if ($__currentStore)
+                    <p class="truncate text-xs font-normal text-gray-500 dark:text-gray-400 sm:hidden" dusk="header-current-store">{{ $__currentStore['name'] }}</p>
+                @endif
+            </div>
         @endisset
     </div>
 
     <div class="flex flex-shrink-0 items-center gap-1" x-data="header()">
         {{-- Store switcher: store-tier users only (global users / super admins span
-             every store and never switch). One query for the user's stores. --}}
-        @php
-            $__user = auth()->user();
-            $__showSwitcher = $__user && $__user->globalRole() === null;
-            $__stores = $__showSwitcher ? $__user->stores()->orderBy('name')->get(['stores.id', 'stores.name']) : collect();
-            $__currentId = (int) session('current_store_id');
-            $__currentStore = $__stores->firstWhere('id', $__currentId);
-        @endphp
+             every store and never switch). One query for the user's stores, at the top of this file. Both menus
+             say whether they are open, and close on Escape (back to their button) or when the focus leaves them. --}}
         @if($__showSwitcher && $__stores->isNotEmpty())
-            <div class="relative mr-1" x-data="{ storeMenu: false }">
-                <button @click="storeMenu = !storeMenu" dusk="store-switcher" aria-label="Switch store — {{ $__currentStore['name'] ?? 'Select store' }}"
+            <div class="relative mr-1" x-data="{ storeMenu: false }"
+                 @keydown.escape.window="if (storeMenu) { storeMenu = false; $refs.storeButton.focus() }"
+                 @focusout="if (! $el.contains($event.relatedTarget)) storeMenu = false">
+                <button @click="storeMenu = !storeMenu" x-ref="storeButton" dusk="store-switcher" aria-label="Switch store — {{ $__currentStore['name'] ?? 'Select store' }}"
+                    aria-haspopup="true" :aria-expanded="storeMenu.toString()"
                     class="flex items-center gap-2 px-3 py-1.5 rounded-xs border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-sm">
-                    <svg class="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <svg class="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                     </svg>
                     {{-- On a phone the button is the icon alone, so the page title keeps some room; the
@@ -45,24 +56,26 @@
                     <span class="hidden max-w-[9rem] truncate font-medium text-gray-700 dark:text-gray-300 sm:block">
                         {{ $__currentStore['name'] ?? 'Select store' }}
                     </span>
-                    <svg class="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <svg class="w-4 h-4 text-gray-500 flex-shrink-0 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
                     </svg>
                 </button>
 
                 <div x-show="storeMenu" @click.outside="storeMenu = false" x-cloak
                     class="absolute right-0 mt-2 w-60 max-h-72 overflow-y-auto rounded-xs shadow-lg z-50 py-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
-                    <p class="px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-500">Switch store</p>
+                    <p class="px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Switch store</p>
                     @foreach($__stores as $__s)
                         <form method="POST" action="{{ route('store.switch') }}">
                             @csrf
                             <input type="hidden" name="store_id" value="{{ $__s['id'] }}">
                             <button type="submit" dusk="store-switch-{{ $__s['id'] }}"
+                                @if($__s['id'] === $__currentId) aria-current="true" @endif
                                 class="w-full text-left px-4 py-2 text-sm flex items-center justify-between gap-2 hover:bg-gray-50 dark:hover:bg-gray-700
                                        {{ $__s['id'] === $__currentId ? 'text-blue-600 dark:text-blue-400 font-semibold' : 'text-gray-700 dark:text-gray-300' }}">
                                 <span class="truncate">{{ $__s['name'] }}</span>
                                 @if($__s['id'] === $__currentId)
-                                    <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <span class="sr-only">(current)</span>
+                                    <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
                                     </svg>
                                 @endif
@@ -87,9 +100,13 @@
         </button>
 
         {{-- User Dropdown --}}
-        <div class="relative">
-            <button @click="toggle()" dusk="user-menu" aria-label="Account menu — {{ auth()->user()->name }}" class="flex items-center gap-2 px-2 py-1.5 rounded-xs hover:bg-gray-100 dark:hover:bg-gray-800">
-                <div
+        <div class="relative"
+             @keydown.escape.window="if (userMenu) { close(); $refs.userButton.focus() }"
+             @focusout="if (! $el.contains($event.relatedTarget)) close()">
+            <button @click="toggle()" x-ref="userButton" dusk="user-menu" aria-label="Account menu — {{ auth()->user()->name }}"
+                aria-haspopup="true" :aria-expanded="userMenu.toString()"
+                class="flex items-center gap-2 px-2 py-1.5 rounded-xs hover:bg-gray-100 dark:hover:bg-gray-800">
+                <div aria-hidden="true"
                     class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-semibold">
                     {{ mb_strtoupper(mb_substr(auth()->user()->name ?: 'U', 0, 1)) }}
                 </div>
@@ -101,10 +118,10 @@
                 class="absolute right-0 mt-2 w-48 rounded-xs shadow-lg z-50 py-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
                 <a href="{{ route('profile.edit') }}" dusk="user-menu-settings"
                     class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Settings</a>
-                <form method="POST" action="{{ route('logout') }}">
+                <form method="POST" action="{{ route('logout') }}" class="mt-1 border-t border-gray-100 pt-1 dark:border-gray-700">
                     @csrf
                     <button type="submit" dusk="logout-button"
-                        class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-50 dark:hover:bg-gray-700">Log
+                        class="w-full text-left px-4 py-2 text-sm text-red-700 hover:bg-gray-50 dark:text-red-400 dark:hover:bg-gray-700">Log
                         Out</button>
                 </form>
             </div>

@@ -51,7 +51,7 @@ class PasswordResetFlowTest extends DuskTestCase
 
             // Laravel answers the same way for a known and an unknown address, so
             // this message is not proof on its own — the email below is.
-            $browser->waitForText('We have emailed', 15);
+            $browser->waitForText('a link to choose a new password is on its way', 15);
 
             /* ── 2. Opens the link that was actually emailed ─────────────── */
             $token = $this->tokenFromMailLog($logSizeBefore, 'reset-password');
@@ -96,7 +96,7 @@ class PasswordResetFlowTest extends DuskTestCase
             $this->jsType($browser, '#password_confirmation', 'trying-the-link-twice');
             $this->jsClick($browser, '@reset-password-submit');
 
-            $browser->waitForText('token is invalid', 15);
+            $browser->waitForText('This link has expired or was already used', 15);
 
             $owner->refresh();
             $this->assertFalse(Hash::check('trying-the-link-twice', $owner->password),

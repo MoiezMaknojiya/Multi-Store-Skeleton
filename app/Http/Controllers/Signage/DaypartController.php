@@ -28,8 +28,9 @@ class DaypartController extends Controller
     public function data(Request $request): JsonResponse
     {
         // The exceptions ride along: every row shows how many it has, and the edit
-        // modal opens from the row it already holds rather than fetching again.
-        $query = Daypart::visibleTo(auth()->user())->with('exceptions')->orderBy('name');
+        // modal opens from the row it already holds rather than fetching again. `in_use` lets the page say
+        // "retire it instead" before anybody confirms a delete the server refuses.
+        $query = Daypart::visibleTo(auth()->user())->with('exceptions')->withExists('scheduleRules as in_use')->orderBy('name');
 
         return $this->paginatedResponse($request, $query, ['name'], 'dayparts');
     }

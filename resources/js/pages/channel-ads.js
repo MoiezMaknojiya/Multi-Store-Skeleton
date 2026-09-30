@@ -19,6 +19,7 @@ import axios from 'axios';
 import { lengthInWords } from '../core/media-file.js';
 import { PlaylistItemDefaults } from '../core/playlist-defaults.js';
 import { unreadableFields } from '../core/validate.js';
+import { dayLabel } from '../core/clock.js';
 
 const blankForm = () => ({ title: '', seconds: PlaylistItemDefaults.imageSeconds, starts_on: '', ends_on: '' });
 
@@ -64,6 +65,8 @@ export function registerChannelAds(Alpine) {
         picked: null,
         uploaded: null,
         uploading: false,
+        // Cancel pressed while a file was still going up: the dialog asks before it gives the upload up.
+        confirmingClose: false,
         // How full the library an upload here joins is ({used, limit}), or null for the platform's own.
         storage: null,
 
@@ -89,6 +92,7 @@ export function registerChannelAds(Alpine) {
         openAdModal(ad = null) {
             this.editingAd = ad;
             this.formErrors = {};
+            this.confirmingClose = false;
             this.clearFile();
             this.chosen = null;
             this.picker = blankPicker();
@@ -108,7 +112,15 @@ export function registerChannelAds(Alpine) {
             if (PICKING.includes(this.source)) this.loadPicker();
         },
 
-        closeAdModal() {
+        closeAdModal(stopTheUpload = false) {
+            // A long video half sent is not thrown away on one tap: the dialog asks first.
+            if (this.uploading && !stopTheUpload) {
+                this.confirmingClose = true;
+
+                return;
+            }
+
+            this.confirmingClose = false;
             this.$dispatch('close-modal', 'channel-ad-modal');
             this.editingAd = null;
             this.formErrors = {};
@@ -118,14 +130,27 @@ export function registerChannelAds(Alpine) {
             this.clearFile();
         },
 
-        /** Switch the way the file is named. What was picked or chosen the other way is
-         *  dropped, so the form only ever sends what it shows. */
+        /** Escape, or a click beside the dialog, while a file is still going up: asked, as Cancel is. */
+        onModalClosing(event) {
+            if (event.detail !== 'channel-ad-modal' || !this.uploading) return;
+
+            event.preventDefault();
+            this.confirmingClose = true;
+        },
+
+        /** "At least 6 seconds, at most 5 minutes." — the limits, said before they are broken. */
+        secondsHint() {
+            return `At least ${PlaylistItemDefaults.minImageSeconds} seconds, at most ${lengthInWords(this.maxImageSeconds)}.`;
+        },
+
+        /** Switch the way the file is named. A file picked from a list is dropped; an upload is kept — a look at the
+         *  library must not throw away a long video half sent — and the save sends only what the chosen way shows
+         *  (the upload for Upload alone). */
         setSource(source) {
             if (this.source === source) return;
 
             this.source = source;
             this.chosen = null;
-            this.clearFile();
             this.forgetErrors('file', 'media_id');
 
             if (PICKING.includes(source)) {
@@ -300,7 +325,7 @@ export function registerChannelAds(Alpine) {
         /** POST, with FormData, for an edit too: an edit may carry a new file, and PHP does
          *  not parse a multipart body sent as PUT. */
         async saveAd(event) {
-            if (this.saving || this.uploading) return;
+            if (this.saving || (this.uploading && this.source === 'upload')) return;
 
             // A date typed only in part reads as '' — said under it, never saved as no date at all.
             const errors = { ...this.validateAd(), ...unreadableFields(event?.target) };
@@ -429,13 +454,19 @@ export function registerChannelAds(Alpine) {
 
         datesLabel(ad) {
             if (! ad.starts_on && ! ad.ends_on) return 'No end date';
+            if (ad.starts_on && ad.ends_on) return `From ${dayLabel(ad.starts_on)} to ${dayLabel(ad.ends_on)}`;
 
-            return `${ad.starts_on ?? 'now'} → ${ad.ends_on ?? 'no end'}`;
+            return ad.starts_on ? `From ${dayLabel(ad.starts_on)}` : `Until ${dayLabel(ad.ends_on)}`;
         },
 
         /** A draft is an Ad Builder ad taken off the screens (Unpublish): off the air until it is published again. */
         statusLabel(ad) {
             return { running: 'Running', scheduled: 'Starts later', ended: 'Ended', draft: 'Draft · not playing' }[ad.status] ?? ad.status;
+        },
+
+        /** Its colour says the same as its words: playing, not yet, not playing (a draft), over. */
+        statusBadge(ad) {
+            return { running: 'badge-success', scheduled: 'badge-info', draft: 'badge-warning' }[ad.status] ?? 'badge-neutral';
         },
 
         lengthLabel(ad) {

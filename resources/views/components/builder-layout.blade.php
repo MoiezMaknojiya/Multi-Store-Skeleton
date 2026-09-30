@@ -38,7 +38,8 @@
 
     {{-- The app's own toasts — the shared component, never a copy: a second copy drifted to the bottom
          corner and the editor spoke in a different place from every other page. --}}
-    <x-toasts />
+    {{-- Below the editor's 56 px bar, which a toast at the very top would cover. --}}
+    <x-toasts top="top-16" />
 </body>
 
 </html>

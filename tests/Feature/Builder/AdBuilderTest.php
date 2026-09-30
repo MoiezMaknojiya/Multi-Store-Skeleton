@@ -165,11 +165,27 @@ test('an ad a channel shows is not deleted until it is taken out of the channel 
     expect(BuilderAd::find($ad->id))->not->toBeNull()
         ->and(ChannelAd::where('media_id', $page->id)->count())->toBe(2);
 
+    // The gallery carries the same words, so it says them before the password is even asked (ads-table.js).
+    $rows = collect($this->getJson('/builder/data')->assertOk()->json('ads'));
+    expect($rows->firstWhere('id', $ad->id)['in_channels_message'])
+        ->toBe('Still used by the channels Lunch Deals, Weekly Deals. Take it out of those channels first.');
+
     // Out of both channels, it deletes like any other design.
     ChannelAd::where('media_id', $page->id)->delete();
     $this->deleteJson("/builder/{$ad->id}", ['password' => 'password'])->assertOk();
 
     expect(BuilderAd::find($ad->id))->toBeNull();
+});
+
+test('a design no channel shows carries no refusal in the gallery', function () {
+    $page = Media::factory()->adPage()->create(['store_id' => $this->store->id]);
+    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'media_id' => $page->id]);
+    $draft = BuilderAd::factory()->create(['store_id' => $this->store->id]);
+
+    $rows = collect($this->getJson('/builder/data')->assertOk()->json('ads'));
+
+    expect($rows->firstWhere('id', $ad->id)['in_channels_message'])->toBeNull()
+        ->and($rows->firstWhere('id', $draft->id)['in_channels_message'])->toBeNull();
 });
 
 test('another store’s ad is not there at all', function () {

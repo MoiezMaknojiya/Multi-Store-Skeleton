@@ -72,7 +72,7 @@ class ScreenPairingTest extends DuskTestCase
 
             $panel->visit('/screens');
             $this->waitForAlpine($panel);
-            $panel->waitForText('No screens found.');
+            $panel->waitForText('No screens yet.');
 
             $this->clickAndAwait($panel, '@add-screen', fn (Browser $b) => $b->waitFor('@screen-pair-form', 3));
             $this->jsType($panel, '@screen-code', $code);
@@ -228,7 +228,7 @@ class ScreenPairingTest extends DuskTestCase
             $this->switchToStore($browser, $beta);
             $browser->visit('/screens');
             $this->waitForAlpine($browser);
-            $browser->waitForText('No screens found.')
+            $browser->waitForText('No screens yet.')
                 ->assertDontSee('Alpha Only TV');
         });
     }

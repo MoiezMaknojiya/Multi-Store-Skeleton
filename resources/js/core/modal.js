@@ -117,7 +117,13 @@ export function registerCustomModal(Alpine) {
             if (event.detail === modalName) this.show = false;
         },
 
+        /* Escape, a click beside it or its own close: announced first, and a page may keep its dialog open — a file
+           still going up asks before it is given up (channel-ads.js, campaigns-table.js). A page's own close-modal
+           event is not asked: the page has decided. */
         closeMe() {
+            const asked = new CustomEvent('modal-closing', { detail: modalName, cancelable: true });
+            if (!window.dispatchEvent(asked)) return;
+
             this.show = false;
         }
     }));

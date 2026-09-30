@@ -3,10 +3,14 @@
      Each row: the editor method it runs, its words, its shortcut, its dusk name, and what it needs to
      be offered — a selection, something on the clipboard, both, or nothing. '-' draws a divider. --}}
 <div x-show="contextMenu" x-cloak class="fixed z-[60] w-60 rounded-lg border border-gray-200 bg-white py-1 text-sm shadow-xl dark:border-gray-700 dark:bg-gray-800"
-     x-bind:style="contextMenuStyle()" @pointerdown.stop @contextmenu.prevent dusk="context-menu" role="menu">
+     x-bind:style="contextMenuStyle()" @pointerdown.stop @contextmenu.prevent dusk="context-menu" role="menu" aria-label="Element menu"
+     x-ref="contextMenu"
+     @keydown.arrow-down.prevent.stop="moveMenuFocus(1)" @keydown.arrow-up.prevent.stop="moveMenuFocus(-1)"
+     @keydown.home.prevent.stop="moveMenuFocus('first')" @keydown.end.prevent.stop="moveMenuFocus('last')"
+     @keydown.tab="closeContextMenu()">
 
     <template x-if="contextMenu?.locked">
-        <button type="button" class="flex w-full items-center justify-between px-3 py-1.5 text-left text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/60"
+        <button type="button" class="flex w-full items-center justify-between px-3 py-1.5 text-left text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700/60 dark:focus-visible:bg-gray-700"
                 @click="runMenu('unlock')" dusk="menu-unlock" role="menuitem">
             <span x-text="'Unlock ' + (contextMenu.locked.name ?? contextMenu.locked.type)"></span>
         </button>
@@ -35,10 +39,10 @@
         ['selectAll', 'Select all', 'Ctrl+A', 'menu-select-all', 'always'],
     ] as $item)
         @if ($item === '-')
-            <div class="my-1 border-t border-gray-100 dark:border-gray-700"></div>
+            <div class="my-1 border-t border-gray-100 dark:border-gray-700" role="separator"></div>
         @else
             <button type="button" role="menuitem"
-                    class="flex w-full items-center justify-between px-3 py-1.5 text-left text-gray-700 hover:bg-gray-50 disabled:cursor-default disabled:text-gray-300 disabled:hover:bg-transparent dark:text-gray-200 dark:hover:bg-gray-700/60 dark:disabled:text-gray-600"
+                    class="flex w-full items-center justify-between px-3 py-1.5 text-left text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-400 disabled:hover:bg-transparent dark:text-gray-200 dark:hover:bg-gray-700/60 dark:focus-visible:bg-gray-700 dark:disabled:text-gray-500"
                     x-bind:disabled="{{ match ($item[4]) {
                         'selection' => 'selectedIds.length === 0',
                         'clipboard' => 'clipboardSize === 0',
@@ -49,7 +53,7 @@
                     } }}"
                     @click="runMenu('{{ $item[0] }}')" dusk="{{ $item[3] }}">
                 <span>{{ $item[1] }}</span>
-                <span class="text-xs text-gray-500">{{ $item[2] }}</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">{{ $item[2] }}</span>
             </button>
         @endif
     @endforeach

@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Advertising') }}</h1>
+        <h1 class="page-title">{{ __('Advertising') }}</h1>
     </x-slot>
 
     {{-- Js::from, not @json: @json leaves its quotes raw and the first string would
@@ -9,13 +9,14 @@
             'breakEverySeconds' => $breakEverySeconds,
             'maxBreakSeconds' => $maxBreakSeconds,
          ]) }})"
+         x-on:modal-closing.window="onModalClosing($event)"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        <div class="flex flex-wrap items-center gap-3 mb-6">
+        <div class="flex flex-wrap items-center gap-3">
             <x-crud.add-button label="Add Campaign" @click="openCampaignModal()" dusk="add-campaign" />
 
             {{-- The two facts that govern everything on this page, stated once. --}}
-            <p class="text-sm text-gray-500 dark:text-gray-400">
+            <p class="max-w-3xl text-sm text-gray-500 dark:text-gray-400">
                 {{-- In seconds below a minute (a browser test turns it right down), in minutes above. --}}
                 One advert break every <span class="font-medium" x-text="breakEverySeconds < 60
                     ? breakEverySeconds + (breakEverySeconds === 1 ? ' second' : ' seconds')
@@ -25,7 +26,8 @@
             </p>
         </div>
 
-        <x-crud.table-wrapper title="All Campaigns" searchPlaceholder="Search by campaign or advertiser..." :columns="6">
+        <x-crud.table-wrapper title="All Campaigns" searchPlaceholder="Search by campaign or advertiser..." :columns="6"
+            description="Adverts from paying advertisers. They play in ad breaks on the screens of shops that carry adverts.">
             <x-slot name="head">
                 <th class="px-5 py-3 text-left font-semibold">Campaign</th>
                 <th class="px-5 py-3 text-left font-semibold">Runs</th>
@@ -36,26 +38,32 @@
             </x-slot>
 
             <x-slot name="body">
-                <x-crud.table-empty :columns="6" itemsVar="items" message="No campaigns yet." />
+                <x-crud.table-empty :columns="6" itemsVar="items" message="No campaigns yet."
+                    hint="Add a campaign with the advertiser's picture or video, its dates and the screens it plays on.">
+                    <x-slot name="action">
+                        <x-crud.add-button label="Add Campaign" @click="openCampaignModal()" dusk="empty-add-campaign" />
+                    </x-slot>
+                </x-crud.table-empty>
 
                 <template x-for="item in items" :key="item.id">
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                         <td class="px-5 py-4">
                             <div class="flex items-center gap-3">
                                 <div class="w-16 h-10 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                                    {{-- An upright advert is shown whole, not cut to its middle. --}}
+                                    {{-- An upright advert is shown whole, not cut to its middle. The name is beside it, so
+                                         the picture says nothing more (alt=""). --}}
                                     <template x-if="item.thumbnail_url">
-                                        <img :src="item.thumbnail_url" :alt="item.name" class="w-full h-full"
+                                        <img :src="item.thumbnail_url" alt="" loading="lazy" class="w-full h-full"
                                              x-bind:class="Number(item.height) > Number(item.width) ? 'object-contain' : 'object-cover'">
                                     </template>
                                     <template x-if="!item.thumbnail_url">
-                                        <span class="text-[10px] text-gray-500" x-text="item.type"></span>
+                                        <span class="text-[10px] text-gray-500 dark:text-gray-300" x-text="item.type"></span>
                                     </template>
                                 </div>
                                 <div class="min-w-0">
                                     <p class="font-medium text-gray-800 dark:text-white whitespace-nowrap"
                                        x-bind:dusk="'campaign-name-' + item.id" x-text="item.name"></p>
-                                    <p class="text-xs text-gray-500 whitespace-nowrap"
+                                    <p class="text-xs text-gray-500 whitespace-nowrap dark:text-gray-400"
                                        x-text="item.advertiser_name || 'No advertiser named'"></p>
                                 </div>
                             </div>
@@ -63,23 +71,24 @@
 
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300 text-xs">
                             <span class="block whitespace-nowrap" x-text="datesLabel(item)"></span>
-                            <span class="block text-gray-500 whitespace-nowrap" x-text="windowLabel(item)"></span>
+                            <span class="block text-gray-500 whitespace-nowrap dark:text-gray-400" x-text="windowLabel(item)"></span>
                         </td>
 
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300 text-sm whitespace-nowrap">
-                            <span x-text="item.play_seconds + 's'"></span>
-                            <span class="block text-xs text-gray-500 capitalize" x-text="item.type"></span>
+                            <span class="tabular-nums" x-text="item.play_seconds + ' secs'"></span>
+                            <span class="block text-xs text-gray-500 capitalize dark:text-gray-400" x-text="item.type"></span>
                         </td>
 
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300 text-xs">
-                            <span x-bind:class="(item.screens_count ?? 0) === 0 ? 'text-amber-600 dark:text-amber-400' : ''"
+                            <span x-bind:class="(item.screens_count ?? 0) === 0 ? 'text-amber-700 dark:text-amber-400' : ''"
                                   x-bind:dusk="'campaign-screens-' + item.id"
                                   x-text="screensLabel(item)"></span>
                         </td>
 
+                        {{-- Where it stands today: paused, over, not yet, on no screen, or running. --}}
                         <td class="px-5 py-4">
-                            <span x-show="item.is_active" x-cloak class="badge-success">Active</span>
-                            <span x-show="!item.is_active" x-cloak class="badge-neutral">Paused</span>
+                            <span x-bind:class="campaignStatus(item).badge" x-bind:dusk="'campaign-status-' + item.id"
+                                  x-text="campaignStatus(item).label"></span>
                         </td>
 
                         <td class="px-5 py-4">
@@ -105,7 +114,7 @@
             :password="true" />
 
         {{-- Add / Edit --}}
-        <x-modal name="campaign-form-modal" :show="false" maxWidth="3xl">
+        <x-modal name="campaign-form-modal" :show="false" maxWidth="3xl" persistent>
             <div class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
                     x-text="editingItem ? 'Edit Campaign' : 'Add Campaign'"></h2>
@@ -116,7 +125,7 @@
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <x-crud.form-field label="Campaign name" field="name" :required="true">
-                            <x-text-input x-model="form.name" dusk="campaign-name" class="block w-full"
+                            <x-text-input x-model="form.name" dusk="campaign-name"
                                           placeholder="Coca-Cola — Ramadan" autocomplete="off" maxlength="120" />
                         </x-crud.form-field>
 
@@ -124,7 +133,7 @@
                              called — so "never run this brand in that shop" can be added
                              later without moving anything. --}}
                         <x-crud.form-field label="Advertiser" field="advertiser_name">
-                            <x-text-input x-model="form.advertiser_name" dusk="campaign-advertiser" class="block w-full"
+                            <x-text-input x-model="form.advertiser_name" dusk="campaign-advertiser"
                                           placeholder="Coca-Cola" autocomplete="off" maxlength="120" />
                         </x-crud.form-field>
                     </div>
@@ -144,19 +153,30 @@
                                 :max-video-seconds="\App\Models\Campaign::MAX_AD_SECONDS" video-noun="An advert"
                                 hint="JPG, PNG, GIF, WEBP, MP4 or WEBM — up to 250 MB, 60 seconds at most." />
                         </x-crud.form-field>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Adverts play with no sound.</p>
+
+                        {{-- Editing: the advert it plays now, which stays unless another file is chosen. --}}
+                        <div x-show="editingItem && !picked" x-cloak class="mt-3 flex items-center gap-3" dusk="campaign-current-advert">
+                            <div class="flex h-10 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded bg-gray-100 dark:bg-gray-700">
+                                <template x-if="editingItem?.thumbnail_url">
+                                    <img :src="editingItem.thumbnail_url" alt="" class="h-full w-full object-contain">
+                                </template>
+                            </div>
+                            <p class="text-sm text-gray-600 dark:text-gray-300"
+                               x-text="'It plays its current ' + (editingItem?.type === 'video' ? 'video' : 'picture') + ' until you choose another file.'"></p>
+                        </div>
                     </div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 -mt-2">
-                        Adverts play with no sound.
-                        <span x-show="editingItem" x-cloak>Leave it empty to keep the current advert.</span>
-                    </p>
 
                     {{-- Seconds belong to an IMAGE. A video runs to its own length, so for one the
                          field is not shown at all, rather than shown and then ignored (owner's rule). --}}
-                    <div x-show="!isVideoAd()" x-cloak class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <x-crud.form-field label="Seconds on screen" field="duration_seconds" :required="true">
-                            <x-text-input type="number" min="{{ \App\Models\PlaylistItem::MIN_IMAGE_SECONDS }}" x-bind:max="maxBreakSeconds" step="1" x-model.number="form.duration_seconds"
-                                          dusk="campaign-seconds" class="block w-full" />
-                        </x-crud.form-field>
+                    <div x-show="!isVideoAd()" x-cloak>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <x-crud.form-field label="Seconds on screen" field="duration_seconds" :required="true">
+                                <x-text-input type="number" min="{{ \App\Models\PlaylistItem::MIN_IMAGE_SECONDS }}" x-bind:max="maxBreakSeconds" step="1" x-model.number="form.duration_seconds"
+                                              dusk="campaign-seconds" />
+                            </x-crud.form-field>
+                        </div>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" x-text="secondsHint()"></p>
                     </div>
                     <p x-show="isVideoAd()" x-cloak dusk="campaign-video-note" class="text-sm text-gray-500 dark:text-gray-400">
                         A video plays to its own end &mdash; there is nothing to set.
@@ -166,10 +186,10 @@
                     <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <x-crud.form-field label="Starts on" field="starts_on">
-                                <x-text-input type="date" x-model="form.starts_on" dusk="campaign-starts-on" class="block w-full" />
+                                <x-text-input type="date" x-model="form.starts_on" dusk="campaign-starts-on" />
                             </x-crud.form-field>
                             <x-crud.form-field label="Ends on" field="ends_on">
-                                <x-text-input type="date" x-model="form.ends_on" dusk="campaign-ends-on" class="block w-full" />
+                                <x-text-input type="date" x-model="form.ends_on" dusk="campaign-ends-on" />
                             </x-crud.form-field>
                         </div>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -181,10 +201,10 @@
                     <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <x-crud.form-field label="From" field="start_time">
-                                <x-text-input type="time" x-model="form.start_time" dusk="campaign-start-time" class="block w-full" />
+                                <x-text-input type="time" x-model="form.start_time" dusk="campaign-start-time" />
                             </x-crud.form-field>
                             <x-crud.form-field label="Until" field="end_time">
-                                <x-text-input type="time" x-model="form.end_time" dusk="campaign-end-time" class="block w-full" />
+                                <x-text-input type="time" x-model="form.end_time" dusk="campaign-end-time" />
                             </x-crud.form-field>
                         </div>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -193,16 +213,18 @@
                         </p>
                     </div>
 
-                    {{-- Which screens carry it. --}}
-                    <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
-                        <label class="form-label">Screens</label>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    {{-- Which screens carry it: a set of checkboxes, named as one by its legend. --}}
+                    <fieldset class="min-w-0 pt-2 border-t border-gray-200 dark:border-gray-700">
+                        <legend class="form-label float-left w-full">Screens</legend>
+                        <p class="clear-left text-xs text-gray-500 dark:text-gray-400 mb-2">
                             Only shops that agreed to advertising can be chosen.
-                            <span x-show="loadingScreens" x-cloak>Loading&hellip;</span>
+                            <span x-show="loadingScreens" x-cloak class="inline-flex items-center gap-1">
+                                <x-spinner class="h-3 w-3" /> Loading&hellip;
+                            </span>
                         </p>
 
                         <template x-if="!loadingScreens && allScreens.length === 0">
-                            <p class="text-sm text-gray-500 dark:text-gray-500" dusk="campaign-no-screens">
+                            <p class="text-sm text-gray-500 dark:text-gray-400" dusk="campaign-no-screens">
                                 There are no screens yet.
                             </p>
                         </template>
@@ -210,28 +232,35 @@
                         <div class="space-y-3 max-h-72 overflow-y-auto">
                             <template x-for="group in screensByStore()" :key="group.id">
                                 <div class="rounded-md border border-gray-200 dark:border-gray-700 p-3">
-                                    <div class="flex items-center justify-between mb-2">
+                                    {{-- One press chooses every screen of the shop that can carry adverts, and the same
+                                         press, once they all are, clears them — the words say which it will do. --}}
+                                    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
                                         <p class="text-sm font-medium text-gray-800 dark:text-white" x-text="group.name"></p>
                                         <button type="button" @click="toggleStore(group)"
                                                 x-bind:dusk="'campaign-store-all-' + group.id"
                                                 x-show="group.screens.some(s => s.carries_ads)"
-                                                class="btn-row-neutral">Select all</button>
+                                                x-bind:aria-label="(storeAllChosen(group) ? 'Clear every screen of ' : 'Choose every screen of ') + group.name"
+                                                class="btn-row-neutral" x-text="storeAllChosen(group) ? 'Clear all' : 'Select all'"></button>
                                     </div>
 
+                                    {{-- A screen that cannot carry adverts says why beside it, in words that stay readable:
+                                         only its checkbox is disabled. --}}
                                     <template x-for="screen in group.screens" :key="screen.id">
-                                        <label class="flex items-center gap-3 py-1"
-                                               x-bind:class="screen.carries_ads ? 'cursor-pointer' : 'opacity-60'">
+                                        <label class="flex flex-wrap items-center gap-x-3 gap-y-1 py-1"
+                                               x-bind:class="screen.carries_ads ? 'cursor-pointer' : 'cursor-not-allowed'">
                                             <input type="checkbox" class="form-checkbox"
                                                    x-bind:dusk="'campaign-screen-' + screen.id"
                                                    x-bind:disabled="!screen.carries_ads"
                                                    x-bind:checked="isChosen(screen.id)"
                                                    @change="toggleScreen(screen.id)">
-                                            <span class="flex-1 text-sm text-gray-700 dark:text-gray-200" x-text="screen.name"></span>
+                                            <span class="flex-1 text-sm"
+                                                  x-bind:class="screen.carries_ads ? 'text-gray-700 dark:text-gray-200' : 'text-gray-500 dark:text-gray-400'"
+                                                  x-text="screen.name"></span>
 
                                             {{-- A greyed row that explains ITSELF beats a screen
                                                  that is silently not in the list. --}}
                                             <template x-if="!screen.carries_ads">
-                                                <span class="text-xs text-gray-500" x-text="blockedReason(screen)"></span>
+                                                <span class="text-xs text-gray-500 dark:text-gray-400" x-text="blockedReason(screen)"></span>
                                             </template>
 
                                             {{-- And one that can be chosen says what choosing it
@@ -239,7 +268,7 @@
                                             <template x-if="screen.carries_ads">
                                                 <span class="text-xs"
                                                       x-bind:class="isOversold(screen)
-                                                            ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-gray-500'"
+                                                            ? 'text-amber-700 dark:text-amber-400 font-medium' : 'text-gray-500 dark:text-gray-400'"
                                                       x-text="bookedLabel(screen)"></span>
                                             </template>
                                         </label>
@@ -248,16 +277,25 @@
                             </template>
                         </div>
                         <template x-if="screensError()">
-                            <p class="form-error" x-text="screensError()" dusk="campaign-screens-error"></p>
+                            <p class="form-error" role="alert" x-text="screensError()" dusk="campaign-screens-error"></p>
                         </template>
+                    </fieldset>
+
+                    <div class="flex items-start gap-2">
+                        <input type="checkbox" x-model="form.is_active" id="campaign_is_active"
+                               dusk="campaign-active" class="form-checkbox mt-0.5">
+                        <label for="campaign_is_active" class="text-sm text-gray-700 dark:text-gray-300">
+                            Active &mdash; running on the screens chosen above. Untick it to pause the campaign.
+                        </label>
                     </div>
 
-                    <div class="flex items-center">
-                        <input type="checkbox" x-model="form.is_active" id="campaign_is_active"
-                               dusk="campaign-active" class="form-checkbox">
-                        <label for="campaign_is_active" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">
-                            Active &mdash; running on the screens chosen above
-                        </label>
+                    {{-- Cancel while the advert is still going up asks first: closing gives the upload up. --}}
+                    <div x-show="confirmingClose && uploading" x-cloak role="alert" class="alert-warning flex flex-wrap items-center justify-between gap-3" dusk="campaign-upload-still-going">
+                        <span>The advert is still uploading. Stop it and close?</span>
+                        <span class="flex flex-wrap gap-2">
+                            <button type="button" class="btn-secondary" @click="confirmingClose = false">Keep uploading</button>
+                            <button type="button" class="btn-danger" @click="closeCampaignModal(true)" dusk="campaign-stop-and-close">Stop and close</button>
+                        </span>
                     </div>
 
                     {{-- Save waits while a video is still being measured, or it would go without its length and poster. --}}

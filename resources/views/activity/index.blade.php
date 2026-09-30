@@ -5,23 +5,18 @@
 
 <x-app-layout>
     <x-slot name="header">
-        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Activity Log') }}</h1>
+        <h1 class="page-title">{{ __('Activity Log') }}</h1>
     </x-slot>
 
     <div x-data="activityTable({ canMaintain: @json($canMaintain) })" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        @if ($store)
-        <p class="text-sm text-gray-500 dark:text-gray-400" dusk="activity-scope-note">
-            What happened in {{ $store->name }} — by its people, and by the platform on its behalf.
-        </p>
-        @endif
 
         {{-- Yearly storage panel (activity-destroy, above the stores): partition status + one-click maintenance --}}
         @if ($canMaintain)
-        <div class="bg-white dark:bg-gray-800 rounded-xs border border-gray-100 dark:border-gray-700 p-5">
+        <div class="card p-5">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h3 class="text-sm font-semibold text-gray-800 dark:text-white">Yearly Storage</h3>
+                    <h2 class="text-sm font-semibold text-gray-800 dark:text-white">Yearly Storage</h2>
                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                         Logs are split into yearly partitions. Maintenance opens partitions 3 years ahead and deletes everything older than 2 years — data included.
                     </p>
@@ -29,13 +24,13 @@
                         <template x-for="p in partitions" :key="p.name">
                             <span class="badge-info" x-text="(p.year ?? 'future') + ' — ' + p.rows + (p.rows === 1 ? ' row' : ' rows')"></span>
                         </template>
-                        <span x-show="partitions.length === 0" class="text-xs text-gray-500">No data yet.</span>
+                        <span x-show="partitions.length === 0" class="text-xs text-gray-500 dark:text-gray-400">No data yet.</span>
                     </div>
                 </div>
                 <button @click="$dispatch('open-modal', 'confirm-activity-maintenance')"
                     x-bind:disabled="maintaining"
                     dusk="activity-maintain-button"
-                    class="btn-secondary whitespace-nowrap self-start sm:self-center">
+                    class="btn-secondary self-start sm:self-center">
                     Run Yearly Maintenance
                 </button>
             </div>
@@ -55,6 +50,7 @@
                         Cancel
                     </x-secondary-button>
                     <x-danger-button x-on:click="runMaintenance()" x-bind:disabled="maintaining" dusk="activity-maintain-confirm">
+                        <x-spinner x-show="maintaining" x-cloak />
                         Run Maintenance
                     </x-danger-button>
                 </div>
@@ -64,10 +60,10 @@
 
         {{-- Time range filter: every listing/search is bounded by it so MySQL
              only scans the matching yearly partitions (partition pruning) --}}
-        <div class="bg-white dark:bg-gray-800 rounded-xs border border-gray-100 dark:border-gray-700 p-4">
+        <div class="card p-4">
             <div class="flex flex-wrap items-end gap-4">
                 <div>
-                    <x-input-label value="Time Range" class="text-xs" for="activity-range-preset" />
+                    <x-input-label value="Time Range" for="activity-range-preset" />
                     <select id="activity-range-preset" x-model="preset" @change="applyPreset(preset)" dusk="activity-range-preset" class="form-select mt-1">
                         <option value="today">Today</option>
                         <option value="7d">Last 7 days</option>
@@ -77,11 +73,11 @@
                     </select>
                 </div>
                 <div>
-                    <x-input-label value="From" class="text-xs" for="activity-range-from" />
+                    <x-input-label value="From" for="activity-range-from" />
                     <input id="activity-range-from" type="date" x-model="from" @change="onDateChange()" dusk="activity-range-from" class="form-input mt-1">
                 </div>
                 <div>
-                    <x-input-label value="To" class="text-xs" for="activity-range-to" />
+                    <x-input-label value="To" for="activity-range-to" />
                     <input id="activity-range-to" type="date" x-model="to" @change="onDateChange()" dusk="activity-range-to" class="form-input mt-1">
                 </div>
             </div>
@@ -89,7 +85,8 @@
 
         {{-- Activity Data Table (read-only audit trail). A bound :title — the wrapper echoes it itself, and an
              echo here as well escaped a store's name twice. --}}
-        <x-crud.table-wrapper :title="$store ? 'Activity in '.$store->name : 'All Activity'" searchPlaceholder="Search activity (action, user, details...)" :columns="4">
+        <x-crud.table-wrapper :title="$store ? 'Activity in '.$store->name : 'All Activity'" searchPlaceholder="Search activity (action, user, details...)" :columns="4"
+            :description="$store ? 'What happened in '.$store->name.' — by its people, and by the platform on its behalf.' : 'Everything done in every store and on the platform, newest first.'">
             <x-slot name="head">
                 <th class="px-5 py-3 text-left font-semibold">When</th>
                 <th class="px-5 py-3 text-left font-semibold">Who</th>
@@ -98,15 +95,18 @@
             </x-slot>
 
             <x-slot name="body">
-                <x-crud.table-empty :columns="4" itemsVar="items" message="No activity yet." />
+                <x-crud.table-empty :columns="4" itemsVar="items" message="Nothing happened in this time range."
+                    hint="Choose a longer time range above." />
 
                 <template x-for="item in items" :key="item.id">
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                         <td class="px-5 py-4 text-sm text-gray-600 dark:text-gray-300 whitespace-nowrap"
-                            x-text="new Date(item.created_at).toLocaleString()"></td>
-                        <td class="px-5 py-4 text-gray-800 dark:text-white whitespace-nowrap" x-text="item.actor_name"></td>
+                            x-text="whenLabel(item.created_at)"></td>
+                        <td class="px-5 py-4 text-gray-800 dark:text-white whitespace-nowrap" x-text="item.actor_name ?? '—'"></td>
+                        {{-- The action in words, coloured by what it did (added, changed, taken away); its code name is
+                             the tooltip, for whoever reads the log with the code beside it. --}}
                         <td class="px-5 py-4">
-                            <span class="badge-info" x-text="item.action"></span>
+                            <span x-bind:class="actionBadge(item.action)" x-bind:title="item.action" x-text="actionLabel(item.action)"></span>
                         </td>
                         <td class="cell-prose px-5 py-4 text-gray-600 dark:text-gray-300 text-sm" x-text="item.description"></td>
                     </tr>

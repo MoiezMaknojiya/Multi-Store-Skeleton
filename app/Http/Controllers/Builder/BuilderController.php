@@ -9,6 +9,7 @@ use App\Http\Requests\Builder\BuilderAdRequest;
 use App\Models\ActivityLog;
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
+use App\Models\Media;
 use App\Models\PlaylistItem;
 use App\Models\Store;
 use App\Services\AdCompiler;
@@ -65,16 +66,22 @@ class BuilderController extends Controller
             ['name'],
             'ads',
             ['*'],
-            // Each row says whether a television shows it — and whether it shows the latest changes — and who
-            // touched it last.
-            fn (Collection $rows) => $rows->each(function (BuilderAd $ad) {
-                $ad->setAttribute('is_published', $ad->isPublished());
-                $ad->setAttribute('status', $ad->status());
-                $ad->setAttribute('store_name', $ad->store?->name);
-                $ad->setAttribute('updated_by_name', $ad->updater?->name);
-                // The listing shows a poster and a name — never the whole design, draft or published.
-                $ad->makeHidden(['document', 'published_document']);
-            }),
+            // Each row says whether a television shows it — and whether it shows the latest changes — who touched it
+            // last, and why it may not be deleted yet (a channel shows its page), so the gallery says it before the
+            // password is asked.
+            function (Collection $rows) {
+                $refusals = Media::stillInChannelsMessages($rows->pluck('media_id')->filter()->all());
+
+                $rows->each(function (BuilderAd $ad) use ($refusals) {
+                    $ad->setAttribute('is_published', $ad->isPublished());
+                    $ad->setAttribute('status', $ad->status());
+                    $ad->setAttribute('store_name', $ad->store?->name);
+                    $ad->setAttribute('updated_by_name', $ad->updater?->name);
+                    $ad->setAttribute('in_channels_message', $ad->media_id === null ? null : ($refusals[$ad->media_id] ?? null));
+                    // The listing shows a poster and a name — never the whole design, draft or published.
+                    $ad->makeHidden(['document', 'published_document']);
+                });
+            },
         );
     }
 

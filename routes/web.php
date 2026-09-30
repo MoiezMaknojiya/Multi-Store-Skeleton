@@ -215,6 +215,9 @@ Route::middleware(['auth', 'verified', 'throttle:admin'])->group(function () {
         // another store's. Gated by the playlist permission alone for the same reason as
         // the media picker above
         Route::get('/{screen}/available-channels', [PlaylistController::class, 'availableChannels'])->middleware('can:screen-playlist')->name('screens.available-channels');
+        // The dayparts a schedule may name, read again when the page comes back into view — so a daypart made
+        // in another tab ("New daypart") is there without losing the playlist's unsaved changes
+        Route::get('/{screen}/daypart-options', [ScreenController::class, 'daypartOptionsFor'])->middleware('can:screen-playlist')->name('screens.daypart-options');
         // The default-media picker's options, gated by the screen permission that
         // needs them for the same reason
         Route::get('/{screen}/media-options', [ScreenController::class, 'mediaOptions'])->middleware('can:screen-update')->name('screens.media-options');

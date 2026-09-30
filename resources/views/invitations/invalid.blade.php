@@ -8,7 +8,7 @@
             </svg>
         </div>
 
-        <h1 class="mt-5 text-2xl font-bold text-gray-800">This invitation is no longer valid</h1>
+        <h1 class="auth-title mt-5">This invitation is no longer valid</h1>
         <p class="mt-2 text-sm text-gray-500">
             It may have expired, already been used, or been cancelled.
             Ask the person who invited you to send a new one.

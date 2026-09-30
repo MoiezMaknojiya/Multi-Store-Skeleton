@@ -142,11 +142,15 @@ class ScreenController extends Controller
             'name' => ['required_if:mode,new', 'nullable', 'string', 'max:255'],
             'orientation' => ['required_if:mode,new', 'nullable', Rule::in(array_keys(Screen::ORIENTATIONS))],
             'screen_id' => ['required_if:mode,replace', 'nullable', 'integer', 'min:1'],
+            // The clock the screen keeps, asked on the pairing form (it was a silent default): every schedule on its
+            // playlist is read against it. Left out, the default; the Edit form changes it later.
+            'timezone' => ['nullable', 'string', 'max:64', Rule::in(timezone_identifiers_list())],
         ], [
             'code.size' => 'A pairing code is exactly 6 characters.',
             'name.required_if' => 'Give the screen a name.',
             'orientation.required_if' => 'Choose how the screen is mounted.',
             'screen_id.required_if' => 'Choose which screen this device replaces.',
+            'timezone.in' => 'Choose a time zone from the list.',
         ]);
 
         return $validated['mode'] === 'replace'
@@ -167,6 +171,7 @@ class ScreenController extends Controller
                 'store_id' => $storeId,
                 'name' => $validated['name'],
                 'orientation' => $validated['orientation'],
+                'timezone' => $validated['timezone'] ?? Screen::DEFAULT_TIMEZONE,
                 'created_by' => auth()->id(),
             ]);
 
@@ -288,6 +293,14 @@ class ScreenController extends Controller
      *
      * @return list<array{id: int, name: string, start_time: string, end_time: string, retired: bool}>
      */
+    /** The same list as JSON, for the playlist page to read again (screens.daypart-options). */
+    public function daypartOptionsFor(Screen $screen): JsonResponse
+    {
+        $screen = Screen::visibleTo(auth()->user())->findOrFail($screen->id);
+
+        return response()->json(['dayparts' => $this->daypartOptions($screen)]);
+    }
+
     private function daypartOptions(Screen $screen): array
     {
         $used = ScheduleRule::whereIn('playlist_item_id', $screen->playlistItems()->select('id'))

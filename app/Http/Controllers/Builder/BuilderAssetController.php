@@ -85,6 +85,9 @@ class BuilderAssetController extends Controller
                 $rows->each(function (BuilderAsset $asset) use ($usage) {
                     $asset->setAttribute('used_by', $usage[$asset->id]['names'] ?? []);
                     $asset->setAttribute('used_elsewhere', $usage[$asset->id]['elsewhere'] ?? 0);
+                    // Why it may not be deleted yet, in destroy's own words, so the shelf says it before any
+                    // confirmation (destroy decides again).
+                    $asset->setAttribute('in_use_message', isset($usage[$asset->id]) ? $this->stillUsedMessage($usage[$asset->id]) : null);
                     $asset->setAttribute('store_name', $asset->store?->name);
                     $asset->setAttribute('shared', $asset->isShared());
                     $asset->setAttribute('owner_label', $this->ownerLabel($asset));

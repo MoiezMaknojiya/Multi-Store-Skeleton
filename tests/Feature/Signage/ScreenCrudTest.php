@@ -279,3 +279,34 @@ test('deleting a store takes its screens with it', function () {
 
     $this->assertDatabaseMissing('screens', ['id' => $screen->id]);
 });
+
+test('the pairing form asks for the screen\'s time zone, and the screen keeps it', function () {
+    $store = Store::factory()->create();
+    $owner = createStoreUser($store, ['screen-store']);
+
+    // Said on the form: the zone chosen is the one the screen keeps.
+    $this->actingAs($owner)->withSession(['current_store_id' => $store->id])
+        ->postJson('/screens/pair', [
+            'code' => waitingDeviceCode(), 'mode' => 'new', 'name' => 'Deli TV', 'orientation' => 'landscape',
+            'timezone' => 'America/New_York',
+        ])->assertOk();
+
+    expect(Screen::where('name', 'Deli TV')->sole()->timezone)->toBe('America/New_York');
+
+    // Left out (an older page), the usual one.
+    $this->actingAs($owner)->withSession(['current_store_id' => $store->id])
+        ->postJson('/screens/pair', [
+            'code' => waitingDeviceCode(), 'mode' => 'new', 'name' => 'Window TV', 'orientation' => 'landscape',
+        ])->assertOk();
+
+    expect(Screen::where('name', 'Window TV')->sole()->timezone)->toBe(Screen::DEFAULT_TIMEZONE);
+
+    // A zone the server does not know is refused under its field, and no screen is made.
+    $this->actingAs($owner)->withSession(['current_store_id' => $store->id])
+        ->postJson('/screens/pair', [
+            'code' => waitingDeviceCode(), 'mode' => 'new', 'name' => 'Nowhere TV', 'orientation' => 'landscape',
+            'timezone' => 'Mars/Olympus_Mons',
+        ])->assertStatus(422)->assertJsonValidationErrors(['timezone' => 'Choose a time zone from the list.']);
+
+    expect(Screen::where('name', 'Nowhere TV')->exists())->toBeFalse();
+});

@@ -42,15 +42,30 @@ import { registerAdEditor }           from './builder/editor.js';
 window.Alpine = Alpine;
 
 /* Toast notifications: one shared store; call window.toast('...', 'error'|'success')
- * from anywhere. Errors deserve a readable message, not a browser alert(). */
+ * from anywhere. Errors deserve a readable message, not a browser alert(). A success goes after five
+ * seconds, an error after ten (it may name what to do next), and neither while the pointer or the keyboard
+ * is on it (hold/release). The timers live outside the reactive state. */
+const toastTimers = new Map();
+
 Alpine.store('toasts', {
     items: [],
     push(message, type = 'error') {
         const id = Date.now() + Math.random();
         this.items.push({ id, message, type });
-        setTimeout(() => this.dismiss(id), 5000);
+        this.release(id);
+    },
+    hold(id) {
+        clearTimeout(toastTimers.get(id));
+    },
+    release(id) {
+        const toast = this.items.find(t => t.id === id);
+        if (!toast) return;
+        clearTimeout(toastTimers.get(id));
+        toastTimers.set(id, setTimeout(() => this.dismiss(id), toast.type === 'success' ? 5000 : 10000));
     },
     dismiss(id) {
+        clearTimeout(toastTimers.get(id));
+        toastTimers.delete(id);
         this.items = this.items.filter(t => t.id !== id);
     },
 });

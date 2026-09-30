@@ -4,7 +4,7 @@
 <div class="space-y-2">
     <div class="grid grid-cols-2 gap-2">
         <label class="text-xs text-gray-500 dark:text-gray-400">Type
-            <select class="form-select mt-1 w-full text-sm"
+            <select class="form-select mt-1"
                     x-bind:value="gradientOf('{{ $target }}')?.kind ?? 'linear'"
                     @change="setGradient('{{ $target }}', 'kind', $el.value)" dusk="{{ $prefix }}-gradient-kind">
                 @foreach ($gradientKinds as $value => $label)
@@ -14,7 +14,7 @@
         </label>
         <label class="text-xs text-gray-500 dark:text-gray-400"
                x-show="(gradientOf('{{ $target }}')?.kind ?? 'linear') === 'linear'">Angle (°)
-            <input type="number" min="0" max="360" class="form-input mt-1 w-full text-sm"
+            <input type="number" min="0" max="360" class="form-input mt-1"
                    x-bind:value="gradientOf('{{ $target }}')?.angle ?? 180"
                    @change="$el.value = setGradient('{{ $target }}', 'angle', $el.value)" dusk="{{ $prefix }}-gradient-angle" />
         </label>
@@ -30,19 +30,19 @@
                    x-bind:value="stop.color"
                    @change="setStop('{{ $target }}', index, 'color', $el.value)"
                    x-bind:dusk="'{{ $prefix }}-gradient-stop-' + index + '-color'" aria-label="Stop colour" />
-            <input type="number" min="0" max="100" class="form-input h-8 w-20 text-sm"
+            <input type="number" min="0" max="100" class="form-input h-8 w-20"
                    x-bind:value="stop.at"
                    @change="$el.value = setStop('{{ $target }}', index, 'at', $el.value)"
                    x-bind:dusk="'{{ $prefix }}-gradient-stop-' + index + '-at'" aria-label="Stop position" />
-            <span class="text-xs text-gray-500">%</span>
-            <button type="button" class="ml-auto text-gray-500 hover:text-red-500"
+            <span class="text-xs text-gray-500 dark:text-gray-400">%</span>
+            <button type="button" class="layer-icon-button ml-auto hover:!text-red-700 dark:hover:!text-red-400"
                     x-show="(gradientOf('{{ $target }}')?.stops?.length ?? 0) > 2"
-                    @click="removeStop('{{ $target }}', index)" title="Remove this colour"
-                    x-bind:dusk="'{{ $prefix }}-gradient-stop-' + index + '-remove'">✕</button>
+                    @click="removeStop('{{ $target }}', index)" title="Remove this colour" aria-label="Remove this colour"
+                    x-bind:dusk="'{{ $prefix }}-gradient-stop-' + index + '-remove'"><x-icon name="x-mark" class="h-3.5 w-3.5" /></button>
         </div>
     </template>
 
-    <button type="button" class="btn-secondary w-full text-xs"
+    <button type="button" class="btn-secondary w-full"
             x-show="(gradientOf('{{ $target }}')?.stops?.length ?? 0) < maxStops"
             @click="addStop('{{ $target }}')" dusk="{{ $prefix }}-gradient-add-stop">+ Add a colour</button>
 </div>

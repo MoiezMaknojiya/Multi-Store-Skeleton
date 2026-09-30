@@ -5,16 +5,16 @@
      refuse everyone else anyway. A store changes hands on the Members page. --}}
 <x-app-layout>
     <x-slot name="header">
-        <h1 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">{{ __('Settings') }}</h1>
+        <h1 class="page-title">{{ __('Settings') }}</h1>
     </x-slot>
 
-    <div class="py-6">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    {{-- The same frame and cards as every other page (it kept Breeze's padding and shadowed panels). --}}
+    <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
             <x-settings-tabs active="store" />
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
                 {{-- Store details --}}
-                <div class="p-4 sm:p-8 bg-white dark:bg-gray-800 shadow sm:rounded-lg">
+                <div class="card p-4 sm:p-8">
                     <section>
                         <header>
                             <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Store Details</h2>
@@ -70,13 +70,9 @@
 
                             <x-auth.form-field name="country" label="Country" bag="storeDetails" :value="$store->country" :required="true" maxlength="100" autocomplete="country-name" />
 
+                            {{-- "Store details saved." arrives as a toast (components/toasts.blade.php). --}}
                             <div class="flex items-center gap-4">
                                 <x-primary-button dusk="store-details-save">{{ __('Save changes') }}</x-primary-button>
-
-                                @if (session('status') === 'store-updated')
-                                    <p x-data="{ show: true }" x-show="show" x-init="setTimeout(() => show = false, 2500)"
-                                        class="text-sm text-gray-600 dark:text-gray-400">{{ __('Saved.') }}</p>
-                                @endif
                             </div>
                         </form>
                         @endunless
@@ -84,14 +80,14 @@
                 </div>
 
                 {{-- Your stores: every store the person belongs to, with a way out — and Create store for store-store --}}
-                <div class="p-4 sm:p-8 bg-white dark:bg-gray-800 shadow sm:rounded-lg" dusk="your-stores">
+                <div class="card p-4 sm:p-8" dusk="your-stores">
                     @include('profile.partials.store-memberships', ['canOpenStore' => $canOpenStore])
                 </div>
             </div>
 
             @if ($canDelete)
                 {{-- Delete store: laid out like Delete Account on the Profile tab --}}
-                <div class="p-4 sm:p-8 bg-white dark:bg-gray-800 shadow sm:rounded-lg" dusk="delete-store">
+                <div class="card p-4 sm:p-8" dusk="delete-store">
                     <section class="max-w-xl space-y-6">
                         <header>
                             <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Delete Store</h2>
@@ -179,7 +175,7 @@
 
                         {{-- A bound :label, not an echo inside label="": the component echoes its label itself,
                              so an echo here escaped the name twice and "Joe's" read "Joe&#039;s". --}}
-                        <x-auth.form-field name="confirm_name" id="confirm_name" bag="storeDeletion" :required="true"
+                        <x-auth.form-field name="confirm_name" bag="storeDeletion" :required="true"
                             :label="'Type '.$store->name.' to confirm'" maxlength="255" autocomplete="off" dusk="delete-store-name" />
 
                         <x-auth.form-field name="password" id="delete_password" label="Your password" type="password" bag="storeDeletion"
@@ -192,6 +188,5 @@
                     </form>
                 </x-modal>
             @endif
-        </div>
     </div>
 </x-app-layout>

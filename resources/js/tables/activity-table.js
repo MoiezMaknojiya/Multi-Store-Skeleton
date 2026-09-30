@@ -45,6 +45,30 @@ export function registerActivityTable(Alpine) {
                 return params;
             },
 
+            /** "Sep 30, 2026, 9:05 AM" — a date and a time, no seconds. */
+            whenLabel(value) {
+                return value ? new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+            },
+
+            /** "member.role_changed" → "Member role changed". */
+            actionLabel(action) {
+                const words = String(action ?? '').replace(/[._]+/g, ' ').trim();
+
+                return words ? words.charAt(0).toUpperCase() + words.slice(1) : '—';
+            },
+
+            /** Red for what was taken away, green for what was added, blue for a change, grey for the rest (a sign-in,
+             *  maintenance). Taken away is asked first: "unpublished" ends in "published". */
+            actionBadge(action) {
+                const verb = String(action ?? '').split('.').pop();
+
+                if (/(deleted|removed|revoked|left|unpublished|pruned|declined|discarded)$/.test(verb)) return 'badge-danger';
+                if (/(created|added|invited|accepted|registered|uploaded|published|paired|assigned|duplicated|installed|verified)$/.test(verb)) return 'badge-success';
+                if (/(updated|changed|reordered|resent|recompiled|reset|switched)$/.test(verb)) return 'badge-info';
+
+                return 'badge-neutral';
+            },
+
             applyPreset(preset) {
                 this.preset = preset;
                 const today = isoDate(new Date());

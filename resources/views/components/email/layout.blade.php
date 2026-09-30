@@ -32,7 +32,7 @@
         <tr>
             <td align="center" style="padding:32px 12px;">
                 <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" align="center"
-                       style="width:600px; max-width:600px; margin:0 auto;">
+                       style="width:100%; max-width:600px; margin:0 auto;">
 
                     {{-- Brand bar --}}
                     <tr>

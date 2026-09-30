@@ -11,11 +11,13 @@ import { takeAddressFlag } from '../core/address-flag.js';
 import { createCrudTable } from '../core/crud-table-base.js';
 import { validate, required, maxLen, requiredMessage } from '../core/validate.js';
 
-const ORIENTATION_LABELS = {
-    landscape: 'Landscape',
-    landscape_flipped: 'Landscape (flipped)',
-    portrait: 'Portrait',
-    portrait_flipped: 'Portrait (flipped)',
+/** This computer's time zone, as the pairing form offers it — or nothing when the browser does not say. */
+const browserTimezone = () => {
+    try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone ?? '';
+    } catch {
+        return '';
+    }
 };
 
 /** How often the list refreshes itself, so a screen that stops beating turns grey without the page being
@@ -32,7 +34,10 @@ export function registerScreensTable(Alpine) {
 
         extraState: {
             hasStore: config.hasStore ?? false,
-            pairForm: { code: '', mode: 'new', name: '', orientation: 'landscape', screen_id: null, screen_name: '' },
+            /* The model's words for the four ways (Screen::ORIENTATIONS), so the list and the dialogs agree. */
+            orientations: config.orientations ?? {},
+            browserTimezone: browserTimezone(),
+            pairForm: { code: '', mode: 'new', name: '', orientation: 'landscape', timezone: config.defaultTimezone ?? 'America/Chicago', screen_id: null, screen_name: '' },
             refreshTimer: null,
             /* The default-media picker's options, fetched when the modal opens: the
              * library can be long and most edits never touch it. */
@@ -113,7 +118,7 @@ export function registerScreensTable(Alpine) {
 
             /* ── Pair / replace ────────────────────────────────────────── */
             openPairModal() {
-                this.pairForm = { code: '', mode: 'new', name: '', orientation: 'landscape', screen_id: null, screen_name: '' };
+                this.pairForm = { code: '', mode: 'new', name: '', orientation: 'landscape', timezone: config.defaultTimezone ?? 'America/Chicago', screen_id: null, screen_name: '' };
                 this.formErrors = {};
                 this.$dispatch('open-modal', 'screen-pair-modal');
             },
@@ -124,6 +129,7 @@ export function registerScreensTable(Alpine) {
                     mode: 'replace',
                     name: '',
                     orientation: screen.orientation,
+                    timezone: screen.timezone,
                     screen_id: screen.id,
                     screen_name: screen.name,
                 };
@@ -166,9 +172,14 @@ export function registerScreensTable(Alpine) {
                         mode: this.pairForm.mode,
                         name: isNew ? this.pairForm.name : null,
                         orientation: isNew ? this.pairForm.orientation : null,
+                        timezone: isNew ? this.pairForm.timezone : null,
                         screen_id: isNew ? null : this.pairForm.screen_id,
                     });
                     this.closePairModal();
+                    // The television notices within half a minute, and the next step is its playlist.
+                    window.toast(isNew
+                        ? 'Screen paired. The TV starts within 30 seconds: open its Playlist to choose what it shows.'
+                        : 'Device replaced. The new TV starts within 30 seconds, with this screen\'s playlist.', 'success');
                     this.currentPage = 1;
                     await this.fetchItems();
                 } catch (error) {
@@ -185,13 +196,20 @@ export function registerScreensTable(Alpine) {
             /* ── Display helpers ───────────────────────────────────────── */
             playlistLabel(screen) {
                 const count = screen.playlist_items_count ?? 0;
-                if (count === 0) return 'No playlist yet';
+                if (count === 0) return 'Nothing to play yet';
 
                 return count === 1 ? '1 item in playlist' : `${count} items in playlist`;
             },
 
+            /* This computer's zone, offered only when it differs and the list has it (a browser may name an old alias). */
+            offersBrowserTimezone() {
+                if (!this.browserTimezone || this.browserTimezone === this.pairForm.timezone) return false;
+
+                return !!document.querySelector(`[dusk="screen-pair-timezone"] option[value="${CSS.escape(this.browserTimezone)}"]`);
+            },
+
             orientationLabel(value) {
-                return ORIENTATION_LABELS[value] ?? value;
+                return this.orientations[value] ?? value;
             },
 
             /** Which way the screen in the form is: its four settings are two shapes. */

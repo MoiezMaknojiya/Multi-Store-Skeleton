@@ -12,14 +12,15 @@
         </div>
 
         @if ($canOpenStore ?? false)
-            <x-primary-button class="shrink-0" x-data x-on:click.prevent="$dispatch('open-modal', 'open-store')" dusk="open-store-button">
+            {{-- Secondary: this card's own action stands beside the page's Save changes, which is the primary. --}}
+            <x-secondary-button class="shrink-0" x-data x-on:click.prevent="$dispatch('open-modal', 'open-store')" dusk="open-store-button">
                 {{ __('Create store') }}
-            </x-primary-button>
+            </x-secondary-button>
         @endif
     </header>
 
     @if ($errors->storeMembership->isNotEmpty())
-        <div class="mt-4 rounded-md border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-300" role="alert">
+        <div class="alert-error mt-4" role="alert">
             {{ $errors->storeMembership->first() }}
         </div>
     @endif
@@ -32,7 +33,7 @@
                 @php($memberStore = $membership['store'])
                 <li class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3" dusk="store-membership-{{ $memberStore->id }}">
                     <div class="min-w-0">
-                        <p class="font-medium text-gray-900 dark:text-gray-100 truncate">{{ $memberStore->name }}</p>
+                        <p class="font-medium text-gray-900 dark:text-gray-100 truncate" title="{{ $memberStore->name }}">{{ $memberStore->name }}</p>
                         <p class="text-xs text-gray-500 dark:text-gray-400">
                             {{ $membership['role']?->name ?? __('No role') }} · {{ $memberStore->city }}, {{ $memberStore->state }}
                         </p>

@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <h1 class="text-lg font-semibold text-gray-800 dark:text-white">Dashboard</h1>
+        <h1 class="page-title">Dashboard</h1>
     </x-slot>
 
     {{-- Three audiences (DashboardController::index): the platform's summary above the stores, one store's summary

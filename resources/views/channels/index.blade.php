@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Channels') }}</h1>
+        <h1 class="page-title">{{ __('Channels') }}</h1>
     </x-slot>
 
     {{-- Js::from, not @json: @json leaves its quotes raw and the first string would
@@ -8,13 +8,13 @@
     <div x-data="channelsTable({{ Js::from(['maxAdsPerPass' => $maxAdsPerPass]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        <div class="flex flex-wrap items-center gap-3 mb-6">
+        <div class="flex flex-wrap items-center gap-3">
             @can('channel-store')
             <x-crud.add-button label="Add Channel" @click="openFormModal()" dusk="add-channel" />
             @endcan
 
             {{-- The one fact that governs this page, stated once. --}}
-            <p class="text-sm text-gray-500 dark:text-gray-400" dusk="channels-scope-note">
+            <p class="max-w-3xl text-sm text-gray-500 dark:text-gray-400" dusk="channels-scope-note">
                 @if ($store)
                     Channels made here belong to {{ $store->name }} and play only on its own screens. The platform's channels are
                     listed too, to look at — add one to a screen from that screen's Channels box.
@@ -37,7 +37,14 @@
             </x-slot>
 
             <x-slot name="body">
-                <x-crud.table-empty :columns="6" itemsVar="items" message="No channels yet." />
+                <x-crud.table-empty :columns="6" itemsVar="items" message="No channels yet."
+                    hint="A channel is a set of ads. Put it on a screen's playlist and it plays a few of them each time round.">
+                    @can('channel-store')
+                        <x-slot name="action">
+                            <x-crud.add-button label="Add Channel" @click="openFormModal()" dusk="empty-add-channel" />
+                        </x-slot>
+                    @endcan
+                </x-crud.table-empty>
 
                 <template x-for="item in items" :key="item.id">
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -47,17 +54,17 @@
                             @unless ($store)
                             {{-- Above the stores, whose screens a channel reaches: every shop's, or one store's own. --}}
                             <div class="mt-1">
-                                <span class="whitespace-nowrap" x-bind:class="item.store_name ? 'badge-neutral' : 'badge-info'"
+                                <span x-bind:class="item.store_name ? 'badge-neutral' : 'badge-info'"
                                       x-bind:dusk="'channel-reach-' + item.id"
                                       x-text="item.store_name ? item.store_name + ' only' : 'Every shop'"></span>
                             </div>
                             @else
                             {{-- Inside a store, the platform's channels are there to look at, never to change. --}}
                             <div class="mt-1" x-show="item.read_only" x-cloak>
-                                <span class="badge-info whitespace-nowrap" x-bind:dusk="'channel-from-platform-' + item.id">From the platform</span>
+                                <span class="badge-info" x-bind:dusk="'channel-from-platform-' + item.id">From the platform</span>
                             </div>
                             @endunless
-                            <p class="text-xs text-gray-500" x-text="item.created_by_name ? 'by ' + item.created_by_name : ''"></p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400" x-text="item.created_by_name ? 'by ' + item.created_by_name : ''"></p>
                         </td>
 
                         <td class="px-5 py-4 text-sm text-gray-600 dark:text-gray-300">
@@ -76,18 +83,19 @@
                         </td>
 
                         <td class="px-5 py-4">
+                            {{-- Opening the channel is the row's main way on, in blue as a screen's Playlist is. --}}
                             <div class="flex items-center justify-end gap-2">
                                 <a x-bind:href="'/channels/' + item.id" x-bind:dusk="'channel-open-' + item.id"
-                                   class="btn-row-success">Ads</a>
+                                   class="btn-row-primary" x-bind:aria-label="'Ads of ' + item.name">Ads</a>
                                 {{-- A platform channel seen from inside a shop offers nothing to change; the server
                                      refuses it anyway (404). --}}
                                 @can('channel-update')
                                 <button x-show="!item.read_only" @click="openFormModal(item)" x-bind:dusk="'edit-channel-' + item.id"
-                                        class="btn-row-neutral">Edit</button>
+                                        class="btn-row-neutral" x-bind:aria-label="'Edit ' + item.name">Edit</button>
                                 @endcan
                                 @can('channel-destroy')
                                 <button x-show="!item.read_only" @click="confirmDelete(item)" x-bind:dusk="'delete-channel-' + item.id"
-                                        class="btn-row-danger">Delete</button>
+                                        class="btn-row-danger" x-bind:aria-label="'Delete ' + item.name">Delete</button>
                                 @endcan
                             </div>
                         </td>
@@ -110,8 +118,7 @@
                     This cannot be undone. The files stay in their media libraries.
                 </p>
 
-                <p x-show="(selectedItem?.screens_count ?? 0) > 0" x-cloak dusk="channel-delete-usage"
-                   class="mt-3 rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+                <p x-show="(selectedItem?.screens_count ?? 0) > 0" x-cloak dusk="channel-delete-usage" class="alert-warning mt-3">
                     It is on <span class="font-semibold" x-text="usageLabel(selectedItem)"></span> and will be
                     taken off every one of those playlists. To take it off the air without that, pause it instead.
                 </p>
@@ -123,6 +130,7 @@
                         Cancel
                     </x-secondary-button>
                     <x-danger-button x-bind:disabled="deleting" dusk="confirm-channel-deletion-confirm">
+                        <x-spinner x-show="deleting" x-cloak />
                         Delete Channel
                     </x-danger-button>
                 </div>
@@ -130,7 +138,7 @@
         </x-modal>
 
         {{-- Add / Edit --}}
-        <x-modal name="channel-form-modal" :show="false" maxWidth="lg">
+        <x-modal name="channel-form-modal" :show="false" maxWidth="lg" persistent>
             <div class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
                     x-text="editingItem ? 'Edit Channel' : 'Add Channel'"></h2>
@@ -139,24 +147,28 @@
                      bubble before saveItem could say it under the field, as every form here does (validate.js). --}}
                 <form @submit.prevent="saveItem" novalidate dusk="channel-form" class="mt-4 space-y-4">
                     <x-crud.form-field label="Channel name" field="name" :required="true">
-                        <x-text-input x-model="form.name" dusk="channel-name" class="block w-full"
+                        <x-text-input x-model="form.name" dusk="channel-name"
                                       placeholder="GAMA Wholesale" autocomplete="off" maxlength="120" />
                     </x-crud.form-field>
 
-                    <x-crud.form-field label="Ads each time" field="ads_per_pass">
-                        <x-text-input type="number" min="1" x-bind:max="maxAdsPerPass" x-model="form.ads_per_pass"
-                                      dusk="channel-ads-per-pass" class="block w-full" placeholder="All" />
-                    </x-crud.form-field>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 -mt-2">
-                        How many of its ads play each time a screen's loop reaches this channel. Leave it blank to
-                        play every one; a smaller number plays the next ones the time after.
-                    </p>
+                    {{-- The help sits with its field, under it — never pulled up with a negative margin. --}}
+                    <div>
+                        <x-crud.form-field label="Ads each time" field="ads_per_pass">
+                            <x-text-input type="number" min="1" x-bind:max="maxAdsPerPass" x-model="form.ads_per_pass"
+                                          dusk="channel-ads-per-pass" placeholder="All" />
+                        </x-crud.form-field>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            How many of its ads play each time a screen's loop reaches this channel. Leave it blank to
+                            play every one; a smaller number plays the next ones the time after.
+                        </p>
+                    </div>
 
-                    <div class="flex items-center">
+                    <div class="flex items-start gap-2">
                         <input type="checkbox" x-model="form.is_active" id="channel_is_active"
-                               dusk="channel-active" class="form-checkbox">
-                        <label for="channel_is_active" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">
-                            Active &mdash; playing on every screen that carries it
+                               dusk="channel-active" class="form-checkbox mt-0.5">
+                        <label for="channel_is_active" class="text-sm text-gray-700 dark:text-gray-300">
+                            Active &mdash; playing on every screen that carries it. Untick it to pause the channel
+                            without taking it off any playlist.
                         </label>
                     </div>
 

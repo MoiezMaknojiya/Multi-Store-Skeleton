@@ -86,6 +86,18 @@ export function registerDaypartsTable(Alpine) {
         }),
 
         extraMethods: {
+            /* A daypart a playlist still uses cannot be deleted (the server refuses it): said at once, with the way
+               out, instead of a dialog whose Delete is refused after it is confirmed. */
+            askToDelete(item) {
+                if (item.in_use) {
+                    window.toast(`${item.name} is used by a playlist, so it stays. Retire it instead (Edit, then Retired): it keeps working where it is used.`);
+
+                    return;
+                }
+
+                this.confirmDelete(item);
+            },
+
             /* ── Exception rows ────────────────────────────────────────── */
 
             /** Add a row, pre-picking the first weekday not already spoken for.
@@ -189,7 +201,7 @@ export function registerDaypartsTable(Alpine) {
             rowSummary(item) {
                 const rows = item.exceptions ?? [];
 
-                if (rows.length === 0) return 'Every day';
+                if (rows.length === 0) return 'None';
 
                 return rows
                     .map((row) => {

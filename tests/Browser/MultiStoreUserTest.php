@@ -86,12 +86,14 @@ class MultiStoreUserTest extends DuskTestCase
                 const button = document.querySelector('[dusk="switch-store-{$storeA->id}"]');
                 const card = button.closest('.relative');
                 const r = card.getBoundingClientRect();
+                // Just inside each rounded corner: a point in the corner's cut-away is page, not card.
+                const i = parseFloat(getComputedStyle(card).borderTopLeftRadius || '0') * 0.3 + 4;
 
                 return [
-                    [r.x + 4, r.y + 4],                          // top-left
-                    [r.x + r.width - 4, r.y + 4],                // top-right
+                    [r.x + i, r.y + i],                          // top-left
+                    [r.x + r.width - i, r.y + i],                // top-right
                     [r.x + r.width / 2, r.y + r.height / 2],     // dead centre
-                    [r.x + 4, r.y + r.height - 4],               // bottom-left
+                    [r.x + i, r.y + r.height - i],               // bottom-left
                 ].map(([x, y]) => document.elementFromPoint(x, y) === button);
             JS)[0];
 

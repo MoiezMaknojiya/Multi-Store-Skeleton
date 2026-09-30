@@ -15,7 +15,7 @@ import axios from 'axios';
 import { takeAddressFlag } from '../core/address-flag.js';
 import { createCrudTable } from '../core/crud-table-base.js';
 import { storageUsedText, storagePercent } from '../core/media-file.js';
-import { validate, required, maxLen } from '../core/validate.js';
+import { validate, required, maxLen, unreadableFields } from '../core/validate.js';
 
 /** ISO instant -> the value a datetime-local input expects, in the viewer's own
  *  timezone, so a shop owner in Karachi sees the time they typed. */
@@ -130,13 +130,18 @@ export function registerMediaTable(Alpine) {
             },
 
             /* ── Edit (title, description, schedule) ───────────────────── */
-            async saveItem() {
+            async saveItem(event) {
                 if (this.saving || !this.editingItem) return;
 
-                const errors = validate(this.form, {
-                    title: [required('Title'), maxLen('Title', 255)],
-                    description: [maxLen('Description', 2000)],
-                });
+                // A start or an expiry typed only in part reads as '' — never saved as "no expiry", which would let
+                // the file play for ever (unreadableFields, as the shared save does).
+                const errors = {
+                    ...validate(this.form, {
+                        title: [required('Title'), maxLen('Title', 255)],
+                        description: [maxLen('Description', 2000)],
+                    }),
+                    ...unreadableFields(event?.target),
+                };
 
                 // Mirrors the backend's after:starts_at rule.
                 if (this.form.starts_at && this.form.expires_at
@@ -146,23 +151,26 @@ export function registerMediaTable(Alpine) {
 
                 if (Object.keys(errors).length > 0) {
                     this.formErrors = errors;
+                    this.focusFirstError();
                     return;
                 }
 
                 this.formErrors = {};
                 this.saving = true;
                 try {
-                    await axios.put(`/media/${this.editingItem.id}`, {
+                    const { data } = await axios.put(`/media/${this.editingItem.id}`, {
                         title: this.form.title,
                         description: this.form.description,
                         starts_at: toInstant(this.form.starts_at),
                         expires_at: toInstant(this.form.expires_at),
                     });
                     this.closeFormModal();
+                    window.toast(data?.message ?? 'File saved.', 'success');
                     await this.fetchItems();
                 } catch (error) {
                     if (error.response?.status === 422 && error.response.data.errors) {
                         this.formErrors = error.response.data.errors;
+                        this.focusFirstError();
                     } else {
                         window.toast(error.response?.data?.message ?? 'An error occurred. Please try again.');
                     }
@@ -208,11 +216,12 @@ export function registerMediaTable(Alpine) {
                 return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
             },
 
+            /* "From Oct 1, 2026, 9:00 AM" / "Until …" / "From … to …" — a date and a time, no seconds. */
             scheduleLabel(item) {
                 if (!item.starts_at && !item.expires_at) return 'Always';
-                const from = item.starts_at ? new Date(item.starts_at).toLocaleString() : 'now';
-                const until = item.expires_at ? new Date(item.expires_at).toLocaleString() : 'no end';
-                return `${from} - ${until}`;
+                const when = (value) => new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+                if (item.starts_at && item.expires_at) return `From ${when(item.starts_at)} to ${when(item.expires_at)}`;
+                return item.starts_at ? `From ${when(item.starts_at)}` : `Until ${when(item.expires_at)}`;
             },
 
             isExpired(item) {

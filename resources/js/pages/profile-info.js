@@ -2,13 +2,8 @@ import { runClientValidation } from '../core/plain-form.js';
 import { required, maxLen, emailFormat, digitsExactly } from '../core/validate.js';
 
 export function registerProfileInfo(Alpine) {
+    /* "Your profile is saved." is a toast (components/toasts.blade.php), not a word beside the button. */
     Alpine.data('profileInfo', () => ({
-        show: true,
-
-        init() {
-            setTimeout(() => this.show = false, 2000);
-        },
-
         // Mirrors ProfileUpdateRequest — required/max/phone-digits/email — so obvious
         // mistakes never reload the page. The backend re-validates (incl. lowercase
         // and unique email) regardless.

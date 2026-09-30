@@ -11,17 +11,18 @@
     ];
 @endphp
 
-<x-app-layout>
+{{-- The tab says the screen's name alone (the header also shows which way it is mounted). --}}
+<x-app-layout :title="$screen->name">
     <x-slot name="header">
-        <div class="flex min-w-0 items-center gap-3">
-            <a href="{{ route('screens.view') }}" class="flex-shrink-0 text-gray-500 hover:text-gray-600 dark:hover:text-gray-200" dusk="back-to-screens"
-               aria-label="Back to screens">
+        <div class="flex min-w-0 items-center gap-2">
+            <a href="{{ route('screens.view') }}" dusk="back-to-screens" aria-label="Back to screens"
+               class="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
             </a>
-            <h1 class="min-w-0 truncate font-semibold text-xl text-gray-800 dark:text-white leading-tight" title="{{ $screen->name }}">{{ $screen->name }}</h1>
-            <span class="hidden flex-shrink-0 text-sm text-gray-500 sm:inline">{{ $orientations[$screen->orientation] ?? $screen->orientation }}</span>
+            <h1 class="page-title min-w-0 truncate" title="{{ $screen->name }}">{{ $screen->name }}</h1>
+            <span class="hidden flex-shrink-0 text-sm text-gray-500 sm:inline dark:text-gray-400">{{ $orientations[$screen->orientation] ?? $screen->orientation }}</span>
         </div>
     </x-slot>
 
@@ -47,11 +48,15 @@
             <div class="card">
                 <div class="card-header">
                     <div>
-                        <h3 class="text-subheading">Playlist</h3>
-                        <p class="text-xs text-gray-500 mt-0.5" dusk="playlist-summary" x-text="summary()"></p>
+                        <h2 class="text-subheading">Playlist</h2>
+                        <p class="text-xs text-gray-500 mt-0.5 dark:text-gray-400" dusk="playlist-summary" x-text="summary()"></p>
                     </div>
                     @can('screen-playlist')
                     <div class="flex flex-wrap items-center gap-2">
+                        {{-- Edits stay on this page until Save Changes: said beside the button, and asked about
+                             before the page is left (the browser's own "Leave site?"). --}}
+                        <span x-show="dirty && !saving" x-cloak role="status" dusk="playlist-unsaved"
+                              class="text-xs font-medium text-amber-700 dark:text-amber-400">Unsaved changes</span>
                         {{-- Copying REPLACES the target's playlist, so it is deliberately
                              the quieter button of the two and asks before it acts. It copies the
                              SAVED playlist, so it waits until what is on the page has been saved. --}}
@@ -60,8 +65,8 @@
                             x-bind:title="dirty ? 'Save your changes first: copying sends the saved playlist' : ''">
                             Copy to other screens
                         </button>
-                        <button @click="save()" x-bind:disabled="!dirty || saving" dusk="playlist-save"
-                            class="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
+                        <button @click="save()" x-bind:disabled="!dirty || saving" dusk="playlist-save" class="btn-primary">
+                            <x-spinner x-show="saving" x-cloak />
                             <span x-text="saving ? 'Saving...' : 'Save Changes'"></span>
                         </button>
                     </div>
@@ -79,7 +84,7 @@
                         <p class="text-center text-muted-soft py-10" dusk="playlist-empty">
                             Nothing here yet.
                             @can('screen-playlist')
-                                Add files from the library on the right &mdash; or a channel, below it.
+                                Add files from the Content library &mdash; or a channel &mdash; with their Add buttons.
                             @endcan
                         </p>
                     </template>
@@ -88,7 +93,7 @@
                         {{-- A line that is not playing — an Ad Builder page taken off the screens (unpublished) — is drawn faded. --}}
                         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 p-2 rounded-md border border-gray-200 dark:border-gray-700"
                              x-bind:class="item.is_draft ? 'opacity-60' : ''">
-                            <span class="w-6 text-xs text-gray-500 text-center" x-text="index + 1"></span>
+                            <span class="w-6 text-xs text-gray-500 text-center dark:text-gray-400" x-text="index + 1"></span>
 
                             <div class="w-20 h-12 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
                                 {{-- An upright picture is shown whole, not cut to its middle (docs/AD-BUILDER-SPEC.md §12). --}}
@@ -97,27 +102,27 @@
                                          x-bind:class="(item.thumbnail_orientation ?? item.orientation) === 'portrait' ? 'object-contain' : 'object-cover'">
                                 </template>
                                 <template x-if="!item.thumbnail_url">
-                                    <span class="text-[10px] text-gray-500" x-text="typeLabel(item)"></span>
+                                    <span class="text-[10px] text-gray-500 dark:text-gray-400" x-text="typeLabel(item)"></span>
                                 </template>
                             </div>
 
                             <div class="flex-1 min-w-0">
                                 <p class="text-sm font-medium text-gray-800 dark:text-white truncate" x-text="item.title"></p>
-                                <p class="text-xs text-gray-500">
+                                <p class="text-xs text-gray-500 dark:text-gray-400">
                                     <span x-text="typeLabel(item)"></span>
-                                    <span x-show="item.expires_at" class="text-amber-600 dark:text-amber-400"
-                                          x-text="' - expires ' + new Date(item.expires_at).toLocaleDateString()"></span>
+                                    <span x-show="item.expires_at" class="text-amber-700 dark:text-amber-400"
+                                          x-text="' · expires ' + new Date(item.expires_at).toLocaleDateString()"></span>
                                     {{-- It keeps its place, and plays again once the ad is published. --}}
-                                    <span x-show="item.is_draft" x-cloak class="text-amber-600 dark:text-amber-400"
+                                    <span x-show="item.is_draft" x-cloak class="text-amber-700 dark:text-amber-400"
                                           x-bind:dusk="'playlist-draft-' + index">&middot; Draft &mdash; not playing until it is published in the Ad Builder</span>
                                     {{-- A file the other way round from the screen plays with bars: said, not refused. --}}
-                                    <span x-show="orientationNote(item)" x-cloak class="text-amber-600 dark:text-amber-400"
+                                    <span x-show="orientationNote(item)" x-cloak class="text-amber-700 dark:text-amber-400"
                                           x-bind:dusk="'playlist-orientation-' + index" x-text="' · ' + orientationNote(item)"></span>
                                     {{-- A channel line says what it will actually play — and says so
                                          plainly when that is nothing: paused, or no ads running. --}}
                                     <template x-if="item.type === 'channel'">
                                         <span x-bind:dusk="'playlist-channel-info-' + index"
-                                              x-bind:class="channelWarning(item) ? 'text-amber-600 dark:text-amber-400' : ''"
+                                              x-bind:class="channelWarning(item) ? 'text-amber-700 dark:text-amber-400' : ''"
                                               x-text="' · ' + channelInfo(item)"></span>
                                     </template>
                                 </p>
@@ -125,10 +130,14 @@
                                      with none plays whenever the screen is on, and
                                      saying so on every row would be noise. --}}
                                 <p x-show="(item.rules ?? []).length > 0" x-cloak
-                                   class="text-xs text-blue-600 dark:text-blue-400 truncate"
+                                   class="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 truncate"
                                    x-bind:dusk="'playlist-schedule-badge-' + index"
                                    x-bind:title="scheduleBadge(item)">
-                                    &#9201; <span x-text="scheduleBadge(item)"></span>
+                                    <svg class="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span class="sr-only">Schedule:</span>
+                                    <span class="truncate" x-text="scheduleBadge(item)"></span>
                                 </p>
                             </div>
 
@@ -147,29 +156,34 @@
                                                 x-bind:aria-label="'Seconds on screen for ' + item.title"
                                                 x-bind:disabled="!canEdit || saving" x-bind:title="item.secondsError || ''"
                                                 class="form-input w-20 text-sm text-right">
-                                            <span class="text-xs text-gray-500">secs</span>
+                                            <span class="text-xs text-gray-500 dark:text-gray-400">secs</span>
                                         </span>
                                     </template>
                                     <template x-if="!isTimed(item)">
-                                        <span class="text-sm text-right text-gray-500 whitespace-nowrap"
+                                        <span class="text-sm text-gray-500 whitespace-nowrap dark:text-gray-400"
                                               x-bind:dusk="'playlist-length-' + index"
                                               x-text="(item.type === 'channel' ? '~' : '') + formatDuration(lineSeconds(item))"></span>
                                     </template>
                                 </div>
 
                                 @can('screen-playlist')
-                                <div class="flex items-center gap-1">
+                                {{-- Each button names the line it acts on, and the red × stands a little apart. --}}
+                                <div class="flex items-center gap-2">
                                     {{-- Still while a save is on its way: its answer replaces the list. --}}
                                     <button @click="openSchedule(index)" x-bind:dusk="'playlist-schedule-' + index" x-bind:disabled="saving"
-                                        class="btn-row-neutral whitespace-nowrap disabled:opacity-30" title="When this item plays">Schedule</button>
+                                        class="btn-row-neutral" title="When this item plays"
+                                        x-bind:aria-label="'Schedule for ' + item.title">Schedule</button>
                                     <button @click="moveUp(index)" x-bind:disabled="index === 0 || saving"
                                         x-bind:dusk="'playlist-up-' + index"
-                                        class="btn-row-neutral disabled:opacity-30" title="Move up">&uarr;</button>
+                                        class="btn-row-neutral" title="Move up"
+                                        x-bind:aria-label="'Move ' + item.title + ' up'"><span aria-hidden="true">&uarr;</span></button>
                                     <button @click="moveDown(index)" x-bind:disabled="index === items.length - 1 || saving"
                                         x-bind:dusk="'playlist-down-' + index"
-                                        class="btn-row-neutral disabled:opacity-30" title="Move down">&darr;</button>
+                                        class="btn-row-neutral" title="Move down"
+                                        x-bind:aria-label="'Move ' + item.title + ' down'"><span aria-hidden="true">&darr;</span></button>
                                     <button @click="removeItem(index)" x-bind:dusk="'playlist-remove-' + index" x-bind:disabled="saving"
-                                        class="btn-row-danger disabled:opacity-30" title="Remove">&times;</button>
+                                        class="btn-row-danger ml-2" title="Remove"
+                                        x-bind:aria-label="'Remove ' + item.title + ' from the playlist'"><span aria-hidden="true">&times;</span></button>
                                 </div>
                                 @endcan
                             </div>
@@ -188,8 +202,8 @@
             {{-- ── Library picker ───────────────────────────────────────── --}}
             <div class="card">
                 <div class="card-header">
-                    <h3 class="text-subheading">Content library</h3>
-                    <div class="relative w-full max-w-xs">
+                    <h2 class="text-subheading">Content library</h2>
+                    <div class="w-full max-w-xs">
                         <input x-model="search" type="search" placeholder="Search files..." aria-label="Search files" autocomplete="new-password" maxlength="255"
                             dusk="media-picker-search" class="form-input" />
                     </div>
@@ -201,10 +215,23 @@
                         Files that play in a channel are not listed here, so nothing plays twice.
                     </p>
 
-                    <template x-if="available.length === 0">
-                        <p class="text-center text-muted-soft py-10" dusk="picker-empty">
-                            Nothing to show here. Upload files to the library first, or clear the search.
-                        </p>
+                    {{-- Loading, a search that found nothing (and the way back), or a library with nothing to add yet
+                         (and, for somebody who may upload, where to do it) — three different things, said apart. --}}
+                    <template x-if="!availableLoaded">
+                        <p class="text-center text-muted-soft py-10">Loading...</p>
+                    </template>
+                    <template x-if="availableLoaded && available.length === 0">
+                        <div class="text-center py-10 space-y-3" dusk="picker-empty">
+                            <p class="text-sm text-muted-soft" x-show="search">
+                                Nothing matches &ldquo;<span x-text="search"></span>&rdquo;.
+                                <button type="button" class="ml-1 font-medium text-blue-600 hover:underline dark:text-blue-400" @click="search = ''">Clear search</button>
+                            </p>
+                            <p class="text-sm text-muted-soft" x-show="!search">No files to add yet.</p>
+                            {{-- The Media page opens with View Media and uploads with Upload Media: offered to somebody with both. --}}
+                            @can(['media-view', 'media-store'])
+                                <a x-show="!search" href="{{ route('media.view', ['upload' => 1]) }}" class="btn-secondary" dusk="picker-upload">Upload files</a>
+                            @endcan
+                        </div>
                     </template>
 
                     <template x-for="media in available" :key="media.id">
@@ -215,26 +242,24 @@
                                          x-bind:class="media.orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                                 </template>
                                 <template x-if="!media.thumbnail_url">
-                                    <span class="text-[10px] text-gray-500" x-text="typeLabel(media)"></span>
+                                    <span class="text-[10px] text-gray-500 dark:text-gray-400" x-text="typeLabel(media)"></span>
                                 </template>
                             </div>
 
                             <div class="flex-1 min-w-0">
                                 <p class="text-sm font-medium text-gray-800 dark:text-white truncate" x-text="media.title"></p>
-                                <p class="text-xs text-gray-500">
+                                <p class="text-xs text-gray-500 dark:text-gray-400">
                                     <span x-text="typeLabel(media)"></span>
                                     {{-- Which way the file is — or, when that is not the screen's way, why it matters:
                                          it would play with bars (§12). One or the other, never "portrait · Portrait". --}}
                                     <span x-show="media.orientation && !orientationNote(media)" x-text="' · ' + media.orientation"></span>
-                                    <span x-show="orientationNote(media)" x-cloak class="text-amber-600 dark:text-amber-400"
+                                    <span x-show="orientationNote(media)" x-cloak class="text-amber-700 dark:text-amber-400"
                                           x-bind:dusk="'picker-orientation-' + media.id" x-text="' · ' + orientationNote(media)"></span>
                                 </p>
                             </div>
 
-                            @can('screen-playlist')
                             <button @click="addItem(media)" x-bind:dusk="'playlist-add-' + media.id" x-bind:disabled="saving"
-                                class="btn-row-neutral disabled:opacity-30">Add</button>
-                            @endcan
+                                class="btn-row-neutral" x-bind:aria-label="'Add ' + media.title + ' to the playlist'">Add</button>
                         </div>
                     </template>
                 </div>
@@ -247,8 +272,10 @@
                  exactly where it stands. Not shown at all while there are no channels. --}}
             <div class="card" x-show="channels.length > 0" x-cloak dusk="channel-picker">
                 <div class="card-header">
-                    <h3 class="text-subheading">Channels</h3>
-                    <p class="text-xs text-gray-500">Add one once &mdash; its new ads arrive on their own.</p>
+                    <div>
+                        <h2 class="text-subheading">Channels</h2>
+                        <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Add one once &mdash; its new ads arrive on their own.</p>
+                    </div>
                 </div>
 
                 <div class="p-4 space-y-2">
@@ -261,7 +288,7 @@
                                              x-bind:class="channel.thumbnail_orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                                     </template>
                                     <template x-if="!channel.thumbnail_url">
-                                        <span class="text-[10px] text-gray-500">channel</span>
+                                        <span class="text-[10px] text-gray-500 dark:text-gray-400">Channel</span>
                                     </template>
                                 </div>
 
@@ -274,20 +301,19 @@
                                               x-bind:dusk="'channel-picker-own-' + channel.id">This store</span>
                                     </p>
                                     <p class="text-xs"
-                                       x-bind:class="channelWarning(channel) ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500'"
+                                       x-bind:class="channelWarning(channel) ? 'text-amber-700 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'"
                                        x-bind:dusk="'channel-picker-info-' + channel.id"
                                        x-text="channelInfo(channel)"></p>
                                 </div>
 
                                 <button type="button" @click="toggleChannelAds(channel.id)" x-show="channel.ads.length > 0"
                                         x-bind:dusk="'channel-preview-' + channel.id"
-                                        class="btn-row-neutral whitespace-nowrap"
+                                        class="btn-row-neutral"
+                                        x-bind:aria-expanded="(openChannelId === channel.id).toString()"
                                         x-text="openChannelId === channel.id ? 'Hide ads' : 'Show ads'"></button>
 
-                                @can('screen-playlist')
                                 <button @click="addChannel(channel)" x-bind:dusk="'playlist-add-channel-' + channel.id" x-bind:disabled="saving"
-                                    class="btn-row-neutral disabled:opacity-30">Add</button>
-                                @endcan
+                                    class="btn-row-neutral" x-bind:aria-label="'Add the channel ' + channel.title + ' to the playlist'">Add</button>
                             </div>
 
                             {{-- What adding it would actually play, today. --}}
@@ -302,13 +328,13 @@
                                                      x-bind:class="ad.orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                                             </template>
                                             <template x-if="!ad.thumbnail_url">
-                                                <span class="text-[10px] text-gray-500" x-text="ad.type"></span>
+                                                <span class="text-[10px] text-gray-500 dark:text-gray-400" x-text="typeLabel(ad)"></span>
                                             </template>
                                         </div>
                                         <p class="mt-1 truncate text-gray-700 dark:text-gray-200" x-text="ad.title"></p>
-                                        <p class="text-gray-500" x-text="adLine(ad)"></p>
+                                        <p class="text-gray-500 dark:text-gray-400" x-text="adLine(ad)"></p>
                                         {{-- The other way round from this screen: it plays with bars, as a file on the list would. --}}
-                                        <p x-show="orientationNote(ad)" x-cloak class="text-amber-600 dark:text-amber-400"
+                                        <p x-show="orientationNote(ad)" x-cloak class="text-amber-700 dark:text-amber-400"
                                            x-bind:dusk="'channel-ad-orientation-' + ad.id" x-text="orientationNote(ad)"></p>
                                     </div>
                                 </template>
@@ -323,17 +349,20 @@
         </div>
 
         {{-- ── When one item plays ──────────────────────────────────────── --}}
-        <x-modal name="playlist-schedule-modal" :show="false" maxWidth="3xl">
+        <x-modal name="playlist-schedule-modal" :show="false" maxWidth="3xl" persistent>
             <div class="p-6" dusk="schedule-modal">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Schedule</h2>
                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
                     <span class="font-semibold" x-text="scheduleIndex !== null ? items[scheduleIndex]?.title : ''"></span>
                     &mdash; leave this empty and it plays whenever the screen is on.
                 </p>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" dusk="schedule-clock">
+                    Times are this screen's own clock: {{ $screen->timezone }}.
+                </p>
 
                 <div class="mt-5 space-y-4">
                     <template x-if="scheduleRules.length === 0">
-                        <p class="text-sm text-gray-500 dark:text-gray-500" dusk="schedule-always">
+                        <p class="text-sm text-gray-500 dark:text-gray-400" dusk="schedule-always">
                             Always &mdash; no schedule set.
                         </p>
                     </template>
@@ -345,23 +374,25 @@
                                  "every Friday" and "11:00-15:00" are two independent
                                  facts, and folding them together is what forces the
                                  competing product into two different modals. --}}
+                            {{-- On a phone every row wraps and each box takes the width it is given; from sm up they
+                                 sit side by side at their own widths. Every box has a name a screen reader says. --}}
                             <div class="flex flex-wrap items-center gap-2">
-                                <label class="form-label mb-0 w-16" x-bind:for="'rule-day-mode-' + ruleIndex">Days</label>
+                                <label class="form-label w-16" x-bind:for="'rule-day-mode-' + ruleIndex">Days</label>
                                 <select x-model="rule.day_mode" @change="refreshPreview()" x-bind:id="'rule-day-mode-' + ruleIndex"
-                                        x-bind:dusk="'rule-day-mode-' + ruleIndex" class="form-select w-44">
+                                        x-bind:dusk="'rule-day-mode-' + ruleIndex" class="form-select sm:w-44">
                                     <option value="always">Every day</option>
                                     <option value="range">Between dates</option>
                                     <option value="repeat">Repeat&hellip;</option>
                                 </select>
 
                                 <template x-if="rule.day_mode === 'range'">
-                                    <div class="flex items-center gap-2">
-                                        <input type="date" x-model="rule.starts_on" @change="refreshPreview()"
-                                               x-bind:dusk="'rule-starts-on-' + ruleIndex" class="form-input w-40"
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <input type="date" x-model="rule.starts_on" @change="refreshPreview()" aria-label="From"
+                                               x-bind:dusk="'rule-starts-on-' + ruleIndex" class="form-input sm:w-40"
                                                x-bind:class="scheduleErrors[ruleIndex]?.starts_on ? '!border-red-500' : ''">
-                                        <span class="text-gray-500">&rarr;</span>
-                                        <input type="date" x-model="rule.ends_on" @change="refreshPreview()"
-                                               x-bind:dusk="'rule-ends-on-' + ruleIndex" class="form-input w-40"
+                                        <span class="text-gray-500 dark:text-gray-400" aria-hidden="true">&rarr;</span>
+                                        <input type="date" x-model="rule.ends_on" @change="refreshPreview()" aria-label="To"
+                                               x-bind:dusk="'rule-ends-on-' + ruleIndex" class="form-input sm:w-40"
                                                x-bind:class="scheduleErrors[ruleIndex]?.ends_on ? '!border-red-500' : ''">
                                     </div>
                                 </template>
@@ -371,15 +402,15 @@
                                  nine shops out of ten that only want a date range never
                                  have to look at it. --}}
                             <template x-if="rule.day_mode === 'repeat'">
-                                <div class="pl-16 space-y-3">
+                                <div class="sm:pl-16 space-y-3">
                                     <div class="flex flex-wrap items-center gap-2">
-                                        <span class="text-sm text-gray-500 dark:text-gray-400">Repeat every</span>
+                                        <span class="text-sm text-gray-500 dark:text-gray-400" aria-hidden="true">Repeat every</span>
                                         <input type="number" min="1" max="52" step="1" x-model.number="rule.recurrence_interval"
-                                               @input="refreshPreview()" x-bind:dusk="'rule-interval-' + ruleIndex"
+                                               @input="refreshPreview()" x-bind:dusk="'rule-interval-' + ruleIndex" aria-label="Repeat every"
                                                class="form-input w-20 text-right"
                                                x-bind:class="scheduleErrors[ruleIndex]?.recurrence_interval ? '!border-red-500' : ''">
-                                        <select x-model="rule.recurrence_type" @change="refreshPreview()"
-                                                x-bind:dusk="'rule-type-' + ruleIndex" class="form-select w-56">
+                                        <select x-model="rule.recurrence_type" @change="refreshPreview()" aria-label="Repeat unit"
+                                                x-bind:dusk="'rule-type-' + ruleIndex" class="form-select sm:w-56">
                                             @foreach ($recurrenceTypes as $value => $label)
                                                 <option value="{{ $value }}">{{ $repeatUnits[$value] ?? $label }}</option>
                                             @endforeach
@@ -387,9 +418,12 @@
                                     </div>
 
                                     <template x-if="rule.recurrence_type === 'weekly'">
-                                        <div class="flex flex-wrap items-center gap-1">
+                                        {{-- A picked day is said, not only coloured: aria-pressed. --}}
+                                        <div class="flex flex-wrap items-center gap-1" role="group" aria-label="Days of the week">
                                             @foreach ($weekdays as $value => $label)
                                                 <button type="button" @click="toggleWeekday(rule, {{ $value }})"
+                                                        aria-label="{{ $label }}"
+                                                        x-bind:aria-pressed="hasWeekday(rule, {{ $value }}) ? 'true' : 'false'"
                                                         x-bind:dusk="'rule-weekday-{{ $value }}-' + ruleIndex"
                                                         x-bind:class="hasWeekday(rule, {{ $value }})
                                                             ? 'bg-blue-600 text-white border-blue-600'
@@ -402,13 +436,13 @@
                                     </template>
 
                                     <template x-if="rule.recurrence_type === 'monthly_day'">
-                                        <div class="flex items-center gap-2">
-                                            <span class="text-sm text-gray-500 dark:text-gray-400">On day</span>
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <span class="text-sm text-gray-500 dark:text-gray-400" aria-hidden="true">On day</span>
                                             <input type="number" min="1" max="31" step="1" x-model.number="rule.recurrence_monthday"
-                                                   @input="refreshPreview()" x-bind:dusk="'rule-monthday-' + ruleIndex"
+                                                   @input="refreshPreview()" x-bind:dusk="'rule-monthday-' + ruleIndex" aria-label="Day of the month"
                                                    class="form-input w-20 text-right"
                                                    x-bind:class="scheduleErrors[ruleIndex]?.recurrence_monthday ? '!border-red-500' : ''">
-                                            <span class="text-xs text-gray-500">
+                                            <span class="text-xs text-gray-500 dark:text-gray-400">
                                                 A 31st simply does not occur in a 30-day month.
                                             </span>
                                         </div>
@@ -416,15 +450,15 @@
 
                                     <template x-if="rule.recurrence_type === 'monthly_weekday'">
                                         <div class="flex flex-wrap items-center gap-2">
-                                            <span class="text-sm text-gray-500 dark:text-gray-400">On the</span>
-                                            <select x-model.number="rule.recurrence_ordinal" @change="refreshPreview()"
-                                                    x-bind:dusk="'rule-ordinal-' + ruleIndex" class="form-select w-32">
+                                            <span class="text-sm text-gray-500 dark:text-gray-400" aria-hidden="true">On the</span>
+                                            <select x-model.number="rule.recurrence_ordinal" @change="refreshPreview()" aria-label="Which week"
+                                                    x-bind:dusk="'rule-ordinal-' + ruleIndex" class="form-select sm:w-32">
                                                 @foreach ($ordinals as $value => $label)
                                                     <option value="{{ $value }}">{{ $label }}</option>
                                                 @endforeach
                                             </select>
-                                            <select x-model.number="rule.recurrence_weekday" @change="refreshPreview()"
-                                                    x-bind:dusk="'rule-month-weekday-' + ruleIndex" class="form-select w-40">
+                                            <select x-model.number="rule.recurrence_weekday" @change="refreshPreview()" aria-label="Weekday"
+                                                    x-bind:dusk="'rule-month-weekday-' + ruleIndex" class="form-select sm:w-40">
                                                 @foreach ($weekdays as $value => $label)
                                                     <option value="{{ $value }}">{{ $label }}</option>
                                                 @endforeach
@@ -433,15 +467,15 @@
                                     </template>
 
                                     <div class="flex flex-wrap items-center gap-2">
-                                        <span class="text-sm text-gray-500 dark:text-gray-400 w-20">Starting</span>
-                                        <input type="date" x-model="rule.starts_on" @change="refreshPreview()"
-                                               x-bind:dusk="'rule-repeat-start-' + ruleIndex" class="form-input w-40"
+                                        <span class="text-sm text-gray-500 dark:text-gray-400 w-20" aria-hidden="true">Starting</span>
+                                        <input type="date" x-model="rule.starts_on" @change="refreshPreview()" aria-label="Starting"
+                                               x-bind:dusk="'rule-repeat-start-' + ruleIndex" class="form-input sm:w-40"
                                                x-bind:class="scheduleErrors[ruleIndex]?.starts_on ? '!border-red-500' : ''">
-                                        <span class="text-sm text-gray-500 dark:text-gray-400">until</span>
-                                        <input type="date" x-model="rule.recurrence_until" @change="refreshPreview()"
-                                               x-bind:dusk="'rule-until-' + ruleIndex" class="form-input w-40"
+                                        <span class="text-sm text-gray-500 dark:text-gray-400" aria-hidden="true">until</span>
+                                        <input type="date" x-model="rule.recurrence_until" @change="refreshPreview()" aria-label="Until"
+                                               x-bind:dusk="'rule-until-' + ruleIndex" class="form-input sm:w-40"
                                                x-bind:class="scheduleErrors[ruleIndex]?.recurrence_until ? '!border-red-500' : ''">
-                                        <span class="text-xs text-gray-500">Leave the end blank to repeat forever.</span>
+                                        <span class="text-xs text-gray-500 dark:text-gray-400">Leave the end blank to repeat forever.</span>
                                     </div>
                                 </div>
                             </template>
@@ -449,9 +483,9 @@
                             {{-- WHAT TIME, on a day the rule covers. The store's live dayparts, and a
                                  retired one only on the rule that already uses it (daypartsFor). --}}
                             <div class="flex flex-wrap items-center gap-2">
-                                <label class="form-label mb-0 w-16" x-bind:for="'rule-daypart-' + ruleIndex">Time</label>
+                                <label class="form-label w-16" x-bind:for="'rule-daypart-' + ruleIndex">Time</label>
                                 <select x-model="rule.daypart_id" @change="refreshPreview()" x-bind:id="'rule-daypart-' + ruleIndex"
-                                        x-bind:dusk="'rule-daypart-' + ruleIndex" class="form-select w-72">
+                                        x-bind:dusk="'rule-daypart-' + ruleIndex" class="form-select sm:w-72">
                                     <option value="">All day</option>
                                     <template x-for="daypart in daypartsFor(rule)" :key="daypart.id">
                                         <option x-bind:value="daypart.id" x-text="daypartLabel(daypart)"
@@ -461,14 +495,16 @@
                                 {{-- It opens the Dayparts page (daypart-view) to make one there (daypart-store),
                                      so it is offered to somebody who holds both. --}}
                                 @can(['daypart-view', 'daypart-store'])
+                                {{-- In a new tab, so nothing here is lost; the list reads itself again when this page is
+                                     back in view (refreshDayparts), and the new one is there. --}}
                                 <a href="{{ route('dayparts.view') }}" target="_blank" rel="noopener"
-                                   class="text-xs text-blue-600 dark:text-blue-400 hover:underline">New daypart</a>
+                                   class="text-xs text-blue-600 dark:text-blue-400 hover:underline">New daypart<span class="sr-only"> (opens in a new tab)</span></a>
                                 @endcan
                             </div>
 
                             {{-- What OK found wrong with this rule, said under it (ruleProblems). --}}
                             <template x-if="ruleError(ruleIndex)">
-                                <p class="form-error" x-bind:dusk="'rule-error-' + ruleIndex" x-text="ruleError(ruleIndex)"></p>
+                                <p class="form-error" role="alert" x-bind:dusk="'rule-error-' + ruleIndex" x-text="ruleError(ruleIndex)"></p>
                             </template>
 
                             <div class="flex items-start justify-between gap-3 pt-1">
@@ -488,7 +524,7 @@
                          is answered with — a preview from a second implementation
                          would be worse than none at all. --}}
                     <div class="rounded-md bg-gray-50 dark:bg-gray-700/40 px-4 py-3">
-                        <p class="text-xs uppercase tracking-wide text-gray-500">
+                        <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
                             Next 7 days <span x-show="previewing" x-cloak class="normal-case">&mdash; working&hellip;</span>
                         </p>
                         <p class="text-sm text-gray-700 dark:text-gray-200 mt-1" dusk="schedule-preview">
@@ -496,20 +532,21 @@
                                 <span>Plays whenever the screen is on.</span>
                             </template>
                             <template x-if="scheduleRules.length > 0 && preview.length === 0">
-                                <span class="text-amber-600 dark:text-amber-400" dusk="schedule-preview-note"
+                                <span class="text-amber-700 dark:text-amber-400" dusk="schedule-preview-note"
                                       x-text="previewError || 'Nothing in the next 7 days.'"></span>
                             </template>
                             <template x-for="(slot, i) in preview" :key="i">
                                 <span class="inline-block mr-3 whitespace-nowrap">
                                     <span x-text="new Date(slot.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })"></span>
-                                    <span class="text-gray-500" x-show="slot.start" x-text="slotLabel(slot)"></span>
+                                    <span class="text-gray-500 dark:text-gray-400" x-show="slot.start" x-text="slotLabel(slot)"></span>
                                 </span>
                             </template>
                         </p>
                     </div>
                 </div>
 
-                <div class="flex flex-wrap justify-end gap-3 mt-6">
+                <div class="flex flex-wrap items-center justify-end gap-3 mt-6">
+                    <p class="mr-auto text-xs text-gray-500 dark:text-gray-400">Kept on this page until you press Save Changes.</p>
                     <button type="button" @click="closeSchedule()" dusk="schedule-cancel" class="btn-secondary">Cancel</button>
                     <button type="button" @click="applySchedule()" dusk="schedule-ok" class="btn-primary">OK</button>
                 </div>
@@ -526,8 +563,11 @@
                 </p>
 
                 <div class="mt-4 space-y-2 max-h-80 overflow-y-auto">
-                    <template x-if="copyTargets.length === 0">
-                        <p class="text-sm text-gray-500 dark:text-gray-500" dusk="copy-no-targets">
+                    <template x-if="copyLoading">
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Loading the other screens&hellip;</p>
+                    </template>
+                    <template x-if="!copyLoading && copyTargets.length === 0">
+                        <p class="text-sm text-gray-500 dark:text-gray-400" dusk="copy-no-targets">
                             There are no other screens in this store.
                         </p>
                     </template>
@@ -544,7 +584,7 @@
                                  BEFORE they press the button. --}}
                             <span class="text-xs"
                                   x-bind:class="target.playlist_items_count > 0
-                                        ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500'"
+                                        ? 'text-amber-700 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'"
                                   x-text="target.playlist_items_count > 0
                                         ? target.playlist_items_count + ' item' + (target.playlist_items_count === 1 ? '' : 's') + ' will be replaced'
                                         : 'empty'"></span>
@@ -552,16 +592,18 @@
                     </template>
                 </div>
 
-                <p x-show="copySelected.length > 0 && copyWillReplace() > 0" x-cloak dusk="copy-warning"
-                   class="mt-4 rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+                <p x-show="copySelected.length > 0 && copyWillReplace() > 0" x-cloak dusk="copy-warning" class="alert-warning mt-4">
                     <span x-text="copyWillReplace()"></span> existing item(s) will be permanently replaced.
                 </p>
 
                 <div class="flex flex-wrap justify-end gap-3 mt-6">
                     <button type="button" @click="$dispatch('close-modal', 'playlist-copy-modal')"
                             dusk="copy-cancel" class="btn-secondary">Cancel</button>
-                    <button type="button" @click="doCopy()" dusk="copy-confirm" class="btn-primary"
+                    {{-- Red while it would overwrite something: the colour says what the words do. --}}
+                    <button type="button" @click="doCopy()" dusk="copy-confirm"
+                            x-bind:class="copyWillReplace() > 0 ? 'btn-danger' : 'btn-primary'"
                             x-bind:disabled="copying || copySelected.length === 0">
+                        <x-spinner x-show="copying" x-cloak />
                         <span x-text="copying ? 'Copying...' : 'Copy and replace'"></span>
                     </button>
                 </div>

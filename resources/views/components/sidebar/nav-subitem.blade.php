@@ -5,6 +5,6 @@
     $isActive = request()->routeIs($routeMatch);
 @endphp
 
-<a href="{{ $href }}" class="{{ $isActive ? 'nav-link-active' : 'nav-link' }} !py-2 text-sm">
-    <span class="whitespace-nowrap">{{ $label }}</span>
+<a href="{{ $href }}" class="{{ $isActive ? 'nav-link-active' : 'nav-link' }} !py-2" @if ($isActive) aria-current="page" @endif>
+    <span>{{ $label }}</span>
 </a>

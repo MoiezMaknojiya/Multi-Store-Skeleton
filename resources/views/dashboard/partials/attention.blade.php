@@ -11,7 +11,7 @@
 
     @if (count($items) === 0)
         <div class="flex items-center gap-3 px-5 py-6 text-sm text-gray-600 dark:text-gray-300" dusk="dashboard-attention-none">
-            <svg class="w-5 h-5 shrink-0 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <svg class="w-5 h-5 shrink-0 text-green-700 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <span>Everything looks good.</span>
@@ -24,7 +24,7 @@
                         dusk="dashboard-attention-{{ $item['key'] }}"
                         class="group flex items-start gap-3 px-5 py-4 {{ $item['href'] ? 'transition hover:bg-gray-50 dark:hover:bg-gray-700/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500' : '' }}">
                         @if ($item['tone'] === 'warning')
-                            <svg class="mt-0.5 w-5 h-5 shrink-0 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <svg class="mt-0.5 w-5 h-5 shrink-0 text-amber-700 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                             </svg>
                         @else
@@ -37,7 +37,7 @@
                             <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ $item['detail'] }}</p>
                         </div>
                         @if ($item['href'])
-                            <svg class="mt-0.5 w-4 h-4 shrink-0 text-gray-500 transition group-hover:translate-x-0.5 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                            <svg class="mt-0.5 w-4 h-4 shrink-0 text-gray-500 transition group-hover:translate-x-0.5 group-hover:text-blue-600 dark:group-hover:text-blue-400 dark:text-gray-400"
                                 fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                             </svg>

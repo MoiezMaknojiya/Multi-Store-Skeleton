@@ -35,8 +35,8 @@
         <div class="relative h-3 flex-1 rounded-full bg-gray-200 dark:bg-gray-700">
             <span class="absolute top-0 h-3 w-3 rounded-full bg-orange-500" style="left: 0" data-ease-ball="{{ $slot }}"></span>
         </div>
-        <button type="button" class="btn-pager text-xs" @click="tryEase('{{ $slot }}')" title="Try this ease"
-                dusk="anim-{{ $slot }}-try">▶</button>
+        <button type="button" class="btn-pager" @click="tryEase('{{ $slot }}')" title="Try this ease" aria-label="Try this ease"
+                dusk="anim-{{ $slot }}-try"><x-icon name="play" class="h-3.5 w-3.5" /></button>
     </div>
 
     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" x-show="easeHandles('{{ $slot }}') !== null"

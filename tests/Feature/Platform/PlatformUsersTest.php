@@ -53,6 +53,20 @@ test('support sees customers only — never the platform team', function () {
     expect($ids)->toContain($owner->id)->not->toContain($this->primary->id)->not->toContain($support->id);
 });
 
+test('a full name finds its account, as the list shows it', function () {
+    $ali = User::factory()->create(['first_name' => 'Ali', 'last_name' => 'Khan', 'email' => 'ak@example.com']);
+    User::factory()->create(['first_name' => 'Ali', 'last_name' => 'Raza', 'email' => 'ar@example.com']);
+
+    $found = collect($this->actingAs($this->primary)->getJson('/users/data?search='.urlencode('Ali Khan'))->assertOk()->json('users'));
+
+    expect($found->pluck('id')->all())->toBe([$ali->id]);
+
+    // One word still reads every column, as before.
+    $found = collect($this->getJson('/users/data?search=Ali')->assertOk()->json('users'));
+
+    expect($found)->toHaveCount(2);
+});
+
 test('deleting an account removes the person from their stores and reports stores left without an owner', function () {
     $owner = createStoreMember($this->store, Role::OWNER);
     $staff = createStoreMember($this->store, Role::STAFF);

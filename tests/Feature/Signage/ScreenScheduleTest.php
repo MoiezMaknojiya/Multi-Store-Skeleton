@@ -299,3 +299,39 @@ test('the schedule editor offers the screen’s own store’s dayparts, and name
     $this->flushSession();
     $check();
 });
+
+test('the dayparts listing says which one a playlist uses, so the page can say "retire it" before a delete', function () {
+    $viewer = createStoreUser($this->store, ['daypart-view'], 'Hours Viewer');
+    Daypart::factory()->between('11:00', '14:00')->create(['store_id' => $this->store->id, 'name' => 'Lunch']);
+    $item = PlaylistItem::create([
+        'screen_id' => $this->screen->id, 'media_id' => $this->welcome->id, 'position' => 0, 'duration_seconds' => 10,
+    ]);
+    $item->scheduleRules()->create(['daypart_id' => $this->hours->id]);
+
+    $rows = collect($this->actingAs($viewer)->withSession(['current_store_id' => $this->store->id])
+        ->getJson('/dayparts/data')->assertOk()->json('dayparts'))->keyBy('name');
+
+    expect((bool) $rows['Deli hours']['in_use'])->toBeTrue()
+        ->and((bool) $rows['Lunch']['in_use'])->toBeFalse();
+});
+
+test('the playlist page reads its dayparts again: a new one is offered without reloading, another store\'s never', function () {
+    $editor = createStoreUser($this->store, ['screen-view', 'screen-playlist'], 'Playlist Editor');
+    $this->actingAs($editor)->withSession(['current_store_id' => $this->store->id]);
+
+    Daypart::factory()->between('11:00', '14:00')->create(['store_id' => $this->store->id, 'name' => 'Lunch']);
+    Daypart::factory()->between('06:00', '09:00')->create(['store_id' => $this->store->id, 'name' => 'Old breakfast', 'is_retired' => true]);
+    $other = Store::factory()->create();
+    Daypart::factory()->between('06:00', '09:00')->create(['store_id' => $other->id, 'name' => 'Elsewhere']);
+
+    expect(collect($this->getJson("/screens/{$this->screen->id}/daypart-options")->assertOk()->json('dayparts'))->pluck('name')->all())
+        ->toBe(['Deli hours', 'Lunch']);
+
+    // Another store's screen is not there at all; without the playlist permission, the list is not offered.
+    $foreign = Screen::factory()->create(['store_id' => $other->id]);
+    $this->getJson("/screens/{$foreign->id}/daypart-options")->assertNotFound();
+
+    $looker = createStoreUser($this->store, ['screen-view'], 'Looker');
+    $this->actingAs($looker)->withSession(['current_store_id' => $this->store->id])
+        ->getJson("/screens/{$this->screen->id}/daypart-options")->assertForbidden();
+});

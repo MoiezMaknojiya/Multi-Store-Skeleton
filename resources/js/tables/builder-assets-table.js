@@ -55,6 +55,18 @@ export function registerBuilderAssetsTable(Alpine) {
                 this.refreshTimer = setTimeout(() => this.fetchItems(), 400);
             },
 
+            /** A file an ad still uses cannot be deleted (the server refuses it too): said at once, with the ads that
+             *  use it, rather than after a confirmation that could never succeed. */
+            askToDelete(item) {
+                if (item.in_use_message) {
+                    window.toast(item.in_use_message);
+
+                    return;
+                }
+
+                this.confirmDelete(item);
+            },
+
             /** "2.4 MB" — a size a person reads, not a number of bytes. */
             sizeLabel(asset) {
                 const mb = (asset.size ?? 0) / (1024 * 1024);

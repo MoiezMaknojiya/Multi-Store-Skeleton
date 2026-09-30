@@ -51,9 +51,13 @@
             </svg>
         </span>
 
+        {{-- A phone has nothing to drop a file from: it is told to tap (a coarse pointer — a finger). --}}
         <span class="text-sm text-gray-700 dark:text-gray-200">
-            <span x-text="dragging ? 'Let go to upload' : '{{ $multiple ? 'Drop files here or' : 'Drop a file here or' }}'"></span>
-            <span x-show="! dragging" class="font-semibold text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">{{ $multiple ? 'choose files' : 'choose a file' }}</span>
+            <span class="hidden font-semibold text-blue-600 pointer-coarse:inline dark:text-blue-400">{{ $multiple ? 'Tap to choose files' : 'Tap to choose a file' }}</span>
+            <span class="pointer-coarse:hidden">
+                <span x-text="dragging ? 'Let go to upload' : '{{ $multiple ? 'Drop files here or' : 'Drop a file here or' }}'"></span>
+                <span x-show="! dragging" class="font-semibold text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">{{ $multiple ? 'choose files' : 'choose a file' }}</span>
+            </span>
         </span>
 
         @if ($hint)
@@ -64,12 +68,16 @@
     <p x-show="summary()" x-cloak class="text-xs font-medium text-gray-600 dark:text-gray-300" x-text="summary()"
        dusk="{{ $dusk }}-upload-summary"></p>
 
-    <ul x-show="uploads.length > 0" x-cloak class="space-y-2" aria-live="polite">
+    {{-- Said to a screen reader when a file's turn comes (uploaded, added, refused, failed) — the rows' percent and
+         speed change several times a second and are never read out. --}}
+    <p class="sr-only" role="status" x-text="said"></p>
+
+    <ul x-show="uploads.length > 0" x-cloak class="space-y-2">
         <template x-for="item in uploads" :key="item.key">
             <li class="flex items-start gap-3 rounded-lg border bg-white p-3 dark:bg-gray-800"
                 :class="['failed', 'refused'].includes(item.status) ? 'border-red-300 dark:border-red-800' : 'border-gray-200 dark:border-gray-700'"
                 dusk="{{ $dusk }}-upload-row">
-                <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-md bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-500">
+                <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-md bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400">
                     <template x-if="item.preview">
                         <img :src="item.preview" alt="" class="h-full w-full object-cover">
                     </template>
@@ -91,26 +99,27 @@
                     <p class="text-xs text-gray-500 dark:text-gray-400" x-text="details(item)"></p>
 
                     <div x-show="showsBar(item)" class="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
-                         role="progressbar" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="item.percent" :aria-label="`${item.name}: ${item.percent}%`">
+                         role="progressbar" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="item.percent" :aria-label="`Uploading ${item.name}`">
                         <div class="h-full rounded-full transition-[width] duration-300"
                              :class="item.status === 'paused' ? 'bg-gray-400 dark:bg-gray-500' : 'bg-blue-600 dark:bg-blue-500'"
                              :style="`width: ${Math.max(item.percent, 2)}%`"></div>
                     </div>
 
                     <p x-show="statusText(item)" class="mt-1 flex items-center gap-1 text-xs"
-                       :class="['done', 'ready'].includes(item.status) ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'"
+                       :class="['done', 'ready'].includes(item.status) ? 'text-green-700 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'"
                        dusk="{{ $dusk }}-upload-status">
                         <svg x-show="['done', 'ready'].includes(item.status)" class="h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                         </svg>
                         <span x-text="statusText(item)"></span>
                     </p>
-                    <p x-show="item.error" class="form-error mt-1" x-text="item.error" dusk="{{ $dusk }}-upload-error"></p>
+                    <p x-show="item.error" class="form-error" x-text="item.error" dusk="{{ $dusk }}-upload-error"></p>
                 </div>
 
+                {{-- A finger's size on a phone (40 px), smaller beside a mouse. --}}
                 <div class="flex flex-shrink-0 items-center gap-1">
                     <button type="button" x-show="canPause(item)" @click="togglePause(item)"
-                            class="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                            class="inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:h-8 sm:w-8 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
                             :aria-label="item.status === 'paused' ? `Resume ${item.name}` : `Pause ${item.name}`"
                             :title="item.status === 'paused' ? 'Resume' : 'Pause'" dusk="{{ $dusk }}-upload-pause">
                         <svg x-show="item.status !== 'paused'" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
@@ -122,7 +131,7 @@
                     </button>
 
                     <button type="button" x-show="canRetry(item)" @click="retry(item)"
-                            class="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                            class="inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:h-8 sm:w-8 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
                             :aria-label="`Try ${item.name} again`" title="Try again" dusk="{{ $dusk }}-upload-retry">
                         <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
@@ -130,7 +139,7 @@
                     </button>
 
                     <button type="button" @click="remove(item)"
-                            class="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-red-400"
+                            class="inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:h-8 sm:w-8 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-red-400"
                             :aria-label="busy() && ! ['done', 'ready', 'failed', 'refused'].includes(item.status) ? `Cancel ${item.name}` : `Remove ${item.name} from the list`"
                             :title="['done', 'ready', 'failed', 'refused'].includes(item.status) ? 'Remove' : 'Cancel'"
                             dusk="{{ $dusk }}-upload-remove">

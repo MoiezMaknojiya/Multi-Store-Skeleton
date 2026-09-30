@@ -280,7 +280,7 @@ async function startPairing() {
         clearTimers();
         state.pollTimer = setInterval(pollPairStatus, POLL_MS);
     } catch {
-        showError('Cannot reach the server. Retrying...');
+        showError('No connection to the server. Check this TV’s internet: it keeps trying by itself.');
         setTimeout(startPairing, 10000);
     }
 }

@@ -139,17 +139,24 @@
 
                 <p id="pairing-code" class="pairing-code" dusk="pairing-code">------</p>
 
-                <p id="pairing-note" class="muted" style="font-size:clamp(13px,1.4vw,18px); margin:4vh 0 0">
+                {{-- Where the dashboard is: the person at the set may be holding a phone and nothing else. --}}
+                <p class="muted" style="font-size:clamp(13px,1.4vw,18px); margin:3vh 0 0" dusk="pairing-panel-address">
+                    The dashboard: <strong style="color:#fff">{{ request()->getHost() }}</strong>
+                </p>
+
+                <p id="pairing-note" class="muted" style="font-size:clamp(13px,1.4vw,18px); margin:2vh 0 0">
                     This code changes every 15 minutes.
                 </p>
 
                 {{-- The device id. Not a secret and not a credential — a screen is
                      let in by its TOKEN, never by this — so it is safe on a wall.
                      It is here to tell one television from another when matching a
-                     set against its row in the database. --}}
-                <p id="pairing-uuid" dusk="pairing-uuid"
-                   style="font-family:ui-monospace,Menlo,monospace; font-size:clamp(10px,1vw,14px);
-                          color:#fff; opacity:.75; margin:2.5vh 0 0; word-break:break-all"></p>
+                     set against its row in the database. Labelled beside it: player.js
+                     writes the id alone into its own span. --}}
+                <p style="font-family:ui-monospace,Menlo,monospace; font-size:clamp(10px,1vw,14px);
+                          color:#fff; opacity:.75; margin:2.5vh 0 0; word-break:break-all">
+                    Device ID <span id="pairing-uuid" dusk="pairing-uuid"></span>
+                </p>
             </div>
 
             {{-- Paired and showing content --}}
@@ -167,9 +174,13 @@
                 <div id="layer-ad" class="media-layer media-layer-ad" hidden dusk="layer-ad"></div>
 
                 <div id="no-content" hidden class="centred">
-                    <p style="font-size:clamp(24px,4vw,54px); font-weight:600; margin:0">No content</p>
+                    <p style="font-size:clamp(24px,4vw,54px); font-weight:600">No content</p>
                     <p class="muted" style="font-size:clamp(14px,1.6vw,20px); margin-top:2vh">
                         <span id="screen-name" dusk="screen-name"></span> is paired and waiting for a playlist.
+                    </p>
+                    {{-- What to do about it, on the set where somebody is looking at it. --}}
+                    <p class="muted" style="font-size:clamp(12px,1.3vw,17px); margin-top:1.5vh">
+                        Add files to its playlist in the dashboard, under Screens.
                     </p>
                 </div>
             </div>

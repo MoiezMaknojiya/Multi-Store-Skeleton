@@ -136,7 +136,7 @@ class ZeroToHeroTest extends DuskTestCase
             /* ── 3. Straight to work: one store means no store to pick ──── */
             $panel->visit('/media');
             $this->waitForAlpine($panel);
-            $panel->waitForText('No media found.');
+            $panel->waitForText('No files yet.');
 
             $poster = $this->upload($panel, $posterPath, 'Opening Poster');
             $second = $this->upload($panel, $secondPath, 'Second Board');
@@ -154,7 +154,7 @@ class ZeroToHeroTest extends DuskTestCase
             /* ── 5. The owner adopts it, from their own panel ────────────── */
             $panel->visit('/screens');
             $this->waitForAlpine($panel);
-            $panel->waitForText('No screens found.');
+            $panel->waitForText('No screens yet.');
 
             $this->clickAndAwait($panel, '@add-screen', fn (Browser $b) => $b->waitFor('@screen-pair-form', 5));
             $this->jsType($panel, '@screen-code', $code);
@@ -246,7 +246,7 @@ class ZeroToHeroTest extends DuskTestCase
             $this->clickAndAwait($panel, '@delete-screen-'.$screen->id,
                 fn (Browser $b) => $b->waitForText('Are you sure you want to delete', 5));
             $this->jsClick($panel, '@confirm-screen-deletion-confirm');
-            $panel->waitForText('No screens found.', 15);
+            $panel->waitForText('No screens yet.', 15);
 
             // The TV loses its token on its next call and asks to be adopted again,
             // with a NEW code — it does not sit on a dead screen.

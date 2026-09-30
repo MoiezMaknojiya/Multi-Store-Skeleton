@@ -537,7 +537,7 @@ class PlaylistFlowTest extends DuskTestCase
             $browser->visit('/screens');
             $this->waitForAlpine($browser);
             $browser->waitForText('Counter TV');
-            $browser->assertSee('No playlist yet');
+            $browser->assertSee('Nothing to play yet');
             $this->jsClick($browser, '@playlist-screen-'.$screen->id);
             $this->waitForAlpine($browser);
             $browser->waitForText('Nothing here yet');
@@ -637,7 +637,7 @@ class PlaylistFlowTest extends DuskTestCase
             $this->jsClick($browser, '@back-to-screens');
             $this->waitForAlpine($browser);
             $browser->waitForText('All Screens');
-            $browser->waitForText('No playlist yet');
+            $browser->waitForText('Nothing to play yet');
         });
     }
 

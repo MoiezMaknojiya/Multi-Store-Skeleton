@@ -41,6 +41,18 @@ export function registerAdsTable(Alpine) {
                 this.fetchItems();
             },
 
+            /** A design whose published page a channel shows cannot be deleted (the server refuses it too): said at
+             *  once, rather than after the password. */
+            askToDelete(item) {
+                if (item.in_channels_message) {
+                    window.toast(item.in_channels_message);
+
+                    return;
+                }
+
+                this.confirmDelete(item);
+            },
+
             /** A copy to work from. The server names it, so two people copying at once cannot collide. */
             async duplicate(ad) {
                 if (this.busyId) return;

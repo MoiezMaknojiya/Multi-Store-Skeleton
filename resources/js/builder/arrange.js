@@ -55,6 +55,9 @@ function writeClipboard(elements) {
 }
 
 export function arrangePanel() {
+    // Where the keyboard was when the menu opened, to go back to — a DOM node, so never in the reactive state.
+    const menu = { returnTo: null };
+
     return {
         /** How many elements the clipboard holds — kept here so the menu and the panel can say so. */
         clipboardSize: readClipboard().length,
@@ -386,10 +389,42 @@ export function arrangePanel() {
                 y: Math.min(event.clientY, window.innerHeight - 440),
                 locked,
             };
+
+            // The keyboard goes into the menu, on its first item that can be pressed (Shift+F10 or the menu key
+            // on a layer opens it too); Up and Down go through it, Esc closes it back to where it was.
+            menu.returnTo = document.activeElement;
+            this.$nextTick(() => this.$refs.contextMenu?.querySelector('[role="menuitem"]:not([disabled])')?.focus({ preventScroll: true }));
         },
 
         closeContextMenu() {
+            if (!this.contextMenu) return;
+
             this.contextMenu = null;
+
+            // Back to where the keyboard was — only when it was in the menu: a click elsewhere keeps its own focus.
+            const back = menu.returnTo;
+            menu.returnTo = null;
+
+            if (back?.isConnected && typeof back.focus === 'function' && this.$refs.contextMenu?.contains(document.activeElement)) {
+                back.focus({ preventScroll: true });
+            }
+        },
+
+        /** Up and Down go through the menu's items that can be pressed, round from the last to the first. */
+        moveMenuFocus(step) {
+            const items = [...(this.$refs.contextMenu?.querySelectorAll('[role="menuitem"]:not([disabled])') ?? [])];
+
+            if (items.length === 0) return;
+
+            const at = items.indexOf(document.activeElement);
+            let next;
+
+            if (step === 'first') next = 0;
+            else if (step === 'last') next = items.length - 1;
+            else if (at === -1) next = step > 0 ? 0 : items.length - 1;
+            else next = (at + step + items.length) % items.length;
+
+            items[next].focus();
         },
 
         /** Run a menu item by name, closing the menu first so the action sees the page as it is. */

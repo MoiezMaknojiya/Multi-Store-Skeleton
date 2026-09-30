@@ -38,7 +38,7 @@ class MediaLibraryTest extends DuskTestCase
             // -- Empty library -------------------------------------------------
             $browser->visit('/media');
             $this->waitForAlpine($browser);
-            $browser->waitForText('No media found.');
+            $browser->waitForText('No files yet.');
 
             // -- Close shuts the upload modal (it is not the shared form modal,
             //    so it needs its own close action) -----------------------------
@@ -73,7 +73,7 @@ class MediaLibraryTest extends DuskTestCase
             $this->clickAndAwait($browser, '@delete-media-'.$media->id,
                 fn (Browser $b) => $b->waitForText('Are you sure you want to delete', 3));
             $this->jsClick($browser, '@confirm-media-deletion-confirm');
-            $browser->waitForText('No media found.');
+            $browser->waitForText('No files yet.');
 
             // Deleting through the UI removes the row and both of its files — the upload and
             // its thumbnail — so the Dusk disk (storage/app/dusk-public) is left as it was found.
@@ -110,7 +110,7 @@ class MediaLibraryTest extends DuskTestCase
             $this->switchToStore($browser, $beta);
             $browser->visit('/media');
             $this->waitForAlpine($browser);
-            $browser->waitForText('No media found.')
+            $browser->waitForText('No files yet.')
                 ->assertDontSee('Alpha Only Poster');
         });
     }
@@ -150,7 +150,7 @@ class MediaLibraryTest extends DuskTestCase
                 ->assertDontSee('Platform promo');
 
             $this->clickAndAwait($browser, '@upload-media', fn (Browser $b) => $b->waitFor('@media-upload-form', 3));
-            $browser->assertSeeIn('@media-upload-library', "They join Alpha Mart's library.");
+            $browser->assertSeeIn('@media-upload-library', "Files you upload here join Alpha Mart's library.");
             $this->uploadThrough($browser, 'media', $path);
             $this->jsClick($browser, '@media-upload-close');
             $this->waitForModalClosed($browser, '@media-upload-form');

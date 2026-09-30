@@ -82,10 +82,12 @@ class NewPasswordController extends Controller
 
         // If the password was reset, the person is sent to the sign-in page to sign in with it — the
         // link never signs anybody in. If there is an error we redirect them back to where they came
-        // from with their error message.
+        // from with their error message: one sentence for a link that expired or was used and for an address
+        // with no account (Laravel's "We can't find a user with that email address" told anybody which
+        // addresses have one, as the forgot-password page never does), with the way on under the form.
         return $status == Password::PASSWORD_RESET
                     ? redirect()->route('login')->with('status', __($status))
                     : back()->withInput($request->only('email'))
-                        ->withErrors(['email' => __($status)]);
+                        ->withErrors(['email' => 'This link has expired or was already used. Ask for a new one below.']);
     }
 }

@@ -201,12 +201,11 @@ class AdBuilderFlowTest extends DuskTestCase
             $browser->waitFor('@asset-card-'.$asset->id)
                 ->assertSeeIn('@asset-usage-'.$asset->id, 'Poster ad');
 
-            $this->clickAndAwait($browser, '@delete-asset-'.$asset->id, fn (Browser $b) => $b->waitFor('@confirm-asset-deletion-confirm', 3));
-            $this->jsClick($browser, '@confirm-asset-deletion-confirm');
-
-            // The refusal names the ad (BuilderAssetController::destroy) — which also means the
-            // server has answered, so the row below is read after the delete was decided.
-            $browser->waitForText('Still used by Poster ad');
+            // Said at once, naming the ad, before any confirmation: the listing carries destroy's own refusal
+            // (in_use_message), so no dialog opens for a delete that could never succeed.
+            $this->jsClick($browser, '@delete-asset-'.$asset->id);
+            $browser->waitForText('Still used by Poster ad')
+                ->assertMissing('@confirm-asset-deletion-confirm');
 
             $this->assertNotNull(BuilderAsset::find($asset->id), 'a picture an ad uses stays where it is');
 
@@ -462,7 +461,7 @@ class AdBuilderFlowTest extends DuskTestCase
 
             $browser->visit('/media');
             $this->waitForAlpine($browser);
-            $browser->waitForText('No media found.');
+            $browser->waitForText('No files yet.');
 
             $browser->visit('/screens/'.$screen->id);
             $this->waitForAlpine($browser);

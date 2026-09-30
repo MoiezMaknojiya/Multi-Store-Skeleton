@@ -29,3 +29,17 @@ export function toAmPm(value) {
 export function windowLabel(start, end) {
     return `${toAmPm(start)} – ${toAmPm(end)}`;
 }
+
+/**
+ * "2026-10-01" → "Oct 1, 2026" (in the reader's own order): a stored day as a person reads it. Taken as the day it
+ * names wherever the browser is — new Date('2026-10-01') is midnight in London, which is still September 30 in
+ * Chicago. Anything that is not such a day comes back as it was.
+ */
+export function dayLabel(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value ?? ''));
+
+    if (!match) return String(value ?? '');
+
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+        .toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}

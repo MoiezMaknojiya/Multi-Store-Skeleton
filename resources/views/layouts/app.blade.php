@@ -45,7 +45,7 @@
         @click="toggleSidebar()" x-cloak>
     </div>
 
-    <div class="flex h-screen overflow-hidden">
+    <div class="flex h-dvh overflow-hidden">
 
         {{-- SIDEBAR --}}
         <x-sidebar />

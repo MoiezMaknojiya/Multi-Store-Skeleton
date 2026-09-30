@@ -47,6 +47,15 @@ test('a super admin lists the permissions', function () {
     $response->assertJsonPath('permissions.0.display_name', 'Sample Permission');
 });
 
+test('the list is searched by label as well as by name', function () {
+    $user = createSuperAdmin();
+    Permission::create(['name' => 'report-export', 'label' => 'Export Reports']);
+
+    $names = collect($this->actingAs($user)->getJson('/permissions/data?search=Export%20Reports')->assertOk()->json('permissions'))->pluck('name');
+
+    expect($names->all())->toBe(['report-export']);
+});
+
 test('a super admin creates a permission', function () {
     $user = createSuperAdmin();
 

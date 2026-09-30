@@ -78,7 +78,10 @@ test('the shelf shows this store’s files and says which ads use them', functio
     expect($rows->pluck('title'))->toContain('Logo', 'Texture')
         ->and($rows->pluck('title'))->not->toContain('Their logo')
         ->and($rows->firstWhere('id', $used->id)['used_by'])->toBe(['Winter sale'])
-        ->and($rows->firstWhere('id', $spare->id)['used_by'])->toBe([]);
+        ->and($rows->firstWhere('id', $spare->id)['used_by'])->toBe([])
+        // Why the used one stays, in the delete's own words, so the shelf says it before any confirmation.
+        ->and($rows->firstWhere('id', $used->id)['in_use_message'])->toStartWith('Still used by Winter sale.')
+        ->and($rows->firstWhere('id', $spare->id)['in_use_message'])->toBeNull();
 });
 
 test('a file an ad still uses cannot be pulled out from under it', function () {

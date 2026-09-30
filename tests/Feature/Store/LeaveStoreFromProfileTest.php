@@ -46,8 +46,8 @@ test('a Viewer leaves a store from the profile, and it drops out of their sessio
         ->and(session('current_store_id'))->toBeNull()
         ->and(ActivityLog::where('action', 'member.left')->where('subject_id', $this->beta->id)->exists())->toBeTrue();
 
-    // A name with a quote in it must not break the page the flash comes back to.
-    $this->get('/profile')->assertOk()->assertSee("passwordForm('You left Joe\u0027s Diner.')", false);
+    // A name with a quote in it must not break the page the flash comes back to: the toast says it, escaped.
+    $this->get('/profile')->assertOk()->assertSee("window.toast('You left Joe\u0027s Diner.', 'success')", false);
 });
 
 test('the last Owner stays; an Owner with a co-owner may go', function () {

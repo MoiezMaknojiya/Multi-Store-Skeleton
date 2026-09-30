@@ -38,8 +38,10 @@ class ActivityLogPageTest extends DuskTestCase
             // midnight UTC.
             $browser->visit('/activity');
             $this->waitForAlpine($browser);
-            $browser->waitForText('store.created')
-                ->assertSee('Created store Audit Mart and invited audit@example.com to own it');
+            // The action reads in words ("Store created"), its code name kept as the badge's tooltip.
+            $browser->waitForText('Created store Audit Mart and invited audit@example.com to own it')
+                ->assertSee('Store created')
+                ->assertPresent('[title="store.created"]');
         });
     }
 }

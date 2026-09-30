@@ -255,7 +255,7 @@ class AdEditorPolishFlowTest extends DuskTestCase
 
             // Three steps, each with its own name.
             $this->setField($browser, '@element-x', '300');
-            $this->setField($browser, '@element-opacity', '0.5');
+            $this->setField($browser, '@element-opacity', '50');   // per cent, as the field asks
             $this->setField($browser, '@element-name', 'Moved box');
 
             $this->jsClick($browser, '@history-toggle');
@@ -434,7 +434,7 @@ class AdEditorPolishFlowTest extends DuskTestCase
             $this->jsClick($browser, '@distribute-y');
             $this->assertSame([100, 350, 600], $this->column($browser, 'y'));
 
-            $this->setField($browser, '@multi-opacity', '0.5');
+            $this->setField($browser, '@multi-opacity', '50');     // per cent; the design keeps 0.5
             $this->assertSame(['0.5', '0.5', '0.5'], array_map('strval', $browser->script('return '.self::EDITOR.'.doc.elements.map(e => e.opacity);')[0]));
 
             $this->jsClick($browser, '@multi-duplicate');

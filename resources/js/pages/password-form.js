@@ -2,15 +2,8 @@ import { runClientValidation } from '../core/plain-form.js';
 import { required, minLen } from '../core/validate.js';
 
 export function registerPasswordForm(Alpine) {
-    Alpine.data('passwordForm', (status) => ({
-        showSuccess: status === 'password-updated',
-
-        init() {
-            if (this.showSuccess) {
-                setTimeout(() => this.showSuccess = false, 2000);
-            }
-        },
-
+    /* "Your password is changed." is a toast (components/toasts.blade.php), not a word beside the button. */
+    Alpine.data('passwordForm', () => ({
         // Mirrors PasswordController — current password required, new password min 8
         // and confirmed. The backend re-checks the current password and full rules.
         validateBeforeSubmit(event) {

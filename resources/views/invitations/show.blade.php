@@ -4,14 +4,14 @@
      InvitationResponseController::placeName, the same words its log lines and welcome use. --}}
 <x-guest-layout :title="'Join '.$place">
     <div dusk="invitation-page" data-state="{{ $state }}">
-        <span class="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+        <span class="badge-info">
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
             Invitation
         </span>
 
-        <h1 class="mt-4 text-2xl font-bold text-gray-800">Join {{ $place }}</h1>
+        <h1 class="auth-title mt-4">Join {{ $place }}</h1>
 
         <div class="mt-5 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3.5">
             <p class="text-sm text-gray-700">
@@ -28,7 +28,7 @@
         </div>
 
         @if (session('error'))
-            <div class="mt-5 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+            <div class="alert-error mt-5" role="alert">
                 {{ session('error') }}
             </div>
         @endif
@@ -37,12 +37,15 @@
             @case('register')
                 <p class="mt-6 text-sm text-gray-500">Create your account to accept. You'll sign in with this email and the password you choose.</p>
 
-                <form method="POST" action="{{ route('invitations.register', $token) }}" class="mt-5 space-y-5" dusk="invitation-register-form"
+                <form method="POST" action="{{ route('invitations.register', $token) }}" class="mt-5 space-y-5" dusk="invitation-register-form" novalidate
                     x-data="invitationRegisterForm()" @submit="handleSubmit($event)">
                     @csrf
 
+                    {{-- Read-only, not disabled: a password manager files the new password under this address (it reads
+                         only enabled fields), not under the phone number typed below it. It is never posted — no name. --}}
                     <x-auth.form-field name="email_display" label="Email" id="invitation_email">
-                        <input id="invitation_email" type="email" value="{{ $invitation->email }}" class="form-input-auth bg-gray-50 text-gray-500" disabled>
+                        <input id="invitation_email" type="email" value="{{ $invitation->email }}" class="form-input-auth bg-gray-50 text-gray-600"
+                            readonly autocomplete="username" maxlength="255">
                     </x-auth.form-field>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -53,16 +56,10 @@
                     <x-auth.form-field name="phone" label="Phone (10 digits)" type="tel" placeholder="1234567890" data-digits="10" inputmode="numeric" autocomplete="tel-national" :required="true" dusk="invitation-phone" />
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <x-auth.form-field name="password" label="Password" :required="true">
-                            <x-slot name="input">
-                                <x-auth.password-input name="password" placeholder="Create a password" autocomplete="new-password" />
-                            </x-slot>
-                        </x-auth.form-field>
-                        <x-auth.form-field name="password_confirmation" label="Confirm Password" :required="true">
-                            <x-slot name="input">
-                                <x-auth.password-input name="password_confirmation" placeholder="Confirm your password" autocomplete="new-password" />
-                            </x-slot>
-                        </x-auth.form-field>
+                        <x-auth.form-field name="password" label="Password" type="password" :required="true"
+            placeholder="Create a password" autocomplete="new-password" hint="At least 8 characters." />
+                        <x-auth.form-field name="password_confirmation" label="Confirm Password" type="password" :required="true"
+            placeholder="Confirm your password" autocomplete="new-password" />
                     </div>
 
                     <button type="submit" class="btn-primary-auth" dusk="invitation-register">Create account and join</button>
@@ -86,7 +83,7 @@
                 @break
 
             @case('mismatch')
-                <div class="mt-6 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" dusk="invitation-mismatch">
+                <div class="alert-warning mt-6" dusk="invitation-mismatch">
                     You're signed in as <span class="font-semibold">{{ auth()->user()->email }}</span>, but this invitation is for
                     <span class="font-semibold">{{ $invitation->email }}</span>. Sign out, then open the link again.
                 </div>
@@ -97,13 +94,22 @@
                 @break
         @endswitch
 
+        {{-- Declining deletes the invitation, so it asks first: one stray tap under the main button must not end it. --}}
         @if ($state !== 'mismatch')
-            <form method="POST" action="{{ route('invitations.decline', $token) }}" class="mt-4 text-center">
-                @csrf
-                <button type="submit" class="text-sm text-gray-500 hover:text-gray-700 hover:underline" dusk="invitation-decline">
+            <div class="mt-4 text-center" x-data="{ sure: false }">
+                <button type="button" x-show="! sure" @click="sure = true" dusk="invitation-decline"
+                    class="rounded-md px-3 py-2 text-sm text-gray-600 hover:text-gray-800 hover:underline">
                     Decline invitation
                 </button>
-            </form>
+                <form x-show="sure" x-cloak method="POST" action="{{ route('invitations.decline', $token) }}" class="alert-warning text-left">
+                    @csrf
+                    <p>Decline? This link stops working, and you would need a new invitation to join.</p>
+                    <div class="mt-3 flex flex-wrap justify-end gap-2">
+                        <button type="button" class="btn-secondary" @click="sure = false" dusk="invitation-decline-keep">Keep it</button>
+                        <button type="submit" class="btn-danger" dusk="invitation-decline-confirm">Decline</button>
+                    </div>
+                </form>
+            </div>
         @endif
     </div>
 </x-guest-layout>

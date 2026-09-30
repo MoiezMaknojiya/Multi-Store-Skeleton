@@ -3,30 +3,24 @@
      and the platform team is invited below. What each row allows comes from the server (`can`). --}}
 <x-app-layout>
     <x-slot name="header">
-        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Users') }}</h1>
+        <h1 class="page-title">{{ __('Users') }}</h1>
     </x-slot>
 
     <div x-data="usersTable({{ Js::from(['isSuperAdmin' => auth()->user()->isSuperAdmin()]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-            <div>
-                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">All accounts</h2>
-                {{-- Stores (putting a person in a store) is the super admin's alone, so only they are told of it. --}}
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    People join a store by invitation from that store.
-                    @can('super-admin-tier')
-                        You can also put them in one with Stores below.
-                    @endcan
-                    They manage their own name, email and password.
-                </p>
-            </div>
-            @can('super-admin-tier')
+        @can('super-admin-tier')
+        <div class="flex flex-wrap items-center gap-3">
             <x-crud.add-button label="Invite to platform team" @click="openInvite()" dusk="invite-platform-member" />
-            @endcan
         </div>
+        @endcan
 
-        <x-crud.table-wrapper title="Accounts" searchPlaceholder="Search by name or email" :columns="4">
+        {{-- What the list is, said once under its title. Stores (putting a person in a store) is the super admin's
+             alone, so only they are told of it. --}}
+        <x-crud.table-wrapper title="Accounts" searchPlaceholder="Search by name or email" :columns="4"
+            :description="'People join a store by invitation from that store.'
+                .(auth()->user()->can('super-admin-tier') ? ' You can also put them in one with Stores below.' : '')
+                .' They manage their own name, email and password.'">
             <x-slot name="head">
                 <th class="px-5 py-3 text-left font-semibold">Account</th>
                 <th class="px-5 py-3 text-left font-semibold">Access</th>
@@ -35,7 +29,8 @@
             </x-slot>
 
             <x-slot name="body">
-                <x-crud.table-empty :columns="4" itemsVar="items" message="No accounts found." />
+                <x-crud.table-empty :columns="4" itemsVar="items" message="No accounts yet."
+                    hint="People join by signing up, or by an invitation from a store or from here." />
 
                 <template x-for="item in items" :key="item.id">
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50" x-bind:dusk="'account-row-' + item.id">
@@ -48,9 +43,9 @@
                                     <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 font-medium text-gray-800 dark:text-white">
                                         <span x-text="item.name"></span>
                                         <span x-show="item.is_you" class="badge-neutral">You</span>
-                                        <span x-show="item.is_primary" class="badge-info" title="The first super admin — cannot be removed">Primary</span>
+                                        <span x-show="item.is_primary" class="badge-info relative" title="The first super admin — cannot be removed">Primary<span class="sr-only">: the first super admin, who cannot be removed</span></span>
                                     </p>
-                                    <p class="text-xs text-gray-500 truncate" x-text="item.email"></p>
+                                    <p class="text-xs text-gray-500 truncate dark:text-gray-400" x-text="item.email"></p>
                                 </div>
                             </div>
                         </td>
@@ -62,19 +57,24 @@
                                 <template x-for="membership in item.memberships" :key="membership.store_id">
                                     <span x-bind:class="roleBadgeClass(membership.role_key)" x-text="membershipLabel(membership)"></span>
                                 </template>
-                                <span x-show="!item.platform_role && item.memberships.length === 0" class="text-xs text-gray-500">No access</span>
+                                <span x-show="!item.platform_role && item.memberships.length === 0" class="text-xs text-gray-500 dark:text-gray-400">No access</span>
                             </div>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300 whitespace-nowrap" x-text="formatDate(item.created_at)"></td>
                         <td class="px-5 py-4">
+                            {{-- Each names the account it acts on; the two that take something away are red. --}}
                             <div class="flex items-center justify-end gap-2">
                                 <button type="button" class="btn-row-neutral" x-show="item.can.impersonate"
+                                    x-bind:aria-label="'Log in as ' + item.name"
                                     @click="impersonate(item)" x-bind:disabled="impersonating" x-bind:dusk="'impersonate-' + item.id">Log in as</button>
                                 <button type="button" class="btn-row-neutral" x-show="item.can.manage_stores"
+                                    x-bind:aria-label="item.name + '’s stores'"
                                     @click="openManageStores(item)" x-bind:disabled="loadingAccess" x-bind:dusk="'manage-stores-' + item.id">Stores</button>
-                                <button type="button" class="btn-row-neutral" x-show="item.can.remove_platform_role"
+                                <button type="button" class="btn-row-danger" x-show="item.can.remove_platform_role"
+                                    x-bind:aria-label="'Remove the platform role of ' + item.name"
                                     @click="confirmRemoveRole(item)" x-bind:dusk="'remove-platform-role-' + item.id">Remove platform role</button>
                                 <button type="button" class="btn-row-danger" x-show="item.can.delete"
+                                    x-bind:aria-label="'Delete ' + item.name"
                                     @click="confirmDelete(item)" x-bind:dusk="'delete-account-' + item.id">Delete</button>
                             </div>
                         </td>
@@ -92,7 +92,7 @@
         {{-- The platform team's open invitations --}}
         <div class="card" dusk="platform-invitations">
             <div class="card-header">
-                <h3 class="text-subheading">Platform team invitations</h3>
+                <h2 class="text-subheading">Platform team invitations</h2>
                 <p class="text-xs text-gray-500 dark:text-gray-400">Links are valid for {{ \App\Models\Invitation::LIFETIME_DAYS }} days. Resending sends a new link.</p>
             </div>
             <div class="overflow-x-auto">
@@ -119,8 +119,13 @@
                                 <td class="px-5 py-4">
                                     <div class="flex items-center justify-end gap-2">
                                         <button type="button" class="btn-row-neutral" @click="resendInvitation(invitation)" x-bind:disabled="busyInvitationId !== null"
-                                            x-bind:dusk="'resend-platform-invitation-' + invitation.id">Resend</button>
+                                            x-bind:aria-label="'Resend the invitation to ' + invitation.email"
+                                            x-bind:dusk="'resend-platform-invitation-' + invitation.id">
+                                            <x-spinner x-show="busyInvitationId === invitation.id" x-cloak class="h-3 w-3" />
+                                            Resend
+                                        </button>
                                         <button type="button" class="btn-row-danger" @click="confirmRevoke(invitation)"
+                                            x-bind:aria-label="'Revoke the invitation to ' + invitation.email"
                                             x-bind:dusk="'revoke-platform-invitation-' + invitation.id">Revoke</button>
                                     </div>
                                 </td>
@@ -142,7 +147,7 @@
                 </div>
 
                 <x-crud.form-field label="Email" field="email" :required="true">
-                    <x-text-input type="email" x-model="inviteForm.email" dusk="invite-platform-email" class="block w-full" maxlength="255" autocomplete="off" placeholder="name@example.com" />
+                    <x-text-input type="email" x-model="inviteForm.email" dusk="invite-platform-email" maxlength="255" autocomplete="off" placeholder="name@example.com" />
                 </x-crud.form-field>
 
                 <x-crud.form-field label="Platform role" field="role_id" :required="true">
@@ -189,28 +194,34 @@
                                     <div class="flex items-center gap-2 shrink-0">
                                         <button type="button" class="btn-row-neutral" @click="saveMembershipRole(membership)"
                                                 x-bind:disabled="membership.busy || membership.selected_role_id === membership.role_id"
+                                                x-bind:aria-label="'Save the role in ' + membership.store_name"
                                                 x-bind:dusk="'membership-save-' + membership.store_id">Save</button>
                                         <button type="button" class="btn-row-danger" @click="askRemove(membership)"
+                                                x-bind:aria-label="'Take them out of ' + membership.store_name"
                                                 x-bind:disabled="membership.busy" x-bind:dusk="'membership-remove-' + membership.store_id">Remove</button>
                                     </div>
                                 </div>
                                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" x-text="roleDescription(membership.store_id, membership.selected_role_id)"></p>
-                                <p class="form-error" x-show="membership.error" x-text="membership.error"></p>
+                                <p class="form-error" role="alert" x-show="membership.error" x-text="membership.error"></p>
                             </li>
                         </template>
                     </ul>
 
                     {{-- Taking them out of a store is a big delete: the password, in a real form. --}}
                     <form x-show="removing" x-cloak @submit.prevent="removeMembership()" dusk="remove-membership-form"
-                          class="mt-3 rounded-md border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-900/20 p-4">
-                        <p class="text-sm text-red-800 dark:text-red-300">
+                          class="alert-error mt-3">
+                        <p>
                             Take <span class="font-semibold" x-text="accessTarget?.name"></span> out of
                             <span class="font-semibold" x-text="removing?.store_name"></span>? What they made there stays with the store.
                         </p>
-                        <x-crud.password-confirm id="remove-membership-password" model="removePassword" error="removePasswordError" />
+                        {{-- They can be put back in, so it asks only that it is you. --}}
+                        <x-crud.password-confirm id="remove-membership-password" model="removePassword" error="removePasswordError" hint="Confirm it is you." />
                         <div class="mt-4 flex flex-wrap justify-end gap-3">
                             <x-secondary-button x-on:click="removing = null">Cancel</x-secondary-button>
-                            <x-danger-button x-bind:disabled="removingBusy" dusk="remove-membership-confirm">Remove from store</x-danger-button>
+                            <x-danger-button x-bind:disabled="removingBusy" dusk="remove-membership-confirm">
+                                <x-spinner x-show="removingBusy" x-cloak />
+                                Remove from store
+                            </x-danger-button>
                         </div>
                     </form>
                 </section>
@@ -227,7 +238,7 @@
                                     <option x-bind:value="option.id" x-text="option.name + (option.city ? ' — ' + option.city : '')"></option>
                                 </template>
                             </select>
-                            <template x-if="assignErrors.store_id"><p class="form-error" x-text="assignErrors.store_id[0]"></p></template>
+                            <template x-if="assignErrors.store_id"><p class="form-error" role="alert" x-text="assignErrors.store_id[0]"></p></template>
                         </div>
                         <div x-bind:class="assignErrors.role_id ? 'crud-field-error' : ''">
                             <select class="form-select" x-model="assignForm.role_id" x-bind:disabled="!assignForm.store_id" dusk="assign-role" aria-label="Role">
@@ -237,9 +248,12 @@
                                 </template>
                             </select>
                             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" x-show="assignForm.role_id" x-text="roleDescription(assignForm.store_id, assignForm.role_id)"></p>
-                            <template x-if="assignErrors.role_id"><p class="form-error" x-text="assignErrors.role_id[0]"></p></template>
+                            <template x-if="assignErrors.role_id"><p class="form-error" role="alert" x-text="assignErrors.role_id[0]"></p></template>
                         </div>
-                        <x-primary-button x-bind:disabled="assigning" dusk="assign-store-save">Add</x-primary-button>
+                        <x-primary-button x-bind:disabled="assigning" dusk="assign-store-save">
+                            <x-spinner x-show="assigning" x-cloak />
+                            Add
+                        </x-primary-button>
                     </form>
                 </section>
 
@@ -257,11 +271,15 @@
                     They leave the platform team at once. Their account stays, with no access to anything.
                 </p>
 
-                <x-crud.password-confirm id="remove-platform-role-password" model="rolePassword" error="rolePasswordError" />
+                {{-- They can be invited back, so it asks only that it is you. --}}
+                <x-crud.password-confirm id="remove-platform-role-password" model="rolePassword" error="rolePasswordError" hint="Confirm it is you." />
 
                 <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-remove-platform-role')">Cancel</x-secondary-button>
-                    <x-danger-button x-bind:disabled="removingRole" dusk="remove-platform-role-confirm">Remove role</x-danger-button>
+                    <x-danger-button x-bind:disabled="removingRole" dusk="remove-platform-role-confirm">
+                        <x-spinner x-show="removingRole" x-cloak />
+                        Remove role
+                    </x-danger-button>
                 </div>
             </form>
         </x-modal>
@@ -275,7 +293,10 @@
                 </p>
                 <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-revoke-platform-invitation')">Cancel</x-secondary-button>
-                    <x-danger-button x-on:click="revokeInvitation()" x-bind:disabled="revoking" dusk="revoke-platform-invitation-confirm">Revoke invitation</x-danger-button>
+                    <x-danger-button x-on:click="revokeInvitation()" x-bind:disabled="revoking" dusk="revoke-platform-invitation-confirm">
+                        <x-spinner x-show="revoking" x-cloak />
+                        Revoke invitation
+                    </x-danger-button>
                 </div>
             </div>
         </x-modal>
@@ -289,8 +310,7 @@
                     The account, its access to every store, its sign-ins everywhere and any invitation waiting for its email are deleted. What they added to stores stays with those stores.
                     <span class="font-semibold text-red-600 dark:text-red-400">This cannot be undone.</span>
                 </p>
-                <div x-show="selectedItem?.sole_owner_of?.length" x-cloak
-                     class="mt-4 rounded-md border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+                <div x-show="selectedItem?.sole_owner_of?.length" x-cloak class="alert-warning mt-4">
                     They are the only Owner of <span class="font-semibold" x-text="(selectedItem?.sole_owner_of ?? []).join(', ')"></span>.
                     <span x-text="(selectedItem?.sole_owner_of?.length ?? 0) === 1 ? 'That store' : 'Those stores'"></span>
                     {{-- Only the ways back this viewer actually has: Stores here is the super admin's alone, and
@@ -308,7 +328,10 @@
 
                 <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-account-deletion')">Cancel</x-secondary-button>
-                    <x-danger-button x-bind:disabled="deleting" dusk="delete-account-confirm">Delete account</x-danger-button>
+                    <x-danger-button x-bind:disabled="deleting" dusk="delete-account-confirm">
+                        <x-spinner x-show="deleting" x-cloak />
+                        Delete account
+                    </x-danger-button>
                 </div>
             </form>
         </x-modal>

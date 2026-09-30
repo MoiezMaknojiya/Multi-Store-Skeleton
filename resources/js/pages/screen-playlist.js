@@ -7,7 +7,7 @@
  * means a half-finished rearrangement never reaches a TV.
  */
 import axios from 'axios';
-import { toAmPm, windowLabel } from '../core/clock.js';
+import { dayLabel, toAmPm, windowLabel } from '../core/clock.js';
 import { PlaylistItemDefaults } from '../core/playlist-defaults.js';
 
 /** A rule as the editor holds it. day_mode is a UI idea only — the server stores
@@ -116,6 +116,10 @@ export function registerScreenPlaylist(Alpine) {
         copyTargets: [],
         copySelected: [],
         copying: false,
+        copyLoading: false,
+        availableLoaded: false,   // the library's first answer is in: until then it says "Loading…", not "nothing"
+        leaveGuard: null,
+        focusGuard: null,
 
         init() {
             this.load();
@@ -125,11 +129,39 @@ export function registerScreenPlaylist(Alpine) {
             if (this.canEdit) {
                 this.loadAvailable();
                 this.loadChannels();
+
+                // A daypart made in another tab ("New daypart") is offered here as soon as this page is back.
+                this.focusGuard = () => this.refreshDayparts();
+                window.addEventListener('focus', this.focusGuard);
             }
+
+            // Edits live on this page until Save Changes: leaving with some asks first, as the Ad Builder does.
+            this.leaveGuard = (event) => {
+                if (!this.dirty) return;
+                event.preventDefault();
+                event.returnValue = '';
+            };
+            window.addEventListener('beforeunload', this.leaveGuard);
+
             this.$watch('search', () => {
                 if (this.searchTimer) clearTimeout(this.searchTimer);
                 this.searchTimer = setTimeout(() => this.loadAvailable(), 400);
             });
+        },
+
+        destroy() {
+            if (this.leaveGuard) window.removeEventListener('beforeunload', this.leaveGuard);
+            if (this.focusGuard) window.removeEventListener('focus', this.focusGuard);
+        },
+
+        /** The dayparts a rule may name, read again (screens.daypart-options). A failure keeps the list there was. */
+        async refreshDayparts() {
+            try {
+                const { data } = await axios.get(`/screens/${this.screenId}/daypart-options`);
+                this.dayparts = data.dayparts;
+            } catch {
+                // The list already on the page still works; nothing to say.
+            }
         },
 
         async load() {
@@ -165,6 +197,8 @@ export function registerScreenPlaylist(Alpine) {
                 if (error.response?.status !== 403) {
                     window.toast('Could not load the content library.');
                 }
+            } finally {
+                if (token === this.availableToken) this.availableLoaded = true;
             }
         },
 
@@ -209,6 +243,11 @@ export function registerScreenPlaylist(Alpine) {
                 rules: [],
             });
             this.dirty = true;
+
+            // Below lg the playlist is above the library, out of sight: say where the file went.
+            if (!window.matchMedia('(min-width: 1024px)').matches) {
+                window.toast(`${media.title} added. Press Save Changes to send it to the screen.`, 'success');
+            }
         },
 
         /**
@@ -299,7 +338,7 @@ export function registerScreenPlaylist(Alpine) {
                 }));
                 this.version = data.version;
                 this.dirty = false;
-                window.toast('Playlist saved', 'success');
+                window.toast('Playlist saved. The screen shows it within 30 seconds.', 'success');
             } catch (error) {
                 const errors = error.response?.data?.errors;
 
@@ -509,6 +548,8 @@ export function registerScreenPlaylist(Alpine) {
             if (this.dirty || this.saving) return;
 
             this.copySelected = [];
+            this.copyTargets = [];
+            this.copyLoading = true;
             this.$dispatch('open-modal', 'playlist-copy-modal');
 
             try {
@@ -516,6 +557,8 @@ export function registerScreenPlaylist(Alpine) {
                 this.copyTargets = data.screens;
             } catch {
                 window.toast('Could not load the other screens.');
+            } finally {
+                this.copyLoading = false;
             }
         },
 
@@ -590,9 +633,11 @@ export function registerScreenPlaylist(Alpine) {
             if (rule.day_mode === 'always') return `Every day · ${when}`;
 
             if (rule.day_mode === 'range') {
-                const from = rule.starts_on || 'always';
-                const to = rule.ends_on || 'forever';
-                return `${from} → ${to} · ${when}`;
+                const range = rule.starts_on && rule.ends_on ? `From ${dayLabel(rule.starts_on)} to ${dayLabel(rule.ends_on)}`
+                    : rule.starts_on ? `From ${dayLabel(rule.starts_on)}`
+                    : rule.ends_on ? `Until ${dayLabel(rule.ends_on)}`
+                    : 'Any day';
+                return `${range} · ${when}`;
             }
 
             const every = Number(rule.recurrence_interval) > 1
@@ -614,13 +659,13 @@ export function registerScreenPlaylist(Alpine) {
                         + (this.weekdays[String(rule.recurrence_weekday)] ?? '');
                     break;
                 case 'yearly':
-                    days = `${every}year on ${rule.starts_on || 'the start date'}`;
+                    days = `${every}year on ${rule.starts_on ? dayLabel(rule.starts_on) : 'the start date'}`;
                     break;
                 default:
                     days = `${every}day`;
             }
 
-            const until = rule.recurrence_until ? `, until ${rule.recurrence_until}` : '';
+            const until = rule.recurrence_until ? `, until ${dayLabel(rule.recurrence_until)}` : '';
 
             return `${days}${until} · ${when}`;
         },

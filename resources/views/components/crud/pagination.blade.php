@@ -1,14 +1,14 @@
-{{-- Pagination bar: "Showing X of Y" on left, prev/page-numbers/next on right.
-     Expects Alpine variables: currentPage, lastPage, total, endItem, and methods prev()/next()/goTo(page) --}}
+{{-- Pagination bar: "Showing 51–100 of 245" on the left, prev/page-numbers/next on the right.
+     Expects Alpine variables: currentPage, lastPage, total, startItem, endItem, and methods prev()/next()/goTo(page) --}}
 @props(['itemsVar'])
 
 <div x-show="{{ $itemsVar }}.length > 0" class="card-footer">
     <div class="text-sm text-muted-soft">
-        Showing <span class="font-medium text-gray-700 dark:text-white" x-text="endItem"></span>
-        of <span class="font-medium text-gray-700 dark:text-white" x-text="total"></span> records
+        Showing <span class="font-medium text-gray-700 dark:text-white tabular-nums" x-text="startItem === endItem ? endItem : startItem + '–' + endItem"></span>
+        of <span class="font-medium text-gray-700 dark:text-white tabular-nums" x-text="total"></span>
     </div>
 
-    <div class="flex items-center gap-1.5">
+    <nav class="flex items-center gap-1.5" aria-label="Pages">
         {{-- Previous page --}}
         <button @click="prev()" :disabled="currentPage === 1" class="btn-pager" aria-label="Previous page">
             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
@@ -23,6 +23,8 @@
         <template x-for="page in pageList()" :key="page">
             <button type="button" @click="typeof page === 'number' && goTo(page)"
                 :disabled="typeof page !== 'number'"
+                :aria-current="currentPage === page ? 'page' : null"
+                :aria-label="typeof page === 'number' ? 'Page ' + page : 'More pages'"
                 :class="typeof page !== 'number'
                     ? 'border-transparent text-gray-400 cursor-default'
                     : (currentPage === page
@@ -38,5 +40,5 @@
                 <path d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" />
             </svg>
         </button>
-    </div>
+    </nav>
 </div>

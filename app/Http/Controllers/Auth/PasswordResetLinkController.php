@@ -39,6 +39,9 @@ class PasswordResetLinkController extends Controller
         // list being walked; this stops it being read.
         Password::sendResetLink($request->only('email'));
 
-        return back()->with('status', __(Password::RESET_LINK_SENT));
+        // Said honestly for both (a link comes only if there is an account), with where it may land, and the
+        // address kept in its field so a typo can be seen and put right.
+        return back()->withInput($request->only('email'))
+            ->with('status', 'If an account uses that address, a link to choose a new password is on its way. It can take a minute — look in spam too.');
     }
 }

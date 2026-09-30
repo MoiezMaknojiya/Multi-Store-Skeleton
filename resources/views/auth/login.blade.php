@@ -1,5 +1,5 @@
 <x-guest-layout title="Sign in">
-    <h1 class="text-2xl font-bold text-gray-800 mb-1">Sign In</h1>
+    <h1 class="auth-title mb-1">Sign In</h1>
     <p class="text-sm text-gray-500 mb-8">
         Don't have an account?
         <a href="{{ route('register') }}" class="text-blue-600 hover:underline font-medium">Create one</a>
@@ -7,7 +7,7 @@
 
     <x-auth.session-status class="mb-4" :status="session('status')" />
 
-    <form method="POST" action="{{ route('login') }}" class="space-y-5"
+    <form method="POST" action="{{ route('login') }}" class="space-y-5" novalidate
         x-data="loginForm()" @submit="handleSubmit($event)">
         @csrf
 
@@ -15,16 +15,13 @@
             placeholder="Enter your email" maxlength="255" autofocus autocomplete="username" :required="true" />
 
         {{-- Password with toggle --}}
-        <x-auth.form-field name="password" label="Password" :required="true">
-            <x-slot name="input">
-                <x-auth.password-input name="password" placeholder="Enter your password" autocomplete="current-password" />
-            </x-slot>
-        </x-auth.form-field>
+        <x-auth.form-field name="password" label="Password" type="password" :required="true"
+            placeholder="Enter your password" autocomplete="current-password" />
 
         {{-- Remember Me + Forgot Password --}}
         <div class="flex items-center justify-between">
             <label class="flex items-center gap-2 cursor-pointer">
-                <input id="remember_me" type="checkbox" name="remember"
+                <input type="checkbox" name="remember"
                        class="form-checkbox">
                 <span class="text-sm text-gray-600">Remember me</span>
             </label>

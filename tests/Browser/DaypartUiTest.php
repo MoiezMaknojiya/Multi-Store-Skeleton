@@ -55,7 +55,7 @@ class DaypartUiTest extends DuskTestCase
 
             $this->waitForAlpine($browser);
             $browser->assertPathIs('/dayparts')
-                ->waitForText('No dayparts found.');
+                ->waitForText('No dayparts yet.');
 
             // -- Build "Deli hours", closed on Sunday --------------------------
             $this->clickAndAwait($browser, '@add-daypart',
@@ -147,7 +147,7 @@ class DaypartUiTest extends DuskTestCase
                 fn (Browser $b) => $b->waitForText('Are you sure'));
 
             $this->clickAndAwait($browser, '@confirm-daypart-deletion-confirm',
-                fn (Browser $b) => $b->waitForText('No dayparts found.'));
+                fn (Browser $b) => $b->waitForText('No dayparts yet.'));
 
             $this->assertSame(0, Daypart::count());
             $this->assertDatabaseMissing('daypart_exceptions', ['daypart_id' => $daypart->id]);

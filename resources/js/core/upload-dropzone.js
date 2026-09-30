@@ -94,6 +94,8 @@ export function registerUploadDropzone(Alpine) {
             dragging: false,
             offline: typeof navigator !== 'undefined' && navigator.onLine === false,
             wasBusy: false,
+            // What a screen reader is told: a file's turn — uploaded, added, refused, failed — never every percent.
+            said: '',
 
             init() {
                 this.onLeave = (event) => {
@@ -242,7 +244,14 @@ export function registerUploadDropzone(Alpine) {
             refuse(item, message) {
                 item.status = 'refused';
                 item.error = message;
+                this.say(`${item.name}: ${message}`);
                 this.announceBusy();
+            },
+
+            /** Tell a screen reader once. Emptied first, so the same words said twice are heard twice. */
+            say(words) {
+                this.said = '';
+                this.$nextTick(() => { this.said = words; });
             },
 
             /* ── The engine ───────────────────────────────────────────────── */
@@ -332,6 +341,7 @@ export function registerUploadDropzone(Alpine) {
                 }
 
                 item.status = 'ready';
+                this.say(`${item.name} is uploaded. It is added when you save.`);
                 this.announceBusy();
                 this.$dispatch('upload-ready', {
                     upload: item.uploadId,
@@ -348,6 +358,7 @@ export function registerUploadDropzone(Alpine) {
                 item.status = 'failed';
                 item.error = wordsFrom(response?.body?.xhr?.responseText)
                     ?? (error?.isNetworkError ? 'The connection kept dropping. Try again.' : 'This file could not be sent. Try again.');
+                this.say(`${item.name}: ${item.error}`);
                 this.announceBusy();
             },
 
@@ -368,10 +379,12 @@ export function registerUploadDropzone(Alpine) {
                     const { data } = await axios.post(this.addUrl, form);
 
                     item.status = 'done';
+                    this.say(`${item.name} is added.`);
                     this.$dispatch('upload-added', { response: data, name: item.name });
                 } catch (error) {
                     item.status = 'failed';
                     item.error = wordsFrom(error.response?.data) ?? 'This file could not be added. Try again.';
+                    this.say(`${item.name}: ${item.error}`);
                 } finally {
                     this.announceBusy();
                 }

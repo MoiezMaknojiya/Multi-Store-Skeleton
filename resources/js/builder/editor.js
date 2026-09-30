@@ -33,11 +33,30 @@ import { viewPanel } from './view.js';
 /** How often a saved ad with changes is saved again on its own. */
 const AUTOSAVE_MS = 30_000;
 
+/** Something a key presses: a button, a link, a checkbox. */
+const PRESSABLE = 'button, a[href], summary, [role="button"], [role="menuitem"], input[type="checkbox"], input[type="radio"]';
+
+/** A dialog of the panel (Discard changes, Unpublish) is open: its keys are its own, never the stage's. */
+function aDialogIsOpen() {
+    return [...document.querySelectorAll('[role="dialog"][aria-modal="true"]')]
+        .some((dialog) => dialog.getClientRects().length > 0);
+}
+
+/** 50 (%) → 0.5, as the design keeps an opacity; anything that is not a number is handed on for limit() to refuse. */
+function fractionOf(percent) {
+    const number = Number(percent);
+
+    return String(percent ?? '').trim() === '' || !Number.isFinite(number) ? percent : number / 100;
+}
+
 export function registerAdEditor(Alpine) {
     Alpine.data('adEditor', (config) => {
         // What Anime.js is running for the preview — deliberately NOT part of the component's reactive state
         // (see motion.js).
         const motion = { running: [], easeTweens: {}, lengthTimer: null };
+        // Where the keyboard was before an overlay of the editor opened, to go back to when it closes — a DOM node,
+        // so never in the reactive state.
+        const overlay = { returnTo: null };
 
         return {
             ...backgroundPanel(),
@@ -130,6 +149,8 @@ export function registerAdEditor(Alpine) {
             /* ── Fonts ─────────────────────────────────────────────────── */
             fontPickerOpen: false,
             fontQuery: '',
+            // The font list could not be fetched: the picker says so, with Try again.
+            fontsFailed: false,
             fonts: [],                  // the whole catalogue: system faces first, then ours
             fontsLoaded: false,
             loadingFonts: false,        // the catalogue is on its way (init and the picker both ask)
@@ -177,7 +198,62 @@ export function registerAdEditor(Alpine) {
                 };
                 window.addEventListener('storage', this._onStorage);
 
+                // The editor's own overlays (the font picker, the asset picker, the shortcuts) behave as the panel's
+                // dialogs do (core/modal.js): the keyboard goes into one when it opens, and back to what opened it
+                // when it closes.
+                ['fontPickerOpen', 'assetPickerOpen', 'shortcutsOpen'].forEach((flag) => {
+                    this.$watch(flag, (open) => (open ? this.overlayOpened(flag) : this.overlayClosed()));
+                });
+
                 this._autosaveTimer = setInterval(() => this.autosaveTick(), AUTOSAVE_MS);
+            },
+
+            /* ── The editor's overlays ─────────────────────────────────── */
+
+            overlayOpened(flag) {
+                overlay.returnTo = document.activeElement;
+
+                const into = { fontPickerOpen: 'fontSearch', assetPickerOpen: 'assetPanel', shortcutsOpen: 'shortcutsPanel' }[flag];
+
+                // x-show draws the overlay on the next frame; the keyboard goes in once it is there.
+                setTimeout(() => this.$refs[into]?.focus({ preventScroll: true }), 50);
+            },
+
+            overlayClosed() {
+                const back = overlay.returnTo;
+                overlay.returnTo = null;
+
+                if (back && back !== document.body && back.isConnected && typeof back.focus === 'function') {
+                    back.focus({ preventScroll: true });
+                }
+            },
+
+            /** Tab and Shift+Tab go round an open overlay's own controls, never to the editor behind it. */
+            keepFocusIn(event, panel) {
+                if (!panel) return;
+
+                const items = [...panel.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea, [tabindex]:not([tabindex="-1"])')]
+                    .filter((item) => item.getClientRects().length > 0);
+
+                if (items.length === 0) {
+                    event.preventDefault();
+
+                    return;
+                }
+
+                const first = items[0];
+                const last = items[items.length - 1];
+
+                if (!panel.contains(document.activeElement) || document.activeElement === panel) {
+                    event.preventDefault();
+                    (event.shiftKey ? last : first).focus();
+                } else if (event.shiftKey && document.activeElement === first) {
+                    event.preventDefault();
+                    last.focus();
+                } else if (!event.shiftKey && document.activeElement === last) {
+                    event.preventDefault();
+                    first.focus();
+                }
             },
 
             destroy() {
@@ -827,6 +903,22 @@ export function registerAdEditor(Alpine) {
                 return kept;
             },
 
+            /** Opacity as a person types it, 0 to 100 %; the design keeps 0 to 1. Answers the percent kept. */
+            setOpacityPercent(percent) {
+                return this.percentOf(this.setOpacity(fractionOf(percent)));
+            },
+
+            setSelectionOpacityPercent(percent) {
+                return this.percentOf(this.setSelectionOpacity(fractionOf(percent)));
+            },
+
+            /** 0.5 → 50. Something that is not a number comes back as it was, for the field to show. */
+            percentOf(fraction) {
+                const number = Number(fraction);
+
+                return String(fraction ?? '').trim() === '' || !Number.isFinite(number) ? fraction : Math.round(number * 100);
+            },
+
             /** One opacity for every selected element. */
             setSelectionOpacity(value) {
                 const items = this.selection().filter((element) => !this.isLocked(element));
@@ -1354,7 +1446,7 @@ export function registerAdEditor(Alpine) {
             publicationTone() {
                 if (!this.published) return 'text-gray-500 dark:text-gray-400';
 
-                return this.changesWaiting() ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400';
+                return this.changesWaiting() ? 'text-amber-700 dark:text-amber-400' : 'text-green-700 dark:text-green-400';
             },
 
             publicationHint() {
@@ -1502,6 +1594,7 @@ export function registerAdEditor(Alpine) {
                 if (this.fontsLoaded || this.loadingFonts) return;
 
                 this.loadingFonts = true;
+                this.fontsFailed = false;
 
                 try {
                     const { data } = await axios.get('/builder/fonts');
@@ -1513,10 +1606,18 @@ export function registerAdEditor(Alpine) {
                         .filter((font) => font.css_url && this.usedFamilies().includes(font.family))
                         .forEach((font) => this.attachFont(font));
                 } catch {
+                    // The picker says so, with Try again (fontsFailed); the toast is for a picker not open yet.
+                    this.fontsFailed = true;
                     window.toast('Could not load the font list.');
                 } finally {
                     this.loadingFonts = false;
                 }
+            },
+
+            /** Try the font list again after it failed. */
+            retryFonts() {
+                this.fontsFailed = false;
+                this.loadFonts();
             },
 
             /** Every family the document sets text in. */
@@ -1666,17 +1767,43 @@ export function registerAdEditor(Alpine) {
                     return;
                 }
 
-                // Esc closes an open picker — even from its own search box — and never reaches the
-                // selection behind it.
-                if (event.key === 'Escape' && (this.fontPickerOpen || this.assetPickerOpen)) {
+                // An overlay of the editor's own (a picker, the shortcuts) takes Esc — even from its search box —
+                // and keeps every other key to itself: nothing behind it is nudged, deleted or undone unseen.
+                if (this.fontPickerOpen || this.assetPickerOpen || this.shortcutsOpen) {
+                    if (event.key === 'Escape' || (this.shortcutsOpen && !typing && event.key === '?')) {
+                        event.preventDefault();
+                        this.fontPickerOpen = false;
+                        this.assetPickerOpen = false;
+                        this.shortcutsOpen = false;
+                    }
+
+                    return;
+                }
+
+                // A dialog of the panel answers its own keys.
+                if (aDialogIsOpen()) return;
+
+                // Esc closes an open menu — even from the checkbox inside it — back onto its button.
+                if (event.key === 'Escape' && (this.historyOpen || this.moreOpen || this.publishMenuOpen)) {
                     event.preventDefault();
-                    this.fontPickerOpen = false;
-                    this.assetPickerOpen = false;
+
+                    const button = this.historyOpen ? this.$refs.historyToggle
+                        : (this.publishMenuOpen ? this.$refs.publishMenuToggle : this.$refs.moreToggle);
+
+                    this.historyOpen = this.moreOpen = this.publishMenuOpen = false;
+                    button?.focus({ preventScroll: true });
 
                     return;
                 }
 
                 if (typing) return;
+
+                // A button, a link or a checkbox the KEYBOARD is on (focus-visible — not one just clicked with the
+                // mouse): Space and Enter press it, as everywhere else, rather than panning or entering a group.
+                if ((event.key === ' ' || event.key === 'Enter') && !control
+                    && event.target instanceof Element && event.target.closest(PRESSABLE) && event.target.matches(':focus-visible')) {
+                    return;
+                }
 
                 // While the whole ad plays the stage is a screen, not a canvas: nothing on it can be
                 // changed unseen (the selection frame is hidden), and only Stop is listened to.
@@ -1691,9 +1818,6 @@ export function registerAdEditor(Alpine) {
 
                 if (event.key === 'Escape') {
                     if (this.contextMenu) this.closeContextMenu();
-                    else if (this.shortcutsOpen) this.shortcutsOpen = false;
-                    else if (this.historyOpen) this.historyOpen = false;
-                    else if (this.publishMenuOpen || this.moreOpen) this.publishMenuOpen = this.moreOpen = false;
                     else if (this.previewing) this.stopPreview();
                     // Inside a group, Esc steps back out to the group itself (§13).
                     else if (this.editingGroupId !== null) this.exitGroup();

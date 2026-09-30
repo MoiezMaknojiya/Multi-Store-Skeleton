@@ -74,7 +74,10 @@ class InvitationAcceptFlowTest extends DuskTestCase
             $browser->loginAs($invitee)->visit('/invitations/'.$token)
                 ->waitFor('@invitation-decline');
 
-            $browser->waitForReload(fn (Browser $b) => $this->jsClick($b, '@invitation-decline'));
+            // It asks first: one tap shows the question, the second declines.
+            $this->jsClick($browser, '@invitation-decline');
+            $browser->waitFor('@invitation-decline-confirm');
+            $browser->waitForReload(fn (Browser $b) => $this->jsClick($b, '@invitation-decline-confirm'));
 
             $this->assertNull(Invitation::find($invitation->id), 'a declined invitation is gone, not left waiting');
             $this->assertFalse(

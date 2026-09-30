@@ -48,7 +48,7 @@
                                 </p>
                                 <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ $step['detail'] }}</p>
                             </div>
-                            <svg class="mt-1 w-4 h-4 shrink-0 text-gray-500 transition group-hover:translate-x-0.5 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                            <svg class="mt-1 w-4 h-4 shrink-0 text-gray-500 transition group-hover:translate-x-0.5 group-hover:text-blue-600 dark:group-hover:text-blue-400 dark:text-gray-400"
                                 fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                             </svg>

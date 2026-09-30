@@ -3,15 +3,15 @@
      AdCompiler writes. --}}
 <div class="space-y-3">
     <div class="flex items-center justify-between">
-        <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500"
-            x-text="selected.type === 'video' ? 'Video' : 'Picture'"></h4>
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+            x-text="selected.type === 'video' ? 'Video' : 'Picture'"></h2>
         <button type="button" class="text-xs text-blue-600 hover:underline dark:text-blue-400"
                 @click="openAssetPicker('replace', selected.type === 'video' ? 'video' : 'image')"
                 dusk="image-replace">Replace…</button>
     </div>
 
     <label class="block text-xs text-gray-500 dark:text-gray-400">Fit
-        <select class="form-select mt-1 w-full text-sm" x-bind:value="selected.style?.fit ?? 'cover'"
+        <select class="form-select mt-1" x-bind:value="selected.style?.fit ?? 'cover'"
                 @change="setStyle('fit', $el.value)" dusk="image-fit">
             @foreach ($fits as $value => $label)
                 <option value="{{ $value }}">{{ $label }}</option>
@@ -37,25 +37,27 @@
 
         <div class="flex-1 space-y-2">
             <label class="block text-xs text-gray-500 dark:text-gray-400">Corner radius
-                <input type="number" min="0" max="999" class="form-input mt-1 w-full text-sm"
+                <input type="number" min="0" max="999" class="form-input mt-1"
                        x-bind:value="selected.style?.radius ?? 0"
                        @change="$el.value = setStyleNumber('radius', $el.value)" dusk="image-radius" />
             </label>
 
             <div class="grid grid-cols-2 gap-1">
-                <button type="button" class="btn-pager text-xs" title="Mirror left to right"
-                        x-bind:class="selected.style?.flipX ? '!border-blue-500 !text-blue-600' : ''"
-                        @click="toggleFlip('x')" dusk="image-flip-x">⇋</button>
-                <button type="button" class="btn-pager text-xs" title="Turn upside down"
-                        x-bind:class="selected.style?.flipY ? '!border-blue-500 !text-blue-600' : ''"
-                        @click="toggleFlip('y')" dusk="image-flip-y">⇵</button>
+                <button type="button" class="btn-pager gap-1 text-xs" title="Mirror left to right" aria-label="Mirror left to right"
+                        x-bind:class="selected.style?.flipX ? '!border-blue-500 !text-blue-600 dark:!text-blue-400' : ''"
+                        x-bind:aria-pressed="selected.style?.flipX ? 'true' : 'false'"
+                        @click="toggleFlip('x')" dusk="image-flip-x"><x-icon name="flip-x" /> Mirror</button>
+                <button type="button" class="btn-pager gap-1 text-xs" title="Turn upside down" aria-label="Turn upside down"
+                        x-bind:class="selected.style?.flipY ? '!border-blue-500 !text-blue-600 dark:!text-blue-400' : ''"
+                        x-bind:aria-pressed="selected.style?.flipY ? 'true' : 'false'"
+                        @click="toggleFlip('y')" dusk="image-flip-y"><x-icon name="flip-y" /> Upside down</button>
             </div>
         </div>
     </div>
 
     @include('builder.partials.frame-controls', ['prefix' => 'image', 'withShadow' => true])
 
-    <button type="button" class="btn-secondary w-full text-xs" @click="showFilters = !showFilters" dusk="image-filters-toggle">
+    <button type="button" class="btn-secondary w-full" @click="showFilters = !showFilters" dusk="image-filters-toggle">
         <span x-text="showFilters ? 'Hide filters' : 'Filters'"></span>
     </button>
 
@@ -72,6 +74,6 @@
             </label>
         @endforeach
 
-        <button type="button" class="btn-secondary w-full text-xs" @click="resetFilters()" dusk="image-filters-reset">Reset filters</button>
+        <button type="button" class="btn-secondary w-full" @click="resetFilters()" dusk="image-filters-reset">Reset filters</button>
     </div>
 </div>

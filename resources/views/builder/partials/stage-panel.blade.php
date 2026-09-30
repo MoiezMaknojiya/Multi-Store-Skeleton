@@ -4,9 +4,9 @@
     {{-- How long the ad is on screen — the design's own, as a layout's duration is in Xibo and a page's in Canva
          (owner, 2026-09-28): every playlist and channel plays it this long. --}}
     <div>
-        <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Length</h4>
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Length</h2>
         <label class="mt-2 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-            <input type="number" x-bind:min="adSecondsMin" x-bind:max="adSecondsMax" step="1" class="form-input w-24 text-sm"
+            <input type="number" x-bind:min="adSecondsMin" x-bind:max="adSecondsMax" step="1" class="form-input w-24"
                    x-bind:value="hasOwnLength() ? adSeconds() : ''" @change="$el.value = setAdSeconds($el.value)"
                    placeholder="Not set" aria-label="Seconds on screen" dusk="ad-length" />
             <span>seconds on screen</span>
@@ -18,14 +18,14 @@
         </p>
         {{-- A design made before designs had a length: every screen keeps its own seconds, published or not, until
              the designer types one (BuilderAd::hasOwnLength). --}}
-        <p x-show="!hasOwnLength()" x-cloak class="mt-1 text-xs text-amber-600 dark:text-amber-400" dusk="ad-length-earlier">
+        <p x-show="!hasOwnLength()" x-cloak class="mt-1 text-xs text-amber-700 dark:text-amber-400" dusk="ad-length-earlier">
             No length of its own yet: each screen and channel shows it for the seconds it was given there. Type a
             length to use it everywhere.
         </p>
     </div>
 
     <div>
-        <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Background</h4>
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Background</h2>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
             Select something on the stage to change it — or build the background here, one layer on another.
         </p>
@@ -38,53 +38,64 @@
 
     <div>
         <div class="flex items-center justify-between">
-            <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Layers</h4>
-            <span class="text-xs text-gray-500" x-text="doc.stage.background.layers.length + ' / ' + maxLayers"></span>
+            <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Layers</h2>
+            <span class="text-xs text-gray-500 dark:text-gray-400" x-text="doc.stage.background.layers.length + ' / ' + maxLayers"></span>
         </div>
 
         <div class="mt-2 grid grid-cols-2 gap-1">
-            <button type="button" class="btn-secondary text-xs" @click="addLayer('color')"
+            <button type="button" class="btn-secondary" @click="addLayer('color')"
                     x-bind:disabled="!canAddLayer()" dusk="bg-add-color">+ Colour</button>
-            <button type="button" class="btn-secondary text-xs" @click="addLayer('gradient')"
+            <button type="button" class="btn-secondary" @click="addLayer('gradient')"
                     x-bind:disabled="!canAddLayer()" dusk="bg-add-gradient">+ Gradient</button>
-            <button type="button" class="btn-secondary text-xs" @click="addLayer('image')"
+            <button type="button" class="btn-secondary" @click="addLayer('image')"
                     x-bind:disabled="!canAddLayer()" dusk="bg-add-image">+ Picture</button>
-            <button type="button" class="btn-secondary text-xs" @click="addLayer('video')"
+            <button type="button" class="btn-secondary" @click="addLayer('video')"
                     x-bind:disabled="!canAddLayer()" dusk="bg-add-video">+ Video</button>
         </div>
 
-        <p x-show="doc.stage.background.layers.length === 0" x-cloak class="mt-3 text-xs text-gray-500">
+        <p x-show="doc.stage.background.layers.length === 0" x-cloak class="mt-3 text-xs text-gray-500 dark:text-gray-400">
             No layers yet — the stage colour fills the frame.
         </p>
 
         {{-- Front first, like every layers panel. --}}
         <div class="mt-2 space-y-1" dusk="bg-layers">
             <template x-for="layer in layersFrontFirst()" :key="layer.id">
-                <div class="group flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm"
+                {{-- The name is the row's button (Tab reaches it, Enter chooses the layer); the small buttons are
+                     24 px and name the layer they act on. --}}
+                <div class="flex cursor-pointer items-center gap-0.5 rounded px-1 py-1 text-sm"
                      x-bind:class="selectedLayerId === layer.id
                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200'
                          : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700/50'"
                      @click="selectLayer(layer)" x-bind:dusk="'bg-layer-' + layer.id">
-                    <button type="button" class="text-gray-500 hover:text-gray-600"
+                    <button type="button" class="layer-icon-button"
                             @click.stop="toggleLayer(layer)"
                             x-bind:title="layer.visible === false ? 'Show' : 'Hide'"
-                            x-bind:dusk="'bg-layer-visible-' + layer.id"
-                            x-text="layer.visible === false ? '◌' : '●'"></button>
-                    <span class="h-4 w-4 shrink-0 rounded border border-gray-300 dark:border-gray-600"
+                            x-bind:aria-label="(layer.visible === false ? 'Show ' : 'Hide ') + layerName(layer)"
+                            x-bind:dusk="'bg-layer-visible-' + layer.id">
+                        <x-icon name="eye" class="h-3.5 w-3.5" x-show="layer.visible !== false" />
+                        <x-icon name="eye-slash" class="h-3.5 w-3.5" x-show="layer.visible === false" x-cloak />
+                    </button>
+                    <span class="mx-1 h-4 w-4 shrink-0 rounded border border-gray-300 dark:border-gray-600"
                           x-bind:style="layerSwatch(layer)"></span>
-                    <span class="min-w-0 flex-1 truncate" x-text="layerName(layer)"></span>
-                    <button type="button" class="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-200"
+                    <button type="button" class="min-w-0 flex-1 truncate rounded px-1 py-0.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                            x-bind:aria-pressed="selectedLayerId === layer.id ? 'true' : 'false'"
+                            x-text="layerName(layer)"></button>
+                    <button type="button" class="layer-icon-button"
                             @click.stop="moveLayer(layer, 1)" title="Bring forward"
-                            x-bind:dusk="'bg-layer-up-' + layer.id">▲</button>
-                    <button type="button" class="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-200"
+                            x-bind:aria-label="'Bring ' + layerName(layer) + ' forward'"
+                            x-bind:dusk="'bg-layer-up-' + layer.id"><x-icon name="arrow-up" class="h-3.5 w-3.5" /></button>
+                    <button type="button" class="layer-icon-button"
                             @click.stop="moveLayer(layer, -1)" title="Send backward"
-                            x-bind:dusk="'bg-layer-down-' + layer.id">▼</button>
-                    <button type="button" class="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-200"
+                            x-bind:aria-label="'Send ' + layerName(layer) + ' backward'"
+                            x-bind:dusk="'bg-layer-down-' + layer.id"><x-icon name="arrow-down" class="h-3.5 w-3.5" /></button>
+                    <button type="button" class="layer-icon-button"
                             @click.stop="duplicateLayer(layer)" title="Duplicate"
-                            x-bind:dusk="'bg-layer-duplicate-' + layer.id">⧉</button>
-                    <button type="button" class="text-xs text-gray-500 hover:text-red-500"
+                            x-bind:aria-label="'Duplicate ' + layerName(layer)"
+                            x-bind:dusk="'bg-layer-duplicate-' + layer.id"><x-icon name="copy" class="h-3.5 w-3.5" /></button>
+                    <button type="button" class="layer-icon-button hover:!text-red-700 dark:hover:!text-red-400"
                             @click.stop="removeLayer(layer)" title="Delete"
-                            x-bind:dusk="'bg-layer-delete-' + layer.id">✕</button>
+                            x-bind:aria-label="'Delete ' + layerName(layer)"
+                            x-bind:dusk="'bg-layer-delete-' + layer.id"><x-icon name="trash" class="h-3.5 w-3.5" /></button>
                 </div>
             </template>
         </div>
@@ -93,7 +104,7 @@
     {{-- The layer being edited. --}}
     <template x-if="selectedLayer()">
         <div class="space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700" dusk="bg-layer-settings">
-            <h4 class="truncate text-xs font-semibold uppercase tracking-wide text-gray-500" x-text="layerName(selectedLayer())"></h4>
+            <h3 class="truncate text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400" x-text="layerName(selectedLayer())"></h3>
 
             <div class="grid grid-cols-2 gap-2">
                 <label class="text-xs text-gray-500 dark:text-gray-400">
@@ -106,7 +117,7 @@
                            @input="setLayerNumber('opacity', $el.value)" dusk="bg-layer-opacity" />
                 </label>
                 <label class="text-xs text-gray-500 dark:text-gray-400">Blend
-                    <select class="form-select mt-1 w-full text-sm" x-bind:value="selectedLayer().blend ?? 'normal'"
+                    <select class="form-select mt-1" x-bind:value="selectedLayer().blend ?? 'normal'"
                             @change="setLayer('blend', $el.value)" dusk="bg-layer-blend">
                         @foreach ($blends as $blend)
                             <option value="{{ $blend }}">{{ ucfirst(str_replace('-', ' ', $blend)) }}</option>
@@ -131,7 +142,7 @@
 
             <template x-if="selectedLayer().type === 'image' || selectedLayer().type === 'video'">
                 <div class="space-y-3">
-                    <button type="button" class="btn-secondary w-full text-xs"
+                    <button type="button" class="btn-secondary w-full"
                             @click="openAssetPicker('layer', selectedLayer().type)" dusk="bg-layer-choose"
                             x-text="selectedLayer().assetId ? 'Choose another…' : (selectedLayer().type === 'video' ? 'Choose a video…' : 'Choose a picture…')"></button>
 
@@ -139,7 +150,7 @@
                         <div class="space-y-3">
                             <div class="grid grid-cols-2 gap-2">
                                 <label class="text-xs text-gray-500 dark:text-gray-400">Size
-                                    <select class="form-select mt-1 w-full text-sm" x-bind:value="selectedLayer().size ?? 'cover'"
+                                    <select class="form-select mt-1" x-bind:value="selectedLayer().size ?? 'cover'"
                                             @change="setLayer('size', $el.value)" dusk="bg-layer-size">
                                         @foreach ($sizes as $value => $label)
                                             <option value="{{ $value }}">{{ $label }}</option>
@@ -147,7 +158,7 @@
                                     </select>
                                 </label>
                                 <label class="text-xs text-gray-500 dark:text-gray-400">Repeat
-                                    <select class="form-select mt-1 w-full text-sm" x-bind:value="selectedLayer().repeat ?? 'no-repeat'"
+                                    <select class="form-select mt-1" x-bind:value="selectedLayer().repeat ?? 'no-repeat'"
                                             @change="setLayer('repeat', $el.value)" dusk="bg-layer-repeat">
                                         @foreach ($repeats as $value => $label)
                                             <option value="{{ $value }}">{{ $label }}</option>
@@ -157,7 +168,7 @@
                             </div>
 
                             <label class="block text-xs text-gray-500 dark:text-gray-400" x-show="selectedLayer().size === 'custom'">Scale (% of the stage width)
-                                <input type="number" min="1" max="1000" class="form-input mt-1 w-full text-sm"
+                                <input type="number" min="1" max="1000" class="form-input mt-1"
                                        x-bind:value="selectedLayer().scale ?? 100"
                                        @change="$el.value = setLayerNumber('scale', $el.value)" dusk="bg-layer-scale" />
                             </label>
@@ -180,7 +191,7 @@
 
                     <template x-if="selectedLayer().type === 'video'">
                         <label class="block text-xs text-gray-500 dark:text-gray-400">Fit
-                            <select class="form-select mt-1 w-full text-sm" x-bind:value="selectedLayer().fit ?? 'cover'"
+                            <select class="form-select mt-1" x-bind:value="selectedLayer().fit ?? 'cover'"
                                     @change="setLayer('fit', $el.value)" dusk="bg-layer-fit">
                                 @foreach ($videoFits as $value => $label)
                                     <option value="{{ $value }}">{{ $label }}</option>

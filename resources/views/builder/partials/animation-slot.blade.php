@@ -2,10 +2,10 @@
      its ease. $effects is the runtime's own list (AdAnimations), so every option is one a television can
      play. --}}
 <div class="rounded-lg border border-gray-200 p-3 dark:border-gray-700" dusk="anim-{{ $slot }}">
-    <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-300">{{ $title }}</h4>
-    <p class="mt-0.5 text-xs text-gray-500">{{ $hint }}</p>
+    <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-300">{{ $title }}</h2>
+    <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ $hint }}</p>
 
-    <select class="form-select mt-2 w-full text-sm" x-bind:value="slotOf('{{ $slot }}')?.effect ?? ''"
+    <select class="form-select mt-2" x-bind:value="slotOf('{{ $slot }}')?.effect ?? ''"
             @change="setEffect('{{ $slot }}', $el.value)" dusk="anim-{{ $slot }}-effect">
         <option value="">None</option>
         @foreach ($effects as $effect)
@@ -16,7 +16,7 @@
     <div x-show="slotOf('{{ $slot }}')" x-cloak class="mt-3 space-y-2">
         @if ($slot === 'loop')
             <label class="block text-xs text-gray-500 dark:text-gray-400" x-show="slotUses('loop', 'axis')">Direction
-                <select class="form-select mt-1 w-full text-sm" x-bind:value="slotOf('loop')?.axis ?? 'y'"
+                <select class="form-select mt-1" x-bind:value="slotOf('loop')?.axis ?? 'y'"
                         @change="setSlot('loop', 'axis', $el.value)" dusk="anim-loop-axis">
                     @foreach ($axes as $value => $label)
                         <option value="{{ $value }}">{{ $label }}</option>
@@ -25,7 +25,7 @@
             </label>
 
             <label class="block text-xs text-gray-500 dark:text-gray-400" x-show="slotUses('loop', 'spinDirection')">Direction
-                <select class="form-select mt-1 w-full text-sm" x-bind:value="spinDirection()"
+                <select class="form-select mt-1" x-bind:value="spinDirection()"
                         @change="setSpinDirection($el.value)" dusk="anim-loop-spin">
                     <option value="clockwise">Clockwise</option>
                     <option value="anticlockwise">Anticlockwise</option>
@@ -34,7 +34,7 @@
 
             <label class="block text-xs text-gray-500 dark:text-gray-400" x-show="slotUses('loop', 'amount')">
                 <span x-text="loopAmount().label"></span>
-                <input type="number" step="1" class="form-input mt-1 w-full text-sm"
+                <input type="number" step="1" class="form-input mt-1"
                        x-bind:min="loopAmount().min" x-bind:max="loopAmount().max"
                        x-bind:value="slotOf('loop')?.amount ?? 0"
                        @change="$el.value = setSlot('loop', 'amount', $el.value)" dusk="anim-loop-amount" />
@@ -42,12 +42,12 @@
 
             <div class="grid grid-cols-2 gap-2" x-show="slotUses('loop', 'amountX') || slotUses('loop', 'amountY')">
                 <label class="text-xs text-gray-500 dark:text-gray-400">Across (px)
-                    <input type="number" step="1" class="form-input mt-1 w-full text-sm"
+                    <input type="number" step="1" class="form-input mt-1"
                            x-bind:value="slotOf('loop')?.amountX ?? 0"
                            @change="$el.value = setSlot('loop', 'amountX', $el.value)" dusk="anim-loop-amount-x" />
                 </label>
                 <label class="text-xs text-gray-500 dark:text-gray-400">Down (px)
-                    <input type="number" step="1" class="form-input mt-1 w-full text-sm"
+                    <input type="number" step="1" class="form-input mt-1"
                            x-bind:value="slotOf('loop')?.amountY ?? 0"
                            @change="$el.value = setSlot('loop', 'amountY', $el.value)" dusk="anim-loop-amount-y" />
                 </label>
@@ -56,19 +56,19 @@
             <div class="grid grid-cols-2 gap-2">
                 <label class="text-xs text-gray-500 dark:text-gray-400">
                     <span x-text="slotOf('loop')?.effect === 'spin' ? 'One turn (s)' : 'One swing (s)'"></span>
-                    <input type="number" step="0.1" min="0.1" max="120" class="form-input mt-1 w-full text-sm"
+                    <input type="number" step="0.1" min="0.1" max="120" class="form-input mt-1"
                            x-bind:value="slotOf('loop')?.duration ?? 2"
                            @change="$el.value = setSlot('loop', 'duration', $el.value)" dusk="anim-loop-duration" />
                 </label>
                 <label class="text-xs text-gray-500 dark:text-gray-400">Wait first (s)
-                    <input type="number" step="0.1" min="0" x-bind:max="animationNumbers.loop.delay[1]" class="form-input mt-1 w-full text-sm"
+                    <input type="number" step="0.1" min="0" x-bind:max="animationNumbers.loop.delay[1]" class="form-input mt-1"
                            x-bind:value="slotOf('loop')?.delay ?? 0"
                            @change="$el.value = setSlot('loop', 'delay', $el.value)" dusk="anim-loop-delay" />
                 </label>
             </div>
 
             <label class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400" x-show="slotOf('loop')?.effect !== 'spin'">
-                <input type="checkbox" class="rounded border-gray-300 dark:border-gray-600"
+                <input type="checkbox" class="form-checkbox"
                        x-bind:checked="slotOf('loop')?.yoyo !== false"
                        @change="setSlot('loop', 'yoyo', $el.checked)" dusk="anim-loop-yoyo" />
                 Back and forth (off: start again from the beginning)
@@ -76,7 +76,7 @@
         @else
             <label class="block text-xs text-gray-500 dark:text-gray-400" x-show="slotUses('{{ $slot }}', 'direction')">
                 {{ $slot === 'in' ? 'Comes in moving' : 'Leaves moving' }}
-                <select class="form-select mt-1 w-full text-sm" x-bind:value="slotOf('{{ $slot }}')?.direction ?? 'up'"
+                <select class="form-select mt-1" x-bind:value="slotOf('{{ $slot }}')?.direction ?? 'up'"
                         @change="setSlot('{{ $slot }}', 'direction', $el.value)" dusk="anim-{{ $slot }}-direction">
                     @foreach ($directions as $direction)
                         <option value="{{ $direction }}">{{ ucfirst($direction) }}</option>
@@ -85,26 +85,26 @@
             </label>
 
             <label class="block text-xs text-gray-500 dark:text-gray-400" x-show="slotUses('{{ $slot }}', 'distance')">Distance (px)
-                <input type="number" step="1" min="0" max="2000" class="form-input mt-1 w-full text-sm"
+                <input type="number" step="1" min="0" max="2000" class="form-input mt-1"
                        x-bind:value="slotOf('{{ $slot }}')?.distance ?? 80"
                        @change="$el.value = setSlot('{{ $slot }}', 'distance', $el.value)" dusk="anim-{{ $slot }}-distance" />
             </label>
 
             <label class="block text-xs text-gray-500 dark:text-gray-400" x-show="slotUses('{{ $slot }}', 'scale')">
                 {{ $slot === 'in' ? 'Starts at size (×)' : 'Ends at size (×)' }}
-                <input type="number" step="0.05" min="0" max="5" class="form-input mt-1 w-full text-sm"
+                <input type="number" step="0.05" min="0" max="5" class="form-input mt-1"
                        x-bind:value="slotOf('{{ $slot }}')?.scale ?? 0.6"
                        @change="$el.value = setSlot('{{ $slot }}', 'scale', $el.value)" dusk="anim-{{ $slot }}-scale" />
             </label>
 
             <label class="block text-xs text-gray-500 dark:text-gray-400" x-show="slotUses('{{ $slot }}', 'degrees')">Turn (°)
-                <input type="number" step="1" min="-720" max="720" class="form-input mt-1 w-full text-sm"
+                <input type="number" step="1" min="-720" max="720" class="form-input mt-1"
                        x-bind:value="slotOf('{{ $slot }}')?.degrees ?? -90"
                        @change="$el.value = setSlot('{{ $slot }}', 'degrees', $el.value)" dusk="anim-{{ $slot }}-degrees" />
             </label>
 
             <label class="block text-xs text-gray-500 dark:text-gray-400" x-show="slotUses('{{ $slot }}', 'blur')">Blur (px)
-                <input type="number" step="1" min="0" max="100" class="form-input mt-1 w-full text-sm"
+                <input type="number" step="1" min="0" max="100" class="form-input mt-1"
                        x-bind:value="slotOf('{{ $slot }}')?.blur ?? 20"
                        @change="$el.value = setSlot('{{ $slot }}', 'blur', $el.value)" dusk="anim-{{ $slot }}-blur" />
             </label>
@@ -112,19 +112,19 @@
             <div class="grid grid-cols-2 gap-2">
                 @if ($slot === 'out')
                     <label class="text-xs text-gray-500 dark:text-gray-400">Starts at (s)
-                        <input type="number" step="0.1" min="0" x-bind:max="animationNumbers.out.at[1]" class="form-input mt-1 w-full text-sm"
+                        <input type="number" step="0.1" min="0" x-bind:max="animationNumbers.out.at[1]" class="form-input mt-1"
                                x-bind:value="slotOf('out')?.at ?? 5"
                                @change="$el.value = setSlot('out', 'at', $el.value)" dusk="anim-out-at" />
                     </label>
                 @else
                     <label class="text-xs text-gray-500 dark:text-gray-400">Wait first (s)
-                        <input type="number" step="0.1" min="0" x-bind:max="animationNumbers.in.delay[1]" class="form-input mt-1 w-full text-sm"
+                        <input type="number" step="0.1" min="0" x-bind:max="animationNumbers.in.delay[1]" class="form-input mt-1"
                                x-bind:value="slotOf('in')?.delay ?? 0"
                                @change="$el.value = setSlot('in', 'delay', $el.value)" dusk="anim-in-delay" />
                     </label>
                 @endif
                 <label class="text-xs text-gray-500 dark:text-gray-400">Takes (s)
-                    <input type="number" step="0.05" min="0.05" max="60" class="form-input mt-1 w-full text-sm"
+                    <input type="number" step="0.05" min="0.05" max="60" class="form-input mt-1"
                            x-bind:value="slotOf('{{ $slot }}')?.duration ?? animationNumbers['{{ $slot }}'].duration[2]"
                            @change="$el.value = setSlot('{{ $slot }}', 'duration', $el.value)" dusk="anim-{{ $slot }}-duration" />
                 </label>
@@ -133,14 +133,14 @@
 
         {{-- The ad leaves the screen at its length (Stage panel), however its elements move: what starts after
              that is never seen, and what is still running is cut. Said where the timing is set. --}}
-        <p x-show="timingNote('{{ $slot }}')" x-cloak class="text-xs text-amber-600 dark:text-amber-400"
+        <p x-show="timingNote('{{ $slot }}')" x-cloak class="text-xs text-amber-700 dark:text-amber-400"
            x-text="timingNote('{{ $slot }}')" dusk="anim-{{ $slot }}-timing"></p>
 
         {{-- The ease: a name from the runtime's list, or a curve drawn by hand. A spin turns at an even
              pace, so it has none. --}}
         <div x-show="!('{{ $slot }}' === 'loop' && slotOf('loop')?.effect === 'spin')">
             <label class="block text-xs text-gray-500 dark:text-gray-400">Ease
-                <select class="form-select mt-1 w-full text-sm" x-bind:value="easeChoice('{{ $slot }}')"
+                <select class="form-select mt-1" x-bind:value="easeChoice('{{ $slot }}')"
                         @change="chooseEase('{{ $slot }}', $el.value)" dusk="anim-{{ $slot }}-ease">
                     <option value="none">Linear (even pace)</option>
                     @foreach ($easeGroups as $family => $eases)

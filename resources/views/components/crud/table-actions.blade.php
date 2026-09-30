@@ -14,12 +14,13 @@
 
 <div class="flex items-center justify-end gap-2">
     @if($editClick && (! $editCan || auth()->user()->can($editCan)))
-    <button @click="{{ $editClick }}" class="btn-row-neutral"
+    {{-- Each says which row it acts on, for a screen reader passing a column of "Edit"s. --}}
+    <button @click="{{ $editClick }}" class="btn-row-neutral" x-bind:aria-label="'Edit ' + (item.name ?? item.title ?? '')"
             @if($dusk) x-bind:dusk="'edit-{{ $dusk }}-' + item.id" @endif>Edit</button>
     @endif
 
     @if($deleteClick && (! $deleteCan || auth()->user()->can($deleteCan)))
-    <button @click="{{ $deleteClick }}" class="btn-row-danger"
+    <button @click="{{ $deleteClick }}" class="btn-row-danger" x-bind:aria-label="'Delete ' + (item.name ?? item.title ?? '')"
             @if($dusk) x-bind:dusk="'delete-{{ $dusk }}-' + item.id" @endif>Delete</button>
     @endif
 </div>

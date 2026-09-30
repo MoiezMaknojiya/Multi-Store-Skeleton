@@ -1,14 +1,15 @@
-{{-- SIDEBAR - Main navigation panel with collapsible width --}}
-<aside id="main-sidebar" :class="sidebarOpen ? 'w-64' : 'w-0 lg:w-19'"
+{{-- SIDEBAR - Main navigation panel with collapsible width. Closed on a phone it is invisible as well as narrow: a
+     keyboard and a screen reader skip it, instead of walking through ten links nobody can see. --}}
+<aside id="main-sidebar" :class="sidebarOpen ? 'w-64' : 'w-0 invisible lg:visible lg:w-19'"
     class="flex-shrink-0 flex flex-col
     fixed inset-y-0 left-0 z-30 overflow-hidden
     bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700
-    lg:static lg:translate-x-0">
+    lg:static">
 
     {{-- Logo Section --}}
     <div class="flex items-center gap-3 px-5 py-3 border-b border-gray-200 dark:border-gray-700 min-h-[64px]">
         <div class="w-9 h-9 rounded-xs bg-blue-600 flex items-center justify-center flex-shrink-0">
-            <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
         </div>
@@ -17,7 +18,7 @@
     </div>
 
     {{-- Navigation links - each rendered by the nav-item component --}}
-    <nav class="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 space-y-1">
+    <nav class="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 space-y-1" aria-label="Main">
         <x-sidebar.nav-item
             href="{{ route('dashboard') }}"
             routeMatch="dashboard"
@@ -157,14 +158,16 @@
     {{-- The account at the foot of the bar opens Settings: the profile, and the store's settings. --}}
     <div class="px-3 py-4 border-t border-gray-200 dark:border-gray-700">
         <a href="{{ route('profile.edit') }}" dusk="sidebar-settings" title="Settings"
-           class="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 {{ request()->routeIs('profile.*', 'store-settings.*') ? 'bg-gray-100 dark:bg-gray-800' : '' }}">
-            <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
+           aria-label="Settings — {{ auth()->user()->name ?? 'User' }}"
+           @if (request()->routeIs('profile.*', 'store-settings.*')) aria-current="page" @endif
+           class="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 {{ request()->routeIs('profile.*', 'store-settings.*') ? 'bg-gray-100 dark:bg-gray-800' : '' }}">
+            <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-semibold flex-shrink-0" aria-hidden="true">
                 {{ mb_strtoupper(mb_substr(auth()->user()->name ?: 'U', 0, 1)) }}
             </div>
             <div x-show="sidebarOpen" data-sidebar-label class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-gray-900 dark:text-white truncate">
                     {{ auth()->user()->name ?? 'User' }}</p>
-                <p class="text-xs text-gray-500 dark:text-gray-500 truncate">Settings</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 truncate">Settings</p>
             </div>
         </a>
     </div>

@@ -8,6 +8,7 @@
         Cancel
     </button>
     <button type="submit" x-bind:disabled="{{ $savingVar }}" @if ($dusk) dusk="{{ $dusk }}" @endif class="btn-primary">
+        <x-spinner x-show="{{ $savingVar }}" x-cloak />
         {{ $saveLabel }}
     </button>
 </div>

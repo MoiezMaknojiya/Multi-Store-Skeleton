@@ -1,10 +1,11 @@
 {{-- Every shortcut the editor knows (§10a), opened with ? or the ⌨ button. --}}
 <div x-show="shortcutsOpen" x-cloak class="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-6"
-     @click.self="shortcutsOpen = false" dusk="shortcuts-modal">
-    <div class="mt-10 max-h-[80vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-6 dark:bg-gray-800">
+     @click.self="shortcutsOpen = false" @keydown.tab="keepFocusIn($event, $refs.shortcutsPanel)" dusk="shortcuts-modal">
+    <div class="mt-10 max-h-[80vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-6 focus:outline-none dark:bg-gray-800"
+         role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" tabindex="-1" x-ref="shortcutsPanel">
         <div class="flex items-center justify-between">
-            <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Keyboard shortcuts</h3>
-            <button type="button" class="btn-pager" @click="shortcutsOpen = false" dusk="shortcuts-close" aria-label="Close">✕</button>
+            <h2 id="shortcuts-title" class="text-lg font-medium text-gray-900 dark:text-gray-100">Keyboard shortcuts</h2>
+            <button type="button" class="btn-pager" @click="shortcutsOpen = false" dusk="shortcuts-close" aria-label="Close" title="Close (Esc)"><x-icon name="x-mark" /></button>
         </div>
 
         <div class="mt-4 grid gap-x-10 gap-y-6 sm:grid-cols-2">
@@ -50,7 +51,7 @@
                 ],
             ] as $group => $shortcuts)
                 <div>
-                    <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500">{{ $group }}</h4>
+                    <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ $group }}</h3>
                     <dl class="mt-2 space-y-1.5">
                         @foreach ($shortcuts as [$keys, $does])
                             <div class="flex items-baseline justify-between gap-4 text-sm">

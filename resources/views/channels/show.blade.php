@@ -1,13 +1,14 @@
-<x-app-layout>
+{{-- The tab says the channel's name alone (the header may add "Paused"). --}}
+<x-app-layout :title="$channel->name">
     <x-slot name="header">
-        <div class="flex min-w-0 items-center gap-3">
-            <a href="{{ route('channels.view') }}" class="flex-shrink-0 text-gray-500 hover:text-gray-600 dark:hover:text-gray-200" dusk="back-to-channels"
-               aria-label="Back to channels">
+        <div class="flex min-w-0 items-center gap-2">
+            <a href="{{ route('channels.view') }}" dusk="back-to-channels" aria-label="Back to channels"
+               class="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
             </a>
-            <h1 class="min-w-0 truncate font-semibold text-xl text-gray-800 dark:text-white leading-tight" title="{{ $channel->name }}">{{ $channel->name }}</h1>
+            <h1 class="page-title min-w-0 truncate" title="{{ $channel->name }}">{{ $channel->name }}</h1>
             @unless ($channel->is_active)
                 <span class="badge-neutral flex-shrink-0">Paused</span>
             @endunless
@@ -24,12 +25,12 @@
             'libraries' => $libraries,
             'uploadsJoin' => $channel->isPlatformChannel() ? "the platform's media library" : 'your media library',
          ]) }})"
+         x-on:modal-closing.window="onModalClosing($event)"
          class="max-w-5xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
         {{-- The platform's channel seen from inside a shop: there to look at (owner, 2026-09-19). --}}
         @if ($readOnly)
-            <p class="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200"
-               dusk="channel-read-only-note">
+            <p class="alert-info" dusk="channel-read-only-note">
                 This channel comes from the platform. You can add it to any of your screens from that screen's Channels box.
             </p>
         @endif
@@ -37,8 +38,8 @@
         <div class="card">
             <div class="card-header">
                 <div>
-                    <h3 class="text-subheading">Ads</h3>
-                    <p class="text-xs text-gray-500 mt-0.5" dusk="channel-ads-summary" x-text="summary()"></p>
+                    <h2 class="text-subheading">Ads</h2>
+                    <p class="text-xs text-gray-500 mt-0.5 dark:text-gray-400" dusk="channel-ads-summary" x-text="summary()"></p>
                 </div>
                 @if (! $readOnly)
                     @can('channel-update')
@@ -62,27 +63,29 @@
                 </template>
 
                 <template x-for="(ad, index) in ads" :key="ad.id">
-                    {{-- An ad outside its dates is on no screen, and is drawn faded to say so. --}}
+                    {{-- An ad outside its dates is on no screen: its picture is drawn faded and its badge says why —
+                         the row's buttons stay as they are, since they still work. --}}
                     <div class="flex flex-wrap items-center gap-x-3 gap-y-2 p-2 rounded-md border border-gray-200 dark:border-gray-700"
-                         x-bind:class="ad.status !== 'running' ? 'opacity-60' : ''"
                          x-bind:dusk="'channel-ad-row-' + ad.id">
-                        <span class="w-6 text-xs text-gray-500 text-center" x-text="index + 1"></span>
+                        <span class="w-6 text-xs text-gray-500 text-center dark:text-gray-400" x-text="index + 1"></span>
 
-                        <div class="w-20 h-12 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                            {{-- An upright picture is shown whole, not cut to its middle (docs/AD-BUILDER-SPEC.md §12). --}}
+                        <div class="w-20 h-12 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0"
+                             x-bind:class="ad.status !== 'running' ? 'opacity-50' : ''">
+                            {{-- An upright picture is shown whole, not cut to its middle (docs/AD-BUILDER-SPEC.md §12). The
+                                 title is beside it, so the picture says nothing more (alt=""). --}}
                             <template x-if="ad.thumbnail_url">
-                                <img :src="ad.thumbnail_url" :alt="ad.title" class="w-full h-full"
+                                <img :src="ad.thumbnail_url" alt="" loading="lazy" class="w-full h-full"
                                      x-bind:class="ad.orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                             </template>
                             <template x-if="!ad.thumbnail_url">
-                                <span class="text-[10px] text-gray-500" x-text="typeLabel(ad.type)"></span>
+                                <span class="text-[10px] text-gray-500 dark:text-gray-300" x-text="typeLabel(ad.type)"></span>
                             </template>
                         </div>
 
                         <div class="flex-1 min-w-0">
-                            <p class="text-sm font-medium text-gray-800 dark:text-white truncate"
+                            <p class="text-sm font-medium text-gray-800 dark:text-white truncate" x-bind:title="ad.title"
                                x-bind:dusk="'channel-ad-title-' + ad.id" x-text="ad.title"></p>
-                            <p class="text-xs text-gray-500">
+                            <p class="text-xs text-gray-500 dark:text-gray-400">
                                 <span x-text="typeLabel(ad.type)"></span>
                                 {{-- A portrait file on a channel plays with bars on a landscape screen (§12): said here. --}}
                                 <span x-show="ad.orientation === 'portrait'" x-cloak x-bind:dusk="'channel-ad-orientation-' + ad.id">&middot; portrait</span>
@@ -95,27 +98,31 @@
                         {{-- The ad's length, state and controls: beside the title when there is room, on a
                              line of their own under it when there is not. --}}
                         <div class="flex w-full flex-wrap items-center justify-end gap-x-3 gap-y-2 @xl:w-auto">
-                            <span class="text-sm text-gray-500 whitespace-nowrap" x-bind:dusk="'channel-ad-length-' + ad.id"
+                            <span class="text-sm text-gray-500 whitespace-nowrap dark:text-gray-400" x-bind:dusk="'channel-ad-length-' + ad.id"
                                   x-text="lengthLabel(ad)"></span>
 
                             <span x-bind:dusk="'channel-ad-status-' + ad.id"
-                                  x-bind:class="ad.status === 'running' ? 'badge-success' : 'badge-neutral'"
+                                  x-bind:class="statusBadge(ad)"
                                   x-bind:title="ad.status === 'draft' ? 'Unpublished in the Ad Builder: it plays again once it is published.' : ''"
                                   x-text="statusLabel(ad)"></span>
 
                             @if (! $readOnly)
                                 @can('channel-update')
-                                <div class="flex items-center gap-1">
+                                {{-- Each button names the ad it acts on, and the red × stands a little apart. --}}
+                                <div class="flex items-center gap-2">
                                     <button @click="openAdModal(ad)" x-bind:dusk="'edit-channel-ad-' + ad.id"
-                                        class="btn-row-neutral">Edit</button>
+                                        class="btn-row-neutral" x-bind:aria-label="'Edit ' + ad.title">Edit</button>
                                     <button @click="move(index, -1)" x-bind:disabled="index === 0 || reordering"
                                         x-bind:dusk="'channel-ad-up-' + ad.id"
-                                        class="btn-row-neutral disabled:opacity-30" title="Move up">&uarr;</button>
+                                        class="btn-row-neutral" title="Move up"
+                                        x-bind:aria-label="'Move ' + ad.title + ' up'"><span aria-hidden="true">&uarr;</span></button>
                                     <button @click="move(index, 1)" x-bind:disabled="index === ads.length - 1 || reordering"
                                         x-bind:dusk="'channel-ad-down-' + ad.id"
-                                        class="btn-row-neutral disabled:opacity-30" title="Move down">&darr;</button>
+                                        class="btn-row-neutral" title="Move down"
+                                        x-bind:aria-label="'Move ' + ad.title + ' down'"><span aria-hidden="true">&darr;</span></button>
                                     <button @click="confirmRemove(ad)" x-bind:dusk="'remove-channel-ad-' + ad.id"
-                                        class="btn-row-danger" title="Take it out of this channel">&times;</button>
+                                        class="btn-row-danger ml-2" title="Take it out of this channel"
+                                        x-bind:aria-label="'Take ' + ad.title + ' out of this channel'"><span aria-hidden="true">&times;</span></button>
                                 </div>
                                 @endcan
                             @endif
@@ -128,7 +135,7 @@
         @if (! $readOnly)
         {{-- Add / edit one ad: its file comes from the library, from the Ad Builder, or a fresh upload that
              joins the library first (docs/CHANNEL-CONTENT-SPEC.md). --}}
-        <x-modal name="channel-ad-modal" :show="false" maxWidth="2xl">
+        <x-modal name="channel-ad-modal" :show="false" maxWidth="2xl" persistent>
             <div class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
                     x-text="editingAd ? 'Edit Ad' : 'Add Ad'"></h2>
@@ -136,22 +143,30 @@
                 {{-- novalidate: the seconds field's own min and max would stop the save with the browser's bubble
                      before saveAd could say it under the field, as every form here does (validate.js). --}}
                 <form @submit.prevent="saveAd" novalidate dusk="channel-ad-form" class="mt-4 space-y-4">
-                    {{-- Where the file comes from. --}}
-                    <div class="flex flex-wrap gap-2" role="group" aria-label="Where the ad comes from">
-                        <template x-if="editingAd">
-                            <button type="button" @click="setSource('keep')" dusk="channel-ad-source-keep"
-                                    x-bind:class="source === 'keep' ? 'btn-primary' : 'btn-secondary'"
-                                    x-bind:aria-pressed="source === 'keep'">Keep this file</button>
-                        </template>
-                        <button type="button" @click="setSource('library')" dusk="channel-ad-source-library"
-                                x-bind:class="source === 'library' ? 'btn-primary' : 'btn-secondary'"
-                                x-bind:aria-pressed="source === 'library'">Media library</button>
-                        <button type="button" @click="setSource('ads')" dusk="channel-ad-source-ads"
-                                x-bind:class="source === 'ads' ? 'btn-primary' : 'btn-secondary'"
-                                x-bind:aria-pressed="source === 'ads'">Ad Builder</button>
-                        <button type="button" @click="setSource('upload')" dusk="channel-ad-source-upload"
-                                x-bind:class="source === 'upload' ? 'btn-primary' : 'btn-secondary'"
-                                x-bind:aria-pressed="source === 'upload'">Upload</button>
+                    {{-- Where the file comes from: a question, then its answers drawn like the Ad Builder's tabs — the
+                         dialog's one blue button stays Save. --}}
+                    <div>
+                        <p id="channel-ad-source-label" class="form-label">Where does the ad come from?</p>
+                        <div class="mt-1 flex flex-wrap gap-x-6 border-b border-gray-200 dark:border-gray-700" role="group" aria-labelledby="channel-ad-source-label">
+                            <template x-if="editingAd">
+                                <button type="button" @click="setSource('keep')" dusk="channel-ad-source-keep"
+                                        x-bind:class="source === 'keep' ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+                                        class="-mb-px border-b-2 px-1 pb-2 text-sm font-medium"
+                                        x-bind:aria-pressed="source === 'keep'">Keep this file</button>
+                            </template>
+                            <button type="button" @click="setSource('library')" dusk="channel-ad-source-library"
+                                    x-bind:class="source === 'library' ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+                                    class="-mb-px border-b-2 px-1 pb-2 text-sm font-medium"
+                                    x-bind:aria-pressed="source === 'library'">Media library</button>
+                            <button type="button" @click="setSource('ads')" dusk="channel-ad-source-ads"
+                                    x-bind:class="source === 'ads' ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+                                    class="-mb-px border-b-2 px-1 pb-2 text-sm font-medium"
+                                    x-bind:aria-pressed="source === 'ads'">Ad Builder</button>
+                            <button type="button" @click="setSource('upload')" dusk="channel-ad-source-upload"
+                                    x-bind:class="source === 'upload' ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
+                                    class="-mb-px border-b-2 px-1 pb-2 text-sm font-medium"
+                                    x-bind:aria-pressed="source === 'upload'">Upload</button>
+                        </div>
                     </div>
 
                     {{-- Keeping the file it has: shown, so nobody has to remember what it was. --}}
@@ -162,7 +177,7 @@
                                      x-bind:class="editingAd?.orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                             </template>
                         </div>
-                        <p class="min-w-0 truncate text-sm text-gray-700 dark:text-gray-200" x-text="editingAd?.title"></p>
+                        <p class="min-w-0 truncate text-sm text-gray-700 dark:text-gray-200" x-bind:title="editingAd?.title" x-text="editingAd?.title"></p>
                     </div>
 
                     {{-- The library, or the Ad Builder's published ads (its pages live in the same library). --}}
@@ -214,7 +229,7 @@
                                     </div>
                                     <div class="px-2 py-1.5">
                                         <p class="truncate text-xs font-medium text-gray-800 dark:text-gray-100" x-text="item.title"></p>
-                                        <p class="text-[11px] text-gray-500"
+                                        <p class="text-[11px] text-gray-500 dark:text-gray-400"
                                            x-text="typeLabel(item.type) + (item.orientation === 'portrait' ? ' · portrait' : '')"></p>
                                     </div>
                                 </button>
@@ -227,7 +242,7 @@
                         </div>
 
                         <template x-if="formErrors.media_id">
-                            <p class="form-error" x-text="formErrors.media_id[0]"></p>
+                            <p class="form-error" role="alert" x-text="formErrors.media_id[0]"></p>
                         </template>
                     </div>
 
@@ -250,7 +265,7 @@
                     </div>
 
                     <x-crud.form-field label="Title" field="title">
-                        <x-text-input x-model="form.title" dusk="channel-ad-title" class="block w-full"
+                        <x-text-input x-model="form.title" dusk="channel-ad-title"
                                       maxlength="255" autocomplete="off" placeholder="Taken from the file when left blank" />
                     </x-crud.form-field>
 
@@ -260,8 +275,9 @@
                     <div x-show="!runsOwnLength()" x-cloak>
                         <x-crud.form-field label="Seconds on screen" field="seconds" :required="true">
                             <x-text-input type="number" min="{{ \App\Models\PlaylistItem::MIN_IMAGE_SECONDS }}" x-bind:max="maxImageSeconds" x-model.number="form.seconds"
-                                          dusk="channel-ad-seconds" class="block w-full" />
+                                          dusk="channel-ad-seconds" />
                         </x-crud.form-field>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" x-text="secondsHint()"></p>
                     </div>
                     <p x-show="runsOwnLength()" x-cloak dusk="channel-ad-video-note" class="text-sm text-gray-500 dark:text-gray-400"
                        x-text="ownLengthNote()"></p>
@@ -269,10 +285,10 @@
                     <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <x-crud.form-field label="Starts on" field="starts_on">
-                                <x-text-input type="date" x-model="form.starts_on" dusk="channel-ad-starts-on" class="block w-full" />
+                                <x-text-input type="date" x-model="form.starts_on" dusk="channel-ad-starts-on" />
                             </x-crud.form-field>
                             <x-crud.form-field label="Ends on" field="ends_on">
-                                <x-text-input type="date" x-model="form.ends_on" dusk="channel-ad-ends-on" class="block w-full" />
+                                <x-text-input type="date" x-model="form.ends_on" dusk="channel-ad-ends-on" />
                             </x-crud.form-field>
                         </div>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -280,7 +296,16 @@
                         </p>
                     </div>
 
-                    <x-crud.form-actions savingVar="saving || uploading" cancelAction="closeAdModal()"
+                    {{-- Cancel while a file is still going up asks first: closing gives the upload up. --}}
+                    <div x-show="confirmingClose && uploading" x-cloak role="alert" class="alert-warning flex flex-wrap items-center justify-between gap-3" dusk="channel-ad-upload-still-going">
+                        <span>The file is still uploading. Stop it and close?</span>
+                        <span class="flex flex-wrap gap-2">
+                            <button type="button" class="btn-secondary" @click="confirmingClose = false">Keep uploading</button>
+                            <button type="button" class="btn-danger" @click="closeAdModal(true)" dusk="channel-ad-stop-and-close">Stop and close</button>
+                        </span>
+                    </div>
+
+                    <x-crud.form-actions savingVar="saving || (uploading && source === 'upload')" cancelAction="closeAdModal()"
                                          dusk="channel-ad-save" cancelDusk="channel-ad-cancel" />
                 </form>
             </div>
@@ -290,9 +315,14 @@
         <x-crud.confirm-delete-modal
             name="confirm-channel-ad-deletion"
             entity="Ad"
+            title="Remove from channel"
+            question="Take this ad out of the channel:"
+            confirmLabel="Remove"
             nameExpression="removingAd?.title"
             deleteAction="removeAd()"
-            disabledVar="removing" />
+            disabledVar="removing">
+            <x-slot name="note">Its file stays in the media library.</x-slot>
+        </x-crud.confirm-delete-modal>
         @endif
     </div>
 </x-app-layout>

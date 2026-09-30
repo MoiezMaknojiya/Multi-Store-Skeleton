@@ -1,6 +1,6 @@
 <x-app-layout>
     <x-slot name="header">
-        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Ad Builder') }}</h1>
+        <h1 class="page-title">{{ __('Ad Builder') }}</h1>
     </x-slot>
 
     <div x-data="builderAssetsTable()" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
@@ -9,7 +9,7 @@
 
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex flex-wrap items-center gap-3">
-                <p class="text-sm text-gray-500 dark:text-gray-400" dusk="assets-scope-note">
+                <p class="max-w-3xl text-sm text-gray-500 dark:text-gray-400" dusk="assets-scope-note">
                     Pictures and videos used inside ads. A video is 30 seconds at most, and it repeats for as long as
                     the ad is on screen. Separate from the media library, which is what your screens play.
                     @if ($aboveTheStores)
@@ -25,7 +25,7 @@
 
             <div class="flex flex-wrap items-center gap-3">
                 @if ($aboveTheStores)
-                    <select x-model="filterStore" @change="applyFilters()" class="form-select w-52 text-sm"
+                    <select x-model="filterStore" @change="applyFilters()" class="form-select sm:w-52"
                             dusk="assets-filter-store" aria-label="Shop">
                         <option value="">All shops</option>
                         @foreach ($stores as $store)
@@ -54,13 +54,30 @@
             </div>
         @endcan
 
-        <div class="card">
-            <div class="p-5">
+        {{-- The same three "nothing to show" cases as every listing (x-crud.table-empty). --}}
+        <div class="card" data-list-card>
+            <div class="p-5" x-bind:aria-busy="loading ? 'true' : 'false'">
                 <template x-if="loading">
-                    <p class="py-12 text-center text-sm text-muted-soft">Loading...</p>
+                    <p class="py-12 text-center text-sm text-muted-soft">
+                        <span class="inline-flex items-center gap-2"><x-spinner class="text-blue-600 dark:text-blue-400" /> Loading...</span>
+                    </p>
                 </template>
 
-                <template x-if="!loading && items.length === 0">
+                <template x-if="!loading && items.length === 0 && loadFailed">
+                    <div class="mx-auto max-w-md space-y-3 py-12 text-center" role="alert" dusk="table-load-failed">
+                        <p class="text-sm text-gray-700 dark:text-gray-200">Could not load the shelf. Check the connection, then try again.</p>
+                        <button type="button" class="btn-row-neutral" @click="fetchItems()" dusk="table-try-again">Try again</button>
+                    </div>
+                </template>
+
+                <template x-if="!loading && items.length === 0 && !loadFailed && search">
+                    <div class="mx-auto max-w-md space-y-3 py-12 text-center" dusk="table-no-match">
+                        <p class="text-sm text-gray-700 dark:text-gray-200">Nothing matches &ldquo;<span class="font-medium" x-text="search"></span>&rdquo;.</p>
+                        <button type="button" class="btn-row-neutral" @click="search = ''" dusk="table-clear-search">Clear search</button>
+                    </div>
+                </template>
+
+                <template x-if="!loading && items.length === 0 && !loadFailed && !search">
                     <p class="py-16 text-center text-sm text-gray-500 dark:text-gray-400" dusk="assets-empty">
                         Nothing on the shelf yet. Upload a picture or a video to use it in an ad.
                     </p>
@@ -74,7 +91,7 @@
 
                             <div class="aspect-video bg-gray-100 dark:bg-gray-900">
                                 {{-- An upright picture is shown whole, not cut to its middle. --}}
-                                <img x-show="item.thumbnail_url" x-cloak x-bind:src="item.thumbnail_url" alt=""
+                                <img x-show="item.thumbnail_url" x-cloak x-bind:src="item.thumbnail_url" alt="" loading="lazy"
                                      class="h-full w-full"
                                      x-bind:class="Number(item.height) > Number(item.width) ? 'object-contain' : 'object-cover'" />
                                 <span x-show="!item.thumbnail_url" x-cloak
@@ -83,7 +100,7 @@
                             </div>
 
                             <div class="space-y-1 p-3">
-                                <p class="truncate text-sm font-medium text-gray-800 dark:text-white"
+                                <p class="truncate text-sm font-medium text-gray-800 dark:text-white" x-bind:title="item.title"
                                    x-bind:dusk="'asset-title-' + item.id" x-text="item.title"></p>
 
                                 {{-- Whose it is: above the stores its shop or "Every shop"; inside a store, the platform's. --}}
@@ -92,20 +109,22 @@
                                           x-bind:dusk="'asset-owner-' + item.id"></span>
                                 </p>
 
-                                <p class="text-xs text-gray-500">
+                                <p class="text-xs text-gray-500 dark:text-gray-400">
                                     <span x-text="item.kind === 'video' ? 'Video' : 'Image'"></span>
                                     <span x-show="item.width" x-cloak x-text="' · ' + item.width + '×' + item.height"></span>
                                     <span x-text="' · ' + sizeLabel(item)"></span>
                                 </p>
 
-                                <p class="truncate text-xs" x-bind:class="isUsed(item) ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500'"
+                                <p class="truncate text-xs" x-bind:class="isUsed(item) ? 'text-blue-700 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'"
+                                   x-bind:title="usageLabel(item)"
                                    x-bind:dusk="'asset-usage-' + item.id" x-text="usageLabel(item)"></p>
 
                                 {{-- A shop's own file with Delete Ads, a shared one with Delete Shared Assets: the row says which
                                      this person holds (can_delete), the route asks again. --}}
                                 @can('delete-builder-assets')
                                     <div class="pt-1" x-show="item.can_delete" x-cloak>
-                                        <button type="button" class="btn-row-danger" @click="confirmDelete(item)"
+                                        <button type="button" class="btn-row-danger" @click="askToDelete(item)"
+                                                x-bind:aria-label="'Delete ' + item.title"
                                                 x-bind:dusk="'delete-asset-' + item.id">Delete</button>
                                     </div>
                                 @endcan
@@ -122,15 +141,17 @@
             <form @submit.prevent="deleteItem()" class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Delete this file?</h2>
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                    <span class="font-medium" x-text="selectedItem?.title"></span> goes for good. An ad still using
-                    it keeps it — the delete is refused and says which ad.
+                    <span class="font-medium" x-text="selectedItem?.title"></span> goes for good. No ad uses it.
                     <span x-show="selectedItem?.shared" x-cloak dusk="confirm-asset-deletion-shared">It is shared with every
                         shop, so it goes from every shop's shelf.</span>
                 </p>
 
                 <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-asset-deletion')">Cancel</x-secondary-button>
-                    <x-danger-button x-bind:disabled="deleting" dusk="confirm-asset-deletion-confirm">Delete file</x-danger-button>
+                    <x-danger-button x-bind:disabled="deleting" dusk="confirm-asset-deletion-confirm">
+                        <x-spinner x-show="deleting" x-cloak />
+                        Delete file
+                    </x-danger-button>
                 </div>
             </form>
         </x-modal>

@@ -13,7 +13,7 @@
     </x-danger-button>
 
     <x-modal name="confirm-user-deletion" :show="$errors->userDeletion->isNotEmpty()" focusable>
-        <form method="post" action="{{ route('profile.destroy') }}" class="p-6" x-on:click.stop
+        <form method="post" action="{{ route('profile.destroy') }}" class="p-6" x-on:click.stop novalidate
             @submit="validateBeforeSubmit($event)">
             @csrf
             @method('delete')
@@ -34,12 +34,12 @@
                     :required="true" autocomplete="current-password" />
             </div>
 
-            <div class="mt-6 flex justify-center">
+            <div class="mt-6 flex flex-wrap justify-end gap-3">
                 <x-secondary-button x-on:click="close">
                     {{ __('Cancel') }}
                 </x-secondary-button>
 
-                <x-danger-button class="ms-3">
+                <x-danger-button>
                     {{ __('Delete Account') }}
                 </x-danger-button>
             </div>

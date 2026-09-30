@@ -5,7 +5,7 @@
      the server (can_edit, can_delete); the form's checklist from /roles/assignable. --}}
 <x-app-layout>
     <x-slot name="header">
-        <h1 class="font-semibold text-xl text-gray-800 dark:text-white leading-tight">{{ __('Roles') }}</h1>
+        <h1 class="page-title">{{ __('Roles') }}</h1>
     </x-slot>
 
     <div x-data="rolesPage({{ Js::from([
@@ -14,31 +14,28 @@
          ]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-            <div class="min-w-0 sm:flex-1">
-                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
-                    {{ $store ? 'Roles in '.$store->name : 'All roles' }}
-                </h2>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-3xl">
-                    @if ($store)
-                        A role decides what a member can do in this store. Store roles come from the platform and are the same in
-                        every store; custom roles belong to {{ $store->name }} alone.
-                    @else
-                        Make a role and say what it is for: a store role is offered in every store, a platform role is for your
-                        team above the stores. The Owner role marks who owns a store — rename it or change what it allows, but it
-                        always stays.
-                    @endif
-                </p>
-            </div>
-
-            @can('role-store')
-            <x-crud.add-button :label="$store ? 'Create custom role' : 'Create role'" @click="openForm()" x-bind:disabled="openingForm" dusk="create-role" class="shrink-0" />
-            @endcan
+        @can('role-store')
+        <div class="flex flex-wrap items-center gap-3">
+            <x-crud.add-button :label="$store ? 'Create custom role' : 'Create role'" @click="openForm()" x-bind:disabled="openingForm" dusk="create-role" />
         </div>
+        @endcan
 
+        {{-- One heading for the list, and what it is for under it. --}}
         <div class="card" dusk="roles-table">
             <div class="card-header">
-                <h3 class="text-subheading">Roles</h3>
+                <div class="min-w-0">
+                    <h2 class="text-subheading">{{ $store ? 'Roles in '.$store->name : 'All roles' }}</h2>
+                    <p class="mt-1 max-w-3xl text-sm text-gray-500 dark:text-gray-400">
+                        @if ($store)
+                            A role decides what a member can do in this store. Store roles come from the platform and are the same in
+                            every store; custom roles belong to {{ $store->name }} alone.
+                        @else
+                            Make a role and say what it is for: a store role is offered in every store, a platform role is for your
+                            team above the stores. The Owner role marks who owns a store — rename it or change what it allows, but it
+                            always stays.
+                        @endif
+                    </p>
+                </div>
             </div>
             <div class="overflow-x-auto">
                 <table class="table-base">
@@ -51,9 +48,11 @@
                             <th class="px-5 py-3 text-right font-semibold">Actions</th>
                         </tr>
                     </thead>
-                    <tbody class="table-tbody">
+                    <tbody class="table-tbody" x-bind:aria-busy="loading ? 'true' : 'false'">
                         <template x-if="loading">
-                            <tr><td colspan="5" class="px-5 py-6 text-center text-muted-soft">Loading...</td></tr>
+                            <tr><td colspan="5" class="px-5 py-6 text-center text-muted-soft">
+                                <span class="inline-flex items-center gap-2"><x-spinner class="text-blue-600 dark:text-blue-400" /> Loading...</span>
+                            </td></tr>
                         </template>
 
                         <template x-if="!loading && mainRoles().length === 0">
@@ -63,9 +62,10 @@
                         <template x-for="role in mainRoles()" :key="role.id">
                             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50" x-bind:dusk="'role-row-' + role.id">
                                 <td class="cell-prose px-5 py-4">
-                                    <p class="flex items-center gap-2 font-medium text-gray-800 dark:text-white">
+                                    {{-- The Owner mark is amber, as an Owner is on the Members and Users pages. --}}
+                                    <p class="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium text-gray-800 dark:text-white">
                                         <span x-text="role.name" x-bind:dusk="'role-name-' + role.id"></span>
-                                        <span x-show="role.is_owner_role" class="badge-success shrink-0" dusk="owner-role-badge">Owner</span>
+                                        <span x-show="role.is_owner_role" class="badge-warning" dusk="owner-role-badge">Owner</span>
                                     </p>
                                     <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400" x-text="role.description"></p>
                                 </td>
@@ -83,10 +83,10 @@
                                 <td class="px-5 py-4 text-gray-600 dark:text-gray-300" x-text="role.holders_count"></td>
                                 <td class="px-5 py-4">
                                     <div class="flex items-center justify-end gap-2">
-                                        <button type="button" class="btn-row-neutral" @click="view(role)" x-bind:dusk="'view-role-' + role.id">View</button>
-                                        <button type="button" class="btn-row-neutral" x-show="role.can_edit" @click="openForm(role)"
+                                        <button type="button" class="btn-row-neutral" @click="view(role)" x-bind:aria-label="'View ' + role.name" x-bind:dusk="'view-role-' + role.id">View</button>
+                                        <button type="button" class="btn-row-neutral" x-show="role.can_edit" @click="openForm(role)" x-bind:aria-label="'Edit ' + role.name"
                                             x-bind:disabled="openingForm" x-bind:dusk="'edit-role-' + role.id">Edit</button>
-                                        <button type="button" class="btn-row-danger" x-show="role.can_delete" @click="confirmDelete(role)"
+                                        <button type="button" class="btn-row-danger" x-show="role.can_delete" @click="confirmDelete(role)" x-bind:aria-label="'Delete ' + role.name"
                                             x-bind:dusk="'delete-role-' + role.id">Delete</button>
                                     </div>
                                 </td>
@@ -102,7 +102,7 @@
         <div class="card" dusk="store-custom-roles" x-show="!loading && storeCustomRoles().length > 0" x-cloak>
             <div class="card-header">
                 <div>
-                    <h3 class="text-subheading">Custom roles made in stores</h3>
+                    <h2 class="text-subheading">Custom roles made in stores</h2>
                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Each belongs to its own store and is offered there alone.</p>
                 </div>
             </div>
@@ -129,10 +129,10 @@
                                 <td class="px-5 py-4 text-gray-600 dark:text-gray-300" x-text="role.holders_count"></td>
                                 <td class="px-5 py-4">
                                     <div class="flex items-center justify-end gap-2">
-                                        <button type="button" class="btn-row-neutral" @click="view(role)" x-bind:dusk="'view-role-' + role.id">View</button>
-                                        <button type="button" class="btn-row-neutral" x-show="role.can_edit" @click="openForm(role)"
+                                        <button type="button" class="btn-row-neutral" @click="view(role)" x-bind:aria-label="'View ' + role.name" x-bind:dusk="'view-role-' + role.id">View</button>
+                                        <button type="button" class="btn-row-neutral" x-show="role.can_edit" @click="openForm(role)" x-bind:aria-label="'Edit ' + role.name"
                                             x-bind:disabled="openingForm" x-bind:dusk="'edit-role-' + role.id">Edit</button>
-                                        <button type="button" class="btn-row-danger" x-show="role.can_delete" @click="confirmDelete(role)"
+                                        <button type="button" class="btn-row-danger" x-show="role.can_delete" @click="confirmDelete(role)" x-bind:aria-label="'Delete ' + role.name"
                                             x-bind:dusk="'delete-role-' + role.id">Delete</button>
                                     </div>
                                 </td>
@@ -145,7 +145,7 @@
         @endunless
 
         {{-- Create / edit --}}
-        <x-modal name="role-form" :show="false" maxWidth="2xl" focusable>
+        <x-modal name="role-form" :show="false" maxWidth="2xl" focusable persistent>
             <form @submit.prevent="save()" novalidate class="p-6 space-y-5" dusk="role-form">
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
@@ -154,25 +154,26 @@
                 </div>
 
                 <x-crud.form-field label="Role name" field="name" :required="true">
-                    <x-text-input x-model="form.name" dusk="role-name" class="block w-full" maxlength="255" autocomplete="off" placeholder="e.g. Shift supervisor" />
+                    <x-text-input x-model="form.name" dusk="role-name" maxlength="255" autocomplete="off" placeholder="e.g. Shift supervisor" />
                 </x-crud.form-field>
 
                 @unless ($store)
-                {{-- What a new role is for. Fixed once it exists: its holders are already on one side or the other. --}}
-                <div x-show="!editingRole">
-                    <span class="form-label">What is this role for? <span class="text-red-500">*</span></span>
+                {{-- What a new role is for. Fixed once it exists: its holders are already on one side or the other. Two
+                     radios, named as one question by their legend. --}}
+                <fieldset x-show="!editingRole" class="min-w-0">
+                    <legend class="form-label">What is this role for? <span class="text-red-600 dark:text-red-400" aria-hidden="true">*</span></legend>
                     <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <label class="flex items-start gap-3 rounded-md border px-3 py-2.5 cursor-pointer"
+                        <label class="flex items-start gap-3 rounded-md border px-3 py-2.5 cursor-pointer focus-within:ring-2 focus-within:ring-blue-500"
                                x-bind:class="form.type === 'store' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-600'">
-                            <input type="radio" name="role-type" value="store" class="mt-0.5" x-model="form.type" @change="changeType('store')" dusk="role-type-store">
+                            <input type="radio" name="role-type" value="store" class="mt-0.5 accent-blue-600" x-model="form.type" @change="changeType('store')" dusk="role-type-store">
                             <span>
                                 <span class="block text-sm font-medium text-gray-800 dark:text-gray-100">Store role</span>
                                 <span class="block text-xs text-gray-500 dark:text-gray-400">Offered in every store. Its permissions reach the member's own store.</span>
                             </span>
                         </label>
-                        <label class="flex items-start gap-3 rounded-md border px-3 py-2.5 cursor-pointer"
+                        <label class="flex items-start gap-3 rounded-md border px-3 py-2.5 cursor-pointer focus-within:ring-2 focus-within:ring-blue-500"
                                x-bind:class="form.type === 'platform' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-600'">
-                            <input type="radio" name="role-type" value="platform" class="mt-0.5" x-model="form.type" @change="changeType('platform')" dusk="role-type-platform">
+                            <input type="radio" name="role-type" value="platform" class="mt-0.5 accent-blue-600" x-model="form.type" @change="changeType('platform')" dusk="role-type-platform">
                             <span>
                                 <span class="block text-sm font-medium text-gray-800 dark:text-gray-100">Platform role</span>
                                 <span class="block text-xs text-gray-500 dark:text-gray-400">For your team above the stores. Its permissions reach every store.</span>
@@ -180,15 +181,18 @@
                         </label>
                     </div>
                     <template x-if="formErrors.type">
-                        <p class="form-error" x-text="formErrors.type[0]"></p>
+                        <p class="form-error" role="alert" x-text="formErrors.type[0]"></p>
                     </template>
-                </div>
+                </fieldset>
                 @endunless
 
-                <div>
-                    <label class="form-label">Permissions <span class="text-red-500">*</span></label>
+                {{-- The checklist is a group of checkboxes, named by its legend. --}}
+                <fieldset class="min-w-0">
+                    <legend class="form-label">Permissions <span class="text-red-600 dark:text-red-400" aria-hidden="true">*</span></legend>
                     <template x-if="loadingAssignable">
-                        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading permissions...</p>
+                        <p class="mt-2 inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                            <x-spinner class="text-blue-600 dark:text-blue-400" /> Loading permissions...
+                        </p>
                     </template>
                     <div class="mt-2 max-h-96 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-3 pr-1" x-show="!loadingAssignable">
                         <template x-for="group in grouped(assignable)" :key="group.key">
@@ -214,12 +218,13 @@
                         </template>
                     </div>
                     <template x-if="formErrors.permissions">
-                        <p class="form-error" x-text="formErrors.permissions[0]"></p>
+                        <p class="form-error" role="alert" x-text="formErrors.permissions[0]"></p>
                     </template>
                     <p x-show="!loadingAssignable && !openingForm && assignable.length === 0" class="mt-2 text-sm text-gray-500 dark:text-gray-400">You hold no permissions you could give to a role.</p>
-                </div>
+                </fieldset>
 
-                <x-crud.form-actions cancelAction="$dispatch('close-modal', 'role-form')" savingVar="saving" saveLabel="Save role" dusk="role-save" />
+                {{-- Not while the checklist is still coming: a save then would send the ticks of the list before it. --}}
+                <x-crud.form-actions cancelAction="$dispatch('close-modal', 'role-form')" savingVar="saving || loadingAssignable" saveLabel="Save role" dusk="role-save" />
             </form>
         </x-modal>
 
@@ -228,13 +233,13 @@
             <div class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100" x-text="viewedRole?.name"></h2>
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400" x-text="viewedRole ? kindLabel(viewedRole) + (viewedRole.store_name ? ' · ' + viewedRole.store_name : '') : ''"></p>
-                <p x-show="viewedRole?.kind === 'super_admin'" class="mt-3 rounded-md bg-blue-50 dark:bg-blue-900/20 px-4 py-3 text-sm text-blue-800 dark:text-blue-300">
+                <p x-show="viewedRole?.kind === 'super_admin'" class="alert-info mt-3">
                     A super admin passes every permission check, whatever this list says — a permission added later included.
                 </p>
                 <div class="mt-4 max-h-96 overflow-y-auto space-y-4">
                     <template x-for="group in grouped(viewedRole?.permissions ?? [])" :key="group.key">
                         <div>
-                            <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400" x-text="group.title"></h4>
+                            <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400" x-text="group.title"></h3>
                             <ul class="mt-1.5 flex flex-wrap gap-1.5">
                                 <template x-for="permission in group.permissions" :key="permission.id">
                                     <li class="badge-neutral" x-text="permission.label ?? permission.name"></li>
@@ -265,7 +270,10 @@
 
                 <div class="mt-6 flex flex-wrap justify-end gap-3">
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-role-deletion')">Cancel</x-secondary-button>
-                    <x-danger-button x-bind:disabled="deleting" dusk="confirm-role-deletion-confirm">Delete role</x-danger-button>
+                    <x-danger-button x-bind:disabled="deleting" dusk="confirm-role-deletion-confirm">
+                        <x-spinner x-show="deleting" x-cloak />
+                        Delete role
+                    </x-danger-button>
                 </div>
             </form>
         </x-modal>

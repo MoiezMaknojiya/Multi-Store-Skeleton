@@ -32,7 +32,8 @@ export function createCrudTable({
     validateForm = null, // Function: (form, editingItem) => errors object ({ field: ['msg'] });
                          // non-empty result blocks the request and shows the errors instead
     onSaved = null,      // Function: (responseData, wasEditing) => void, after a successful save —
-                         // for a save whose outcome the refreshed row cannot show (an email sent)
+                         // for a save whose outcome the refreshed row cannot show (an email sent).
+                         // Without one, the server's own message ("Screen updated successfully") is the toast.
     deleteNeedsPassword = false, // A big delete re-confirms the actor's password (ConfirmsPassword on the
                          // server; the modal uses <x-crud.password-confirm>)
     extraState = {},     // Additional reactive properties specific to the entity
@@ -63,6 +64,7 @@ export function createCrudTable({
         searchDebounceTimer: null,
         fetchToken: 0,
         refreshFailed: false,   // a quiet refresh failed and has said so; cleared by the next success
+        loadFailed: false,      // the list could not be loaded at all: the table says so, with Try again
 
         /* Merge entity-specific state */
         ...extraState,
@@ -96,6 +98,7 @@ export function createCrudTable({
             if (!quiet) {
                 this.items = [];
                 this.loading = true;
+                this.loadFailed = false;
             }
             try {
                 const params = { search: this.search, page: this.currentPage, per_page: this.perPage };
@@ -109,6 +112,7 @@ export function createCrudTable({
                 this.currentPage = data.currentPage;
                 this.lastPage = data.lastPage;
                 this.refreshFailed = false;
+                this.loadFailed = false;
                 /* A listing may say more than its rows — the media library says how full its shop is. */
                 if (typeof this.afterFetch === 'function') this.afterFetch(data);
             } catch (error) {
@@ -120,7 +124,9 @@ export function createCrudTable({
                     if (!this.refreshFailed) window.toast(`Could not refresh the ${entityLabel}s. Showing the last list loaded.`);
                     this.refreshFailed = true;
                 } else {
+                    /* Not "nothing here yet": the table says the list could not be loaded, and offers it again. */
                     this.items = [];
+                    this.loadFailed = true;
                 }
             } finally {
                 /* Also after a quiet request: one that overtook a normal fetch has to end its "Loading...". */
@@ -129,6 +135,11 @@ export function createCrudTable({
         },
 
         /* ── Pagination ────────────────────────────────────────────────── */
+        /* "Showing 51–100 of 245": the first row on this page and the last. */
+        get startItem() {
+            return this.total === 0 ? 0 : (this.currentPage - 1) * this.perPage + 1;
+        },
+
         get endItem() {
             return Math.min(this.currentPage * this.perPage, this.total);
         },
@@ -136,22 +147,29 @@ export function createCrudTable({
         next() {
             if (this.currentPage < this.lastPage) {
                 this.currentPage++;
-                this.fetchItems();
+                this.turnedPage();
             }
         },
 
         prev() {
             if (this.currentPage > 1) {
                 this.currentPage--;
-                this.fetchItems();
+                this.turnedPage();
             }
         },
 
         goTo(page) {
             if (page >= 1 && page <= this.lastPage && page !== this.currentPage) {
                 this.currentPage = page;
-                this.fetchItems();
+                this.turnedPage();
             }
+        },
+
+        /* A new page starts at its top: the pager is at the foot of a long list, and the rows it brought are above. */
+        turnedPage() {
+            this.fetchItems();
+            this.$nextTick(() => (this.$root.querySelector('[data-list-card]') ?? this.$root.querySelector('.card'))
+                ?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
         },
 
         /**
@@ -216,6 +234,7 @@ export function createCrudTable({
 
             if (Object.keys(errors).length > 0) {
                 this.formErrors = errors;
+                this.focusFirstError();
                 return;
             }
             this.formErrors = {};
@@ -228,10 +247,12 @@ export function createCrudTable({
                     : await axios.post(baseUrl, this.form);
                 this.closeFormModal();
                 if (onSaved) onSaved(data, wasEditing);
+                else window.toast(data?.message ?? 'Saved.', 'success');
                 await this.fetchItems();
             } catch (error) {
                 if (error.response?.status === 422 && error.response.data.errors) {
                     this.formErrors = error.response.data.errors;
+                    this.focusFirstError();
                 } else {
                     // Message-only 422s (guard rules) and everything else: show the
                     // server's actual reason instead of swallowing it.
@@ -260,8 +281,9 @@ export function createCrudTable({
             this.deletePasswordError = '';
             try {
                 const url = `${fetchUrl.replace('/data', '')}/${this.selectedItem.id}`;
-                await axios.delete(url, deleteNeedsPassword ? { data: { password: this.deletePassword } } : undefined);
+                const { data } = await axios.delete(url, deleteNeedsPassword ? { data: { password: this.deletePassword } } : undefined);
                 this.$dispatch('close-modal', deleteModalName);
+                window.toast(data?.message ?? 'Deleted.', 'success');
                 this.selectedItem = null;
                 this.deletePassword = '';
                 await this.fetchItems();
@@ -281,6 +303,12 @@ export function createCrudTable({
             } finally {
                 this.deleting = false;
             }
+        },
+
+        /* After a refused save, the keyboard goes to the first field that has to change: its message is read out
+           with it (x-crud.form-field ties the two together). */
+        focusFirstError() {
+            this.$nextTick(() => this.$root.querySelector('.crud-field-error :is(input, select, textarea)')?.focus());
         },
 
         /* Merge entity-specific methods */
