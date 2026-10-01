@@ -5,10 +5,12 @@ namespace Tests\Browser;
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\Media;
+use App\Models\Permission;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
 use App\Models\Store;
+use App\Models\User;
 use App\Services\AdPublisher;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
@@ -239,18 +241,24 @@ class AdBuilderFlowTest extends DuskTestCase
 
     /**
      * A picture uploaded straight from the editor's picker (owner, 2026-09-30) joins the shop's shelf and is there to
-     * pick the moment it is in; without Create Ads the picker takes no file; and above the stores a new ad must name
-     * its shop first, since the file goes to that shop's shelf.
+     * pick the moment it is in; without Create Ads the picker takes no file; and above the stores somebody who may not
+     * make an ad for every shop names its shop first, since the file goes to that shop's shelf.
      */
     public function test_a_picture_is_uploaded_from_the_editors_picker_and_placed_at_once(): void
     {
-        $admin = $this->seedSuperAdmin();
+        $this->seedSuperAdmin();
         $store = Store::factory()->create(['name' => 'Alpha Mart']);
         $designer = $this->storeMember($store, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
         $editor = $this->storeMember($store, ['ad-view', 'ad-update'], 'editor@example.com', 'Editor');
         $saved = BuilderAd::factory()->create(['store_id' => $store->id, 'name' => 'Old poster']);
 
-        $this->browse(function (Browser $browser) use ($admin, $designer, $editor, $store, $saved) {
+        // A platform designer without Update Shared Ads: their new ad is for one shop, chosen first.
+        $platformDesigner = User::factory()->create(['email' => 'platform-designer@example.com']);
+        $platformRole = Role::create(['name' => 'Platform Designer', 'is_global' => true]);
+        $platformRole->permissions()->sync(Permission::whereIn('name', ['ad-view', 'ad-store', 'ad-update'])->pluck('id'));
+        $platformDesigner->stores()->attach(0, ['role_id' => $platformRole->id]);
+
+        $this->browse(function (Browser $browser) use ($platformDesigner, $designer, $editor, $store, $saved) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
             $this->switchToStore($browser, $store);
@@ -289,15 +297,87 @@ class AdBuilderFlowTest extends DuskTestCase
             $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
             $browser->waitFor('@pick-asset-'.$asset->id)->assertMissing('@picker-upload');
 
-            // Above the stores a new ad names its shop first: a file dropped before that is refused, and nothing is sent.
+            // Above the stores, without Update Shared Ads, a new ad names its shop first: a file dropped before that is
+            // refused, and nothing is sent.
             $this->freshSession($browser);
-            $browser->loginAs($admin)->visit('/builder/create?orientation=landscape');
+            $browser->loginAs($platformDesigner)->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
             $browser->waitFor('@ad-stage');
             $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
             $browser->attach('@picker-file', $this->fixtureImage('Too soon.png'))
                 ->waitForTextIn('@picker-upload', 'Choose the shop this ad is for first, at the top.');
             $this->assertSame(1, BuilderAsset::count());
+        });
+    }
+
+    /**
+     * The owner's own steps (2026-10-01): above the stores a new ad is for All shops, a picture dropped into the picker
+     * goes to the shelf shared with every shop at once — no "choose the shop first" — and once the ad is published a
+     * shop's designer finds it "From the platform", copies it, and opens the copy as their own.
+     */
+    public function test_the_platform_makes_an_ad_for_every_shop_and_a_shop_copies_it(): void
+    {
+        $admin = $this->seedSuperAdmin();
+        $store = Store::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->storeMember($store, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+
+        $this->browse(function (Browser $browser) use ($admin, $store, $designer) {
+            $this->freshSession($browser);
+            $browser->loginAs($admin)->visit('/builder/create?orientation=landscape');
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@ad-stage');
+
+            // All shops comes first, and is what a new ad is for.
+            $this->assertSame('All shops', $browser->script('return document.querySelector(\'[dusk="ad-store"]\').selectedOptions[0].textContent.trim();')[0]);
+
+            $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
+            $this->uploadThrough($browser, 'picker', $this->fixtureImage('Brand logo.png', 30, 90, 200));
+
+            $browser->waitUsing(20, 250, fn () => BuilderAsset::whereNull('store_id')->exists());
+            $asset = BuilderAsset::whereNull('store_id')->sole();
+            $this->assertSame('Brand logo', $asset->title);
+
+            $browser->waitFor('@pick-asset-'.$asset->id);
+            $this->jsClick($browser, '@pick-asset-'.$asset->id);
+            $browser->waitUntilMissing('@asset-picker', 5)->waitFor('[dusk^="element-"]');
+
+            $this->jsType($browser, '@ad-name', 'Winter sale');
+            $this->jsClick($browser, '@ad-save');
+            $browser->waitUsing(20, 250, fn () => BuilderAd::where('name', 'Winter sale')->exists());
+            $ad = BuilderAd::firstWhere('name', 'Winter sale');
+            $this->assertNull($ad->store_id);
+            $this->assertSame($asset->id, $ad->document['elements'][0]['assetId'] ?? null);
+
+            // Saved, it stays whose it was made for.
+            $browser->assertDisabled('@ad-store');
+
+            $this->jsClick($browser, '@ad-publish');
+            $browser->waitForText('every shop sees it now');
+            $browser->waitUsing(20, 250, fn () => $ad->fresh()->isPublished());
+            $this->assertNull($ad->fresh()->media->store_id);
+
+            // A shop's designer finds it, from the platform, and copies it — it is not theirs to change or delete.
+            $this->freshSession($browser);
+            $browser->loginAs($designer);
+            $this->switchToStore($browser, $store);
+            $browser->visit('/builder');
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@ad-card-'.$ad->id)
+                ->assertSeeIn('@ad-owner-'.$ad->id, 'From the platform')
+                ->assertMissing('@edit-ad-'.$ad->id)
+                ->assertMissing('@delete-ad-'.$ad->id);
+
+            $this->jsClick($browser, '@duplicate-ad-'.$ad->id);
+            $browser->waitForText('Copied to your ads');
+            $browser->waitUsing(20, 250, fn () => BuilderAd::where('store_id', $store->id)->exists());
+            $copy = BuilderAd::firstWhere('store_id', $store->id);
+            $this->assertSame('Winter sale', $copy->name);
+
+            // The copy is theirs, to open and change.
+            $browser->waitFor('@edit-ad-'.$copy->id)->screenshot('shared-ad-copied');
+            $browser->visit('/builder/'.$copy->id);
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@ad-stage')->assertMissing('@ad-store')->assertMissing('@ad-owner');
         });
     }
 

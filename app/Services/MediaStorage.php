@@ -341,7 +341,7 @@ class MediaStorage
      * nicety, so a full shop keeps the one it had (or none) and the save goes on: nothing is ever refused
      * for a photograph of a design (StoreStorage).
      */
-    public function storePosterWithin(int $storeId, string $target, ?string $dataUrl, Closure $record, string $disk = 'public'): ?string
+    public function storePosterWithin(?int $storeId, string $target, ?string $dataUrl, Closure $record, string $disk = 'public'): ?string
     {
         $jpeg = $this->encodePoster($dataUrl);
 

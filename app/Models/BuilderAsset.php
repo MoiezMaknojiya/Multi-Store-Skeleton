@@ -108,10 +108,15 @@ class BuilderAsset extends Model
         return $storeId > 0 ? $query->onShelfOf($storeId) : $query->whereRaw('0 = 1');
     }
 
-    /** What a shop's designs may use: its own and what the platform shares with every shop. */
-    public function scopeOnShelfOf(Builder $query, int $storeId): Builder
+    /**
+     * What a shop's designs may use: its own and what the platform shares with every shop. An ad shared with every
+     * shop ($storeId null) uses the shared files alone: a shop's own file would show in no other shop's copy.
+     */
+    public function scopeOnShelfOf(Builder $query, ?int $storeId): Builder
     {
-        return $query->where(fn (Builder $query) => $query->where('store_id', $storeId)->orWhereNull('store_id'));
+        return $storeId === null
+            ? $query->whereNull('store_id')
+            : $query->where(fn (Builder $query) => $query->where('store_id', $storeId)->orWhereNull('store_id'));
     }
 
     /** The platform's, shared with every shop — no shop's own. */

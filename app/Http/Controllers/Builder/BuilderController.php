@@ -23,6 +23,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -34,7 +35,10 @@ use Illuminate\View\View;
  *
  * An ad belongs to a store, like everything else a shop makes, and the platform works above them all:
  * `BuilderAd::visibleTo` decides which, so a store's person never sees another shop's design and a super
- * admin sees every one with the shop's name beside it.
+ * admin sees every one with the shop's name beside it. The platform may also make an ad for every shop (owner,
+ * 2026-10-01): every shop sees it once it is published and copies it into its own Ads, and it is changed with
+ * Update Shared Ads and deleted with Delete Shared Ads — the routes let either permission through and each action
+ * here asks the one the ad needs (mayUpdate, mayDelete).
  */
 class BuilderController extends Controller
 {
@@ -57,18 +61,19 @@ class BuilderController extends Controller
         // ads finds none, because the store's own wall is already on the query.
         $query = BuilderAd::visibleTo(auth()->user())
             ->when($filters['store_id'] ?? null, fn (Builder $query, int|string $storeId) => $query->where('store_id', $storeId))
-            ->with(['store:id,name', 'updater:id,first_name,last_name'])
+            ->with(['store:id,name', 'updater:id,first_name,last_name', 'media:id,thumbnail_path'])
             ->latest('updated_at');
 
         return $this->paginatedResponse(
             $request,
             $query,
-            ['name'],
+            // A shop finds the platform's ad by the name it was published under, which is the one its card shows.
+            ['name', 'published_name'],
             'ads',
             ['*'],
             // Each row says whether a television shows it — and whether it shows the latest changes — who touched it
-            // last, and why it may not be deleted yet (a channel shows its page), so the gallery says it before the
-            // password is asked.
+            // last, whose it is, what this person may do to it, and why it may not be deleted yet (a channel shows its
+            // page), so the gallery says it before the password is asked.
             function (Collection $rows) {
                 $refusals = Media::stillInChannelsMessages($rows->pluck('media_id')->filter()->all());
 
@@ -78,8 +83,24 @@ class BuilderController extends Controller
                     $ad->setAttribute('store_name', $ad->store?->name);
                     $ad->setAttribute('updated_by_name', $ad->updater?->name);
                     $ad->setAttribute('in_channels_message', $ad->media_id === null ? null : ($refusals[$ad->media_id] ?? null));
+                    $ad->setAttribute('shared', $ad->isShared());
+                    $ad->setAttribute('owner_label', $this->ownerLabel($ad));
+                    $ad->setAttribute('can', ['update' => $this->mayUpdate($ad), 'copy' => $this->mayCopy($ad), 'delete' => $this->mayDelete($ad)]);
+
+                    // Inside a shop the platform's ad is the platform's: shown as it was published — never its unfinished
+                    // changes — and with nobody's name from above the stores (as the platform's channels are shown).
+                    if ($ad->isShared() && ! $this->aboveTheStores()) {
+                        $ad->setAttribute('updated_by_name', null);
+                        $ad->makeHidden(['created_by', 'updated_by']);
+
+                        if ($this->showsPublishedVersion($ad)) {
+                            $ad->setAttribute('name', $ad->published_name ?? $ad->name);
+                            $ad->setAttribute('thumbnail_path', $ad->media?->thumbnail_path);
+                        }
+                    }
+
                     // The listing shows a poster and a name — never the whole design, draft or published.
-                    $ad->makeHidden(['document', 'published_document']);
+                    $ad->makeHidden(['document', 'published_document', 'published_name', 'media']);
                 });
             },
         );
@@ -114,14 +135,16 @@ class BuilderController extends Controller
     public function edit(BuilderAd $ad): View
     {
         // Route middleware is not enough: the target has to be inside the store the actor is working in,
-        // or it does not exist for them (404, never 403).
+        // or it does not exist for them (404, never 403) — and a shared one is opened with Update Shared Ads.
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
+        $this->authorizeChange($ad);
 
         return view('builder.editor', [
             'ad' => $ad,
             'orientation' => $ad->orientation,
             'document' => $ad->document,
-            'assets' => $this->assetsForEditor($ad->store_id),
+            'assets' => $this->assetsForEditor($ad),
+            'ownerLabel' => $this->ownerLabel($ad) ?? ($this->aboveTheStores() ? $ad->store?->name : null),
         ]);
     }
 
@@ -143,7 +166,9 @@ class BuilderController extends Controller
 
         $this->savePoster($ad, $request->input('thumbnail'));
 
-        ActivityLog::record('ad.created', $ad, "Created {$ad->orientation} ad {$ad->name}");
+        ActivityLog::record('ad.created', $ad, $ad->isShared()
+            ? "Created {$ad->orientation} ad {$ad->name} for every shop"
+            : "Created {$ad->orientation} ad {$ad->name}", storeId: $this->logStoreOf($ad));
 
         return response()->json([
             'message' => 'Ad saved',
@@ -162,6 +187,7 @@ class BuilderController extends Controller
     public function update(BuilderAdRequest $request, BuilderAd $ad): JsonResponse
     {
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
+        $this->authorizeChange($ad);
         $validated = $request->validated();
         $changed = $ad->wouldChangeWith($validated['name'], $validated['document']);
 
@@ -172,29 +198,47 @@ class BuilderController extends Controller
                 'updated_by' => auth()->id(),
             ])->save();
 
-            ActivityLog::record('ad.updated', $ad, "Updated ad {$ad->name}");
+            ActivityLog::record('ad.updated', $ad, "Updated ad {$ad->name}", storeId: $this->logStoreOf($ad));
         }
 
         $this->savePoster($ad, $request->input('thumbnail'));
 
         return response()->json([
             'message' => $changed && $ad->isPublished()
-                ? 'Changes saved — the screens keep the published version until you publish them'
+                ? ($ad->isShared()
+                    ? 'Changes saved — shops keep the published version until you publish them'
+                    : 'Changes saved — the screens keep the published version until you publish them')
                 : 'Ad saved',
             'ad' => $this->summary($ad->fresh()),
         ]);
     }
 
-    /** A copy to work from, with its own name. The copy is a draft even if the original was published. */
+    /**
+     * A copy to work from, with its own name. The copy is a draft even if the original was published.
+     *
+     * Inside a shop a copy is that shop's own, whichever ad it was made from — the platform's shared ones included
+     * (owner, 2026-10-01: "woo copy kar sake"), and then it is of what the shop was shown: the version the platform
+     * published, never its unfinished changes, under that name while the shop has no ad called so. Above the stores a
+     * copy stays where its original is; a shared ad's copy is shared too, so it is made with Update Shared Ads, as every
+     * ad for every shop is.
+     */
     public function duplicate(BuilderAd $ad): JsonResponse
     {
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
+        $storeId = $this->aboveTheStores() ? $ad->store_id : $this->standingStoreId();
+
+        abort_unless($this->mayCopy($ad), 403, 'Making an ad for every shop needs the Update Shared Ads permission.');
+
+        $fromThePlatform = $ad->isShared() && $storeId !== null;
+        $published = $fromThePlatform && $ad->isPublished() && $ad->published_document !== null;
+        $name = $published ? ($ad->published_name ?? $ad->name) : $ad->name;
+        $original = $published ? $ad->media?->thumbnail_path : $ad->thumbnail_path;
 
         $copy = BuilderAd::create([
-            'store_id' => $ad->store_id,
-            'name' => $this->copyName($ad),
+            'store_id' => $storeId,
+            'name' => $this->copyName($name, $storeId, keepItIfFree: $fromThePlatform),
             'orientation' => $ad->orientation,
-            'document' => $ad->document,
+            'document' => $published ? $ad->published_document : $ad->document,
             'created_by' => auth()->id(),
             'updated_by' => auth()->id(),
         ]);
@@ -202,21 +246,25 @@ class BuilderController extends Controller
         // The poster is the design's picture, so the copy starts with it — as a file of its own. Sharing the
         // original's file would let deleting the original take the copy's picture with it. A shop with no room
         // for it gets its copy without one: a poster is never a reason to refuse (StoreStorage).
-        if ($ad->thumbnail_path && Storage::disk('public')->exists($ad->thumbnail_path)) {
+        if ($original && Storage::disk('public')->exists($original)) {
             $poster = $copy->storageDirectory().'/poster.jpg';
 
-            $this->quota->withRoomOrSkip($copy->store_id, (int) Storage::disk('public')->size($ad->thumbnail_path), function () use ($ad, $copy, $poster) {
-                Storage::disk('public')->copy($ad->thumbnail_path, $poster);
+            $this->quota->withRoomOrSkip($copy->store_id, (int) Storage::disk('public')->size($original), function () use ($original, $copy, $poster) {
+                Storage::disk('public')->copy($original, $poster);
                 $copy->update(['thumbnail_path' => $poster]);
 
                 return true;
             });
         }
 
-        ActivityLog::record('ad.duplicated', $copy, "Duplicated ad {$ad->name} as {$copy->name}");
+        if ($fromThePlatform) {
+            ActivityLog::record('ad.copied', $copy, "Copied ad {$name} from the platform".($copy->name !== $name ? " as {$copy->name}" : ''));
+        } else {
+            ActivityLog::record('ad.duplicated', $copy, "Duplicated ad {$ad->name} as {$copy->name}", storeId: $this->logStoreOf($copy));
+        }
 
         return response()->json([
-            'message' => 'Ad duplicated',
+            'message' => $fromThePlatform ? 'Copied to your ads' : 'Ad duplicated',
             'ad' => $this->summary($copy),
         ]);
     }
@@ -233,9 +281,15 @@ class BuilderController extends Controller
     public function preview(Request $request, BuilderAd $ad, AdCompiler $compiler): Response
     {
         // Whoever may look at the ads, and whoever may change this one: previewing is part of designing.
-        abort_unless(auth()->user()->canAny(['ad-view', 'ad-update']), 403);
+        abort_unless(auth()->user()->canAny(['ad-view', 'ad-update', 'ad-shared-update']), 403);
 
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
+
+        // A shop is shown the platform's ad as it was published, as its gallery shows it — never the changes the
+        // platform has not published yet. Only read, never saved.
+        if ($this->showsPublishedVersion($ad) && $ad->published_document !== null) {
+            $ad = (clone $ad)->forceFill(['document' => $ad->published_document, 'name' => $ad->published_name ?? $ad->name]);
+        }
 
         // A preview reloads itself at the ad's length for as long as its tab is open: it is compiled again only when
         // the draft has changed since (the brute-force round, 2026-09-29 — a tab left open overnight compiled the
@@ -272,17 +326,23 @@ class BuilderController extends Controller
     public function publish(BuilderAd $ad, AdPublisher $publisher): JsonResponse
     {
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
+        $this->authorizeChange($ad);
 
         $media = $publisher->publish($ad, auth()->id());
 
-        ActivityLog::record('ad.published', $ad, "Published ad {$ad->name}");
+        ActivityLog::record('ad.published', $ad, $ad->isShared() ? "Published ad {$ad->name} for every shop" : "Published ad {$ad->name}",
+            storeId: $this->logStoreOf($ad));
 
         $screens = $publisher->screensShowing($media);
 
         return response()->json([
-            'message' => $screens > 0
-                ? "Published — {$screens} ".($screens === 1 ? 'screen is' : 'screens are').' now showing the new version'
-                : 'Published to your media library, ready for a playlist',
+            'message' => match (true) {
+                // Its page is in the platform's library, where only the platform's channels reach it; every shop now
+                // sees this version, and copies it to play it on its own screens.
+                $ad->isShared() => 'Published — every shop sees it now and can copy it',
+                $screens > 0 => "Published — {$screens} ".($screens === 1 ? 'screen is' : 'screens are').' now showing the new version',
+                default => 'Published to your media library, ready for a playlist',
+            },
             'ad' => $this->summary($ad->fresh()),
             'media_id' => $media->id,
         ]);
@@ -296,6 +356,7 @@ class BuilderController extends Controller
     public function unpublish(BuilderAd $ad, AdPublisher $publisher): JsonResponse
     {
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
+        $this->authorizeChange($ad);
 
         if (! $ad->isPublished()) {
             throw ValidationException::withMessages(['ad' => 'This ad is not on any screen.']);
@@ -305,10 +366,14 @@ class BuilderController extends Controller
 
         $publisher->unpublish($ad);
 
-        ActivityLog::record('ad.unpublished', $ad, "Unpublished ad {$ad->name}".($reach !== '' ? " — taken off {$reach}" : ''));
+        ActivityLog::record('ad.unpublished', $ad, "Unpublished ad {$ad->name}".($reach !== '' ? " — taken off {$reach}" : ''),
+            storeId: $this->logStoreOf($ad));
+
+        // A shared ad leaves every shop's Ads too, until it is published again; the copies shops made stay theirs.
+        $message = $reach !== '' ? "Unpublished — taken off {$reach}" : 'Unpublished — it is a draft again';
 
         return response()->json([
-            'message' => $reach !== '' ? "Unpublished — taken off {$reach}" : 'Unpublished — it is a draft again',
+            'message' => $ad->isShared() ? "{$message}. Shops no longer see it" : $message,
             'ad' => $this->summary($ad->fresh()),
         ]);
     }
@@ -324,9 +389,17 @@ class BuilderController extends Controller
     public function showInPlaylists(Request $request, BuilderAd $ad): JsonResponse
     {
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
+        $this->authorizeChange($ad);
 
         $validated = $request->validate(['in_playlists' => ['required', 'boolean']]);
         $wanted = (bool) $validated['in_playlists'];
+
+        // Its page is in the platform's library, which no shop's playlist reaches: a shop plays it from its own copy.
+        if ($ad->isShared()) {
+            throw ValidationException::withMessages([
+                'in_playlists' => 'An ad for every shop plays only in the platform\'s channels. A shop copies it to put it on its playlists.',
+            ]);
+        }
 
         if (! $wanted && ($stillPlaying = $ad->media?->stillOnScreensMessage()) !== null) {
             throw ValidationException::withMessages(['in_playlists' => $stillPlaying]);
@@ -356,6 +429,7 @@ class BuilderController extends Controller
     public function discard(BuilderAd $ad, AdPublisher $publisher): JsonResponse
     {
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
+        $this->authorizeChange($ad);
 
         if (! $ad->canDiscardChanges()) {
             throw ValidationException::withMessages(['ad' => match (true) {
@@ -367,7 +441,7 @@ class BuilderController extends Controller
 
         $publisher->discardChanges($ad, auth()->id());
 
-        ActivityLog::record('ad.changes_discarded', $ad, "Discarded the unpublished changes of ad {$ad->name}");
+        ActivityLog::record('ad.changes_discarded', $ad, "Discarded the unpublished changes of ad {$ad->name}", storeId: $this->logStoreOf($ad));
 
         return response()->json([
             'message' => 'Changes discarded — back to the version on the screens',
@@ -383,6 +457,11 @@ class BuilderController extends Controller
     {
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
 
+        // A shared ad goes from every shop at once, so it takes Delete Shared Ads (owner, 2026-10-01).
+        abort_unless($this->mayDelete($ad), 403, $ad->isShared()
+            ? 'Deleting an ad shared with every shop needs the Delete Shared Ads permission.'
+            : 'Deleting an ad needs the Delete Ads permission.');
+
         // Its published page is a library row; a channel showing it would lose the ad without anybody
         // deciding so (owner, 2026-09-19). Refused before the password, like every other refusal.
         if (($inUse = $ad->media?->stillInAChannelMessage()) !== null) {
@@ -392,14 +471,16 @@ class BuilderController extends Controller
         $this->confirmPassword($request);
 
         $name = $ad->name;
-        $storeId = $ad->store_id;
+        $shared = $ad->isShared();
+        $storeId = $this->logStoreOf($ad);
         $screens = $ad->media_id === null
             ? 0
             : PlaylistItem::where('media_id', $ad->media_id)->count();
 
         DB::transaction(fn () => $ad->delete());
 
-        ActivityLog::record('ad.deleted', null, "Deleted ad {$name}", storeId: $storeId);
+        // The copies shops made of a shared ad are theirs, and stay.
+        ActivityLog::record('ad.deleted', null, $shared ? "Deleted ad {$name}, shared with every shop" : "Deleted ad {$name}", storeId: $storeId);
 
         return response()->json([
             'message' => $screens > 0
@@ -410,16 +491,79 @@ class BuilderController extends Controller
 
     /**
      * The pictures and videos the editor may put on the stage: the ad's shop's own and those the platform shares
-     * with every shop (owner, 2026-09-29).
+     * with every shop (owner, 2026-09-29) — for an ad shared with every shop, the shared ones alone. A new ad's are
+     * everything in reach, and the editor keeps to the shelf of the shop chosen for it (onThisShelf).
      */
-    private function assetsForEditor(?int $storeId = null): array
+    private function assetsForEditor(?BuilderAd $ad = null): array
     {
         return BuilderAsset::visibleTo(auth()->user())
-            ->when($storeId !== null, fn (Builder $query) => $query->onShelfOf($storeId))
+            ->when($ad !== null, fn (Builder $query) => $query->onShelfOf($ad->store_id))
             ->latest()
             ->limit(200)
             ->get(['id', 'store_id', 'title', 'kind', 'disk', 'path', 'thumbnail_path', 'width', 'height', 'duration_seconds'])
             ->toArray();
+    }
+
+    /** A shop's own ad with Update Ads; one the platform shares with every shop with Update Shared Ads. */
+    private function mayUpdate(BuilderAd $ad): bool
+    {
+        return Gate::allows($ad->isShared() ? 'ad-shared-update' : 'ad-update');
+    }
+
+    /** A shop's own ad with Delete Ads; one the platform shares with every shop with Delete Shared Ads. */
+    private function mayDelete(BuilderAd $ad): bool
+    {
+        return Gate::allows($ad->isShared() ? 'ad-shared-destroy' : 'ad-destroy');
+    }
+
+    /** Create Ads — and, above the stores, Update Shared Ads to copy a shared ad, whose copy is shared too. */
+    private function mayCopy(BuilderAd $ad): bool
+    {
+        return Gate::allows('ad-store') && (! ($ad->isShared() && $this->aboveTheStores()) || Gate::allows('ad-shared-update'));
+    }
+
+    /** Changing, publishing and taking an ad off: refused with the permission it needs, never as a bare 403. */
+    private function authorizeChange(BuilderAd $ad): void
+    {
+        abort_unless($this->mayUpdate($ad), 403, $ad->isShared()
+            ? 'Changing an ad shared with every shop needs the Update Shared Ads permission.'
+            : 'Changing an ad needs the Update Ads permission.');
+    }
+
+    /**
+     * Whether a shop's person is shown the version the platform published rather than its draft: everybody in a shop
+     * but whoever may change the platform's ads, who works on the draft as the platform does.
+     */
+    private function showsPublishedVersion(BuilderAd $ad): bool
+    {
+        return $ad->isShared() && $ad->isPublished() && ! $this->aboveTheStores() && ! Gate::allows('ad-shared-update');
+    }
+
+    /** Whose ad this is, for a shared one: above the stores "Every shop", inside a shop "From the platform". */
+    private function ownerLabel(BuilderAd $ad): ?string
+    {
+        if (! $ad->isShared()) {
+            return null;
+        }
+
+        return $this->aboveTheStores() ? 'Every shop' : 'From the platform';
+    }
+
+    /** The store a log entry belongs to: the ad's shop, or for a shared ad the shop the person is working in (if any). */
+    private function logStoreOf(BuilderAd $ad): ?int
+    {
+        return $ad->store_id ?? $this->standingStoreId();
+    }
+
+    private function aboveTheStores(): bool
+    {
+        return auth()->user()->globalRole() !== null;
+    }
+
+    /** The shop a store's person is working in; none above the stores. */
+    private function standingStoreId(): ?int
+    {
+        return $this->aboveTheStores() ? null : ((int) session('current_store_id') ?: null);
     }
 
     /**
@@ -450,6 +594,8 @@ class BuilderController extends Controller
 
             // May a shop's own playlist play it, or is it for channels only (showInPlaylists)?
             'in_playlists' => (bool) $ad->in_playlists,
+            // Made for every shop, by the platform (owner, 2026-10-01)?
+            'shared' => $ad->isShared(),
             'updated_at' => $ad->updated_at?->toIso8601String(),
         ];
     }
@@ -478,11 +624,21 @@ class BuilderController extends Controller
             fn (string $path) => BuilderAd::withoutTimestamps(fn () => $ad->update(['thumbnail_path' => $path])));
     }
 
-    /** "Winter sale" → "Winter sale (copy)", and "(copy 2)" after that. */
-    private function copyName(BuilderAd $ad): string
+    /**
+     * "Winter sale" → "Winter sale (copy)", and "(copy 2)" after that, among the ads of the place the copy goes to. A
+     * shop's copy of the platform's ad keeps the name while the shop has no ad called so: it is the shop's first.
+     */
+    private function copyName(string $name, ?int $storeId, bool $keepItIfFree = false): string
     {
-        $base = preg_replace('/ \(copy( \d+)?\)$/', '', $ad->name) ?? $ad->name;
-        $taken = BuilderAd::where('store_id', $ad->store_id)->pluck('name')->all();
+        $base = preg_replace('/ \(copy( \d+)?\)$/', '', $name) ?? $name;
+        $taken = BuilderAd::query()
+            ->when($storeId === null, fn (Builder $query) => $query->whereNull('store_id'), fn (Builder $query) => $query->where('store_id', $storeId))
+            ->pluck('name')
+            ->all();
+
+        if ($keepItIfFree && ! in_array($name, $taken, true)) {
+            return mb_substr($name, 0, 120);
+        }
 
         if (! in_array("{$base} (copy)", $taken, true)) {
             return mb_substr("{$base} (copy)", 0, 120);
@@ -498,23 +654,33 @@ class BuilderController extends Controller
     }
 
     /**
-     * Which shop the new ad belongs to.
+     * Which shop the new ad belongs to — or none, for an ad the platform makes for every shop.
      *
      * A store's person builds in the store they are working in — there is nothing to choose. The platform
      * team stands in no store at all (the tiers are exclusive), so they say which shop the ad is for, and
-     * the answer has to be a store that exists. Either way an ad is never store-less: the media row it
-     * publishes into cannot be.
+     * the answer has to be a store that exists; or, with Update Shared Ads, no shop at all — All shops, the
+     * editor's first choice (owner, 2026-10-01) — and the ad is shared with every shop.
      *
      * @param  array<string, mixed>  $validated
      */
-    private function targetStoreId(array $validated): int
+    private function targetStoreId(array $validated): ?int
     {
-        if (auth()->user()->globalRole() !== null) {
+        if ($this->aboveTheStores()) {
             $storeId = (int) ($validated['store_id'] ?? 0);
 
-            if (! $storeId || ! Store::whereKey($storeId)->exists()) {
+            if ($storeId === 0 && Gate::allows('ad-shared-update')) {
+                return null;
+            }
+
+            if ($storeId === 0) {
                 throw ValidationException::withMessages([
                     'store_id' => 'Choose the shop this ad is for.',
+                ]);
+            }
+
+            if (! Store::whereKey($storeId)->exists()) {
+                throw ValidationException::withMessages([
+                    'store_id' => 'That shop no longer exists. Reload the page and choose again.',
                 ]);
             }
 

@@ -33,7 +33,7 @@ class Permission extends Model
         'store-view', 'store-store', 'store-destroy',
         'channel-view', 'channel-store', 'channel-update', 'channel-destroy',
         'activity-view', 'activity-destroy',
-        'ad-shared-destroy',
+        'ad-shared-update', 'ad-shared-destroy', 'ad-shared-asset-destroy',
     ];
 
     /**
@@ -45,9 +45,11 @@ class Permission extends Model
      *    and deleting that store;
      *  - channel-* — the store's own channels, for its own screens;
      *  - activity-view — this store's history;
-     *  - ad-shared-destroy — the one that reaches past the store, by the owner's choice (2026-09-29: "agar permission
-     *    du toh woo delete bhi kar sake"): deleting a picture or a video the platform shares with every shop's Ad
-     *    Builder takes it off every shop's shelf. No store role starts with it; a file any shop's ad uses stays.
+     *  - ad-shared-update, ad-shared-destroy, ad-shared-asset-destroy — the ones that reach past the store, by the
+     *    owner's choice (2026-09-29: "agar permission du toh woo delete bhi kar sake"; 2026-10-01: "sub khel permission
+     *    ka honga", three of them): changing or deleting an ad the platform shares with every shop, and deleting a
+     *    picture or a video it shares with every shop's Ad Builder, act on every shop at once. No store role starts
+     *    with them; a file any shop's ad uses stays.
      *
      * Not among them: user-view and user-destroy (accounts are the platform's; a store's people are its Members
      * page), and activity-destroy (yearly maintenance drops a whole year of every store's history).
@@ -56,7 +58,7 @@ class Permission extends Model
         'store-view', 'store-store', 'store-destroy',
         'channel-view', 'channel-store', 'channel-update', 'channel-destroy',
         'activity-view',
-        'ad-shared-destroy',
+        'ad-shared-update', 'ad-shared-destroy', 'ad-shared-asset-destroy',
     ];
 
     /**
@@ -107,7 +109,9 @@ class Permission extends Model
         'channel-destroy' => 'Delete Channels',
         'activity-view' => 'View Activity Log',
         'activity-destroy' => 'Delete Old Activity Logs',
-        'ad-shared-destroy' => 'Delete Shared Assets',
+        'ad-shared-update' => 'Update Shared Ads',
+        'ad-shared-destroy' => 'Delete Shared Ads',
+        'ad-shared-asset-destroy' => 'Delete Shared Assets',
         'permission-view' => 'View Permissions',
         'permission-store' => 'Create Permissions',
         'permission-update' => 'Update Permissions',

@@ -91,6 +91,7 @@ class BuilderAssetController extends Controller
                 $rows->each(function (BuilderAsset $asset) use ($usage) {
                     $asset->setAttribute('used_by', $usage[$asset->id]['names'] ?? []);
                     $asset->setAttribute('used_elsewhere', $usage[$asset->id]['elsewhere'] ?? 0);
+                    $asset->setAttribute('used_by_platform', $usage[$asset->id]['platform'] ?? 0);
                     // Why it may not be deleted yet, in destroy's own words, so the shelf says it before any
                     // confirmation (destroy decides again).
                     $asset->setAttribute('in_use_message', isset($usage[$asset->id]) ? $this->stillUsedMessage($usage[$asset->id]) : null);
@@ -171,12 +172,13 @@ class BuilderAssetController extends Controller
      * Which ads name these assets, as {assetId: {names: [ad name, …], elsewhere: n}}.
      *
      * An id inside the document is what "used" means, so the documents are read and searched: a shop's own file in
-     * its shop's designs only, a shared file in every shop's. A store's person is told the names of their own shop's
-     * ads and only the number of other shops' (one shop never learns another's designs); above the stores every ad
-     * is named, and one of another shop's with the shop's name.
+     * its shop's designs only, a shared file in every shop's and the platform's own ads for every shop. A store's
+     * person is told the names of their own shop's ads and only the number of other shops' and of the platform's (one
+     * shop never learns another's designs, nor the platform's unpublished ones); above the stores every ad is named,
+     * with the shop's name or "every shop".
      *
      * @param  Collection<int, BuilderAsset>  $assets
-     * @return array<int, array{names: array<int, string>, elsewhere: int}>
+     * @return array<int, array{names: array<int, string>, elsewhere: int, platform: int}>
      */
     private function usageFor(Collection $assets): array
     {
@@ -216,15 +218,19 @@ class BuilderAssetController extends Controller
                         continue;
                     }
 
-                    $usage[$assetId] ??= ['names' => [], 'elsewhere' => 0];
+                    $usage[$assetId] ??= ['names' => [], 'elsewhere' => 0, 'platform' => 0];
                     $sharedFile = in_array($assetId, $shared, true);
 
-                    if ($viewerStore !== null && (int) $ad->store_id !== $viewerStore) {
+                    if ($viewerStore !== null && $ad->isShared()) {
+                        $usage[$assetId]['platform']++;
+                    } elseif ($viewerStore !== null && (int) $ad->store_id !== $viewerStore) {
                         $usage[$assetId]['elsewhere']++;
                     } else {
-                        $usage[$assetId]['names'][] = $viewerStore === null && $sharedFile && $ad->store !== null
-                            ? "{$ad->name} ({$ad->store->name})"
-                            : $ad->name;
+                        $usage[$assetId]['names'][] = match (true) {
+                            $viewerStore !== null || ! $sharedFile => $ad->name,
+                            $ad->store !== null => "{$ad->name} ({$ad->store->name})",
+                            default => "{$ad->name} (every shop)",
+                        };
                     }
                 }
             });
@@ -236,13 +242,25 @@ class BuilderAssetController extends Controller
      * Why a file in use stays: the ads the person may see by name, those of other shops counted — and nobody is told
      * to take a file out of ads they cannot open.
      *
-     * @param  array{names: array<int, string>, elsewhere: int}  $usage
+     * @param  array{names: array<int, string>, elsewhere: int, platform?: int}  $usage
      */
     private function stillUsedMessage(array $usage): string
     {
         $names = $usage['names'];
         $elsewhere = $usage['elsewhere'];
-        $others = $elsewhere === 1 ? 'an ad of another shop' : "{$elsewhere} ads of other shops";
+        $platform = $usage['platform'] ?? 0;
+        $others = implode(' and ', array_filter([
+            match (true) {
+                $elsewhere === 0 => null,
+                $elsewhere === 1 => 'an ad of another shop',
+                default => "{$elsewhere} ads of other shops",
+            },
+            match (true) {
+                $platform === 0 => null,
+                $platform === 1 => 'an ad the platform shares',
+                default => "{$platform} ads the platform shares",
+            },
+        ]));
 
         if ($names === []) {
             return "Still used by {$others}, so it stays: it can go once no shop's ad uses it.";
@@ -250,7 +268,7 @@ class BuilderAssetController extends Controller
 
         $named = implode(', ', array_slice($names, 0, 3)).(count($names) > 3 ? ' and '.(count($names) - 3).' more' : '');
 
-        return $elsewhere > 0
+        return $others !== ''
             ? "Still used by {$named}, and by {$others}, so it stays: it can go once no shop's ad uses it."
             : "Still used by {$named}. Take it out of those ads first, and publish the ones whose screens still show it.";
     }
@@ -258,7 +276,7 @@ class BuilderAssetController extends Controller
     /** A shop's own file with Delete Ads; one shared with every shop with Delete Shared Assets. */
     private function mayDelete(BuilderAsset $asset): bool
     {
-        return Gate::allows($asset->isShared() ? 'ad-shared-destroy' : 'ad-destroy');
+        return Gate::allows($asset->isShared() ? 'ad-shared-asset-destroy' : 'ad-destroy');
     }
 
     /** Whose file this is, in the words of the person looking: above the stores its shop or "Every shop", inside one the platform's. */

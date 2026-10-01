@@ -16,9 +16,16 @@ use Illuminate\Support\Facades\Storage;
  * positioned text, pictures and video, each able to move on its own.
  *
  * The `document` is the design — what the editor reads and writes. Publishing compiles it into a
- * self-contained HTML file and writes a `media` row of type `html`, which is the only thing playlists,
- * schedules, the device manifest and the player ever see. That is why an ad always belongs to a store:
- * the media row it becomes cannot be store-less either.
+ * self-contained HTML file and writes a `media` row of type `html` into the ad's library, which is the only
+ * thing playlists, schedules, the device manifest and the player ever see.
+ *
+ * An ad belongs to a shop, or — with no shop, `store_id` NULL — to the platform, made for every shop (owner,
+ * 2026-10-01: "all shop k liya ads ... woo ads sub ko dikhe aur woo copy kar sake"). A shared ad uses the files the
+ * platform shares (BuilderAsset::onShelfOf), lives under `builder/platform/ads/`, publishes into the platform's own
+ * library — so only the platform's channels play it — and every shop sees it once it is published and copies it into
+ * its own Ads. It is changed with Update Shared Ads and deleted with Delete Shared Ads, wherever the person stands.
+ *
+ * @property int|null $store_id
  */
 class BuilderAd extends Model
 {
@@ -116,8 +123,11 @@ class BuilderAd extends Model
     }
 
     /**
-     * The ads a person manages from where they stand: above the stores, every store's (each row saying
-     * whose it is); inside a store, that store's own and no other. With no store selected, none at all.
+     * The ads a person sees from where they stand: above the stores, every store's and the shared ones (each row
+     * saying whose it is); inside a store, that store's own and the ones the platform shares with every shop — once
+     * published (owner, 2026-10-01: an unfinished design stays the platform's), or every one for somebody there who
+     * may change or delete them. Never another shop's own; with no store selected, none at all. What may be DONE to
+     * one is the controller's to ask (a shared one is changed and deleted with its own permissions).
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
@@ -127,7 +137,21 @@ class BuilderAd extends Model
 
         $storeId = (int) session('current_store_id');
 
-        return $storeId > 0 ? $query->where('store_id', $storeId) : $query->whereRaw('0 = 1');
+        if ($storeId <= 0) {
+            return $query->whereRaw('0 = 1');
+        }
+
+        $seesDrafts = $user->hasPermissionInCurrentStore('ad-shared-update') || $user->hasPermissionInCurrentStore('ad-shared-destroy');
+
+        return $query->where(fn (Builder $query) => $query->where('store_id', $storeId)
+            ->orWhere(fn (Builder $shared) => $shared->whereNull('store_id')
+                ->when(! $seesDrafts, fn (Builder $published) => $published->whereNotNull('media_id')->whereNotNull('published_at'))));
+    }
+
+    /** The platform's, made for every shop — no shop's own. */
+    public function isShared(): bool
+    {
+        return $this->store_id === null;
     }
 
     public function store(): BelongsTo
@@ -254,10 +278,10 @@ class BuilderAd extends Model
         return $value;
     }
 
-    /** Where this ad's published file and poster live. */
+    /** Where this ad's published file and poster live: its shop's folder, or the platform's for a shared one. */
     public function storageDirectory(): string
     {
-        return "builder/{$this->store_id}/ads/{$this->id}";
+        return 'builder/'.($this->store_id ?? 'platform')."/ads/{$this->id}";
     }
 
     /** Mounted upright: a 1080 × 1920 stage. */

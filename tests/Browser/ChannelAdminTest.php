@@ -118,7 +118,7 @@ class ChannelAdminTest extends DuskTestCase
             $browser->waitFor('@channel-ad-form');
             $this->jsClick($browser, '@channel-ad-source-ads');
             $browser->waitFor('@channel-ad-picker-empty')
-                ->assertSeeIn('@channel-ad-picker-empty', 'choose the shop above')
+                ->assertSeeIn('@channel-ad-picker-empty', 'or choose a shop above')
                 // A shop whose only published ad is on a playlist: an empty tab that says why.
                 ->select('@channel-ad-library', (string) $bakery->id)
                 ->waitForTextIn('@channel-ad-picker-empty', '1 published ad is on a playlist, so not listed here')

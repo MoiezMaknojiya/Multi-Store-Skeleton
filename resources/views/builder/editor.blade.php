@@ -3,6 +3,12 @@
     // them the shops). A store's own people never see this: they are already working somewhere.
     $platformUser = auth()->user()->globalRole() !== null;
     $stores = $ad ? [] : ($stores ?? []);
+    // An ad for every shop (owner, 2026-10-01): a new one is made with All shops, first in the Shop list for whoever
+    // holds Update Shared Ads; a saved one names no shop. Inside a shop such an ad is the platform's, and its files are
+    // the shared ones, uploaded above the stores.
+    $canShare = $platformUser && ! $ad && auth()->user()->can('ad-shared-update');
+    $sharedAd = $ad !== null && $ad->store_id === null;
+    $ownerLabel ??= null;
 
     // The panel's lists are the server's own (AdCompiler, AdAnimations): every option is a value the
     // compiler writes and the request accepts — never a copy that could drift from them. Only the words
@@ -111,6 +117,8 @@
              'assets' => $assets,
              'storeId' => $platformUser ? ($ad?->store_id) : null,
              'choosesShop' => $platformUser && ! $ad,
+             'canShare' => $canShare,
+             'shared' => $sharedAd,
              // Where the ad stands with the screens (docs/AD-BUILDER-SPEC.md §9): on them or not, whether they
              // show its latest changes, and whether there is a published version to go back to.
              'published' => (bool) $ad?->isPublished(),
@@ -120,11 +128,14 @@
              // May a shop's own playlist play it, or is it for channels only (owner's rule, 2026-09-22)?
              'inPlaylists' => (bool) $ad?->in_playlists,
              'hasPoster' => (bool) $ad?->thumbnail_path,
-             // What the routes let this person do: change (and publish) a saved ad, and fetch a font.
+             // What the routes let this person do: change (and publish) a saved ad — a shop's with Update Ads, one for
+             // every shop with Update Shared Ads — and fetch a font.
              'canUpdate' => (bool) auth()->user()?->can('ad-update'),
-             // Whether the picker takes a new file too (the shelf's upload asks Create Ads, as its route does).
-             'canUpload' => (bool) auth()->user()?->can('ad-store'),
-             'canInstallFonts' => (bool) auth()->user()?->canAny(['ad-store', 'ad-update']),
+             'canUpdateShared' => (bool) auth()->user()?->can('ad-shared-update'),
+             // Whether the picker takes a new file too (the shelf's upload asks Create Ads, as its route does). Not for
+             // a shop's person in an ad for every shop: their upload would be their shop's, which that ad cannot use.
+             'canUpload' => (bool) auth()->user()?->can('ad-store') && ! ($sharedAd && ! $platformUser),
+             'canInstallFonts' => (bool) auth()->user()?->canAny(['ad-store', 'ad-update', 'ad-shared-update']),
              'limits' => \App\Services\AdCompiler::LIMITS,
              'filters' => \App\Services\AdCompiler::FILTERS,
              'animationNumbers' => \App\Services\AdAnimations::NUMBERS,
@@ -170,13 +181,19 @@
                           : 'For a screen the usual way round (1920 × 1080). Chosen when the ad was made; it cannot change.'"
                       x-text="orientation === 'portrait' ? 'Portrait' : 'Landscape'"></span>
 
+                {{-- Above the stores a new ad says whose it is — All shops first for whoever may make an ad for every
+                     shop (owner, 2026-10-01), as the Assets page's list does — and the first save fixes it. A saved
+                     ad says it beside its shape. --}}
                 @if ($platformUser && ! $ad)
-                    <select x-model.number="storeId" class="form-select h-9 w-44" dusk="ad-store" aria-label="Shop">
-                        <option value="">Choose a shop…</option>
+                    <select x-model.number="storeId" @change="shopChanged()" x-bind:disabled="!!adId" class="form-select h-9 w-44"
+                            dusk="ad-store" aria-label="Shop" x-bind:title="adId ? 'Chosen with the first save' : ''">
+                        <option value="">{{ $canShare ? 'All shops' : 'Choose a shop…' }}</option>
                         @foreach ($stores as $store)
                             <option value="{{ $store['id'] }}">{{ $store['name'] }}</option>
                         @endforeach
                     </select>
+                @elseif ($ownerLabel)
+                    <span class="{{ $sharedAd ? 'badge-info' : 'badge-neutral' }} shrink-0" dusk="ad-owner">{{ $ownerLabel }}</span>
                 @endif
 
                 {{-- Shrinks before anything else does: on a narrow bar each line is cut short, never drawn over
@@ -273,8 +290,8 @@
                     <span class="hidden xl:inline" x-text="previewing === 'all' ? 'Stop' : 'Play'"></span>
                 </button>
 
-                {{-- The preview route answers View Ads or Update Ads (BuilderController::preview). --}}
-                @canany(['ad-view', 'ad-update'])
+                {{-- The preview route answers View Ads, Update Ads or Update Shared Ads (BuilderController::preview). --}}
+                @canany(['ad-view', 'ad-update', 'ad-shared-update'])
                     <button type="button" class="btn-secondary" @click="openPreview()" x-bind:disabled="saving" dusk="ad-preview"
                             title="The saved ad full screen, in a new tab, exactly as a television shows it" aria-label="Preview (opens in a new tab)">
                         <span class="hidden xl:inline">Preview</span>
@@ -290,9 +307,10 @@
                 {{-- Publish is what puts the ad on a television: it compiles the design into a page and drops it
                      in the media library, where a playlist can pick it up. Beside it, the rest of the draft/publish
                      model (docs/AD-BUILDER-SPEC.md §9): Discard changes and Unpublish. All three change a saved ad,
-                     so they are Update Ads — the lock on their routes. --}}
-                @can('ad-update')
-                    <div class="relative flex" @click.outside="publishMenuOpen = false">
+                     so they are Update Ads — or Update Shared Ads for an ad made for every shop, which Publish shows to
+                     every shop — the lock on their routes. --}}
+                @can('update-builder-ads')
+                    <div class="relative flex" x-show="mayChange()" @click.outside="publishMenuOpen = false">
                         <button type="button" class="btn-primary !rounded-r-none" @click="publish()"
                                 x-bind:disabled="publishing || saving || unpublishing || discarding" dusk="ad-publish"
                                 x-bind:title="publishHint()">
@@ -307,8 +325,10 @@
                              class="absolute right-0 top-full z-50 mt-1 w-72 rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800">
                             {{-- Where the ad may play (owner's rule, 2026-09-22). Off until it is ticked: the same
                                  ad inside a channel and on the playlist carrying that channel would play twice in
-                                 one pass. Untick is refused while a screen still carries it, and says which. --}}
-                            <label class="flex cursor-pointer items-start gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/60">
+                                 one pass. Untick is refused while a screen still carries it, and says which. An ad
+                                 for every shop has no such tick: no shop's playlist reaches the platform's library,
+                                 so a shop plays it from its own copy. --}}
+                            <label x-show="!isShared()" class="flex cursor-pointer items-start gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/60">
                                 <input type="checkbox" class="form-checkbox mt-0.5"
                                        x-bind:checked="inPlaylists" x-bind:disabled="!adId || playlistUseSaving"
                                        @change="setInPlaylists($event.target.checked)" dusk="ad-in-playlists" />
@@ -319,7 +339,7 @@
                                     </span>
                                 </span>
                             </label>
-                            <div class="my-1 border-t border-gray-100 dark:border-gray-700"></div>
+                            <div x-show="!isShared()" class="my-1 border-t border-gray-100 dark:border-gray-700"></div>
                             {{-- A step that cannot be taken now says why under its name, not only in a tooltip. --}}
                             <button type="button" class="block w-full px-3 py-2 text-left not-disabled:hover:bg-gray-50 focus:outline-none focus-visible:bg-gray-100 disabled:cursor-not-allowed dark:not-disabled:hover:bg-gray-700/60 dark:focus-visible:bg-gray-700"
                                     @click="publishMenuOpen = false; $dispatch('open-modal', 'confirm-discard-changes')"
@@ -1067,22 +1087,30 @@
                 </div>
 
                 {{-- A new picture or video straight from here (owner, 2026-09-30): it joins this ad's shelf — the shop
-                     the person works in, or above the stores the ad's shop — and is there to pick the moment it is in,
-                     under the same rules as the Assets page (30-second videos, the shop's 512 MB). The editor listens
-                     here, not on the box: an expression on the box runs with the box's own `this`. --}}
+                     the person works in, or above the stores the ad's shop, or with All shops the shelf shared with every
+                     shop (owner, 2026-10-01) — and is there to pick the moment it is in, under the same rules as the
+                     Assets page (30-second videos, the shop's 512 MB). The editor listens here, not on the box: an
+                     expression on the box runs with the box's own `this`. Inside a shop an ad for every shop takes no
+                     upload: the person's file would be their shop's, which an ad every shop copies cannot use. --}}
                 @can('ad-store')
-                    <div class="mt-4" x-on:upload-added="onAssetUploaded($event.detail)" dusk="picker-upload">
-                        <x-upload-dropzone purpose="asset" mode="add" :multiple="true" add-url="/builder/assets" dusk="picker"
-                            :max-video-seconds="\App\Models\BuilderAsset::MAX_VIDEO_SECONDS"
-                            :needs-store="$platformUser ? 'Choose the shop this ad is for first, at the top.' : null"
-                            context="{ store: storeId, fields: storeId ? { store_id: storeId } : {}, storage: shelfStorage }"
-                            hint="JPG, PNG, GIF, WEBP, MP4 or WEBM, up to 250 MB each. Videos up to 30 seconds." />
-                    </div>
+                    @if ($sharedAd && ! $platformUser)
+                        <p class="mt-4 text-sm text-gray-500 dark:text-gray-400" dusk="picker-shared-note">
+                            An ad for every shop uses the files the platform shares. They are uploaded above the stores.
+                        </p>
+                    @else
+                        <div class="mt-4" x-on:upload-added="onAssetUploaded($event.detail)" dusk="picker-upload">
+                            <x-upload-dropzone purpose="asset" mode="add" :multiple="true" add-url="/builder/assets" dusk="picker"
+                                :max-video-seconds="\App\Models\BuilderAsset::MAX_VIDEO_SECONDS"
+                                :needs-store="$platformUser && ! $ad && ! $canShare ? 'Choose the shop this ad is for first, at the top.' : null"
+                                context="{ store: storeId, fields: storeId ? { store_id: storeId } : {}, storage: shelfStorage }"
+                                hint="JPG, PNG, GIF, WEBP, MP4 or WEBM, up to 250 MB each. Videos up to 30 seconds." />
+                        </div>
+                    @endif
                 @endcan
 
                 <p x-show="pickerAssets().length === 0" x-cloak class="py-10 text-center text-sm text-gray-500 dark:text-gray-400"
                    dusk="picker-empty"
-                   x-text="choosesShop && !storeId
+                   x-text="choosesShop && !canShare && !storeId
                        ? 'Choose the shop this ad is for first (at the top) — its pictures come from that shop’s shelf.'
                        : (assetPickerKind === 'video' ? 'No videos yet.' : 'No files yet.') + (canUpload ? ' Drop one above.' : '')"></p>
 
@@ -1108,7 +1136,7 @@
 
         {{-- The two steps of the draft/publish model that undo cannot take back, each confirmed once. Neither
              deletes anything, so neither asks for the password (the everyday deletes do not either). --}}
-        @can('ad-update')
+        @can('update-builder-ads')
             <x-modal name="confirm-discard-changes" maxWidth="md">
                 <div class="p-6">
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Discard changes?</h2>
@@ -1126,7 +1154,10 @@
             <x-modal name="confirm-unpublish" maxWidth="md">
                 <div class="p-6">
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Unpublish this ad?</h2>
-                    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400"
+                       x-text="isShared()
+                           ? 'Shops no longer see it, and it leaves every channel, until you publish it again. Nothing is deleted.'
+                           : 'It leaves every screen and channel until you publish it again. Nothing is deleted.'">
                         It leaves every screen and channel until you publish it again. Nothing is deleted.
                     </p>
                     <div class="mt-6 flex flex-wrap justify-end gap-3">

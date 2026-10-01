@@ -84,19 +84,23 @@ export function registerBuilderAssetsTable(Alpine) {
                 return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round((asset.size ?? 0) / 1024))} KB`;
             },
 
-            /** Named by any ad — this shop's, or another shop's for a file shared with every shop. */
+            /** Named by any ad — this shop's, or another shop's or the platform's for a file shared with every shop. */
             isUsed(asset) {
-                return (asset.used_by ?? []).length > 0 || Number(asset.used_elsewhere ?? 0) > 0;
+                return (asset.used_by ?? []).length > 0 || Number(asset.used_elsewhere ?? 0) > 0 || Number(asset.used_by_platform ?? 0) > 0;
             },
 
             /**
              * "Used by Winter sale, Eid offer" — or nothing at all, which is why it can be deleted. Another shop's ads
-             * using a shared file are counted, never named.
+             * and the platform's using a shared file are counted, never named.
              */
             usageLabel(asset) {
                 const used = asset.used_by ?? [];
                 const elsewhere = Number(asset.used_elsewhere ?? 0);
-                const others = elsewhere > 0 ? `${elsewhere} ${elsewhere === 1 ? 'ad' : 'ads'} of other shops` : '';
+                const platform = Number(asset.used_by_platform ?? 0);
+                const others = [
+                    elsewhere > 0 ? `${elsewhere} ${elsewhere === 1 ? 'ad' : 'ads'} of other shops` : '',
+                    platform > 0 ? `${platform} platform ${platform === 1 ? 'ad' : 'ads'}` : '',
+                ].filter(Boolean).join(' and ');
 
                 if (used.length === 0) return others ? `Used by ${others}` : 'Not used yet';
 

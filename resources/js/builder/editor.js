@@ -77,14 +77,20 @@ export function registerAdEditor(Alpine) {
             }),
             assets: config.assets ?? [],
             storeId: config.storeId ?? null,
-            /* The platform team making a NEW ad says which shop it is for; until they have, no shelf is
-             * this ad's, so nothing from any shop can be placed and then lost when the ad is saved there. */
+            /* The platform team making a NEW ad says which shop it is for — or All shops, with Update Shared Ads;
+             * until they have, no shelf is this ad's, so nothing from any shop can be placed and then lost when
+             * the ad is saved there. */
             choosesShop: config.choosesShop ?? false,
+            canShare: config.canShare ?? false,
+            /* Made for every shop (owner, 2026-10-01): its shelf is the files shared with every shop alone. */
+            shared: config.shared ?? false,
 
             /* What this person may do here, as the routes decide it: a saved ad is changed and published
-             * with Update Ads, and a font is fetched by whoever may create or change an ad. The page asks
-             * the server, so nothing is offered that a click would only have refused. */
+             * with Update Ads — one shared with every shop with Update Shared Ads — and a font is fetched by
+             * whoever may create or change an ad. The page asks the server, so nothing is offered that a click
+             * would only have refused. */
             canUpdate: config.canUpdate ?? false,
+            canUpdateShared: config.canUpdateShared ?? false,
             canInstallFonts: config.canInstallFonts ?? false,
             canUpload: config.canUpload ?? false,
 
@@ -573,9 +579,40 @@ export function registerAdEditor(Alpine) {
              */
             onThisShelf(asset) {
                 if (!asset.store_id) return true;
+                // An ad for every shop uses the shared files alone: a shop's own would show in no other shop's copy.
+                if (this.isShared()) return false;
                 if (this.choosesShop && !this.storeId) return false;
 
                 return !this.storeId || asset.store_id === this.storeId;
+            },
+
+            /** Made for every shop: a saved ad as the server says, a new one while All shops is chosen. */
+            isShared() {
+                return this.adId ? this.shared : (this.choosesShop && this.canShare && !this.storeId);
+            },
+
+            /** May this person change this ad after its first save — and publish it: Update Ads, or Update Shared Ads. */
+            mayChange() {
+                return this.isShared() ? this.canUpdateShared : this.canUpdate;
+            },
+
+            /**
+             * A new ad's shop chosen again: the picker's storage meter was the other shop's, and a file already on the
+             * stage that is not on the new shelf would show on no screen, so it is said at once.
+             */
+            shopChanged() {
+                this.shelfStorage = null;
+
+                const ids = [
+                    ...(this.doc.elements ?? []).map((element) => element.assetId),
+                    ...(this.doc.stage?.background?.layers ?? []).map((layer) => layer?.assetId),
+                ].filter((id) => id);
+                const lost = this.assets.filter((asset) => ids.includes(asset.id) && !this.onThisShelf(asset)).length;
+
+                if (lost > 0) {
+                    window.toast(`${lost} ${lost === 1 ? 'file on the stage' : 'files on the stage'} will not show: `
+                        + (this.isShared() ? 'an ad for every shop uses shared files only.' : 'they belong to another shop.'));
+                }
             },
 
             /** A file uploaded from the picker is on the shelf at once, first in the grid, ready to pick. */
@@ -1307,10 +1344,15 @@ export function registerAdEditor(Alpine) {
             async save({ auto = false } = {}) {
                 if (this.saving) return false;
 
-                // Changing a saved ad is Update Ads (the route's own lock). Somebody who may create ads but
-                // not change them has created this one, and is told so here rather than refused by the server.
-                if (this.adId && !this.canUpdate) {
-                    if (!auto) window.toast('This ad is saved. Changing a saved ad needs the Update Ads permission, which you do not have.');
+                // Changing a saved ad is Update Ads, or Update Shared Ads for one made for every shop (the controller's
+                // own question). Somebody who may create ads but not change them has created this one, and is told so
+                // here rather than refused by the server.
+                if (this.adId && !this.mayChange()) {
+                    if (!auto) {
+                        window.toast(this.isShared()
+                            ? 'This ad is saved. Changing an ad for every shop needs the Update Shared Ads permission, which you do not have.'
+                            : 'This ad is saved. Changing a saved ad needs the Update Ads permission, which you do not have.');
+                    }
 
                     return false;
                 }
@@ -1352,8 +1394,9 @@ export function registerAdEditor(Alpine) {
                     // Create, so a reload opens a fresh ad rather than a refusal.
                     if (!this.adId) {
                         this.adId = data.ad.id;
+                        this.shared = data.ad.shared ?? false;
 
-                        if (this.canUpdate) window.history.replaceState({}, '', `/builder/${this.adId}`);
+                        if (this.mayChange()) window.history.replaceState({}, '', `/builder/${this.adId}`);
                     }
 
                     // Only what was sent is saved: a change made while the request was on its way stays unsaved.
@@ -1390,7 +1433,7 @@ export function registerAdEditor(Alpine) {
              * whole ad plays. Returns whether it saved (the browser tests call it directly).
              */
             autosaveTick() {
-                if (!this.autosave || !this.adId || !this.dirty || !this.canUpdate) return false;
+                if (!this.autosave || !this.adId || !this.dirty || !this.mayChange()) return false;
                 if (this.saving || this.publishing || this.gesture || this.editingTextId || this.previewing === 'all') return false;
 
                 this.save({ auto: true });
@@ -1417,6 +1460,7 @@ export function registerAdEditor(Alpine) {
                 this.hasPublishedVersion = ad.has_published_version ?? false;
 
                 this.inPlaylists = ad.in_playlists ?? false;
+                this.shared = ad.shared ?? this.shared;
             },
 
             /**
@@ -1451,7 +1495,7 @@ export function registerAdEditor(Alpine) {
             /** Short, because the bar is narrow on a laptop; publicationHint() is the whole sentence. */
             publicationStatus() {
                 if (!this.adId) return '';
-                if (!this.published) return 'Draft · not on screens';
+                if (!this.published) return this.isShared() ? 'Draft · shops do not see it' : 'Draft · not on screens';
 
                 return this.changesWaiting() ? 'Changes not published' : 'Published';
             },
@@ -1463,6 +1507,15 @@ export function registerAdEditor(Alpine) {
             },
 
             publicationHint() {
+                // An ad for every shop is published for the shops to see and copy (owner, 2026-10-01).
+                if (this.isShared()) {
+                    if (!this.published) return 'No shop sees it until you publish it.';
+
+                    return this.changesWaiting()
+                        ? 'Shops keep seeing the published version until you publish these changes.'
+                        : 'Every shop sees it, exactly as it is here, and can copy it.';
+                }
+
                 if (!this.published) return 'Not on any screen until you publish it.';
 
                 return this.changesWaiting()
@@ -1478,6 +1531,10 @@ export function registerAdEditor(Alpine) {
             },
 
             publishHint() {
+                if (this.isShared()) {
+                    return this.changesWaiting() ? 'Show these changes to every shop' : 'Let every shop see this ad and copy it';
+                }
+
                 return this.changesWaiting()
                     ? 'Put these changes on every screen that carries this ad'
                     : 'Compile this ad and add it to the media library';

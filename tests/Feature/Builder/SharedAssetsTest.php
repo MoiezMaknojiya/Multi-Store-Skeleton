@@ -130,7 +130,7 @@ test('with Delete Shared Assets a shop\'s person deletes a shared file from ever
 
     BuilderAd::factory()->create(['store_id' => $this->other->id, 'name' => 'Beta secret campaign', 'document' => documentWithPicture($shared->id)]);
 
-    $keeper = createStoreUser($this->store, ['ad-view', 'ad-shared-destroy'], 'Shelf keeper');
+    $keeper = createStoreUser($this->store, ['ad-view', 'ad-shared-asset-destroy'], 'Shelf keeper');
     $this->actingAs($keeper)->withSession(['current_store_id' => $this->store->id]);
 
     // The listing says this person may, and the delete is refused all the same while another shop's ad uses it —
@@ -165,7 +165,7 @@ test('Delete Shared Assets and Delete Ads are two permissions: each deletes only
     $this->deleteJson("/builder/assets/{$shared->id}")->assertForbidden();
 
     // Delete Shared Assets: the shared file, not the shop's own.
-    $this->actingAs(createStoreUser($this->store, ['ad-view', 'ad-shared-destroy'], 'Shelf keeper'))->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs(createStoreUser($this->store, ['ad-view', 'ad-shared-asset-destroy'], 'Shelf keeper'))->withSession(['current_store_id' => $this->store->id]);
     $this->deleteJson("/builder/assets/{$own->id}")->assertForbidden();
 
     // Neither: the route itself says no.
@@ -219,17 +219,18 @@ test('a deleted shop takes its own files and leaves the shared ones', function (
 });
 
 test('Delete Shared Assets is a platform permission a shop\'s role may carry, and only Super-Admin starts with it', function () {
-    expect(Permission::belongsToStores('ad-shared-destroy'))->toBeTrue()
-        ->and(Permission::PLATFORM)->toContain('ad-shared-destroy')
-        ->and(Permission::LABELS['ad-shared-destroy'])->toBe('Delete Shared Assets');
+    expect(Permission::belongsToStores('ad-shared-asset-destroy'))->toBeTrue()
+        ->and(Permission::PLATFORM)->toContain('ad-shared-asset-destroy')
+        ->and(Permission::LABELS['ad-shared-asset-destroy'])->toBe('Delete Shared Assets');
 
     // A test's database has no Super-Admin while its migrations run (the seeder makes it), so the migration is run
-    // again once there is one — it is written to be run twice, as a real installation's may be.
+    // again once there is one — it is written to be run twice, as a real installation's may be. The permission was
+    // `ad-shared-destroy` until ads for every shop came, and the migration that brought them renamed the same row.
     $superAdmin = Role::firstOrCreate(['name' => Role::SUPER_ADMIN], ['is_global' => true]);
-    (require database_path('migrations/2026_09_29_130100_insert_the_shared_assets_permission.php'))->up();
-    (require database_path('migrations/2026_09_29_130100_insert_the_shared_assets_permission.php'))->up();
+    (require database_path('migrations/2026_10_01_110100_insert_the_shared_ads_permissions.php'))->up();
+    (require database_path('migrations/2026_10_01_110100_insert_the_shared_ads_permissions.php'))->up();
 
-    $permission = Permission::where('name', 'ad-shared-destroy')->sole();
+    $permission = Permission::where('name', 'ad-shared-asset-destroy')->sole();
     $holders = $permission->roles()->get();
 
     expect($holders->pluck('id')->all())->toBe([$superAdmin->id])

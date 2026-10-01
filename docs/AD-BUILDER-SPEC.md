@@ -1016,3 +1016,42 @@ timeline); the set reboots with no line and plays the page again; the server ret
   above the stores the ad's own shop, sent as `store_id` — and is first on the picker's grid the moment it is in
   (`onAssetUploaded`). A new ad above the stores names its shop first; a file dropped before that is refused as it is
   chosen ("Choose the shop this ad is for first, at the top."). Without `ad-store` the picker offers no box.
+
+## Addendum — 2026-10-01: ads for every shop
+
+The owner met "Choose the shop this ad is for first, at the top." in the editor's picker, and asked: "mein all shop k
+liya ads kese banao? jese asset mein ha woo ads sub ko dikhe aur woo copy kar sake" — and "sub khel permission ka
+honga, mein duga toh woo mera kaam bhi delete kar sakte ha". Asked when shops should see such an ad, "publish ke
+baad"; asked how to split the permissions, "teen alag".
+
+- **What it is.** An ad with no shop (`builder_ads.store_id` NULL — migration `2026_10_01_110000`, whose `down()`
+  takes the shared ads, their library rows and their files) is the platform's, made for every shop, as a shelf asset
+  with no shop already is (§3). Its poster and page live under `builder/platform/ads/{id}/`; it uses the shared files
+  alone (`BuilderAsset::onShelfOf(null)`); its page is published into the platform's own library (`media.store_id`
+  NULL), which no shop's wall counts and which only the platform's channels reach — so it has no Show in playlists
+  (refused, 422), and a shop plays it from its own copy.
+- **Making one.** Above the stores the editor's Shop list starts at **All shops** for whoever holds Update Shared Ads,
+  then each shop; the first save fixes the choice (the list is disabled after it), and a saved ad says "Every shop"
+  (or its shop's name) beside its shape. The picker's uploader then puts a file on the shared shelf, so nothing asks
+  for a shop first. Changing the list after a file is on the stage says which files will not show there. Without
+  Update Shared Ads a new ad still names its shop first, with the old words.
+- **What a shop sees.** Inside a shop the Ads page lists its own ads and the platform's — once published, with the
+  published name and poster ("From the platform"), never the platform's unfinished changes or anybody's name from
+  above the stores; a store person holding Update Shared Ads or Delete Shared Ads also sees the drafts.
+  Preview shows a shop the published version. **Copy** makes the platform's ad the shop's own: a draft of the
+  published version, under its name while the shop has none so called (then "(copy)"), its poster copied within the
+  shop's 512 MB, logged as `ad.copied` in the shop. The copy is independent: the platform's later changes, or its
+  delete, leave it as it is. Above the stores Copy keeps a shared ad shared.
+- **Permissions** (migration `2026_10_01_110100`): **Update Shared Ads** (`ad-shared-update`, new) makes, changes,
+  publishes and takes off an ad for every shop; **Delete Shared Ads** (`ad-shared-destroy`, new) deletes one — with
+  the password, never while a channel shows its page; **Delete Shared Assets** is the shelf's own, renamed
+  `ad-shared-asset-destroy` on the same row, so whoever held it keeps exactly that. All three are platform
+  permissions a store's role may carry (`Permission::STORE_SCOPED`), held by Super-Admin alone to start with, and asked
+  wherever the person stands: the routes ask `update-builder-ads` / `delete-builder-ads` (either the shop's own
+  permission or the shared one) and `BuilderController` asks the one each ad needs; every gallery row carries
+  `can: {update, copy, delete}`, so a card offers exactly what the server allows.
+- **Tests.** `SharedAdsTest` (making one, what shops see and when, copying, each permission, the shared files alone,
+  the platform's channel, Preview, a deleted shop, both migrations up and down), `AdBuilderAttackTest` (a shop never
+  makes one, a draft is nothing to a shop, another shop's copy stays theirs), `EditorPickerUploadTest` (All shops
+  needs no shop first), `AdBuilderFlowTest` in the browser (the owner's own steps: an ad for All shops with a file from
+  the picker, published, copied by a shop).

@@ -73,13 +73,14 @@
                              x-bind:dusk="'ad-card-' + item.id">
 
                             {{-- The poster the editor captured when the ad was saved. It opens the editor — which
-                                 is Update Ads — so it is a link only for somebody who may change the ad; a mouse's
-                                 short cut only, since the name and Edit below lead to the same place (tabindex -1). --}}
+                                 is Update Ads, or Update Shared Ads for an ad made for every shop — so it is a link only
+                                 for somebody who may change this ad (the row's `can`); a mouse's short cut only, since
+                                 the name and Edit below lead to the same place (tabindex -1). --}}
                             {{-- The tile stays a television's shape; a portrait poster is drawn inside it whole
                                  (contained, never cropped) and the tile says which way the ad is (§12). --}}
                             <div class="relative">
-                                @can('ad-update')
-                                    <a x-bind:href="'/builder/' + item.id" tabindex="-1" aria-hidden="true" class="block aspect-video bg-gray-100 dark:bg-gray-900">
+                                @can('update-builder-ads')
+                                    <a x-bind:href="item.can?.update ? '/builder/' + item.id : null" tabindex="-1" aria-hidden="true" class="block aspect-video bg-gray-100 dark:bg-gray-900">
                                         <img x-show="item.thumbnail_url" x-cloak x-bind:src="item.thumbnail_url" alt=""
                                              class="h-full w-full" x-bind:class="item.orientation === 'portrait' ? 'object-contain' : 'object-cover'"
                                              x-bind:dusk="'ad-poster-' + item.id" />
@@ -116,9 +117,10 @@
                                  side they once squeezed the name to nothing and pushed Delete out of the card. --}}
                             <div class="flex flex-wrap items-start justify-between gap-3 p-4">
                                 <div class="min-w-[8rem] flex-1">
-                                    @can('ad-update')
-                                        <a x-bind:href="'/builder/' + item.id" x-bind:dusk="'ad-name-' + item.id" x-bind:title="item.name"
-                                           class="block truncate font-medium text-gray-800 hover:underline dark:text-white" x-text="item.name"></a>
+                                    @can('update-builder-ads')
+                                        <a x-bind:href="item.can?.update ? '/builder/' + item.id : null" x-bind:dusk="'ad-name-' + item.id" x-bind:title="item.name"
+                                           class="block truncate font-medium text-gray-800 dark:text-white" x-bind:class="item.can?.update ? 'hover:underline' : ''"
+                                           x-text="item.name"></a>
                                     @else
                                         <p x-bind:dusk="'ad-name-' + item.id" x-bind:title="item.name"
                                            class="truncate font-medium text-gray-800 dark:text-white" x-text="item.name"></p>
@@ -129,9 +131,15 @@
                                         <span x-text="item.updated_by_name ? 'by ' + item.updated_by_name : ''"></span>
                                     </p>
 
+                                    {{-- Made for every shop (owner, 2026-10-01): "Every shop" above the stores, "From the
+                                         platform" inside one, as the Assets page says it of a shared file. --}}
+                                    <span x-show="item.shared" x-cloak class="badge-info mr-1 mt-2 inline-block"
+                                          x-bind:dusk="'ad-owner-' + item.id" x-text="item.owner_label"></span>
+
                                     {{-- The industry's draft/publish model (docs/AD-BUILDER-SPEC.md §9): a changed ad
-                                         stays on the screens as it was published until the changes are published. --}}
-                                    <span class="mt-2 inline-block"
+                                         stays on the screens as it was published until the changes are published. A shop
+                                         is only ever shown the platform's published version, so its card says no more. --}}
+                                    <span class="mt-2 inline-block" x-show="!item.shared || item.can?.update" x-cloak
                                           x-bind:class="{ published: 'badge-success', changed: 'badge-warning' }[item.status] ?? 'badge-neutral'"
                                           x-bind:dusk="'ad-status-' + item.id"
                                           x-bind:title="{
@@ -143,7 +151,7 @@
                                     {{-- Where a published ad may play (owner's rule, 2026-09-22): a shop's own
                                          playlists too, or only inside a channel. A draft is on nothing, so it
                                          says nothing; the tick itself lives in the editor, beside Publish. --}}
-                                    <span class="ml-1 mt-2 inline-block" x-show="item.status !== 'draft'" x-cloak
+                                    <span class="ml-1 mt-2 inline-block" x-show="item.status !== 'draft' && !item.shared" x-cloak
                                           x-bind:class="item.in_playlists ? 'badge-info' : 'badge-neutral'"
                                           x-bind:dusk="'ad-playlist-use-' + item.id"
                                           x-bind:title="item.in_playlists
@@ -154,14 +162,17 @@
 
                                 {{-- Each names the ad it acts on. A design a channel shows is not deleted: said at once,
                                      before the password (askToDelete). --}}
+                                {{-- What may be done to this ad comes with it (`can`): a shop's own with Update Ads and
+                                     Delete Ads, one made for every shop with Update Shared Ads and Delete Shared Ads. A
+                                     shop's Copy of the platform's ad makes it the shop's own. --}}
                                 <div class="flex shrink-0 items-center gap-2">
-                                    @can('ad-update')
-                                        <a x-bind:href="'/builder/' + item.id" class="btn-row-neutral"
+                                    @can('update-builder-ads')
+                                        <a x-show="item.can?.update" x-bind:href="'/builder/' + item.id" class="btn-row-neutral"
                                            x-bind:aria-label="'Edit ' + item.name"
                                            x-bind:dusk="'edit-ad-' + item.id">Edit</a>
                                     @endcan
                                     @can('ad-store')
-                                        <button type="button" class="btn-row-neutral" @click="duplicate(item)"
+                                        <button type="button" class="btn-row-neutral" @click="duplicate(item)" x-show="item.can?.copy"
                                                 x-bind:disabled="busyId === item.id"
                                                 x-bind:aria-label="'Copy ' + item.name"
                                                 x-bind:dusk="'duplicate-ad-' + item.id">
@@ -169,8 +180,8 @@
                                             Copy
                                         </button>
                                     @endcan
-                                    @can('ad-destroy')
-                                        <button type="button" class="btn-row-danger" @click="askToDelete(item)"
+                                    @can('delete-builder-ads')
+                                        <button type="button" class="btn-row-danger" @click="askToDelete(item)" x-show="item.can?.delete"
                                                 x-bind:aria-label="'Delete ' + item.name"
                                                 x-bind:dusk="'delete-ad-' + item.id">Delete</button>
                                     @endcan
@@ -213,6 +224,7 @@
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
                     <span class="font-medium" x-text="selectedItem?.name"></span> and its published copy go for good —
                     including from any playlist that plays it.
+                    <span x-show="selectedItem?.shared" x-cloak dusk="confirm-ad-deletion-shared">It goes from every shop; the copies shops made stay theirs.</span>
                 </p>
 
                 <x-crud.password-confirm id="delete-ad-password" />

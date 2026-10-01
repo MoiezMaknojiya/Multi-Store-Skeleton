@@ -93,15 +93,20 @@ class StoreStorage
      * includes every write that got there first (REPEATABLE READ takes its snapshot at the first plain read).
      * So call it OUTSIDE any other transaction: a read made before it in an outer one would fix the snapshot
      * earlier, and a write another request committed meanwhile would not be seen. Negative or zero $bytes is
-     * never refused: nothing grows.
+     * never refused: nothing grows. No shop ($storeId null) is the platform's own — an ad shared with every shop
+     * — which has no wall: the write runs at once, in a transaction of its own.
      *
      * @template T
      *
      * @param  Closure(): T  $write
      * @return T
      */
-    public function withRoom(int $storeId, int $bytes, Closure $write, string $attribute = 'file'): mixed
+    public function withRoom(?int $storeId, int $bytes, Closure $write, string $attribute = 'file'): mixed
     {
+        if ($storeId === null) {
+            return DB::transaction(fn () => $write());
+        }
+
         return DB::transaction(function () use ($storeId, $bytes, $write, $attribute) {
             if (Store::whereKey($storeId)->lockForUpdate()->first(['id']) === null) {
                 throw ValidationException::withMessages([$attribute => 'That shop no longer exists. Reload the page and choose again.']);
@@ -126,7 +131,7 @@ class StoreStorage
      * @param  Closure(): T  $write
      * @return T|null
      */
-    public function withRoomOrSkip(int $storeId, int $bytes, Closure $write): mixed
+    public function withRoomOrSkip(?int $storeId, int $bytes, Closure $write): mixed
     {
         try {
             return $this->withRoom($storeId, $bytes, $write);

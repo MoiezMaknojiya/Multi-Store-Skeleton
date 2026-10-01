@@ -227,14 +227,25 @@ test('the shop an ad is for is one plain id — never an array, never read as sh
     expect(BuilderAd::where('name', 'Odd shop')->exists())->toBeFalse();
 });
 
-test('the platform builds for a shop, and must say which one', function () {
+test('the platform builds for a shop, and must say which one — unless it may make an ad for every shop', function () {
+    // A platform account stands in no store, so without Update Shared Ads the ad would have nowhere to belong.
+    $this->actingAs(createPlatformUser(['ad-view', 'ad-store', 'ad-update'], 'Platform designer'));
+    $this->flushSession();
+
+    $this->postJson('/builder', ['name' => 'For somebody', 'document' => adDocument()])
+        ->assertStatus(422)->assertJsonValidationErrors(['store_id' => 'Choose the shop this ad is for.']);
+    $this->postJson('/builder', ['name' => 'For nobody', 'document' => adDocument(), 'store_id' => 999999])
+        ->assertStatus(422)->assertJsonValidationErrors(['store_id' => 'That shop no longer exists. Reload the page and choose again.']);
+
+    expect(BuilderAd::count())->toBe(0);
+
+    // With it, no shop is All shops: an ad for every shop (owner, 2026-10-01; SharedAdsTest).
     $admin = createSuperAdmin();
     $this->actingAs($admin);
     $this->flushSession();
 
-    // A platform account stands in no store, so the ad would have nowhere to belong.
-    $this->postJson('/builder', ['name' => 'For somebody', 'document' => adDocument()])
-        ->assertStatus(422)->assertJsonValidationErrors('store_id');
+    $this->postJson('/builder', ['name' => 'For every shop', 'document' => adDocument()])->assertOk();
+    expect(BuilderAd::firstWhere('name', 'For every shop')->store_id)->toBeNull();
 
     $this->postJson('/builder', ['name' => 'For Alpha', 'document' => adDocument(), 'store_id' => $this->store->id])
         ->assertOk();

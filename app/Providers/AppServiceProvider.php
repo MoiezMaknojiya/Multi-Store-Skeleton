@@ -129,14 +129,18 @@ class AppServiceProvider extends ServiceProvider
     }
 
     /**
-     * Deleting from the Ad Builder's shelf: a shop's own file with Delete Ads, a file the platform shares with every
-     * shop with Delete Shared Assets (owner, 2026-09-29). A route's `can:` names one ability, so the route asks this
-     * one — either permission — and the controller asks the one the file needs.
+     * What the Ad Builder's routes ask: a shop's own ad or file with the ordinary permissions, what the platform shares
+     * with every shop with the shared ones (owner, 2026-09-29 and 2026-10-01). A route's `can:` names one ability, so
+     * the route asks one of these — either permission — and the controller asks the one the ad or the file needs.
      */
     private function registerBuilderGates(): void
     {
-        Gate::define('delete-builder-assets', fn (User $user) => $user->hasPermissionInCurrentStore('ad-destroy')
-            || $user->hasPermissionInCurrentStore('ad-shared-destroy'));
+        $either = fn (string $own, string $shared) => fn (User $user) => $user->hasPermissionInCurrentStore($own)
+            || $user->hasPermissionInCurrentStore($shared);
+
+        Gate::define('update-builder-ads', $either('ad-update', 'ad-shared-update'));
+        Gate::define('delete-builder-ads', $either('ad-destroy', 'ad-shared-destroy'));
+        Gate::define('delete-builder-assets', $either('ad-destroy', 'ad-shared-asset-destroy'));
     }
 
     /**

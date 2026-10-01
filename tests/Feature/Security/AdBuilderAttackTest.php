@@ -122,7 +122,7 @@ test('a shop’s person never makes a file shared, and never deletes a shared on
     $this->deleteJson("/builder/assets/{$shared->id}")->assertForbidden();
 
     // And a shared file another shop's ad uses stays, with nothing of that shop said.
-    $keeper = createStoreUser($this->store, ['ad-view', 'ad-shared-destroy'], 'Shelf keeper');
+    $keeper = createStoreUser($this->store, ['ad-view', 'ad-shared-asset-destroy'], 'Shelf keeper');
     $this->actingAs($keeper)->withSession(['current_store_id' => $this->store->id]);
 
     $document = attackDocument([['id' => 'a', 'type' => 'image', 'x' => 0, 'y' => 0, 'w' => 100, 'h' => 100, 'z' => 0, 'assetId' => $shared->id]]);
@@ -141,6 +141,52 @@ test('naming another shop in the listings’ filter finds nothing of it', functi
     expect($this->getJson("/builder/data?store_id={$this->other->id}")->assertOk()->json('ads'))->toBe([])
         ->and($this->getJson("/builder/assets/data?store_id={$this->other->id}")->assertOk()->json('assets'))->toBe([])
         ->and($this->getJson('/builder/data?store_id=0')->status())->toBe(422);
+});
+
+/* ── The platform's ads for every shop (owner, 2026-10-01) ──────────────── */
+
+test('a shop’s person never makes an ad for every shop, whatever the payload or the permission says', function () {
+    // Even with Update Shared Ads: inside a shop a new ad, and a copy, are the shop's own.
+    $editor = createStoreUser($this->store, ['ad-view', 'ad-store', 'ad-update', 'ad-shared-update'], 'Template editor');
+    $this->actingAs($editor)->withSession(['current_store_id' => $this->store->id]);
+
+    $id = $this->postJson('/builder', ['name' => 'For everyone?', 'document' => attackDocument(), 'store_id' => null])->assertOk()->json('ad.id');
+    expect(BuilderAd::find($id)->store_id)->toBe($this->store->id);
+
+    $shared = BuilderAd::factory()->published()->create(['store_id' => null, 'name' => 'Platform sale']);
+    $copyId = $this->postJson("/builder/{$shared->id}/duplicate")->assertOk()->json('ad.id');
+
+    expect(BuilderAd::find($copyId)->store_id)->toBe($this->store->id)
+        ->and(BuilderAd::whereNull('store_id')->count())->toBe(1);
+});
+
+test('the platform’s unpublished ad is nothing to a shop: not listed, opened, previewed, copied, changed or deleted', function () {
+    $draft = BuilderAd::factory()->withText('Not yet')->create(['store_id' => null, 'name' => 'Coming soon']);
+
+    expect(json_encode($this->getJson('/builder/data')->assertOk()->json()))->not->toContain('Coming soon');
+
+    $this->get("/builder/{$draft->id}")->assertNotFound();
+    $this->get("/builder/{$draft->id}/preview")->assertNotFound();
+    $this->postJson("/builder/{$draft->id}/duplicate")->assertNotFound();
+    $this->putJson("/builder/{$draft->id}", ['name' => 'Mine', 'document' => attackDocument()])->assertNotFound();
+    $this->postJson("/builder/{$draft->id}/publish")->assertNotFound();
+    $this->deleteJson("/builder/{$draft->id}", ['password' => 'password'])->assertNotFound();
+
+    expect(BuilderAd::where('store_id', $this->store->id)->count())->toBe(0)
+        ->and($draft->fresh()->name)->toBe('Coming soon');
+});
+
+test('a shop’s copy of the platform’s ad is that shop’s alone', function () {
+    $shared = BuilderAd::factory()->published()->create(['store_id' => null, 'name' => 'Platform sale']);
+
+    $this->actingAs(createStoreUser($this->other, ['ad-view', 'ad-store'], 'Beta designer'))->withSession(['current_store_id' => $this->other->id]);
+    $theirs = $this->postJson("/builder/{$shared->id}/duplicate")->assertOk()->json('ad.id');
+
+    $this->actingAs($this->designer)->withSession(['current_store_id' => $this->store->id]);
+    $this->get("/builder/{$theirs}")->assertNotFound();
+    $this->postJson("/builder/{$theirs}/duplicate")->assertNotFound();
+
+    expect(collect($this->getJson('/builder/data')->json('ads'))->pluck('id')->all())->toBe([$shared->id]);
 });
 
 /* ── Getting code into the page ──────────────────────────────────────── */

@@ -265,9 +265,9 @@ export function registerChannelAds(Alpine) {
             if (this.picker.search.trim() !== '') return 'Nothing here matches that search.';
 
             if (this.source === 'ads') {
-                // The Ad Builder works inside a shop and publishes into that shop's library.
+                // An ad publishes into its shop's library, and one made for every shop into the platform's own.
                 return this.libraries.length > 0 && this.picker.library === 'platform'
-                    ? 'Ad Builder ads are published into a shop\'s library — choose the shop above.'
+                    ? 'No ad for every shop is published yet. Publish one in the Ad Builder, or choose a shop above.'
                     : 'No published ads here yet. Publish one in the Ad Builder, then choose it here.';
             }
 
