@@ -4,7 +4,8 @@
     </x-slot>
 
     {{-- Three audiences (DashboardController::index): the platform's summary above the stores, one store's summary
-         inside it, and the empty state for somebody in no store yet. What each summary holds is decided — and
+         inside it (or why it is closed, for a store the platform has paused), and the empty state for somebody in no
+         store yet. What each summary holds is decided — and
          permission-checked — in App\Services\DashboardSummary; these views only draw it. The icons are the
          sidebar's, so a card looks like the page it opens. --}}
     @php
@@ -24,6 +25,8 @@
         @include('dashboard.partials.platform')
     @elseif ($view === 'store')
         @include('dashboard.partials.store')
+    @elseif ($view === 'paused')
+        @include('dashboard.partials.paused')
     @else
         @include('dashboard.partials.empty')
     @endif

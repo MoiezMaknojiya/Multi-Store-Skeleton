@@ -1,21 +1,9 @@
-{{-- One store's dashboard: its name and what may be started from here, its numbers, what needs a look, the first
-     steps of a new shop (gone once all are done) and what happened lately. Every part arrives only when the person
-     holds its permission (App\Services\DashboardSummary::forStore). --}}
+{{-- One store's dashboard: its name, its numbers, what needs a look, the first steps of a new shop (gone once all
+     are done) and what happened lately. No buttons of its own (owner, 2026-09-30): each thing is started on its own
+     page, where its button stands. Every part arrives only when the person holds its permission
+     (App\Services\DashboardSummary::forStore). --}}
 <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6" dusk="dashboard-store">
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div class="min-w-0">
-            <h2 class="text-subheading break-words" dusk="dashboard-store-name">{{ $summary['store'] }}</h2>
-        </div>
-
-        @if (count($summary['actions']))
-            <div class="flex flex-wrap gap-2" dusk="dashboard-actions">
-                @foreach ($summary['actions'] as $action)
-                    <a href="{{ $action['href'] }}" dusk="dashboard-action-{{ $action['key'] }}"
-                        class="{{ $loop->first ? 'btn-primary-add' : 'btn-secondary-add' }}">{{ $action['label'] }}</a>
-                @endforeach
-            </div>
-        @endif
-    </div>
+    <h2 class="text-subheading break-words" dusk="dashboard-store-name">{{ $summary['store'] }}</h2>
 
     @include('dashboard.partials.cards', ['cards' => $summary['cards']])
 
@@ -70,7 +58,7 @@
     @endif
 
     {{-- A role that may look at none of it still lands somewhere that says where to go. --}}
-    @if (! count($summary['cards']) && ! count($summary['actions']) && is_null($summary['activity']))
+    @if (! count($summary['cards']) && is_null($summary['activity']))
         <div class="card p-8 text-center text-sm text-gray-600 dark:text-gray-300" dusk="dashboard-store-nothing">
             There is nothing for your role in {{ $summary['store'] }} to see here. Everything you may open is in the menu.
         </div>

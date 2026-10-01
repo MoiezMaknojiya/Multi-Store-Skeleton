@@ -19,7 +19,7 @@
         Once it is confirmed you can add your screens, upload your pictures and videos, and build your ads.
     </p>
 
-    <x-email.button :url="$url">Confirm my email</x-email.button>
+    <x-email.button :url="$url">Confirm My Email</x-email.button>
 
     <p style="margin:28px 0 8px 0; font-size:13px; line-height:20px; color:#6b7280;">
         Or paste this address into your browser:

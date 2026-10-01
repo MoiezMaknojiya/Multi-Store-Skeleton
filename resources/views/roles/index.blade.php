@@ -28,7 +28,7 @@
                     </p>
                 </div>
                 @can('role-store')
-                    <x-crud.add-button :label="$store ? 'Create custom role' : 'Create role'" @click="openForm()" x-bind:disabled="openingForm" dusk="create-role" />
+                    <x-crud.add-button :label="$store ? 'Create Custom Role' : 'Create Role'" @click="openForm()" x-bind:disabled="openingForm" dusk="create-role" />
                 @endcan
             </div>
             <div class="overflow-x-auto">
@@ -143,7 +143,7 @@
             <form @submit.prevent="save()" novalidate class="p-6 space-y-5" dusk="role-form">
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
-                        x-text="editingRole ? 'Edit ' + editingRole.name : {{ Js::from($store ? 'Create custom role' : 'Create role') }}"></h2>
+                        x-text="editingRole ? 'Edit ' + editingRole.name : {{ Js::from($store ? 'Create Custom Role' : 'Create Role') }}"></h2>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400" x-text="formHint()"></p>
                 </div>
 
@@ -216,7 +216,7 @@
                 </fieldset>
 
                 {{-- Not while the checklist is still coming: a save then would send the ticks of the list before it. --}}
-                <x-crud.form-actions cancelAction="$dispatch('close-modal', 'role-form')" savingVar="saving || loadingAssignable" saveLabel="Save role" dusk="role-save" />
+                <x-crud.form-actions cancelAction="$dispatch('close-modal', 'role-form')" savingVar="saving || loadingAssignable" saveLabel="Save Role" dusk="role-save" />
             </form>
         </x-modal>
 
@@ -264,7 +264,7 @@
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-role-deletion')">Cancel</x-secondary-button>
                     <x-danger-button x-bind:disabled="deleting" dusk="confirm-role-deletion-confirm">
                         <x-spinner x-show="deleting" x-cloak />
-                        Delete role
+                        Delete Role
                     </x-danger-button>
                 </div>
             </form>

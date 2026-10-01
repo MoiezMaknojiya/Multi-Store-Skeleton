@@ -42,8 +42,7 @@ class UploadLimitsTest extends DuskTestCase
                 ->assertSeeIn('@storage-meter-text', '510 MB of 512 MB used')
                 ->assertSeeIn('@storage-meter-warning', 'Almost full.');
 
-            $this->jsClick($browser, '@upload-media');
-            $browser->waitFor('@media-upload-form');
+            $browser->waitFor('@media-dropzone');
 
             // Three megabytes, with two left: refused as it is chosen.
             $this->choose($browser, 'media-file', "new File([new Uint8Array(3 * 1024 * 1024)], 'big.jpg', { type: 'image/jpeg' })");

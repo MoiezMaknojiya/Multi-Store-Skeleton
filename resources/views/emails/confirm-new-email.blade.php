@@ -18,7 +18,7 @@
         If it was you, open the link below to confirm it. Until you do, the account keeps its old address.
     </p>
 
-    <x-email.button :url="$url">Confirm new email</x-email.button>
+    <x-email.button :url="$url">Confirm New Email</x-email.button>
 
     <p style="margin:28px 0 8px 0; font-size:13px; line-height:20px; color:#6b7280;">
         Or paste this address into your browser:

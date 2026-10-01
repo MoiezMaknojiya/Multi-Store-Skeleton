@@ -50,7 +50,7 @@
                 <button type="button" class="btn-pager gap-1 text-xs" title="Turn upside down" aria-label="Turn upside down"
                         x-bind:class="selected.style?.flipY ? '!border-blue-500 !text-blue-600 dark:!text-blue-400' : ''"
                         x-bind:aria-pressed="selected.style?.flipY ? 'true' : 'false'"
-                        @click="toggleFlip('y')" dusk="image-flip-y"><x-icon name="flip-y" /> Upside down</button>
+                        @click="toggleFlip('y')" dusk="image-flip-y"><x-icon name="flip-y" /> Upside Down</button>
             </div>
         </div>
     </div>
@@ -58,7 +58,7 @@
     @include('builder.partials.frame-controls', ['prefix' => 'image', 'withShadow' => true])
 
     <button type="button" class="btn-secondary w-full" @click="showFilters = !showFilters" dusk="image-filters-toggle">
-        <span x-text="showFilters ? 'Hide filters' : 'Filters'"></span>
+        <span x-text="showFilters ? 'Hide Filters' : 'Filters'"></span>
     </button>
 
     <div x-show="showFilters" x-cloak class="space-y-2">
@@ -74,6 +74,6 @@
             </label>
         @endforeach
 
-        <button type="button" class="btn-secondary w-full" @click="resetFilters()" dusk="image-filters-reset">Reset filters</button>
+        <button type="button" class="btn-secondary w-full" @click="resetFilters()" dusk="image-filters-reset">Reset Filters</button>
     </div>
 </div>

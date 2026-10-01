@@ -35,12 +35,11 @@ function cardsOf(TestResponse $response): array
     return collect($response->viewData('summary')['cards'])->keyBy('key')->all();
 }
 
-/** Every link the summary offers: the cards', the actions', the steps' and the attention list's. */
+/** Every link the summary offers: the cards', the steps' and the attention list's. */
 function linksOf(array $summary): array
 {
     return collect([
         ...$summary['cards'],
-        ...($summary['actions'] ?? []),
         ...($summary['steps'] ?? []),
         ...($summary['attention'] ?? []),
     ])->pluck('href')->filter()->values()->all();
@@ -84,12 +83,11 @@ test('each part of a shop\'s dashboard needs its own permission, and every link 
     $alpha = Store::factory()->create();
     $screen = Screen::factory()->create(['store_id' => $alpha->id, 'last_seen_at' => null]);
 
-    // Screens alone: their card and what needs a look, nothing else — no actions, no steps, no log.
+    // Screens alone: their card and what needs a look, nothing else — no steps, no log.
     $watcher = createStoreUser($alpha, ['screen-view'], 'Screen Watcher');
     $summary = dashboardFor($watcher, $alpha)->viewData('summary');
 
     expect(array_column($summary['cards'], 'key'))->toBe(['screens'])
-        ->and($summary['actions'])->toBe([])
         ->and($summary['steps'])->toBe([])
         ->and($summary['attention'])->not->toBeNull()
         ->and($summary['activity'])->toBeNull();
@@ -99,7 +97,6 @@ test('each part of a shop\'s dashboard needs its own permission, and every link 
     $summary = dashboardFor($adder, $alpha)->viewData('summary');
 
     expect($summary['cards'])->toBe([])
-        ->and($summary['actions'])->toBe([])
         ->and($summary['steps'])->toBe([])
         ->and($summary['attention'])->toBeNull();
     dashboardFor($adder, $alpha)->assertSee('dusk="dashboard-store-nothing"', false);
@@ -110,7 +107,10 @@ test('each part of a shop\'s dashboard needs its own permission, and every link 
     $summary = dashboardFor($owner, $alpha)->viewData('summary');
 
     expect(array_column($summary['cards'], 'key'))->toBe(['screens', 'media', 'ads'])
-        ->and(array_column($summary['actions'], 'key'))->toBe(['pair', 'upload', 'ad']);
+        // No buttons of the dashboard's own (owner, 2026-09-30): each thing is started on its own page.
+        ->and($summary)->not->toHaveKey('actions');
+    dashboardFor($owner, $alpha)->assertDontSee('dusk="dashboard-actions"', false)
+        ->assertDontSee('Pair a screen')->assertDontSee('Upload files')->assertDontSee('Create Ad');
 
     foreach ([$watcher, $owner] as $person) {
         $links = linksOf(dashboardFor($person, $alpha)->viewData('summary'));

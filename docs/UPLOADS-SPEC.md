@@ -1,7 +1,8 @@
 # Uploading a file: dropped, sent in chunks, and shown as it goes — spec
 
-> How a picture or a video reaches the server from any of the four places that take one: the Media page, a
-> channel's **Upload**, a campaign's advert and the Ad Builder's shelf. The owner asked on 2026-09-29 for "drag and
+> How a picture or a video reaches the server from any of the places that take one: the Media page, a
+> channel's **Upload**, a campaign's advert, the Ad Builder's shelf and — through the shelf's own door — the Ad
+> Builder editor's picker (2026-09-30). The owner asked on 2026-09-29 for "drag and
 > drop, chunking, a good progress bar", a professional look in the panel's own design, and free software only.
 > What a file may be — its formats, size and length, the shop's 512 MB, the server's reserve — is still ruled by
 > `.claude/rules/02-project-conventions.md` (**Upload limits**), and nothing here loosens it.
@@ -18,7 +19,8 @@
 | How a file travels | **The tus protocol 1.0** (creation + termination): 5 MB chunks, each its own request. A dropped connection retries by itself and carries on from the last chunk the server has; the browser going offline waits for it to come back and carries on the moment it does; a connection that hangs without a word is noticed and sent again; the same file chosen again after a reload carries on too. Nothing reloads the page, and nothing is chosen again. |
 | The server side | **No package**: the tus endpoints are the app's own (`UploadController`, `App\Services\ChunkedUploads`). `ankitpokhrel/tus-php` has had no release since February 2024 and would stop Laravel at Symfony 7, and every rule of this app must be asked before the first byte. |
 | When a finished file joins its place | **Through the same door as before**: the form posts `upload` (the upload's id) instead of `file`, and the Form Request turns the finished upload into the `file` every existing rule already checks — formats read from the bytes, the video's length read from the file, the shop's room decided under its lock, the server's reserve. |
-| The Media page and the shelf | **Several files at once**, each added to its place as soon as it arrives. A file's title is its name, changed later with Edit. |
+| The Media page and the shelf | **Several files at once**, each added to its place as soon as it arrives. A file's title is its name, changed later with Edit. The box is on the page itself, never in a dialog (owner, 2026-09-30), and an "Added" row goes by itself after eight seconds, as a notification does. |
+| The Ad Builder editor's picker | **The shelf's upload inside the picker** (owner, 2026-09-30): the file joins this ad's shelf — the shop worked in, or above the stores the ad's own shop, which a new ad names first — and is on the picker's grid the moment it is in. |
 | A channel's Upload and a campaign's advert | **One file**, sent as soon as it is chosen; Save waits until it has arrived. |
 | A page left mid-upload | The browser asks first (its own words). |
 
@@ -84,8 +86,11 @@ once its row is made; a refused one stays for the person to try again, until it 
 `resources/js/core/upload-dropzone.js` registers the Alpine component `uploadDropzone` (Uppy is loaded only when a
 page has one), and `<x-upload-dropzone>` draws it. Two modes:
 
-- **`add`** — the Media page and the shelf: each file that arrives is posted to its door at once, and the component
-  dispatches `upload-added` with the server's answer, so the page refreshes its list and its storage meter.
+- **`add`** — the Media page, the shelf and the editor's picker: each file that arrives is posted to its door at
+  once, and the component dispatches `upload-added` with the server's answer, so the page refreshes its list and its
+  storage meter (the picker puts the new file first on its grid). Eight seconds after it, the "Added" row fades away
+  (`ADDED_STAYS_MS`) — "3 of 5 added" still counts it until nothing is going any more — while a refused or a failed row stays
+  for its reason and its Try again.
 - **`form`** — a channel's Upload and a campaign's advert: the component dispatches `upload-ready` with the upload's
   id and what the browser measured, `upload-cleared` when the file is taken away, and `upload-busy` while bytes are
   still going, so the form can hold Save.

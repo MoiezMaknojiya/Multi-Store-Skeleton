@@ -999,3 +999,20 @@ file bigger than two pieces arrives in three and is kept whole with no piece lef
 opened inside the worker's scope; after the cut a fresh frame shows the page with its picture drawn and its
 runtime running, from the cache alone; a picture whose time comes while the line is down comes on (the
 timeline); the set reboots with no line and plays the page again; the server returns and the set is live.
+
+## Addendum — 2026-09-30: the editor loads on its own, and its picker takes a file
+
+- **The editor is a script of its own.** `resources/js/builder/` was two fifths of the panel's script, and only the
+  editor's page uses it (owner: "editor ko alag load karo"). `resources/js/app.js` imports `./builder/editor.js`
+  dynamically, and only on a page holding an `adEditor` component, before `Alpine.start()`; every other page starts
+  Alpine at once without it. `components/builder-layout.blade.php` asks for the chunk with a `modulepreload`, so it
+  arrives beside the app's own script rather than after it. A chunk that cannot be fetched (the connection dropped as
+  the page opened) leaves the rest of the page working and says "The editor could not be loaded. Check the
+  connection, then reload the page." The panel's script went from 271 KB to 194 KB (60 KB gzipped); the editor's
+  chunk is 76 KB (24 KB gzipped).
+- **Upload from the picker.** The asset picker (a new element, a background layer's file, a replacement) carries the
+  shared uploader for whoever holds `ad-store`, posting to the shelf's own door (`/builder/assets`, the same rules:
+  30-second videos, the shop's 512 MB, the server's reserve). The file joins this ad's shelf — the shop worked in, or
+  above the stores the ad's own shop, sent as `store_id` — and is first on the picker's grid the moment it is in
+  (`onAssetUploaded`). A new ad above the stores names its shop first; a file dropped before that is refused as it is
+  chosen ("Choose the shop this ad is for first, at the top."). Without `ad-store` the picker offers no box.

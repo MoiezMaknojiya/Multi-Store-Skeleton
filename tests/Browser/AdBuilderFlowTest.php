@@ -238,6 +238,70 @@ class AdBuilderFlowTest extends DuskTestCase
     }
 
     /**
+     * A picture uploaded straight from the editor's picker (owner, 2026-09-30) joins the shop's shelf and is there to
+     * pick the moment it is in; without Create Ads the picker takes no file; and above the stores a new ad must name
+     * its shop first, since the file goes to that shop's shelf.
+     */
+    public function test_a_picture_is_uploaded_from_the_editors_picker_and_placed_at_once(): void
+    {
+        $admin = $this->seedSuperAdmin();
+        $store = Store::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->storeMember($store, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $editor = $this->storeMember($store, ['ad-view', 'ad-update'], 'editor@example.com', 'Editor');
+        $saved = BuilderAd::factory()->create(['store_id' => $store->id, 'name' => 'Old poster']);
+
+        $this->browse(function (Browser $browser) use ($admin, $designer, $editor, $store, $saved) {
+            $this->freshSession($browser);
+            $browser->loginAs($designer);
+            $this->switchToStore($browser, $store);
+
+            $browser->visit('/builder/create?orientation=landscape');
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@ad-stage');
+
+            $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
+            $browser->assertVisible('@picker-dropzone')
+                ->assertSeeIn('@picker-empty', 'No files yet. Drop one above.');
+
+            $this->uploadThrough($browser, 'picker', $this->fixtureImage('Picker logo.png', 220, 40, 90));
+
+            $browser->waitUsing(20, 250, fn () => BuilderAsset::where('store_id', $store->id)->exists());
+            $asset = BuilderAsset::firstWhere('store_id', $store->id);
+            $this->assertSame('Picker logo', $asset->title);
+
+            // On the grid at once, first, without leaving the editor.
+            $browser->waitFor('@pick-asset-'.$asset->id)->assertMissing('@picker-empty');
+            $this->jsClick($browser, '@pick-asset-'.$asset->id);
+            $browser->waitUntilMissing('@asset-picker', 5)->waitFor('[dusk^="element-"]');
+
+            $this->jsType($browser, '@ad-name', 'Picked at once');
+            $this->jsClick($browser, '@ad-save');
+            $browser->waitUsing(20, 250, fn () => BuilderAd::where('name', 'Picked at once')->exists());
+            $this->assertSame($asset->id, BuilderAd::firstWhere('name', 'Picked at once')->document['elements'][0]['assetId'] ?? null);
+
+            // Without Create Ads the picker takes no file: the shelf's upload asks for it, as its route does.
+            $this->freshSession($browser);
+            $browser->loginAs($editor);
+            $this->switchToStore($browser, $store);
+            $browser->visit('/builder/'.$saved->id);
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@ad-stage');
+            $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
+            $browser->waitFor('@pick-asset-'.$asset->id)->assertMissing('@picker-upload');
+
+            // Above the stores a new ad names its shop first: a file dropped before that is refused, and nothing is sent.
+            $this->freshSession($browser);
+            $browser->loginAs($admin)->visit('/builder/create?orientation=landscape');
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@ad-stage');
+            $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
+            $browser->attach('@picker-file', $this->fixtureImage('Too soon.png'))
+                ->waitForTextIn('@picker-upload', 'Choose the shop this ad is for first, at the top.');
+            $this->assertSame(1, BuilderAsset::count());
+        });
+    }
+
+    /**
      * Above the stores an upload goes to the shop chosen in the Shop list — or, with none chosen, it is shared with
      * every shop (owner, 2026-09-29: "sub store k liya upload karna ho"), and a shop's designer finds it on their
      * shelf, marked as the platform's, and in the editor's picker.
@@ -537,8 +601,8 @@ class AdBuilderFlowTest extends DuskTestCase
                 // The rulers and the shortcuts are one click away in "More".
                 $this->jsClick($browser, '@toolbar-more');
                 $browser->waitFor('@toolbar-more-menu')
-                    ->assertSeeIn('@toolbar-more-rulers', 'Rulers and guides')
-                    ->assertSeeIn('@toolbar-more-shortcuts', 'Keyboard shortcuts');
+                    ->assertSeeIn('@toolbar-more-rulers', 'Rulers and Guides')
+                    ->assertSeeIn('@toolbar-more-shortcuts', 'Keyboard Shortcuts');
                 $this->jsClick($browser, '@toolbar-more-shortcuts');
                 $browser->waitFor('@shortcuts-modal')->screenshot('editor-bar-laptop');
             } finally {

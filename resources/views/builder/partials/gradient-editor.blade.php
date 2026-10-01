@@ -44,5 +44,5 @@
 
     <button type="button" class="btn-secondary w-full"
             x-show="(gradientOf('{{ $target }}')?.stops?.length ?? 0) < maxStops"
-            @click="addStop('{{ $target }}')" dusk="{{ $prefix }}-gradient-add-stop">+ Add a colour</button>
+            @click="addStop('{{ $target }}')" dusk="{{ $prefix }}-gradient-add-stop">+ Add a Colour</button>
 </div>

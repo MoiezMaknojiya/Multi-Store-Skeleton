@@ -32,10 +32,10 @@
                     </p>
                 </div>
             </div>
-            {{-- Active/Inactive badge --}}
+            {{-- Active, or paused by the platform (closed to its people until it is turned back on). --}}
             <span class="{{ $store['is_active'] ? 'badge-success' : 'badge-neutral' }}">
                 <span class="w-1.5 h-1.5 rounded-full {{ $store['is_active'] ? 'bg-green-500' : 'bg-gray-400' }}" aria-hidden="true"></span>
-                {{ $store['is_active'] ? 'Active' : 'Inactive' }}
+                {{ $store['is_active'] ? 'Active' : 'Paused' }}
             </span>
         </div>
 
@@ -56,7 +56,7 @@
                 <input type="hidden" name="store_id" value="{{ $store['id'] }}">
                 <button type="submit" dusk="switch-store-{{ $store['id'] }}" aria-label="Open {{ $store['name'] }}"
                     class="stretch-to-box cursor-pointer text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 inline-flex items-center gap-1 focus:outline-none">
-                    Open store
+                    Open Store
                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                     </svg>

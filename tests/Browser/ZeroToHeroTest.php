@@ -33,21 +33,17 @@ class ZeroToHeroTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    /** Upload one file through the real modal and return its row — titled by its file's name. */
+    /** Upload one file through the real drop box on the Media page and return its row — titled by its file's name. */
     private function upload(Browser $panel, string $path, string $title): Media
     {
         $this->assertSame($title, pathinfo($path, PATHINFO_FILENAME), 'A file is titled by its name.');
 
-        $this->clickAndAwait($panel, '@upload-media', fn (Browser $b) => $b->waitFor('@media-upload-form', 5));
-
-        // The "select a store first" banner belongs to people who work above the stores. A
-        // fresh owner has exactly one and is already inside it. Asked with the form OPEN:
-        // the banner lives in this modal, so with the modal shut it would be missing anyway.
-        $panel->assertDontSeeIn('@media-upload-form', 'Select a store first');
+        // The box is on the page itself (owner, 2026-09-30). A fresh owner has exactly one store and is already
+        // inside it, so nothing asks them to choose one first.
+        $panel->waitFor('@media-upload');
+        $panel->assertDontSeeIn('@media-upload', 'Select a store first');
 
         $this->uploadThrough($panel, 'media', $path);
-        $this->jsClick($panel, '@media-upload-close');
-        $this->waitForModalClosed($panel, '@media-upload-form');
 
         $panel->waitForText($title, 20);
 

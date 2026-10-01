@@ -157,7 +157,7 @@
             <button type="button" class="mt-1 text-xs text-blue-600 hover:underline dark:text-blue-400"
                     @click="easeOpen['{{ $slot }}'] = !easeOpen['{{ $slot }}']; $nextTick(() => easeOpen['{{ $slot }}'] && tryEase('{{ $slot }}'))"
                     dusk="anim-{{ $slot }}-curve-toggle"
-                    x-text="easeOpen['{{ $slot }}'] ? 'Hide the curve' : 'Show the curve'"></button>
+                    x-text="easeOpen['{{ $slot }}'] ? 'Hide the Curve' : 'Show the Curve'"></button>
 
             <div x-show="easeOpen['{{ $slot }}']" x-cloak>
                 @include('builder.partials.ease-visualizer', ['slot' => $slot])

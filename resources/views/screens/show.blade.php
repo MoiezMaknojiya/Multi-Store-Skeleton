@@ -63,7 +63,7 @@
                         <button @click="openCopyModal()" dusk="playlist-copy-open" class="btn-secondary"
                             x-bind:disabled="dirty || saving"
                             x-bind:title="dirty ? 'Save your changes first: copying sends the saved playlist' : ''">
-                            Copy to other screens
+                            Copy to Other Screens
                         </button>
                         <button @click="save()" x-bind:disabled="!dirty || saving" dusk="playlist-save" class="btn-primary">
                             <x-spinner x-show="saving" x-cloak />
@@ -224,12 +224,12 @@
                         <div class="text-center py-10 space-y-3" dusk="picker-empty">
                             <p class="text-sm text-muted-soft" x-show="search">
                                 Nothing matches &ldquo;<span x-text="search"></span>&rdquo;.
-                                <button type="button" class="ml-1 font-medium text-blue-600 hover:underline dark:text-blue-400" @click="search = ''">Clear search</button>
+                                <button type="button" class="ml-1 font-medium text-blue-600 hover:underline dark:text-blue-400" @click="search = ''">Clear Search</button>
                             </p>
                             <p class="text-sm text-muted-soft" x-show="!search">No files to add yet.</p>
                             {{-- The Media page opens with View Media and uploads with Upload Media: offered to somebody with both. --}}
                             @can(['media-view', 'media-store'])
-                                <a x-show="!search" href="{{ route('media.view', ['upload' => 1]) }}" class="btn-secondary" dusk="picker-upload">Upload files</a>
+                                <a x-show="!search" href="{{ route('media.view') }}" class="btn-secondary" dusk="picker-upload">Upload Files</a>
                             @endcan
                         </div>
                     </template>
@@ -310,7 +310,7 @@
                                         x-bind:dusk="'channel-preview-' + channel.id"
                                         class="btn-row-neutral"
                                         x-bind:aria-expanded="(openChannelId === channel.id).toString()"
-                                        x-text="openChannelId === channel.id ? 'Hide ads' : 'Show ads'"></button>
+                                        x-text="openChannelId === channel.id ? 'Hide Ads' : 'Show Ads'"></button>
 
                                 <button @click="addChannel(channel)" x-bind:dusk="'playlist-add-channel-' + channel.id" x-bind:disabled="saving"
                                     class="btn-row-neutral" x-bind:aria-label="'Add the channel ' + channel.title + ' to the playlist'">Add</button>
@@ -517,7 +517,7 @@
                     </template>
 
                     <button type="button" @click="addRule()" dusk="schedule-add-rule" class="btn-secondary-add">
-                        + Add a schedule
+                        + Add a Schedule
                     </button>
 
                     {{-- Built by the server, through the very same code the television
@@ -603,7 +603,7 @@
                             x-bind:class="copyWillReplace() > 0 ? 'btn-danger' : 'btn-primary'"
                             x-bind:disabled="copying || copySelected.length === 0">
                         <x-spinner x-show="copying" x-cloak />
-                        <span x-text="copying ? 'Copying...' : 'Copy and replace'"></span>
+                        <span x-text="copying ? 'Copying...' : 'Copy and Replace'"></span>
                     </button>
                 </div>
             </div>

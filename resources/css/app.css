@@ -74,10 +74,11 @@
    controls exactly. */
 /* Every button below keeps its label on one line — a button is one fixed-height (h-10) line, and a label
    broken over two spills out of it. Where there is not room for all of a row's buttons, the ROW wraps
-   (flex-wrap on the container), never a label. */
+   (flex-wrap on the container), never a label. A label is written the way it reads, each word capitalised
+   ("Delete File", "Create Ad" — owner, 2026-09-30), never forced into capitals by the stylesheet. */
 @utility btn-primary {
     @apply inline-flex items-center justify-center gap-2 h-10 rounded-md whitespace-nowrap
-           font-semibold text-xs uppercase tracking-widest
+           font-semibold text-sm
            px-4 border border-transparent
            bg-blue-600 text-white
            hover:bg-blue-700 active:bg-blue-800
@@ -90,7 +91,7 @@
    secondary buttons sit on the same visual surface as adjacent text inputs. */
 @utility btn-secondary {
     @apply inline-flex items-center justify-center gap-2 h-10 rounded-md whitespace-nowrap
-           font-semibold text-xs uppercase tracking-widest
+           font-semibold text-sm
            px-4
            bg-white dark:bg-gray-900
            border border-gray-300 dark:border-gray-700
@@ -104,7 +105,7 @@
 /* Destructive button (Delete). */
 @utility btn-danger {
     @apply inline-flex items-center justify-center gap-2 h-10 rounded-md whitespace-nowrap
-           font-semibold text-xs uppercase tracking-widest
+           font-semibold text-sm
            px-4 border border-transparent
            bg-red-600 text-white
            hover:bg-red-500 active:bg-red-700

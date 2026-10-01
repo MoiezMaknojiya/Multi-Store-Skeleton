@@ -28,7 +28,7 @@
 
         <form method="POST" action="{{ route('verification.send') }}" class="mt-3">
             @csrf
-            <button type="submit" class="btn-primary-auth" dusk="verify-email-resend">Send the link again</button>
+            <button type="submit" class="btn-primary-auth" dusk="verify-email-resend">Send the Link Again</button>
         </form>
 
         <p class="mt-6 text-sm text-gray-600">
@@ -46,7 +46,7 @@
         <form method="POST" action="{{ route('logout') }}" class="mt-6">
             @csrf
             <button type="submit" class="text-sm text-gray-600 underline hover:text-gray-900"
-                    dusk="verify-email-logout">Sign out</button>
+                    dusk="verify-email-logout">Sign Out</button>
         </form>
     </div>
 </x-guest-layout>

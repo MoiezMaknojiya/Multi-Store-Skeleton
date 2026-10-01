@@ -2,8 +2,8 @@
  * Media library Alpine component.
  *
  * Differences from the other CRUD tables:
- *  - creating a row means uploading FILES: the upload modal holds the shared uploader
- *    (<x-upload-dropzone>, docs/UPLOADS-SPEC.md), which sends each in chunks, measures a
+ *  - creating a row means uploading FILES: the shared uploader on the page
+ *    (<x-upload-dropzone>, docs/UPLOADS-SPEC.md) sends each in chunks, measures a
  *    video in the browser and adds each to the library as it arrives — this page only
  *    refreshes its list and its storage meter when one has (onUploaded);
  *  - above the stores the page reads one library at a time — the platform's own
@@ -12,7 +12,6 @@
  *    carries the server's own words for it.
  */
 import axios from 'axios';
-import { takeAddressFlag } from '../core/address-flag.js';
 import { createCrudTable } from '../core/crud-table-base.js';
 import { storageUsedText, storagePercent } from '../core/media-file.js';
 import { validate, required, maxLen, unreadableFields } from '../core/validate.js';
@@ -50,8 +49,9 @@ export function registerMediaTable(Alpine) {
             filterType: '',
             filterOrientation: '',
             sort: 'newest',
-            // How full the library on the page is ({used, limit}), or null for one with no wall (the platform's).
-            storage: null,
+            // How full the library on the page is ({used, limit}), or null for one with no wall (the platform's). The
+            // page brings the first answer, so the meter does not appear, and push the page down, once the list is in.
+            storage: config.storage ?? null,
             // Several files arriving together refresh the list once.
             refreshTimer: null,
         },
@@ -66,11 +66,6 @@ export function registerMediaTable(Alpine) {
         }),
 
         extraMethods: {
-            /** Sent here to upload (the dashboard's Upload files): the uploader at once, for somebody who may upload. */
-            onInit() {
-                if (takeAddressFlag('upload') && document.querySelector('[dusk="upload-media"]')) this.$nextTick(() => this.openUploadModal());
-            },
-
             /* ── Listing filters ───────────────────────────────────────── */
             extraParams() {
                 return {
@@ -79,15 +74,6 @@ export function registerMediaTable(Alpine) {
                     sort: this.sort,
                     ...(this.libraries !== null ? { library: this.library } : {}),
                 };
-            },
-
-            /** Where an upload from this page goes, in words. */
-            libraryName() {
-                if (this.library === 'platform') return 'the platform\'s library';
-
-                const shop = (this.libraries ?? []).find((each) => String(each.id) === String(this.library));
-
-                return shop ? `${shop.name}'s library` : 'the chosen library';
             },
 
             applyFilters() {
@@ -108,16 +94,6 @@ export function registerMediaTable(Alpine) {
             },
 
             /* ── Upload ────────────────────────────────────────────────── */
-            /** The uploader in the modal keeps its files: open it again and they are still there, going or gone. */
-            openUploadModal() {
-                this.$dispatch('open-modal', 'media-upload-modal');
-            },
-
-            /** Closing it lets the uploads carry on. */
-            closeUploadModal() {
-                this.$dispatch('close-modal', 'media-upload-modal');
-            },
-
             /** A file joined the library: its storage now, and the list once the files arriving together are in. */
             onUploaded(detail) {
                 this.storage = detail?.response?.storage ?? this.storage;

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AuthenticateDevice;
+use App\Http\Middleware\EnsureStoreIsActive;
 use App\Http\Middleware\RejectMalformedText;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -26,6 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'device.token' => AuthenticateDevice::class,
+            'store.active' => EnsureStoreIsActive::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

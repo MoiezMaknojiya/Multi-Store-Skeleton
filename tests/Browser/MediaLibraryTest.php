@@ -40,21 +40,21 @@ class MediaLibraryTest extends DuskTestCase
             $this->waitForAlpine($browser);
             $browser->waitForText('No files yet.');
 
-            // -- Close shuts the upload modal (it is not the shared form modal,
-            //    so it needs its own close action) -----------------------------
-            $this->clickAndAwait($browser, '@upload-media', fn (Browser $b) => $b->waitFor('@media-upload-form', 3));
-            $this->jsClick($browser, '@media-upload-close');
-            $this->waitForModalClosed($browser, '@media-upload-form');
+            // -- The filters and the search on one line, and the drop box on the page itself (owner, 2026-09-30) --
+            $browser->assertVisible('@media-dropzone')->assertMissing('@upload-media');
+            $line = $browser->script(<<<'JS'
+                const tops = ['media-filter-type', 'media-filter-orientation', 'media-sort', 'crud-search']
+                    .map((name) => Math.round(document.querySelector(`[dusk="${name}"]`).getBoundingClientRect().top));
+                return new Set(tops).size;
+            JS)[0];
+            $this->assertSame(1, $line, 'Type, Orientation, Sort by and the search are not on one line');
 
             // -- Upload: in chunks, added to the library as it arrives ----------
-            $this->clickAndAwait($browser, '@upload-media', fn (Browser $b) => $b->waitFor('@media-upload-form', 3));
             $this->uploadThrough($browser, 'media', $path);
-            $this->jsClick($browser, '@media-upload-close');
-            $this->waitForModalClosed($browser, '@media-upload-form');
 
-            $browser->waitForText('Breakfast Board', 15);
-
+            // Its row in the list, not its row in the drop box above it ("Breakfast Board.png"), which is on the page too.
             $media = Media::where('title', 'Breakfast Board')->firstOrFail();
+            $browser->waitFor('@edit-media-'.$media->id, 15);
             $this->assertSame($store->id, $media->store_id);
             $this->assertSame($owner->id, $media->created_by);
             $this->assertSame('landscape', $media->orientation);
@@ -149,11 +149,7 @@ class MediaLibraryTest extends DuskTestCase
                 ->waitForText('Alpha poster')
                 ->assertDontSee('Platform promo');
 
-            $this->clickAndAwait($browser, '@upload-media', fn (Browser $b) => $b->waitFor('@media-upload-form', 3));
-            $browser->assertSeeIn('@media-upload-library', "Files you upload here join Alpha Mart's library.");
             $this->uploadThrough($browser, 'media', $path);
-            $this->jsClick($browser, '@media-upload-close');
-            $this->waitForModalClosed($browser, '@media-upload-form');
 
             $browser->waitForText('Alpha menu', 15);
             $this->assertSame($alpha->id, Media::where('title', 'Alpha menu')->firstOrFail()->store_id);

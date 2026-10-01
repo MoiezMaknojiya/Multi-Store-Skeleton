@@ -8,7 +8,8 @@
  *
  * What a person sees is the panel's own (components/upload-dropzone.blade.php). Two modes:
  *  - `add` (the Media page, the Ad Builder's shelf): each file that arrives is posted to its door (`addUrl`) at once,
- *    and `upload-added` is dispatched with the server's answer, so the page refreshes its list and its storage.
+ *    and `upload-added` is dispatched with the server's answer, so the page refreshes its list and its storage. Its
+ *    "Added" row then goes by itself after a few seconds, as a notification does.
  *  - `form` (a channel's Upload, a campaign's advert): one file. `upload-picked` when it is accepted, `upload-ready`
  *    with its upload id and what the browser measured once every byte is in, `upload-cleared` when it is taken away,
  *    and `upload-busy` while bytes are still going, so the form can hold its Save.
@@ -40,6 +41,13 @@ const QUIET_RESTARTS_MS = 30000;
 
 /* What an upload tells the server about itself (Upload-Metadata). */
 const META_FIELDS = ['name', 'type', 'purpose', 'library', 'store', 'channel'];
+
+/* How long an "Added" row stays (`add`) before it fades away by itself, as a notification does (owner, 2026-09-30);
+ * a refused or failed row stays, for its reason and its Try again. */
+const ADDED_STAYS_MS = 8000;
+
+/* How long its fading takes: the row's `duration-300`. */
+const FADE_MS = 300;
 
 /* Rows still doing something: the page asks before it is left while any is. */
 const BUSY = ['checking', 'waiting', 'uploading', 'paused', 'adding'];
@@ -76,6 +84,8 @@ export function registerUploadDropzone(Alpine) {
         let uppy = null;
         // The watch on uploads that have gone quiet.
         let watch = null;
+        // The "Added" rows waiting to fade away.
+        const leaving = new Set();
 
         return {
             purpose: config.purpose,
@@ -94,6 +104,8 @@ export function registerUploadDropzone(Alpine) {
             dragging: false,
             offline: typeof navigator !== 'undefined' && navigator.onLine === false,
             wasBusy: false,
+            // "Added" rows that have gone from the list, still counted in "3 of 5 added" until the batch is over.
+            addedAndGone: 0,
             // What a screen reader is told: a file's turn — uploaded, added, refused, failed — never every percent.
             said: '',
 
@@ -121,6 +133,7 @@ export function registerUploadDropzone(Alpine) {
                 window.removeEventListener('online', this.onOnline);
                 window.removeEventListener('offline', this.onOffline);
                 clearInterval(watch);
+                leaving.forEach((timer) => clearTimeout(timer));
                 this.uploads.forEach((item) => this.forgetPreview(item));
                 uppy?.destroy();
             },
@@ -169,6 +182,7 @@ export function registerUploadDropzone(Alpine) {
                     stalled: false,
                     error: '',
                     uploadId: null,
+                    fading: false,
                 });
 
                 // The reactive row, as Alpine keeps it.
@@ -381,6 +395,7 @@ export function registerUploadDropzone(Alpine) {
                     item.status = 'done';
                     this.say(`${item.name} is added.`);
                     this.$dispatch('upload-added', { response: data, name: item.name });
+                    this.fadeAway(item);
                 } catch (error) {
                     item.status = 'failed';
                     item.error = wordsFrom(error.response?.data) ?? 'This file could not be added. Try again.';
@@ -445,6 +460,24 @@ export function registerUploadDropzone(Alpine) {
                 this.announceBusy();
             },
 
+            /** An "Added" row goes by itself: it fades, then leaves the list — unless it was taken off first. */
+            fadeAway(item) {
+                const stay = setTimeout(() => {
+                    leaving.delete(stay);
+
+                    if (! this.uploads.includes(item)) return;
+
+                    item.fading = true;
+
+                    const fade = setTimeout(() => {
+                        leaving.delete(fade);
+                        if (this.uploads.includes(item)) this.remove(item);
+                    }, FADE_MS);
+                    leaving.add(fade);
+                }, ADDED_STAYS_MS);
+                leaving.add(stay);
+            },
+
             /** Cancel a file on its way, or take a finished or refused one off the list. */
             remove(item) {
                 if (item.fileId && uppy) {
@@ -456,7 +489,11 @@ export function registerUploadDropzone(Alpine) {
                 }
 
                 this.forgetPreview(item);
+                if (item.status === 'done') this.addedAndGone++;
                 this.uploads = this.uploads.filter((each) => each !== item);
+                // A batch is over once nothing in the list is going or done: a refused row left behind does not carry its
+                // count into the next files dropped.
+                if (this.uploads.every((each) => each.status === 'refused')) this.addedAndGone = 0;
 
                 if (this.mode === 'form') this.$dispatch('upload-cleared');
 
@@ -546,12 +583,13 @@ export function registerUploadDropzone(Alpine) {
                 return item.status === 'failed';
             },
 
-            /** "3 of 5 added" — for a list of several. */
+            /** "3 of 5 added" — for a list of several, the rows that have faded away still counted until the batch is over. */
             summary() {
                 const counted = this.uploads.filter((item) => item.status !== 'refused');
-                const done = counted.filter((item) => ['done', 'ready'].includes(item.status)).length;
+                const done = counted.filter((item) => ['done', 'ready'].includes(item.status)).length + this.addedAndGone;
+                const total = counted.length + this.addedAndGone;
 
-                return counted.length > 1 ? `${done} of ${counted.length} ${this.mode === 'add' ? 'added' : 'uploaded'}` : '';
+                return counted.length > 0 && total > 1 ? `${done} of ${total} ${this.mode === 'add' ? 'added' : 'uploaded'}` : '';
             },
         };
     });

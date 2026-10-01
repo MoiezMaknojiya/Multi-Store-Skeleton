@@ -200,7 +200,7 @@ class PlayerRestartTest extends DuskTestCase
             $tv->waitUntil('document.querySelector(\'[dusk="pairing-code"]\').textContent.trim().length === 6', 20);
 
             // And it is pointed at the right door.
-            $tv->assertSeeIn('@pairing-where', 'Replace device');
+            $tv->assertSeeIn('@pairing-where', 'Replace Device');
             $tv->assertSee('set up before');
 
             // Never the screen's name: this page is open to anyone.

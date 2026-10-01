@@ -102,7 +102,9 @@ Route::middleware('auth')->group(function () {
 // -----------------------------------------------------------------------
 // Admin Routes  (auth required on every group below; throttled per user)
 // -----------------------------------------------------------------------
-Route::middleware(['auth', 'verified', 'throttle:admin'])->group(function () {
+// A store the platform has paused is closed to its own people here (store.active: EnsureStoreIsActive) — the dashboard
+// says why, and its screens keep playing.
+Route::middleware(['auth', 'verified', 'store.active', 'throttle:admin'])->group(function () {
 
     // -------------------------------------------------------------------
     // Members  (the current store's team — docs/STORE-ORGANIZATION-SPEC.md)
@@ -450,7 +452,7 @@ Route::middleware(['auth', 'verified', 'throttle:admin'])->group(function () {
 // makes its row through its own route, with its own permission; these only carry bytes, and ask the same permission
 // before the first one.
 // -------------------------------------------------------------------
-Route::middleware(['auth', 'verified', 'throttle:uploads', SpeaksTus::class])->prefix('uploads')->group(function () {
+Route::middleware(['auth', 'verified', 'store.active', 'throttle:uploads', SpeaksTus::class])->prefix('uploads')->group(function () {
     Route::options('/', [UploadController::class, 'options'])->name('uploads.options');
     Route::post('/', [UploadController::class, 'store'])->name('uploads.store');
     Route::match(['HEAD'], '/{upload}', [UploadController::class, 'show'])->whereUuid('upload')->name('uploads.show');

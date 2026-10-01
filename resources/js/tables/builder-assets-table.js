@@ -9,7 +9,7 @@ import { createCrudTable } from '../core/crud-table-base.js';
 import { storageUsedText, storagePercent } from '../core/media-file.js';
 
 export function registerBuilderAssetsTable(Alpine) {
-    Alpine.data('builderAssetsTable', createCrudTable({
+    Alpine.data('builderAssetsTable', (config = {}) => createCrudTable({
         fetchUrl: '/builder/assets/data',
         dataKey: 'assets',
         entityLabel: 'asset',
@@ -20,8 +20,9 @@ export function registerBuilderAssetsTable(Alpine) {
             refreshTimer: null,
             /* Above the stores: one shop (its id), or All shops (''), where an upload is shared with every shop. */
             filterStore: '',
-            /* How full the shop on the shelf is ({used, limit}): its own inside a store, the one chosen above. */
-            storage: null,
+            /* How full the shop on the shelf is ({used, limit}): its own inside a store, the one chosen above. The page
+             * brings the first answer, so the meter is there at once. */
+            storage: config.storage ?? null,
         },
 
         extraMethods: {
@@ -104,5 +105,5 @@ export function registerBuilderAssetsTable(Alpine) {
                 return others ? `Used by ${named} and ${others}` : `Used by ${named}`;
             },
         },
-    }));
+    })());
 }

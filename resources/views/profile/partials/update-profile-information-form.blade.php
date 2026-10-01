@@ -24,7 +24,7 @@
 
         {{-- "Your profile is saved." arrives as a toast (components/toasts.blade.php). --}}
         <div class="flex items-center gap-4">
-            <x-primary-button>{{ __('Save changes') }}</x-primary-button>
+            <x-primary-button>{{ __('Save Changes') }}</x-primary-button>
         </div>
     </form>
 
@@ -50,7 +50,7 @@
             </p>
             <form method="POST" action="{{ route('verification.send') }}" class="mt-3">
                 @csrf
-                <button type="submit" class="btn-secondary" dusk="profile-email-unconfirmed-resend">Send the link again</button>
+                <button type="submit" class="btn-secondary" dusk="profile-email-unconfirmed-resend">Send the Link Again</button>
             </form>
         </div>
     @endif
@@ -68,12 +68,12 @@
             <div class="mt-3 flex flex-wrap items-center gap-3">
                 <form method="POST" action="{{ route('profile.email.resend') }}">
                     @csrf
-                    <button type="submit" class="btn-secondary" dusk="profile-email-resend">Send the link again</button>
+                    <button type="submit" class="btn-secondary" dusk="profile-email-resend">Send the Link Again</button>
                 </form>
                 <form method="POST" action="{{ route('profile.email.cancel') }}">
                     @csrf
                     @method('delete')
-                    <button type="submit" class="btn-secondary" dusk="profile-email-cancel">Keep my current email</button>
+                    <button type="submit" class="btn-secondary" dusk="profile-email-cancel">Keep My Current Email</button>
                 </form>
             </div>
         </div>

@@ -10,15 +10,15 @@ use Tests\DuskTestCase;
 
 /**
  * The dashboard as a person uses it (owner, 2026-09-30: "user friendly banao puri site ko"): a new shop's first
- * steps and quick actions open the very dialog they name on the page they lead to — once, the address forgetting
- * it — the platform's list of what needs a look leads where it is put right, and a keyboard reaches the page's own
+ * steps open the very thing they name on the page they lead to — a dialog once, the address forgetting it — the
+ * platform's list of what needs a look leads where it is put right, and a keyboard reaches the page's own
  * content first, past the sidebar, while a dialog keeps it inside until it closes.
  */
 class DashboardFlowTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    public function test_a_new_shops_dashboard_opens_what_each_button_names(): void
+    public function test_a_new_shops_first_steps_open_what_each_one_names(): void
     {
         $this->seedSuperAdmin();
         $shop = Store::factory()->create(['name' => 'Corner Shop']);
@@ -32,10 +32,12 @@ class DashboardFlowTest extends DuskTestCase
                 ->assertSeeIn('@dashboard-steps', 'Pair your first screen')
                 ->assertSeeIn('@dashboard-steps-progress', '0 of 2 done')
                 ->assertSeeIn('@dashboard-card-screens', 'None paired yet')
+                // No buttons of the dashboard's own (owner, 2026-09-30): each thing starts on its own page.
+                ->assertMissing('@dashboard-actions')
                 ->assertTitle('Dashboard · '.config('app.name'));
 
-            // Pair a screen: the Screens page with its code dialog open, and the address without the flag.
-            $browser->click('@dashboard-action-pair')
+            // Pair your first screen: the Screens page with its code dialog open, and the address without the flag.
+            $browser->click('@dashboard-step-pair')
                 ->waitForLocation('/screens')
                 ->waitFor('[dusk="screen-pair-form"]')
                 ->assertVisible('[dusk="screen-pair-form"]');
@@ -46,17 +48,11 @@ class DashboardFlowTest extends DuskTestCase
             $this->waitForAlpine($browser);
             $browser->pause(400)->assertMissing('[dusk="screen-pair-form"]');
 
-            // Upload files: the Media page with its uploader open.
-            $browser->visit('/dashboard')->waitFor('@dashboard-action-upload')
-                ->click('@dashboard-action-upload')
+            // Upload a picture or a video: the Media page, whose drop box is on the page itself.
+            $browser->visit('/dashboard')->waitFor('@dashboard-step-upload')
+                ->click('@dashboard-step-upload')
                 ->waitForLocation('/media')
                 ->waitForText('Drop files here');
-
-            // New ad: the Ad Builder asking which way the screen is.
-            $browser->visit('/dashboard')->waitFor('@dashboard-action-ad')
-                ->click('@dashboard-action-ad')
-                ->waitForLocation('/builder')
-                ->waitForText('Create Ad — which way is the screen?');
 
             // A card is the way to its page.
             $browser->visit('/dashboard')->waitFor('@dashboard-card-media')

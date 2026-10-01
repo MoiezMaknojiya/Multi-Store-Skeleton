@@ -63,11 +63,15 @@ class ChunkedUploadFlowTest extends DuskTestCase
             $this->assertSame(['Breakfast menu', 'Dinner menu', 'Lunch menu'], Media::orderBy('title')->pluck('title')->all());
             $this->assertSame(0, Upload::count(), 'an upload was left behind');
 
-            $this->jsClick($browser, '@media-upload-close');
-            $this->waitForModalClosed($browser, '@media-upload-form');
             // The list refreshes 400 ms after a file joins it (onUploaded), so a refresh between two files can show the
             // first alone for a moment: each is waited for.
             $browser->waitForText('Breakfast menu')->waitForText('Lunch menu')->waitForText('Dinner menu');
+
+            // An "Added" row goes by itself after eight seconds, as a notification does (owner, 2026-09-30), and the
+            // count of the batch with it; the files stay in the library.
+            $browser->waitUntilMissing('@media-upload-row', 15)
+                ->assertMissing('@media-upload-summary')
+                ->assertSee('Breakfast menu');
         });
     }
 
@@ -195,7 +199,8 @@ class ChunkedUploadFlowTest extends DuskTestCase
         $this->switchToStore($browser, $store);
         $browser->visit('/media');
         $this->waitForAlpine($browser);
-        $this->clickAndAwait($browser, '@upload-media', fn (Browser $b) => $b->waitFor('@media-upload-form', 3));
+        // The drop box is on the page itself (owner, 2026-09-30), not in a dialog.
+        $browser->waitFor('@media-dropzone');
     }
 
     /**

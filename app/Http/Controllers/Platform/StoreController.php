@@ -108,9 +108,16 @@ class StoreController extends Controller
 
         $store->update($validated);
 
-        ActivityLog::record('store.updated', $store, "Updated store {$store->name}");
+        // Pausing a store closes it to its own people (EnsureStoreIsActive), so it is said as what it is.
+        [$action, $description, $message] = match (true) {
+            $store->wasChanged('is_active') && ! $store->is_active => ['store.paused', "Paused store {$store->name}", "{$store->name} is paused."],
+            $store->wasChanged('is_active') => ['store.resumed', "Turned store {$store->name} back on", "{$store->name} is active again."],
+            default => ['store.updated', "Updated store {$store->name}", "Store {$store->name} updated."],
+        };
 
-        return response()->json(['message' => "Store {$store->name} updated.", 'store' => $store]);
+        ActivityLog::record($action, $store, $description);
+
+        return response()->json(['message' => $message, 'store' => $store]);
     }
 
     /** Delete a store and everything it owns (Store::purgeContents) — the name typed, and the password. */
@@ -209,7 +216,7 @@ class StoreController extends Controller
         $user = auth()->user();
 
         if ($user->globalRole() !== null) {
-            abort(403, 'The platform team works above the stores. Use "Log in as" to see a store as one of its members.');
+            abort(403, 'The platform team works above the stores. Use "Log In As" to see a store as one of its members.');
         }
 
         $store = Store::find($request->integer('store_id'));

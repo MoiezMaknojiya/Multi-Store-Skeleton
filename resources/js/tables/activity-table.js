@@ -62,8 +62,8 @@ export function registerActivityTable(Alpine) {
             actionBadge(action) {
                 const verb = String(action ?? '').split('.').pop();
 
-                if (/(deleted|removed|revoked|left|unpublished|pruned|declined|discarded)$/.test(verb)) return 'badge-danger';
-                if (/(created|added|invited|accepted|registered|uploaded|published|paired|assigned|duplicated|installed|verified)$/.test(verb)) return 'badge-success';
+                if (/(deleted|removed|revoked|left|unpublished|pruned|declined|discarded|paused)$/.test(verb)) return 'badge-danger';
+                if (/(created|added|invited|accepted|registered|uploaded|published|paired|assigned|duplicated|installed|verified|resumed)$/.test(verb)) return 'badge-success';
                 if (/(updated|changed|reordered|resent|recompiled|reset|switched)$/.test(verb)) return 'badge-info';
 
                 return 'badge-neutral';

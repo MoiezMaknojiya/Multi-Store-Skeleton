@@ -43,7 +43,7 @@
                 <template x-if="!loading && items.length === 0 && loadFailed">
                     <div class="mx-auto max-w-md space-y-3 py-12 text-center" role="alert" dusk="table-load-failed">
                         <p class="text-sm text-gray-700 dark:text-gray-200">Could not load the ads. Check the connection, then try again.</p>
-                        <button type="button" class="btn-row-neutral" @click="fetchItems()" dusk="table-try-again">Try again</button>
+                        <button type="button" class="btn-row-neutral" @click="fetchItems()" dusk="table-try-again">Try Again</button>
                     </div>
                 </template>
 
@@ -54,8 +54,8 @@
                             <span x-show="!search">This shop has no ads yet.</span>
                         </p>
                         <div class="flex flex-wrap justify-center gap-2">
-                            <button type="button" x-show="search" class="btn-row-neutral" @click="search = ''" dusk="table-clear-search">Clear search</button>
-                            <button type="button" x-show="!search" class="btn-row-neutral" @click="filterStore = ''; applyFilters()" dusk="table-clear-filters">Show every shop</button>
+                            <button type="button" x-show="search" class="btn-row-neutral" @click="search = ''" dusk="table-clear-search">Clear Search</button>
+                            <button type="button" x-show="!search" class="btn-row-neutral" @click="filterStore = ''; applyFilters()" dusk="table-clear-filters">Show Every Shop</button>
                         </div>
                     </div>
                 </template>
@@ -221,7 +221,7 @@
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-ad-deletion')">Cancel</x-secondary-button>
                     <x-danger-button x-bind:disabled="deleting" dusk="confirm-ad-deletion-confirm">
                         <x-spinner x-show="deleting" x-cloak />
-                        Delete ad
+                        Delete Ad
                     </x-danger-button>
                 </div>
             </form>

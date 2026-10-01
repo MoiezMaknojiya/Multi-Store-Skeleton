@@ -86,6 +86,7 @@ export function registerAdEditor(Alpine) {
              * the server, so nothing is offered that a click would only have refused. */
             canUpdate: config.canUpdate ?? false,
             canInstallFonts: config.canInstallFonts ?? false,
+            canUpload: config.canUpload ?? false,
 
             /* The server's own tables (AdCompiler::LIMITS and ::FILTERS, AdAnimations::NUMBERS) and limits,
              * so every input here is held inside exactly what the server accepts and the compiler writes. */
@@ -145,6 +146,9 @@ export function registerAdEditor(Alpine) {
             assetPickerOpen: false,
             assetPickerMode: 'element',
             assetPickerKind: null,
+            /* How full the shop's shelf is ({used, limit}), as the last upload from the picker said: the uploader checks
+             * a file against it before a byte is sent. Unknown until then — the server decides either way. */
+            shelfStorage: null,
 
             /* ── Fonts ─────────────────────────────────────────────────── */
             fontPickerOpen: false,
@@ -572,6 +576,18 @@ export function registerAdEditor(Alpine) {
                 if (this.choosesShop && !this.storeId) return false;
 
                 return !this.storeId || asset.store_id === this.storeId;
+            },
+
+            /** A file uploaded from the picker is on the shelf at once, first in the grid, ready to pick. */
+            onAssetUploaded(detail) {
+                const asset = detail?.response?.asset;
+
+                this.shelfStorage = detail?.response?.storage ?? this.shelfStorage;
+
+                if (!asset?.id || this.assets.some((each) => each.id === asset.id)) return;
+
+                const { id, store_id, title, kind, disk, path, thumbnail_path, width, height, duration_seconds, url, thumbnail_url } = asset;
+                this.assets = [{ id, store_id, title, kind, disk, path, thumbnail_path, width, height, duration_seconds, url, thumbnail_url }, ...this.assets];
             },
 
             pickerTitle() {
@@ -1458,7 +1474,7 @@ export function registerAdEditor(Alpine) {
                 if (this.publishing) return 'Publishing…';
                 if (!this.published) return 'Publish';
 
-                return this.changesWaiting() ? 'Publish changes' : 'Publish again';
+                return this.changesWaiting() ? 'Publish Changes' : 'Publish Again';
             },
 
             publishHint() {

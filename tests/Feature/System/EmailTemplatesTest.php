@@ -61,7 +61,7 @@ test('the invitation email carries the link, who sent it, the role and when it e
         ->toContain($role->name)
         ->toContain($invitation->expires_at->toFormattedDayDateString())
         ->toContain('sara@example.com')
-        ->toContain('Accept invitation')
+        ->toContain('Accept Invitation')
         // Drawn the way email has to be drawn: a table, the brand bar, and every rule inline.
         ->toContain('<table')
         ->toContain('#2563eb')
@@ -99,7 +99,7 @@ test('the password reset email carries the link, the address and the minutes it 
         ->toContain('Sara Khan')
         ->toContain('sara@example.com')
         ->toContain((string) $minutes)
-        ->toContain('Reset password')
+        ->toContain('Reset Password')
         ->toContain('nothing has changed')                        // what to do when it was not you
         ->toContain('<table')
         ->not->toContain('<img')
@@ -148,7 +148,7 @@ test('the email that confirms a new account carries its signed link, the address
         ->toContain('sana@example.com')
         ->toContain(VerifyEmailNotification::minutes().' minutes')
         ->toContain(User::UNVERIFIED_DAYS.' days')
-        ->toContain('Confirm my email')
+        ->toContain('Confirm My Email')
         ->toContain("If you didn't")
         ->toContain('<table')
         ->toContain('#2563eb')
@@ -171,7 +171,7 @@ test('the email that confirms a changed address goes to the new one and says the
         ->not->toContain('Zebulon')                               // it goes to whatever address was typed
         ->not->toContain('ali@example.com')                       // nor does it tell a stranger the account's address
         ->toContain('keeps its old address')
-        ->toContain('Confirm new email')
+        ->toContain('Confirm New Email')
         ->toContain('<table')
         ->not->toContain('<img');
 });

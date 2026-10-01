@@ -21,7 +21,7 @@
 
         {{-- "Your password is changed." arrives as a toast (components/toasts.blade.php). --}}
         <div class="flex items-center gap-4">
-            <x-primary-button>{{ __('Change password') }}</x-primary-button>
+            <x-primary-button>{{ __('Change Password') }}</x-primary-button>
         </div>
     </form>
 </section>

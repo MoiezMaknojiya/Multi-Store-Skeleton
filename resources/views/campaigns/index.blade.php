@@ -224,7 +224,7 @@
                                                 x-bind:dusk="'campaign-store-all-' + group.id"
                                                 x-show="group.screens.some(s => s.carries_ads)"
                                                 x-bind:aria-label="(storeAllChosen(group) ? 'Clear every screen of ' : 'Choose every screen of ') + group.name"
-                                                class="btn-row-neutral" x-text="storeAllChosen(group) ? 'Clear all' : 'Select all'"></button>
+                                                class="btn-row-neutral" x-text="storeAllChosen(group) ? 'Clear All' : 'Select All'"></button>
                                     </div>
 
                                     {{-- A screen that cannot carry adverts says why beside it, in words that stay readable:
@@ -277,8 +277,8 @@
                     <div x-show="confirmingClose && uploading" x-cloak role="alert" class="alert-warning flex flex-wrap items-center justify-between gap-3" dusk="campaign-upload-still-going">
                         <span>The advert is still uploading. Stop it and close?</span>
                         <span class="flex flex-wrap gap-2">
-                            <button type="button" class="btn-secondary" @click="confirmingClose = false">Keep uploading</button>
-                            <button type="button" class="btn-danger" @click="closeCampaignModal(true)" dusk="campaign-stop-and-close">Stop and close</button>
+                            <button type="button" class="btn-secondary" @click="confirmingClose = false">Keep Uploading</button>
+                            <button type="button" class="btn-danger" @click="closeCampaignModal(true)" dusk="campaign-stop-and-close">Stop and Close</button>
                         </span>
                     </div>
 

@@ -62,7 +62,7 @@
             placeholder="Confirm your password" autocomplete="new-password" />
                     </div>
 
-                    <button type="submit" class="btn-primary-auth" dusk="invitation-register">Create account and join</button>
+                    <button type="submit" class="btn-primary-auth" dusk="invitation-register">Create Account and Join</button>
                 </form>
                 @break
 
@@ -71,14 +71,14 @@
                     An account already exists for <span class="font-medium">{{ $invitation->email }}</span>.
                     Sign in with it and you'll come straight back here to accept.
                 </p>
-                <a href="{{ route('login') }}" class="btn-primary-auth mt-5" dusk="invitation-login">Sign in to accept</a>
+                <a href="{{ route('login') }}" class="btn-primary-auth mt-5" dusk="invitation-login">Sign In to Accept</a>
                 @break
 
             @case('accept')
                 <p class="mt-6 text-sm text-gray-600">You're signed in as <span class="font-medium">{{ auth()->user()->email }}</span>.</p>
                 <form method="POST" action="{{ route('invitations.accept', $token) }}" class="mt-5">
                     @csrf
-                    <button type="submit" class="btn-primary-auth" dusk="invitation-accept">Accept invitation</button>
+                    <button type="submit" class="btn-primary-auth" dusk="invitation-accept">Accept Invitation</button>
                 </form>
                 @break
 
@@ -89,7 +89,7 @@
                 </div>
                 <form method="POST" action="{{ route('logout') }}" class="mt-5">
                     @csrf
-                    <button type="submit" class="btn-primary-auth">Sign out</button>
+                    <button type="submit" class="btn-primary-auth">Sign Out</button>
                 </form>
                 @break
         @endswitch
@@ -99,13 +99,13 @@
             <div class="mt-4 text-center" x-data="{ sure: false }">
                 <button type="button" x-show="! sure" @click="sure = true" dusk="invitation-decline"
                     class="rounded-md px-3 py-2 text-sm text-gray-600 hover:text-gray-800 hover:underline">
-                    Decline invitation
+                    Decline Invitation
                 </button>
                 <form x-show="sure" x-cloak method="POST" action="{{ route('invitations.decline', $token) }}" class="alert-warning text-left">
                     @csrf
                     <p>Decline? This link stops working, and you would need a new invitation to join.</p>
                     <div class="mt-3 flex flex-wrap justify-end gap-2">
-                        <button type="button" class="btn-secondary" @click="sure = false" dusk="invitation-decline-keep">Keep it</button>
+                        <button type="button" class="btn-secondary" @click="sure = false" dusk="invitation-decline-keep">Keep It</button>
                         <button type="submit" class="btn-danger" dusk="invitation-decline-confirm">Decline</button>
                     </div>
                 </form>

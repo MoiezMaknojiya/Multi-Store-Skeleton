@@ -269,6 +269,23 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * The store this person works in, when the platform has paused it (its Active switch off; owner, 2026-09-30):
+     * their membership stands, but its pages are closed to them (EnsureStoreIsActive), their role there grants nothing
+     * (contextPermissionNames) and the dashboard says why, until the platform turns it back on. Its screens keep
+     * playing. Null above the stores, with no store chosen, in a store they are not a member of, or in an active one.
+     */
+    public function pausedStore(): ?Store
+    {
+        $storeId = (int) session('current_store_id');
+
+        if ($storeId === 0 || $this->globalRole() !== null) {
+            return null;
+        }
+
+        return $this->stores()->where('stores.id', $storeId)->where('stores.is_active', false)->first();
+    }
+
+    /**
      * Whether Settings has a Stores tab for this person (owner's rule, 2026-09-17): a store member working in
      * a store whose role there holds View Stores. Without it "Your stores" stays on the profile, so anybody
      * can still leave a store.
@@ -322,7 +339,8 @@ class User extends Authenticatable implements MustVerifyEmail
         $key = $platformRole !== null ? 'platform' : 'store:'.(int) session('current_store_id');
 
         if (! array_key_exists($key, $this->permissionNamesMemo)) {
-            $role = $platformRole ?? (session('current_store_id') ? $this->currentRole() : null);
+            // A paused store grants its people nothing until the platform turns it back on (pausedStore).
+            $role = $platformRole ?? (session('current_store_id') && $this->pausedStore() === null ? $this->currentRole() : null);
 
             $this->permissionNamesMemo[$key] = $role
                 ? $role->permissions()->pluck('name')->all()

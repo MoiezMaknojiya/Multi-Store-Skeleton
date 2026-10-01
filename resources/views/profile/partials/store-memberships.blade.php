@@ -14,7 +14,7 @@
         @if ($canOpenStore ?? false)
             {{-- Secondary: this card's own action stands beside the page's Save changes, which is the primary. --}}
             <x-secondary-button class="shrink-0" x-data x-on:click.prevent="$dispatch('open-modal', 'open-store')" dusk="open-store-button">
-                {{ __('Create store') }}
+                {{ __('Create Store') }}
             </x-secondary-button>
         @endif
     </header>
@@ -65,7 +65,7 @@
 
                     <div class="mt-6 flex flex-wrap justify-end gap-3">
                         <x-secondary-button x-on:click="$dispatch('close')">{{ __('Cancel') }}</x-secondary-button>
-                        <x-danger-button dusk="leave-store-{{ $memberStore->id }}-confirm">{{ __('Leave store') }}</x-danger-button>
+                        <x-danger-button dusk="leave-store-{{ $memberStore->id }}-confirm">{{ __('Leave Store') }}</x-danger-button>
                     </div>
                 </form>
             </x-modal>

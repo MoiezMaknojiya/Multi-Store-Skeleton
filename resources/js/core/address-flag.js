@@ -1,8 +1,8 @@
 /**
- * A page opened to do one thing at once — `/screens?pair=1`, `/media?upload=1`, `/builder?new=1`, the dashboard's
- * quick actions — reads its flag here, and only once: the flag leaves the address at the same moment, so a refresh or
- * the back button does not open the dialog again. The page still decides whether it may open it (its own button must
- * be on the page, which is how the permission shows).
+ * A page opened to do one thing at once — `/screens?pair=1` (the dashboard's first step), `/builder?new=1` (Create Ad
+ * sent back to choose a shape) — reads its flag here, and only once: the flag leaves the address at the same moment,
+ * so a refresh or the back button does not open the dialog again. The page still decides whether it may open it (its
+ * own button must be on the page, which is how the permission shows).
  */
 export function takeAddressFlag(name) {
     const params = new URLSearchParams(window.location.search);

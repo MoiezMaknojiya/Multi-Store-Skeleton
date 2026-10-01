@@ -31,9 +31,9 @@
                 </span>
                 {{-- Page actions on the ticked shops: a disabled button looks disabled by itself (btn-secondary). --}}
                 <button type="button" @click="askStoreAds(true)" dusk="stores-ads-on" class="btn-secondary"
-                        x-bind:disabled="selectedStoreIds.length === 0 || savingAds">Adverts on</button>
+                        x-bind:disabled="selectedStoreIds.length === 0 || savingAds">Adverts On</button>
                 <button type="button" @click="askStoreAds(false)" dusk="stores-ads-off" class="btn-secondary"
-                        x-bind:disabled="selectedStoreIds.length === 0 || savingAds">Adverts off</button>
+                        x-bind:disabled="selectedStoreIds.length === 0 || savingAds">Adverts Off</button>
             </div>
         </div>
         @endif
@@ -84,7 +84,7 @@
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300" x-text="item.members_count" x-bind:dusk="'store-members-' + item.id"></td>
                         <td class="px-5 py-4">
-                            <x-crud.status-badge activeExpression="item.is_active" />
+                            <x-crud.status-badge activeExpression="item.is_active" inactive="Paused" />
                         </td>
                         @if ($manageAds)
                         <td class="px-5 py-4">
@@ -96,7 +96,7 @@
                             <div class="flex items-center justify-end gap-2">
                                 <button type="button" class="btn-row-success" x-show="item.can.invite_owner"
                                     x-bind:aria-label="'Invite an owner for ' + item.name"
-                                    @click="openInviteOwner(item)" x-bind:dusk="'invite-owner-' + item.id">Invite owner</button>
+                                    @click="openInviteOwner(item)" x-bind:dusk="'invite-owner-' + item.id">Invite Owner</button>
                                 <button type="button" class="btn-row-neutral" x-show="item.can.update"
                                     x-bind:aria-label="'Edit ' + item.name"
                                     @click="openFormModal(item)" x-bind:dusk="'edit-store-' + item.id">Edit</button>
@@ -141,7 +141,7 @@
                     </x-secondary-button>
                     <x-primary-button x-on:click="applyStoreAds()" x-bind:disabled="savingAds" dusk="confirm-store-ads">
                         <x-spinner x-show="savingAds" x-cloak />
-                        <span x-text="pendingAdsAccepts ? 'Adverts on' : 'Adverts off'"></span>
+                        <span x-text="pendingAdsAccepts ? 'Adverts On' : 'Adverts Off'"></span>
                     </x-primary-button>
                 </div>
             </div>
@@ -175,7 +175,7 @@
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-store-deletion')">Cancel</x-secondary-button>
                     <x-danger-button x-bind:disabled="deleting" dusk="delete-store-confirm">
                         <x-spinner x-show="deleting" x-cloak />
-                        Delete store
+                        Delete Store
                     </x-danger-button>
                 </div>
             </form>
@@ -260,11 +260,15 @@
                         <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">They'll get an email invitation to own this store.</p>
                     </div>
 
-                    {{-- Active Checkbox: switching a store on or off is the platform's alone --}}
-                    <div class="flex items-center gap-2">
-                        <input type="checkbox" x-model="form.is_active" id="is_active"
-                            class="form-checkbox">
-                        <label for="is_active" class="text-sm text-gray-700 dark:text-gray-300">Active</label>
+                    {{-- Active Checkbox: switching a store on or off is the platform's alone. Off, the store is paused
+                         (EnsureStoreIsActive): closed to its own people, its screens still playing. --}}
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" x-model="form.is_active" id="is_active" dusk="store-active"
+                                aria-describedby="store-active-hint" class="form-checkbox">
+                            <label for="is_active" class="text-sm text-gray-700 dark:text-gray-300">Active</label>
+                        </div>
+                        <p id="store-active-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">Off pauses the store: its people cannot open it, and its screens keep playing.</p>
                     </div>
 
                     <x-crud.form-actions savingVar="saving" dusk="store-save" />

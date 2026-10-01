@@ -115,7 +115,7 @@
                             <p class="form-label">Exceptions</p>
                             <button type="button" @click="addException()" x-bind:disabled="!canAddException()"
                                     dusk="daypart-add-exception" class="btn-row-neutral">
-                                Add exception
+                                Add Exception
                             </button>
                         </div>
                         <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">

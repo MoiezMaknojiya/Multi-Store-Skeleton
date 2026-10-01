@@ -122,6 +122,8 @@
              'hasPoster' => (bool) $ad?->thumbnail_path,
              // What the routes let this person do: change (and publish) a saved ad, and fetch a font.
              'canUpdate' => (bool) auth()->user()?->can('ad-update'),
+             // Whether the picker takes a new file too (the shelf's upload asks Create Ads, as its route does).
+             'canUpload' => (bool) auth()->user()?->can('ad-store'),
              'canInstallFonts' => (bool) auth()->user()?->canAny(['ad-store', 'ad-update']),
              'limits' => \App\Services\AdCompiler::LIMITS,
              'filters' => \App\Services\AdCompiler::FILTERS,
@@ -250,12 +252,12 @@
                          class="absolute right-0 top-full z-50 mt-1 w-60 rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800">
                         <button type="button" class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700/60 dark:focus-visible:bg-gray-700"
                                 @click="toggleRulers(); moreOpen = false" dusk="toolbar-more-rulers">
-                            <span class="inline-flex items-center gap-2"><x-icon name="ruler" /> Rulers and guides</span>
+                            <span class="inline-flex items-center gap-2"><x-icon name="ruler" /> Rulers and Guides</span>
                             <span class="text-xs text-gray-500 dark:text-gray-400" x-text="showRulers ? 'On · Shift+R' : 'Off · Shift+R'"></span>
                         </button>
                         <button type="button" class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700/60 dark:focus-visible:bg-gray-700"
                                 @click="shortcutsOpen = true; moreOpen = false" dusk="toolbar-more-shortcuts">
-                            <span class="inline-flex items-center gap-2"><x-icon name="keyboard" /> Keyboard shortcuts</span>
+                            <span class="inline-flex items-center gap-2"><x-icon name="keyboard" /> Keyboard Shortcuts</span>
                             <span class="text-xs text-gray-500 dark:text-gray-400">?</span>
                         </button>
                     </div>
@@ -322,7 +324,7 @@
                             <button type="button" class="block w-full px-3 py-2 text-left not-disabled:hover:bg-gray-50 focus:outline-none focus-visible:bg-gray-100 disabled:cursor-not-allowed dark:not-disabled:hover:bg-gray-700/60 dark:focus-visible:bg-gray-700"
                                     @click="publishMenuOpen = false; $dispatch('open-modal', 'confirm-discard-changes')"
                                     x-bind:disabled="!mayDiscard()" x-bind:title="discardHint()" dusk="ad-discard">
-                                <span class="block text-sm" x-bind:class="mayDiscard() ? 'text-gray-800 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'">Discard changes</span>
+                                <span class="block text-sm" x-bind:class="mayDiscard() ? 'text-gray-800 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'">Discard Changes</span>
                                 <span class="block text-xs text-gray-500 dark:text-gray-400"
                                       x-text="mayDiscard() ? 'Go back to the version on the screens' : (discardHint() || 'Go back to the version on the screens')"></span>
                             </button>
@@ -810,7 +812,7 @@
 
                                     <button type="button" class="btn-secondary mt-3 w-full"
                                             @click="showMoreType = !showMoreType" dusk="text-show-more">
-                                        <span x-text="showMoreType ? 'Show less' : 'Show more'"></span>
+                                        <span x-text="showMoreType ? 'Show Less' : 'Show More'"></span>
                                     </button>
 
                                     <div x-show="showMoreType" x-cloak class="mt-3 space-y-3 border-t border-gray-200 pt-3 dark:border-gray-700">
@@ -883,7 +885,7 @@
                                             </label>
                                             <button type="button" class="btn-secondary col-span-2"
                                                     x-show="selected.style?.background" x-cloak
-                                                    @click="setStyle('background', null)" dusk="text-background-clear">Remove panel</button>
+                                                    @click="setStyle('background', null)" dusk="text-background-clear">Remove Panel</button>
                                         </div>
 
                                         {{-- Shadow and outline: what makes white text readable over a photograph. --}}
@@ -891,7 +893,7 @@
                                             <button type="button" class="btn-secondary w-full"
                                                     @click="toggleNestedStyle('textShadow', { x: 0, y: 4, blur: 12, color: '#000000' })"
                                                     dusk="text-shadow-toggle">
-                                                <span x-text="selected.style?.textShadow ? 'Remove shadow' : 'Add shadow'"></span>
+                                                <span x-text="selected.style?.textShadow ? 'Remove Shadow' : 'Add Shadow'"></span>
                                             </button>
 
                                             <div x-show="selected.style?.textShadow" x-cloak class="mt-2 grid grid-cols-3 gap-2">
@@ -922,7 +924,7 @@
                                             <button type="button" class="btn-secondary w-full"
                                                     @click="toggleNestedStyle('textStroke', { width: 2, color: '#000000' })"
                                                     dusk="text-stroke-toggle">
-                                                <span x-text="selected.style?.textStroke ? 'Remove outline' : 'Add outline'"></span>
+                                                <span x-text="selected.style?.textStroke ? 'Remove Outline' : 'Add Outline'"></span>
                                             </button>
 
                                             <div x-show="selected.style?.textStroke" x-cloak class="mt-2 grid grid-cols-2 gap-2">
@@ -961,7 +963,7 @@
                                     @click="previewing === 'element' ? stopPreview() : previewElement(selected)" dusk="anim-preview">
                                 <x-icon name="play" x-show="previewing !== 'element'" />
                                 <x-icon name="stop" x-show="previewing === 'element'" x-cloak />
-                                <span x-text="previewing === 'element' ? 'Stop' : 'Preview this element'"></span>
+                                <span x-text="previewing === 'element' ? 'Stop' : 'Preview This Element'"></span>
                             </button>
 
                             @include('builder.partials.animation-slot', [
@@ -1015,11 +1017,11 @@
                 </p>
                 <div x-show="!loadingFonts && fontsFailed" x-cloak role="alert" class="mt-6 space-y-3 text-center" dusk="font-picker-failed">
                     <p class="text-sm text-gray-700 dark:text-gray-200">Could not load the fonts. Check the connection, then try again.</p>
-                    <button type="button" class="btn-row-neutral" @click="retryFonts()">Try again</button>
+                    <button type="button" class="btn-row-neutral" @click="retryFonts()">Try Again</button>
                 </div>
                 <div x-show="!loadingFonts && !fontsFailed && fontsLoaded && fontResults.length === 0" x-cloak class="mt-6 space-y-3 text-center" dusk="font-picker-no-match">
                     <p class="text-sm text-gray-700 dark:text-gray-200">No font matches &ldquo;<span class="font-medium" x-text="fontQuery"></span>&rdquo;.</p>
-                    <button type="button" class="btn-row-neutral" @click="fontQuery = ''; $refs.fontSearch.focus()">Clear search</button>
+                    <button type="button" class="btn-row-neutral" @click="fontQuery = ''; $refs.fontSearch.focus()">Clear Search</button>
                 </div>
 
                 {{-- A family nobody has installed yet is fetched on the spot by whoever may create or change
@@ -1064,12 +1066,25 @@
                     </div>
                 </div>
 
+                {{-- A new picture or video straight from here (owner, 2026-09-30): it joins this ad's shelf — the shop
+                     the person works in, or above the stores the ad's shop — and is there to pick the moment it is in,
+                     under the same rules as the Assets page (30-second videos, the shop's 512 MB). The editor listens
+                     here, not on the box: an expression on the box runs with the box's own `this`. --}}
+                @can('ad-store')
+                    <div class="mt-4" x-on:upload-added="onAssetUploaded($event.detail)" dusk="picker-upload">
+                        <x-upload-dropzone purpose="asset" mode="add" :multiple="true" add-url="/builder/assets" dusk="picker"
+                            :max-video-seconds="\App\Models\BuilderAsset::MAX_VIDEO_SECONDS"
+                            :needs-store="$platformUser ? 'Choose the shop this ad is for first, at the top.' : null"
+                            context="{ store: storeId, fields: storeId ? { store_id: storeId } : {}, storage: shelfStorage }"
+                            hint="JPG, PNG, GIF, WEBP, MP4 or WEBM, up to 250 MB each. Videos up to 30 seconds." />
+                    </div>
+                @endcan
+
                 <p x-show="pickerAssets().length === 0" x-cloak class="py-10 text-center text-sm text-gray-500 dark:text-gray-400"
+                   dusk="picker-empty"
                    x-text="choosesShop && !storeId
                        ? 'Choose the shop this ad is for first (at the top) — its pictures come from that shop’s shelf.'
-                       : (assetPickerKind === 'video'
-                           ? 'No videos yet. Upload one on the Assets page first.'
-                           : 'No files yet. Upload one on the Assets page first.')"></p>
+                       : (assetPickerKind === 'video' ? 'No videos yet.' : 'No files yet.') + (canUpload ? ' Drop one above.' : '')"></p>
 
                 <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
                     <template x-for="asset in pickerAssets()" :key="asset.id">
@@ -1103,7 +1118,7 @@
                     <div class="mt-6 flex flex-wrap justify-end gap-3">
                         <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-discard-changes')">Cancel</x-secondary-button>
                         <x-danger-button type="button" x-on:click="discardChanges()" x-bind:disabled="discarding"
-                                         dusk="confirm-discard-changes">Discard changes</x-danger-button>
+                                         dusk="confirm-discard-changes">Discard Changes</x-danger-button>
                     </div>
                 </div>
             </x-modal>

@@ -21,7 +21,7 @@
         Open the link below to choose a new one.
     </p>
 
-    <x-email.button :url="$url">Reset password</x-email.button>
+    <x-email.button :url="$url">Reset Password</x-email.button>
 
     <p style="margin:28px 0 8px 0; font-size:13px; line-height:20px; color:#6b7280;">
         Or paste this address into your browser:

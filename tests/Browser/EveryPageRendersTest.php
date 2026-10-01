@@ -96,6 +96,52 @@ class EveryPageRendersTest extends DuskTestCase
         });
     }
 
+    /**
+     * A store the platform has paused, as its own people see it, and the app's own error page (owner, 2026-09-30):
+     * named, one heading, every control with a name — the error page with no Alpine and no built file of its own.
+     */
+    public function test_a_paused_store_and_an_error_page_render_named(): void
+    {
+        $this->seedSuperAdmin();
+        $store = Store::factory()->create(['name' => 'Alpha Mart', 'is_active' => false]);
+        $owner = $this->storeMember($store);
+
+        $this->browse(function (Browser $browser) use ($owner) {
+            $this->freshSession($browser);
+            $browser->loginAs($owner);
+
+            $this->walk($browser, ['/dashboard']);
+            $browser->assertSeeIn('@dashboard-paused', 'Alpha Mart is paused');
+
+            // Every page of it leads back here.
+            $browser->visit('/screens')->waitForLocation('/dashboard')->assertPresent('@dashboard-paused');
+
+            $browser->visit('/no-such-page')->assertSee('Page not found')->assertPresent('@error-dashboard');
+            $this->assertEverythingIsNamed($browser, '/no-such-page');
+            // The address that is not there is the one error its console may show.
+            $browser->driver->manage()->getLog('browser');
+
+            $browser->click('@error-dashboard')->waitForLocation('/dashboard')->assertPresent('@dashboard-paused');
+
+            // Both on a phone: nothing wider than it, and the error's button whole on its line.
+            $browser->resize(375, 812);
+            foreach (['/dashboard', '/no-such-page'] as $page) {
+                $browser->visit($page);
+                $fits = $browser->script(<<<'JS'
+                    const button = document.querySelector('[dusk="error-dashboard"]');
+                    return {
+                        sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+                        buttonOneLine: !button || button.getBoundingClientRect().height <= 44,
+                    };
+                JS)[0];
+                $this->assertFalse($fits['sideways'], "{$page} is wider than a phone");
+                $this->assertTrue($fits['buttonOneLine'], "{$page}'s button wraps on a phone");
+            }
+            $browser->driver->manage()->getLog('browser');
+            $browser->resize(1920, 1080);
+        });
+    }
+
     /** Open each page, let Alpine settle, and insist that it finished loading and said nothing to the console. */
     private function walk(Browser $browser, array $pages): void
     {

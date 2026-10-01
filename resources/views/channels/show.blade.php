@@ -152,10 +152,10 @@
                                  never only in a binding (a border with no colour of its own is drawn black). --}}
                             <template x-if="editingAd">
                                 <button type="button" @click="setSource('keep')" dusk="channel-ad-source-keep"
-                                        class="tab-link pb-2" x-bind:aria-pressed="source === 'keep' ? 'true' : 'false'">Keep this file</button>
+                                        class="tab-link pb-2" x-bind:aria-pressed="source === 'keep' ? 'true' : 'false'">Keep This File</button>
                             </template>
                             <button type="button" @click="setSource('library')" dusk="channel-ad-source-library"
-                                    class="tab-link pb-2" x-bind:aria-pressed="source === 'library' ? 'true' : 'false'">Media library</button>
+                                    class="tab-link pb-2" x-bind:aria-pressed="source === 'library' ? 'true' : 'false'">Media Library</button>
                             <button type="button" @click="setSource('ads')" dusk="channel-ad-source-ads"
                                     class="tab-link pb-2" x-bind:aria-pressed="source === 'ads' ? 'true' : 'false'">Ad Builder</button>
                             <button type="button" @click="setSource('upload')" dusk="channel-ad-source-upload"
@@ -236,7 +236,7 @@
 
                         <div x-show="picker.page < picker.lastPage" x-cloak class="text-center">
                             <button type="button" @click="loadPicker({ more: true })" x-bind:disabled="picker.loading"
-                                    dusk="channel-ad-picker-more" class="btn-secondary">Load more</button>
+                                    dusk="channel-ad-picker-more" class="btn-secondary">Load More</button>
                         </div>
 
                         <template x-if="formErrors.media_id">
@@ -298,8 +298,8 @@
                     <div x-show="confirmingClose && uploading" x-cloak role="alert" class="alert-warning flex flex-wrap items-center justify-between gap-3" dusk="channel-ad-upload-still-going">
                         <span>The file is still uploading. Stop it and close?</span>
                         <span class="flex flex-wrap gap-2">
-                            <button type="button" class="btn-secondary" @click="confirmingClose = false">Keep uploading</button>
-                            <button type="button" class="btn-danger" @click="closeAdModal(true)" dusk="channel-ad-stop-and-close">Stop and close</button>
+                            <button type="button" class="btn-secondary" @click="confirmingClose = false">Keep Uploading</button>
+                            <button type="button" class="btn-danger" @click="closeAdModal(true)" dusk="channel-ad-stop-and-close">Stop and Close</button>
                         </span>
                     </div>
 

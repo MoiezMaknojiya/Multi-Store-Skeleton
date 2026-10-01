@@ -36,9 +36,9 @@
 
     <div class="grid grid-cols-2 gap-1">
         <button type="button" class="btn-secondary" x-bind:disabled="clipboardSize === 0"
-                @click="pasteStyle()" title="Ctrl+Shift+V" dusk="multi-paste-style">Paste style</button>
+                @click="pasteStyle()" title="Ctrl+Shift+V" dusk="multi-paste-style">Paste Style</button>
         <button type="button" class="btn-secondary" x-bind:disabled="clipboardSize === 0"
-                @click="pasteAnimation()" title="Ctrl+Alt+V" dusk="multi-paste-animation">Paste animation</button>
+                @click="pasteAnimation()" title="Ctrl+Alt+V" dusk="multi-paste-animation">Paste Animation</button>
         <button type="button" class="btn-secondary" @click="toggleLockSelection()" title="Ctrl+L" dusk="multi-lock">Lock</button>
         <button type="button" class="btn-secondary" @click="hideSelection()" dusk="multi-hide">Hide</button>
     </div>

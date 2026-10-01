@@ -4,7 +4,7 @@
     <button type="button" class="btn-secondary w-full"
             @click="toggleNestedStyle('border', { width: 6, style: 'solid', color: '#ffffff' })"
             dusk="{{ $prefix }}-border-toggle">
-        <span x-text="selected.style?.border ? 'Remove border' : 'Add border'"></span>
+        <span x-text="selected.style?.border ? 'Remove Border' : 'Add Border'"></span>
     </button>
 
     <div x-show="selected.style?.border" x-cloak class="grid grid-cols-3 gap-2">
@@ -32,7 +32,7 @@
         <button type="button" class="btn-secondary w-full"
                 @click="toggleNestedStyle('shadow', { x: 0, y: 16, blur: 40, spread: 0, color: '#000000' })"
                 dusk="{{ $prefix }}-shadow-toggle">
-            <span x-text="selected.style?.shadow ? 'Remove shadow' : 'Add shadow'"></span>
+            <span x-text="selected.style?.shadow ? 'Remove Shadow' : 'Add Shadow'"></span>
         </button>
 
         <div x-show="selected.style?.shadow" x-cloak class="grid grid-cols-2 gap-2">

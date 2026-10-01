@@ -37,14 +37,17 @@ class MediaController extends Controller
 
     /**
      * The media library page. Above the stores it reads one library at a time — the platform's own, or a
-     * shop's — and the chooser decides where an upload lands as well (docs/CHANNEL-CONTENT-SPEC.md §3).
+     * shop's — and the chooser decides where an upload lands as well (docs/CHANNEL-CONTENT-SPEC.md §3). The
+     * storage of the library it opens on comes with the page, so the meter is there at once instead of pushing
+     * the filters and the drop box down when the list arrives.
      */
-    public function index(Request $request): View
+    public function index(Request $request, StoreStorage $quota): View
     {
+        $aboveTheStores = $request->user()->globalRole() !== null;
+
         return view('media.index', [
-            'libraries' => $request->user()->globalRole() !== null
-                ? Store::orderBy('name')->get(['id', 'name'])->toArray()
-                : null,
+            'libraries' => $aboveTheStores ? Store::orderBy('name')->get(['id', 'name'])->toArray() : null,
+            'storage' => $quota->summary($this->libraryOnThePage(null)),
         ]);
     }
 

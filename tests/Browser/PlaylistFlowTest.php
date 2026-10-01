@@ -105,10 +105,7 @@ class PlaylistFlowTest extends DuskTestCase
             // -- 4. The owner uploads a file ------------------------------------
             $panel->visit('/media');
             $this->waitForAlpine($panel);
-            $this->clickAndAwait($panel, '@upload-media', fn (Browser $b) => $b->waitFor('@media-upload-form', 3));
             $this->uploadThrough($panel, 'media', $poster);
-            $this->jsClick($panel, '@media-upload-close');
-            $this->waitForModalClosed($panel, '@media-upload-form');
             $panel->waitForText('Opening Poster', 15);
 
             $media = Media::where('title', 'Opening Poster')->firstOrFail();

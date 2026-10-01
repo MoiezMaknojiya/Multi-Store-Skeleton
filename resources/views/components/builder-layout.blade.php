@@ -19,6 +19,10 @@
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 
+    {{-- The editor is a script of its own, loaded on this page alone (resources/js/app.js): fetched at once, beside
+         the app's, rather than after it. --}}
+    <link rel="modulepreload" href="{{ \Illuminate\Support\Facades\Vite::asset('resources/js/builder/editor.js') }}">
+
     {{-- Dark Mode Flash Prevention --}}
     <script>
         if (localStorage.getItem('darkMode') === 'true') {

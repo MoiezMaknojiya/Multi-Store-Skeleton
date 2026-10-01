@@ -43,7 +43,13 @@ class BuilderAssetController extends Controller
             ? Store::orderBy('name')->get(['id', 'name'])->toArray()
             : [];
 
-        return view('builder.assets', ['stores' => $stores, 'aboveTheStores' => $this->aboveTheStores()]);
+        // The shelf's storage comes with the page (none for All shops, where the platform's shared files have no wall),
+        // so the meter is there at once instead of pushing the drop box down when the list arrives.
+        return view('builder.assets', [
+            'stores' => $stores,
+            'aboveTheStores' => $this->aboveTheStores(),
+            'storage' => $this->storageOf(null),
+        ]);
     }
 
     /**

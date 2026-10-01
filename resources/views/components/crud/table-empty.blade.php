@@ -20,7 +20,7 @@
             <template x-if="loadFailed">
                 <div class="mx-auto max-w-md space-y-3" role="alert" dusk="table-load-failed">
                     <p class="text-sm text-gray-700 dark:text-gray-200">Could not load this list. Check the connection, then try again.</p>
-                    <button type="button" class="btn-row-neutral" @click="fetchItems()" dusk="table-try-again">Try again</button>
+                    <button type="button" class="btn-row-neutral" @click="fetchItems()" dusk="table-try-again">Try Again</button>
                 </div>
             </template>
             <template x-if="!loadFailed && (search || ({{ $filtered }}))">
@@ -30,9 +30,9 @@
                         <span x-show="!search">Nothing matches these filters.</span>
                     </p>
                     <div class="flex flex-wrap justify-center gap-2">
-                        <button type="button" x-show="search" class="btn-row-neutral" @click="search = ''" dusk="table-clear-search">Clear search</button>
+                        <button type="button" x-show="search" class="btn-row-neutral" @click="search = ''" dusk="table-clear-search">Clear Search</button>
                         @if ($clearFilters)
-                            <button type="button" x-show="!search" class="btn-row-neutral" @click="{{ $clearFilters }}" dusk="table-clear-filters">Clear filters</button>
+                            <button type="button" x-show="!search" class="btn-row-neutral" @click="{{ $clearFilters }}" dusk="table-clear-filters">Clear Filters</button>
                         @endif
                     </div>
                 </div>

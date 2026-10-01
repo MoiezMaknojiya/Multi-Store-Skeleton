@@ -39,7 +39,7 @@ class DashboardSummary
      * list means "all quiet", which is not the same thing.
      *
      * @return array{store: string, cards: list<array<string, mixed>>, attention: list<array<string, mixed>>|null,
-     *     steps: list<array<string, mixed>>, actions: list<array<string, string>>, activity: list<array<string, mixed>>|null}
+     *     steps: list<array<string, mixed>>, activity: list<array<string, mixed>>|null}
      */
     public function forStore(Store $store, User $user): array
     {
@@ -133,7 +133,6 @@ class DashboardSummary
             'cards' => $cards,
             'attention' => $user->can('screen-view') || $user->can('media-view') ? $attention : null,
             'steps' => $this->gettingStarted($user, $screens, $mediaCount),
-            'actions' => $this->storeActions($user),
             'activity' => $user->can('activity-view')
                 ? $this->recentActivity(ActivityLog::where('store_id', $store->id))
                 : null,
@@ -257,7 +256,7 @@ class DashboardSummary
             $steps[] = [
                 'key' => 'upload', 'done' => (bool) $mediaCount,
                 'text' => 'Upload a picture or a video', 'detail' => 'Drop it on the Media page, several at once if you like.',
-                'href' => route('media.view', ['upload' => 1]),
+                'href' => route('media.view'),
             ];
         }
 
@@ -286,22 +285,6 @@ class DashboardSummary
         return $more > 0
             ? [['key' => $key, 'tone' => $tone, 'text' => "{$more} {$text}", 'detail' => $detail, 'href' => $href, 'count' => $more]]
             : [];
-    }
-
-    /**
-     * What may be started from the dashboard: each needs the permission to do it and the one that opens its page.
-     *
-     * @return list<array<string, string>>
-     */
-    private function storeActions(User $user): array
-    {
-        return collect([
-            ['key' => 'pair', 'label' => 'Pair a screen', 'href' => route('screens.view', ['pair' => 1]), 'can' => ['screen-view', 'screen-store']],
-            ['key' => 'upload', 'label' => 'Upload files', 'href' => route('media.view', ['upload' => 1]), 'can' => ['media-view', 'media-store']],
-            ['key' => 'ad', 'label' => 'Create Ad', 'href' => route('builder.index', ['new' => 1]), 'can' => ['ad-view', 'ad-store']],
-        ])->filter(fn (array $action) => collect($action['can'])->every(fn (string $permission) => $user->can($permission)))
-            ->map(fn (array $action) => ['key' => $action['key'], 'label' => $action['label'], 'href' => $action['href']])
-            ->values()->all();
     }
 
     /**

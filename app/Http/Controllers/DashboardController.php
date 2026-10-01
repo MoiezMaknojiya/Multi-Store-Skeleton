@@ -19,6 +19,7 @@ class DashboardController extends Controller
      *    what needs doing and its first steps (DashboardSummary).
      *  - Store users with no store chosen yet: smart default — a single store is
      *    auto-selected, several stores send them to the selection page.
+     * A store the platform has paused shows why instead (EnsureStoreIsActive sends every page of it here).
      */
     public function index(DashboardSummary $summary): View|RedirectResponse
     {
@@ -46,6 +47,14 @@ class DashboardController extends Controller
             session()->reflash();
 
             return redirect()->route('stores.select');
+        }
+
+        if (! $store->is_active) {
+            return view('dashboard.index', [
+                'view' => 'paused',
+                'store' => $store,
+                'hasOtherStores' => $stores->count() > 1,
+            ]);
         }
 
         return view('dashboard.index', [

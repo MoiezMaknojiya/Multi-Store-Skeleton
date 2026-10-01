@@ -34,10 +34,9 @@ import { registerCampaignsTable }    from './tables/campaigns-table.js';
 import { registerChannelsTable }     from './tables/channels-table.js';
 import { registerChannelAds }        from './pages/channel-ads.js';
 
-/* The Ad Builder: its two listings and the editor itself */
+/* The Ad Builder's two listings. The editor itself is loaded on its own page only (below). */
 import { registerAdsTable }           from './tables/ads-table.js';
 import { registerBuilderAssetsTable } from './tables/builder-assets-table.js';
-import { registerAdEditor }           from './builder/editor.js';
 
 window.Alpine = Alpine;
 
@@ -108,9 +107,30 @@ registerCampaignsTable(Alpine);
 registerChannelsTable(Alpine);
 registerChannelAds(Alpine);
 
-/* Register the Ad Builder */
+/* Register the Ad Builder's listings */
 registerAdsTable(Alpine);
 registerBuilderAssetsTable(Alpine);
-registerAdEditor(Alpine);
 
-Alpine.start();
+/**
+ * The Ad Builder's editor is some two fifths of the panel's script, and only its own page uses it (owner, 2026-09-30:
+ * "editor ko alag load karo"): it is fetched there alone, before Alpine starts, so every other page opens without it.
+ * Every other page starts Alpine at once — nothing is awaited on the way. A page whose editor could not be fetched
+ * (the connection dropped as it opened) still works everywhere else and says so; the editor's part is left alone.
+ */
+async function start() {
+    const editors = document.querySelectorAll('[x-data^="adEditor"]');
+
+    if (editors.length > 0) {
+        try {
+            const { registerAdEditor } = await import('./builder/editor.js');
+            registerAdEditor(Alpine);
+        } catch {
+            editors.forEach((editor) => editor.setAttribute('x-ignore', ''));
+            window.toast('The editor could not be loaded. Check the connection, then reload the page.');
+        }
+    }
+
+    Alpine.start();
+}
+
+start();

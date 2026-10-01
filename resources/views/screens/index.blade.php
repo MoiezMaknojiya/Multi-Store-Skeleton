@@ -44,9 +44,9 @@
                     Every screen in this shop at once:
                 </span>
                 <button @click="allScreenAds(true)" x-bind:disabled="savingAds"
-                        dusk="all-screens-ads-on" class="btn-row-neutral">Adverts on</button>
+                        dusk="all-screens-ads-on" class="btn-row-neutral">Adverts On</button>
                 <button @click="allScreenAds(false)" x-bind:disabled="savingAds"
-                        dusk="all-screens-ads-off" class="btn-row-neutral">Adverts off</button>
+                        dusk="all-screens-ads-off" class="btn-row-neutral">Adverts Off</button>
             </div>
         </div>
         @endcan
@@ -148,7 +148,7 @@
                                         x-bind:dusk="'screen-ads-' + item.id"
                                         x-bind:class="item.accepts_network_ads ? 'btn-row-primary' : 'btn-row-neutral'"
                                         x-bind:title="adsLabel(item)"
-                                        x-text="item.accepts_network_ads ? 'Adverts on' : 'Adverts off'"></button>
+                                        x-text="item.accepts_network_ads ? 'Adverts On' : 'Adverts Off'"></button>
                                 @endcan
 
                                 <a x-bind:href="'/screens/' + item.id" x-bind:dusk="'playlist-screen-' + item.id"
@@ -161,7 +161,7 @@
 
                                 @can('screen-store')
                                 <button @click="openReplaceModal(item)" x-bind:dusk="'replace-screen-' + item.id"
-                                    class="btn-row-neutral">Replace device</button>
+                                    class="btn-row-neutral">Replace Device</button>
                                 @endcan
 
                                 @can('screen-destroy')
@@ -193,7 +193,7 @@
         <x-modal name="screen-pair-modal" :show="false" maxWidth="lg">
             <div class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
-                    x-text="pairForm.mode === 'replace' ? 'Replace device' : 'Add Screen'"></h2>
+                    x-text="pairForm.mode === 'replace' ? 'Replace Device' : 'Add Screen'"></h2>
 
                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400"
                    x-text="pairForm.mode === 'replace'

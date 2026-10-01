@@ -4,13 +4,13 @@
         <h1 class="page-title">{{ __('Assets') }}</h1>
     </x-slot>
 
-    <div x-data="builderAssetsTable()" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <div x-data="builderAssetsTable({{ Js::from(['storage' => $storage]) }})" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
         {{-- The shop's storage where a note once stood (owner, 2026-09-30), the shop list and the search beside it. The
              meter shows only for a shop's shelf: the platform's shared one (All shops) has no wall. --}}
         <div class="flex flex-wrap items-center justify-between gap-3">
             {{-- The shelf counts toward the shop's 512 MB like its library does. --}}
-            <x-storage-meter class="w-full sm:w-96" />
+            <x-storage-meter class="w-full sm:w-96" :initial="$storage" />
 
             <div class="ml-auto flex flex-wrap items-center gap-3">
                 @if ($aboveTheStores)
@@ -52,14 +52,14 @@
                 <template x-if="!loading && items.length === 0 && loadFailed">
                     <div class="mx-auto max-w-md space-y-3 py-12 text-center" role="alert" dusk="table-load-failed">
                         <p class="text-sm text-gray-700 dark:text-gray-200">Could not load the shelf. Check the connection, then try again.</p>
-                        <button type="button" class="btn-row-neutral" @click="fetchItems()" dusk="table-try-again">Try again</button>
+                        <button type="button" class="btn-row-neutral" @click="fetchItems()" dusk="table-try-again">Try Again</button>
                     </div>
                 </template>
 
                 <template x-if="!loading && items.length === 0 && !loadFailed && search">
                     <div class="mx-auto max-w-md space-y-3 py-12 text-center" dusk="table-no-match">
                         <p class="text-sm text-gray-700 dark:text-gray-200">Nothing matches &ldquo;<span class="font-medium" x-text="search"></span>&rdquo;.</p>
-                        <button type="button" class="btn-row-neutral" @click="search = ''" dusk="table-clear-search">Clear search</button>
+                        <button type="button" class="btn-row-neutral" @click="search = ''" dusk="table-clear-search">Clear Search</button>
                     </div>
                 </template>
 
@@ -140,7 +140,7 @@
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-asset-deletion')">Cancel</x-secondary-button>
                     <x-danger-button x-bind:disabled="deleting" dusk="confirm-asset-deletion-confirm">
                         <x-spinner x-show="deleting" x-cloak />
-                        Delete file
+                        Delete File
                     </x-danger-button>
                 </div>
             </form>

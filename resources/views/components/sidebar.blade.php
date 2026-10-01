@@ -34,14 +34,6 @@
              and the account at the foot of this bar). See docs/STORE-ORGANIZATION-SPEC.md §8. --}}
         @php($__onPlatform = auth()->user()->globalRole() !== null)
 
-        @if ($__onPlatform && auth()->user()->can('store-view'))
-        <x-sidebar.nav-item
-            href="{{ route('stores.view') }}"
-            routeMatch="stores.*"
-            label="Stores"
-            icon="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-        @endif
-
         @if ($__onPlatform)
             {{-- Accounts, plus — for super admins — the platform's roles and the permission
                  catalogue. Each link takes the same locks as its routes. A super admin always
@@ -64,6 +56,15 @@
                 @endif
             </x-sidebar.nav-group>
             @endcan
+        @endif
+
+        {{-- Users first, then Stores (owner, 2026-09-30). --}}
+        @if ($__onPlatform && auth()->user()->can('store-view'))
+        <x-sidebar.nav-item
+            href="{{ route('stores.view') }}"
+            routeMatch="stores.*"
+            label="Stores"
+            icon="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
         @endif
 
         @can('screen-view')

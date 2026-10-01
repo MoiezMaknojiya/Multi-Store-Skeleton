@@ -48,7 +48,7 @@
                 <button type="button" class="btn-pager text-xs"
                         x-bind:class="!selected.style?.gradient ? '!border-blue-500 !text-blue-600 dark:!text-blue-400' : ''"
                         x-bind:aria-pressed="!selected.style?.gradient ? 'true' : 'false'"
-                        @click="setShapeFill('solid')" dusk="shape-fill-solid">One colour</button>
+                        @click="setShapeFill('solid')" dusk="shape-fill-solid">One Colour</button>
                 <button type="button" class="btn-pager text-xs"
                         x-bind:class="selected.style?.gradient ? '!border-blue-500 !text-blue-600 dark:!text-blue-400' : ''"
                         x-bind:aria-pressed="selected.style?.gradient ? 'true' : 'false'"

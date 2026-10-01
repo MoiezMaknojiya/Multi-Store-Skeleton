@@ -141,7 +141,7 @@
                 <div class="space-y-3">
                     <button type="button" class="btn-secondary w-full"
                             @click="openAssetPicker('layer', selectedLayer().type)" dusk="bg-layer-choose"
-                            x-text="selectedLayer().assetId ? 'Choose another…' : (selectedLayer().type === 'video' ? 'Choose a video…' : 'Choose a picture…')"></button>
+                            x-text="selectedLayer().assetId ? 'Choose Another…' : (selectedLayer().type === 'video' ? 'Choose a Video…' : 'Choose a Picture…')"></button>
 
                     <template x-if="selectedLayer().type === 'image'">
                         <div class="space-y-3">

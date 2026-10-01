@@ -174,7 +174,7 @@ class ScreenPairingTest extends DuskTestCase
             // -- Replace device keeps the screen and rotates the token ----------
             $tokenBefore = $screen->fresh()->token_hash;
             $this->clickAndAwait($browser, '@replace-screen-'.$screen->id, fn (Browser $b) => $b->waitFor('@screen-pair-form', 3));
-            $browser->assertSee('Replace device');
+            $browser->assertSee('Replace Device');
             $this->jsType($browser, '@screen-code', $replacementCode);
             $this->jsClick($browser, '@screen-pair-save');
             $this->waitForModalClosed($browser, '@screen-pair-form');

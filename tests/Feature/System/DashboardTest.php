@@ -146,3 +146,14 @@ test('a name that starts with a letter of more than one byte gives its avatar th
             ->and($html)->toContain('ع');
     }
 });
+
+test('above the stores the sidebar lists Users first and Stores after it (owner, 2026-09-30)', function () {
+    $html = $this->actingAs(createSuperAdmin())->get('/dashboard')->assertOk()->getContent();
+
+    $users = strpos($html, 'href="'.route('users.view').'"');
+    $stores = strpos($html, 'href="'.route('stores.view').'"');
+
+    expect($users)->not->toBeFalse()
+        ->and($stores)->not->toBeFalse()
+        ->and($users)->toBeLessThan($stores);
+});

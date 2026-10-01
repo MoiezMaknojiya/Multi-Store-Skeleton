@@ -21,7 +21,7 @@
                 </button>
                 <button type="button" role="tab" id="tab-invitations" aria-controls="panel-invitations" dusk="tab-invitations" class="tab-link"
                     x-on:click="tab = 'invitations'" aria-selected="false" :aria-selected="tab === 'invitations' ? 'true' : 'false'">
-                    Pending invitations <span class="ml-1 badge-neutral" x-text="invitations.length"></span>
+                    Pending Invitations <span class="ml-1 badge-neutral" x-text="invitations.length"></span>
                 </button>
             </div>
         </div>
@@ -32,7 +32,7 @@
                 <h2 class="text-subheading min-w-0">Team of {{ $store->name }}</h2>
                 <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap sm:justify-end">
                     @can('member-invite')
-                        <x-crud.add-button label="Invite member" @click="openInvite()" dusk="invite-member" />
+                        <x-crud.add-button label="Invite Member" @click="openInvite()" dusk="invite-member" />
                     @endcan
                     <x-crud.search-input placeholder="Search by name or email" />
                 </div>
@@ -57,7 +57,7 @@
                             <tr><td colspan="4" class="px-5 py-10 text-center">
                                 <div class="mx-auto max-w-md space-y-3" dusk="table-no-match">
                                     <p class="text-sm text-gray-700 dark:text-gray-200">Nobody matches &ldquo;<span class="font-medium" x-text="search"></span>&rdquo;.</p>
-                                    <button type="button" class="btn-row-neutral" @click="search = ''" dusk="table-clear-search">Clear search</button>
+                                    <button type="button" class="btn-row-neutral" @click="search = ''" dusk="table-clear-search">Clear Search</button>
                                 </div>
                             </td></tr>
                         </template>
@@ -87,7 +87,7 @@
                                         @can('member-update')
                                         <button type="button" class="btn-row-neutral" x-show="member.can_manage"
                                             x-bind:aria-label="'Change the role of ' + member.name"
-                                            x-on:click="openChangeRole(member)" :dusk="'change-role-' + member.id">Change role</button>
+                                            x-on:click="openChangeRole(member)" :dusk="'change-role-' + member.id">Change Role</button>
                                         @endcan
                                         @can('member-remove')
                                         <button type="button" class="btn-row-danger" x-show="member.can_manage"
@@ -108,11 +108,11 @@
         <div x-show="tab === 'invitations'" x-cloak class="card" id="panel-invitations" role="tabpanel" aria-labelledby="tab-invitations" dusk="invitations-table">
             <div class="card-header">
                 <div class="min-w-0">
-                    <h2 class="text-subheading">Pending invitations</h2>
+                    <h2 class="text-subheading">Pending Invitations</h2>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Links last {{ \App\Models\Invitation::LIFETIME_DAYS }} days.</p>
                 </div>
                 @can('member-invite')
-                    <x-crud.add-button label="Invite member" @click="openInvite()" dusk="invite-member-invitations" />
+                    <x-crud.add-button label="Invite Member" @click="openInvite()" dusk="invite-member-invitations" />
                 @endcan
             </div>
             <div class="overflow-x-auto">
@@ -195,7 +195,7 @@
                     <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400" x-show="inviteForm.role_id" x-text="roleDescription(inviteForm.role_id)"></p>
                 </x-crud.form-field>
 
-                <x-crud.form-actions cancelAction="$dispatch('close-modal', 'invite-member')" savingVar="inviting" saveLabel="Send invitation" dusk="invite-send" />
+                <x-crud.form-actions cancelAction="$dispatch('close-modal', 'invite-member')" savingVar="inviting" saveLabel="Send Invitation" dusk="invite-send" />
             </form>
         </x-modal>
 
@@ -218,7 +218,7 @@
                     <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400" x-text="roleDescription(roleForm.role_id)"></p>
                 </x-crud.form-field>
 
-                <x-crud.form-actions cancelAction="$dispatch('close-modal', 'change-member-role')" savingVar="changingRole" saveLabel="Save role" dusk="change-role-save" />
+                <x-crud.form-actions cancelAction="$dispatch('close-modal', 'change-member-role')" savingVar="changingRole" saveLabel="Save Role" dusk="change-role-save" />
             </form>
         </x-modal>
 
@@ -237,7 +237,7 @@
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'remove-member')">Cancel</x-secondary-button>
                     <x-danger-button x-bind:disabled="removing" dusk="remove-member-confirm">
                         <x-spinner x-show="removing" x-cloak />
-                        Remove member
+                        Remove Member
                     </x-danger-button>
                 </div>
             </form>
@@ -255,7 +255,7 @@
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'revoke-invitation')">Cancel</x-secondary-button>
                     <x-danger-button x-on:click="revoke()" x-bind:disabled="revoking" dusk="revoke-invitation-confirm">
                         <x-spinner x-show="revoking" x-cloak />
-                        Revoke invitation
+                        Revoke Invitation
                     </x-danger-button>
                 </div>
             </div>
@@ -272,7 +272,7 @@
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'leave-store')">Cancel</x-secondary-button>
                     <x-danger-button x-on:click="leave()" x-bind:disabled="leaving" dusk="leave-store-confirm">
                         <x-spinner x-show="leaving" x-cloak />
-                        Leave store
+                        Leave Store
                     </x-danger-button>
                 </div>
             </div>
@@ -290,7 +290,7 @@
                 </div>
                 <button type="button" class="btn-secondary" dusk="leave-store"
                     x-on:click="isSoleOwner() ? window.toast('You are the only Owner of ' + storeName + '. Make someone else an Owner before you leave.') : $dispatch('open-modal', 'leave-store')">
-                    Leave store
+                    Leave Store
                 </button>
             </div>
         </div>

@@ -13,7 +13,7 @@
         <x-crud.table-wrapper title="Accounts" searchPlaceholder="Search by name or email" :columns="4">
             @can('super-admin-tier')
                 <x-slot name="actions">
-                    <x-crud.add-button label="Invite to platform team" @click="openInvite()" dusk="invite-platform-member" />
+                    <x-crud.add-button label="Invite to Platform Team" @click="openInvite()" dusk="invite-platform-member" />
                 </x-slot>
             @endcan
             <x-slot name="head">
@@ -60,13 +60,13 @@
                             <div class="flex items-center justify-end gap-2">
                                 <button type="button" class="btn-row-neutral" x-show="item.can.impersonate"
                                     x-bind:aria-label="'Log in as ' + item.name"
-                                    @click="impersonate(item)" x-bind:disabled="impersonating" x-bind:dusk="'impersonate-' + item.id">Log in as</button>
+                                    @click="impersonate(item)" x-bind:disabled="impersonating" x-bind:dusk="'impersonate-' + item.id">Log In As</button>
                                 <button type="button" class="btn-row-neutral" x-show="item.can.manage_stores"
                                     x-bind:aria-label="item.name + '’s stores'"
                                     @click="openManageStores(item)" x-bind:disabled="loadingAccess" x-bind:dusk="'manage-stores-' + item.id">Stores</button>
                                 <button type="button" class="btn-row-danger" x-show="item.can.remove_platform_role"
                                     x-bind:aria-label="'Remove the platform role of ' + item.name"
-                                    @click="confirmRemoveRole(item)" x-bind:dusk="'remove-platform-role-' + item.id">Remove platform role</button>
+                                    @click="confirmRemoveRole(item)" x-bind:dusk="'remove-platform-role-' + item.id">Remove Platform Role</button>
                                 <button type="button" class="btn-row-danger" x-show="item.can.delete"
                                     x-bind:aria-label="'Delete ' + item.name"
                                     @click="confirmDelete(item)" x-bind:dusk="'delete-account-' + item.id">Delete</button>
@@ -153,7 +153,7 @@
                     </select>
                 </x-crud.form-field>
 
-                <x-crud.form-actions cancelAction="$dispatch('close-modal', 'invite-platform-member')" savingVar="inviting" saveLabel="Send invitation" dusk="invite-platform-send" />
+                <x-crud.form-actions cancelAction="$dispatch('close-modal', 'invite-platform-member')" savingVar="inviting" saveLabel="Send Invitation" dusk="invite-platform-send" />
             </form>
         </x-modal>
 
@@ -214,7 +214,7 @@
                             <x-secondary-button x-on:click="removing = null">Cancel</x-secondary-button>
                             <x-danger-button x-bind:disabled="removingBusy" dusk="remove-membership-confirm">
                                 <x-spinner x-show="removingBusy" x-cloak />
-                                Remove from store
+                                Remove from Store
                             </x-danger-button>
                         </div>
                     </form>
@@ -272,7 +272,7 @@
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-remove-platform-role')">Cancel</x-secondary-button>
                     <x-danger-button x-bind:disabled="removingRole" dusk="remove-platform-role-confirm">
                         <x-spinner x-show="removingRole" x-cloak />
-                        Remove role
+                        Remove Role
                     </x-danger-button>
                 </div>
             </form>
@@ -289,7 +289,7 @@
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-revoke-platform-invitation')">Cancel</x-secondary-button>
                     <x-danger-button x-on:click="revokeInvitation()" x-bind:disabled="revoking" dusk="revoke-platform-invitation-confirm">
                         <x-spinner x-show="revoking" x-cloak />
-                        Revoke invitation
+                        Revoke Invitation
                     </x-danger-button>
                 </div>
             </div>
@@ -324,7 +324,7 @@
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-account-deletion')">Cancel</x-secondary-button>
                     <x-danger-button x-bind:disabled="deleting" dusk="delete-account-confirm">
                         <x-spinner x-show="deleting" x-cloak />
-                        Delete account
+                        Delete Account
                     </x-danger-button>
                 </div>
             </form>

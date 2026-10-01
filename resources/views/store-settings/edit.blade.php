@@ -72,7 +72,7 @@
 
                             {{-- "Store details saved." arrives as a toast (components/toasts.blade.php). --}}
                             <div class="flex items-center gap-4">
-                                <x-primary-button dusk="store-details-save">{{ __('Save changes') }}</x-primary-button>
+                                <x-primary-button dusk="store-details-save">{{ __('Save Changes') }}</x-primary-button>
                             </div>
                         </form>
                         @endunless
@@ -116,7 +116,7 @@
                         @csrf
 
                         <div>
-                            <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ __('Create store') }}</h2>
+                            <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ __('Create Store') }}</h2>
                             <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
                                 You'll be its Owner.
                             </p>
@@ -151,7 +151,7 @@
 
                         <div class="flex flex-wrap justify-end gap-3">
                             <x-secondary-button x-on:click="$dispatch('close')">{{ __('Cancel') }}</x-secondary-button>
-                            <x-primary-button dusk="open-store-confirm">{{ __('Create store') }}</x-primary-button>
+                            <x-primary-button dusk="open-store-confirm">{{ __('Create Store') }}</x-primary-button>
                         </div>
                     </form>
                 </x-modal>

@@ -13,6 +13,6 @@
         Invitations arrive by email. Ask a store's owner to invite {{ auth()->user()->email }}, then open the link in that email.
     </p>
     {{-- The one thing to check from here: the address an owner has to invite. --}}
-    <a href="{{ route('profile.edit') }}" class="btn-secondary mt-6" dusk="dashboard-empty-settings">Check your email in Settings</a>
+    <a href="{{ route('profile.edit') }}" class="btn-secondary mt-6" dusk="dashboard-empty-settings">Check Your Email in Settings</a>
 </div>
 </div>

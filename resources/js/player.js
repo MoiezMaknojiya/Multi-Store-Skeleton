@@ -104,7 +104,7 @@ function setPairingInstruction(knownDevice) {
         : 'Open your dashboard, go to';
 
     el('pairing-where').textContent = knownDevice
-        ? 'Screens \u2192 Replace device'
+        ? 'Screens \u2192 Replace Device'
         : 'Screens \u2192 Add Screen';
 
     // A 401 leaves behind "This screen was removed", which is the right note when
