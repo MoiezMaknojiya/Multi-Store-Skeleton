@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Daypart;
@@ -250,10 +251,11 @@ test('with no live file on the playlist, an unscheduled channel plays on its own
     lineOnScreen($this->screen, $this->gama, 0);
     expect(collect(manifestNow($this)['items'])->pluck('type')->all())->toBe(['channel']);
 
-    // ...and neither is one whose own files have all expired: an old promotion left on
-    // the list is not a request for a black screen.
-    $expired = Media::factory()->expired()->create(['store_id' => $this->store->id]);
-    lineOnScreen($this->screen, $expired, 1);
+    // ...and neither is one whose own files are all Ad Builder pages taken off the screens: a
+    // draft left on the list is not a request for a black screen.
+    $draft = BuilderAd::factory()->published()->create(['store_id' => $this->store->id]);
+    $draft->update(['published_at' => null]);
+    lineOnScreen($this->screen, $draft->media, 1);
 
     $manifest = manifestNow($this);
     expect(collect($manifest['items'])->pluck('type')->all())->toBe(['channel']);

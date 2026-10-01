@@ -18,10 +18,10 @@
  * Offline (docs/AD-BUILDER-SPEC.md §15): where the browser has a service worker,
  * public/player-sw.js keeps the page, the last manifest and every file the
  * manifest names, and this page plays on from them when the line drops — the
- * manifest's timeline says what each moment of the next days shows; what has
- * expired since is dropped, then the holding picture, then black — and after
- * every live manifest it names to the worker, most needed first, every file the
- * next days may play. Anywhere else the player is online only, exactly as before.
+ * manifest's timeline says what each moment of the next days shows, the holding
+ * picture where nothing is due, then black — and after every live manifest it
+ * names to the worker, most needed first, every file the next days may play.
+ * Anywhere else the player is online only, exactly as before.
  */
 
 const TOKEN_KEY = 'signage.device.token';
@@ -31,7 +31,7 @@ const CODE_KEY = 'signage.device.code';
 const CODE_EXPIRES_KEY = 'signage.device.code_expires';
 const KNOWN_KEY = 'signage.device.known';
 // The gap between the server's clock and this set's, from the last live manifest (§15) — kept, so a set that
-// reboots with no line still judges expiry and the schedule by the server's hours.
+// reboots with no line still reads the timeline by the server's hours.
 const CLOCK_KEY = 'signage.device.clock_offset';
 
 // While waiting to be claimed. Deliberately as slow as the playlist poll
@@ -137,9 +137,9 @@ const state = {
     itemDurationMs: 0,
 
     // Offline (§15): whether the manifest on screen came from the worker's cache, the
-    // set's clock corrected by the last live manifest's server time (so expiry is judged
-    // by the right hours however wrong the box's clock is), and the last live manifest —
-    // warmed again when a worker takes the page over after it loaded.
+    // set's clock corrected by the last live manifest's server time (so the timeline's
+    // entry is picked by the right hours however wrong the box's clock is), and the last
+    // live manifest — warmed again when a worker takes the page over after it loaded.
     offline: false,
     clockOffset: Number(store.get(CLOCK_KEY)) || 0,
     lastLive: null,
@@ -374,7 +374,7 @@ async function fetchPlaylist() {
         applyOrientation(data.screen?.orientation);
 
         // The worker marks an answer it served from its cache because the server could
-        // not be reached (§15): the set is offline, and judges expiry for itself.
+        // not be reached (§15): the set is offline, and plays its timeline's entry for now.
         applyManifest(data, response.headers.get('X-Signage-Cached') === '1');
     } catch {
         /* Keep showing the last thing that worked. */
@@ -383,15 +383,11 @@ async function fetchPlaylist() {
 
 /**
  * A manifest, live or from memory. A live one resets the clock offset and warms the cache
- * with everything the screen may need; a cached one is played the way the owner decided —
- * what has not expired plays on, and once everything has, the holding picture or black.
+ * with everything the screen may need; a cached one plays its timeline's entry for now.
  */
 function applyManifest(data, fromCache) {
     state.offline = fromCache;
     document.body.dataset.source = fromCache ? 'cache' : 'live';
-    // Which items a cached manifest has dropped as expired — nothing on the glass says so (the owner's
-    // rule); it is on the page for whoever checks a set.
-    document.body.dataset.dropped = '';
 
     if (!fromCache) {
         const serverTime = Date.parse(data.server_time);
@@ -407,17 +403,16 @@ function applyManifest(data, fromCache) {
 
     const shown = fromCache ? fromMemory(data) : data;
 
-    if (fromCache) {
-        document.body.dataset.dropped = shown.dropped;
-        document.body.dataset.entry = String(shown.entry);
-    }
+    // Which entry of the timeline a cached manifest is playing — nothing on the glass says so (the owner's
+    // rule); it is on the page for whoever checks a set.
+    if (fromCache) document.body.dataset.entry = String(shown.entry);
 
     // Nothing changed: leave whatever is on screen alone rather than
     // re-rendering and making the TV flicker every poll. What is compared is
     // what would be SHOWN, whether it came live or from memory: the line dropping
     // — or coming back — with the same things due restarts nothing (a video is
     // not cut, a channel's rotation is not sent back to its start), while a new
-    // entry of the timeline (lunch has begun) or a file expiring mid-outage does.
+    // entry of the timeline (lunch has begun) does.
     const key = JSON.stringify([
         shown.screen?.orientation ?? null,
         shown.blank === true,
@@ -435,8 +430,8 @@ function applyManifest(data, fromCache) {
 /**
  * What a cached manifest says the screen should show NOW (§15). The timeline carries the server's own
  * answer for every moment it changes over the next few days — worked out by the very resolver that answers
- * online — so its entry for this moment is taken (past its end, the last one); then any file that has
- * expired since is dropped, and when nothing is left the holding picture, then black.
+ * online, the holding picture wherever nothing else is due — so its entry for this moment is taken (past its
+ * end, the last one).
  *
  * "Now" is this set's clock corrected by the last live server time, and never earlier than the moment the
  * manifest was made: a box whose clock went back to 2020 after a power cut keeps playing the right day.
@@ -461,20 +456,7 @@ function fromMemory(data) {
         base = { items: named(entries[entry].items), blank: entries[entry].blank === true, ads: named(entries[entry].ads) };
     }
 
-    const expired = (item) => item.type !== 'channel' && item.expires_at && Date.parse(item.expires_at) <= now;
-    const items = base.items.filter((item) => !expired(item));
-    const dropped = base.items.filter(expired).map((item) => item.id).join(',');
-    const adBreak = { ...(data.ad_break ?? {}), items: base.ads };
-
-    if (items.length > 0 || base.items.length === 0) {
-        return { ...data, items, blank: base.blank, ad_break: adBreak, dropped, entry };
-    }
-
-    // Everything in it has expired: the holding picture if there is one — unless that too has
-    // expired — and otherwise black, which is what the server would have answered.
-    const fallback = data.fallback && !expired(data.fallback) ? [data.fallback] : [];
-
-    return { ...data, items: fallback, blank: fallback.length === 0, ad_break: adBreak, dropped, entry };
+    return { ...data, items: base.items, blank: base.blank, ad_break: { ...(data.ad_break ?? {}), items: base.ads }, entry };
 }
 
 /* ── The worker and its cache (§15) ─────────────────────────────────────── */
@@ -650,11 +632,11 @@ function render(data) {
     show('view-content');
 
     // What is on the glass and no longer on the list must not stay up while the next item loads — or, with
-    // no line, fails to: played from memory, or once it has expired, black is better than yesterday's price.
-    // (Online, the next item is a moment away, and cutting to black for that moment would be a flash.)
+    // no line, fails to: played from memory, black is better than yesterday's price. (Online, the next item
+    // is a moment away, and cutting to black for that moment would be a flash.)
     const current = frontNode();
 
-    if (current && (state.offline || hasExpired(current)) && !state.items.some((item) => assetUrl(item) === current.dataset.item)) {
+    if (current && state.offline && !state.items.some((item) => assetUrl(item) === current.dataset.item)) {
         if (current.tagName === 'VIDEO') current.pause();
         layer(state.front).hidden = true;
         layer(state.front).innerHTML = '';
@@ -713,19 +695,10 @@ function stopPlayback() {
 function buildElement(item) {
     const node = buildNode(item);
 
-    // Which file it is and when it stops being current: render() takes something that is no longer on the
-    // list off the glass by these.
+    // Which file it is: render() takes something that is no longer on the list off the glass by it.
     node.dataset.item = assetUrl(item);
-    if (item.expires_at) node.dataset.expires = item.expires_at;
 
     return node;
-}
-
-/** Has what this node shows expired, by the server's clock? */
-function hasExpired(node) {
-    const expires = Date.parse(node.dataset.expires ?? '');
-
-    return Number.isFinite(expires) && expires <= Date.now() + state.clockOffset;
 }
 
 function buildNode(item) {

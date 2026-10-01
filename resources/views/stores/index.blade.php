@@ -159,7 +159,7 @@
                     </p>
                 </div>
                 <div>
-                    <label class="form-label" for="delete-store-name">Type <span class="font-semibold" x-text="selectedItem?.name"></span> to confirm <span class="text-red-600 dark:text-red-400" aria-hidden="true">*</span></label>
+                    <label class="form-label" for="delete-store-name">Type <span class="confirm-name" x-text="selectedItem?.name" dusk="delete-store-typed-name"></span> to confirm <span class="text-red-600 dark:text-red-400" aria-hidden="true">*</span></label>
                     <div class="mt-1" x-bind:class="deleteErrors.confirm_name ? 'crud-field-error' : ''">
                         <x-text-input id="delete-store-name" x-model="deleteConfirmName" dusk="delete-store-name" maxlength="255" autocomplete="off"
                             aria-required="true" x-bind:aria-invalid="deleteErrors.confirm_name ? 'true' : null"

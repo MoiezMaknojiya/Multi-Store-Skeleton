@@ -126,13 +126,19 @@ playlist item, do rules.
 
 ## 5. Resolver — chalega ya nahi
 
-Har item ke liye **do** sawal. **Koi ek bhi na kahe → item band.**
+Har item ke liye **ek** sawal. **Rule na kahe → item band.**
 
 ```
-1. File zinda hai?            media.starts_at / media.expires_at  (ye pehle se hai)
-2. Koi rule haan kehta hai?   rules khali hon to khud-ba-khud haan
-                              (rules screen ke timezone par parhi jati hain)
+Koi rule haan kehta hai?   rules khali hon to khud-ba-khud haan
+                           (rules screen ke timezone par parhi jati hain)
 ```
+
+Sirf ek cheez rule ke haan kehne par bhi nahi chalti: Ad Builder ka woh page jo **unpublish** ho chuka ho.
+
+> **2026-10-01 se file ki apni koi date nahi** (owner: "srif naam rakho"). Pehle `media.starts_at` /
+> `media.expires_at` bhi poocha jata tha; ab Media Library mein file ka sirf naam hai (Rename), aur kab
+> chalegi ye sirf playlist line ke rules batate hain. Migration `2026_10_01_100000_take_the_dates_and_description_off_media`
+> ne dono dates aur description ke columns hata diye.
 
 Sab resolve **server par** hota hai, `DeviceController::playlist` mein — hamare maujooda
 usool ke mutabiq, taake sasti TV ki ghalat ghari se farq na pare. Device sirf wo list dekhta
@@ -154,8 +160,6 @@ hai jo abhi chalni hai. Poll 30 second ka hai, to boundary par 30 sec ke andar s
 | `eid-offer.mp4` | 20s | **A:** 20–22 Mar + Evening (16:00–20:00) · **B:** har Friday + Lunch |
 | `branding.jpg` | 8s | Deli hours (07:00–20:00, Sunday 09:00–16:00) |
 
-`eid-offer.mp4` ki file par `expires_at = 25 Mar` bhi laga hai.
-
 **Jumma, 20 March:**
 
 | Waqt | TV par kya chal raha hai |
@@ -171,10 +175,9 @@ hai jo abhi chalni hai. Poll 30 second ka hai, to boundary par 30 sec ke andar s
 
 - Rule A ki dates (20–22 Mar) guzar chukin ❌
 - Rule B kehta hai: Friday hai, Lunch ka waqt hai ✅
-- **Magar** file ki `expires_at = 25 Mar` guzar chuki ❌
 
-→ **`eid-offer.mp4` nahi chalegi.** Rule haan kehne ke bawajood, kyunki file khud expire ho
-chuki. Yahi "koi bhi mana kare to band" ka usool hai.
+→ **`eid-offer.mp4` chalegi**, kyunki ek rule haan kehta hai. Use 25 March ke baad band karna ho
+to Rule B par `ends_on = 25 Mar` lagao: file ki apni koi date nahi hoti (2026-10-01).
 
 **Default media kab chalti hai:** jab har item filter ho jaye. Upar 06:00 aur 21:00 par
 `welcome.jpg` chalti — kyunki us waqt koi bhi item due nahi. Set na ho to **kaali screen**
@@ -299,7 +302,7 @@ rehta hai, kyunki wahan "No content" sach aur kaam ka hai (§18 ka teen-matlab t
 
 - `blank: true` → player kaali screen dikhaye, "No content" ka text bhi nahi
   (`document.body.classList.toggle('closed', …)` — `resources/js/player.js`).
-- `items` khali + default media set (aur wo khud expire na hui ho) → server default media ko
+- `items` khali + default media set (aur wo unpublish hua Ad Builder page na ho) → server default media ko
   ek aam item bana ke bhej deta hai, `id: 0` ke saath. **Player ka code badalne ki zarurat
   nahi.**
 - Har item par `checksum` — id + size + updated_at se bana cache key, content digest nahi.
@@ -406,7 +409,7 @@ Item ke ⋮ mein **`Schedule`**:
 ### Playlist row par nishan
 
 Jis item par schedule ho, us par ek chhota **⏱ badge** + summary line. Aur jo item **abhi**
-eligible nahi, wo greyed dikhe — bilkul waise jaise expired media abhi greyed dikhta hai.
+eligible nahi, wo greyed dikhe.
 
 ---
 
@@ -427,17 +430,15 @@ eligible nahi, wo greyed dikhe — bilkul waise jaise expired media abhi greyed 
 
 | Halat | Message |
 |---|---|
-| Rule ki dates file ki expiry ke baad | ⚠️ *"Ye file 25 Mar ko expire ho jati hai — is rule ki dates us ke baad hain."* |
 | `recurrence_until` guzar chuka | ⚠️ *"Is rule ka waqt guzar chuka hai."* |
 | ~~Screen ke hours hain magar default media nahi~~ | **khatam** — screen ke hours hi nahi rahe (§18) |
 
-Warning **rokti nahi** — owner shayad file ki expiry baad mein badalna chahta ho.
+Warning **rokti nahi**. (File ki expiry wali warning 2026-10-01 ko khatam: file ki apni date hi nahi rahi.)
 
 > *As built:* hard errors sab lage hue hain (`PlaylistController::writeItems` +
-> `resources/js/core/validate.js`), magar ye warning messages **server se nahi aate**. Panel is
-> ke bajaye line ke saath file ki expiry amber mein likh deta hai (`- expires 25/03/2026`,
-> `resources/views/screens/show.blade.php`), aur channel line par `channelWarning()` isi
-> tarah amber dikhata hai. Baqi warnings abhi baqi kaam hain.
+> `resources/js/core/validate.js`), magar ye warning messages **server se nahi aate**. Channel
+> line par `channelWarning()` amber mein batata hai (`resources/views/screens/show.blade.php`).
+> Baqi warnings abhi baqi kaam hain.
 
 ---
 
@@ -468,8 +469,8 @@ App\Models\Screen::localTime(?CarbonInterface $at = null): CarbonImmutable
 
 Do baatein jo yahan ahem hain:
 
-- `resolve()` **ek hi lamha** poore manifest ke liye parhta hai (`$instant`), warna ek file jo
-  loop ke beech expire ho rahi ho ek hi jawab mein andar aur bahar dono ho sakti thi.
+- `resolve()` **ek hi lamha** poore manifest ke liye parhta hai (`$instant`), warna ek line jis
+  ka daypart loop ke beech band ho raha ho ek hi jawab mein andar aur bahar dono ho sakti thi.
 - `DeviceController::playlist` isi ko call karta hai, aur `occurrences()` UI ke preview ko bhi
   feed karta hai (`PlaylistController::preview`) — ek hi logic, do jagah, isliye test ek hi
   jagah.

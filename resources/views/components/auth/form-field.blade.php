@@ -8,6 +8,7 @@
        value    — default input value (falls back behind old())
        id       — input id when $name would collide with another field on the page
        hint     — a line under the field saying what it takes ("At least 8 characters."), read with it
+       highlight — the words a person must type, picked out where the label says :name ("Type :name to confirm")
 
      Renders one of four things in order of priority:
        1. The named "input" slot
@@ -19,7 +20,7 @@
      for the eye), and aria-describedby its hint and, after a refused submit, its message (aria-invalid). The
      message carries data-error-for, so the page's own check (resources/js/core/plain-form.js) can put a newer
      one in its place. --}}
-@props(['name', 'label', 'type' => 'text', 'placeholder' => '', 'required' => false, 'bag' => 'default', 'value' => null, 'id' => null, 'hint' => null])
+@props(['name', 'label', 'type' => 'text', 'placeholder' => '', 'required' => false, 'bag' => 'default', 'value' => null, 'id' => null, 'hint' => null, 'highlight' => null])
 
 @php($fieldId = $id ?? $name)
 @php($fieldErrors = $errors->getBag($bag))
@@ -29,9 +30,13 @@
      as an array, and echoing an array is a TypeError — a 500 on the very page that should have shown the
      validation error. Only one plain value is ever put back in the field. --}}
 @php($fieldValue = old($name, $value))
+{{-- Every part escaped here, once: the words around :name, and the words to type picked out. --}}
+@php($labelHtml = filled($highlight) && str_contains($label, ':name')
+    ? e(\Illuminate\Support\Str::before($label, ':name')).'<span class="confirm-name" dusk="'.e($fieldId).'-typed-name">'.e($highlight).'</span>'.e(\Illuminate\Support\Str::after($label, ':name'))
+    : e($label))
 
 <div>
-    <label for="{{ $fieldId }}" class="form-label mb-1.5">{{ $label }}@if($required) <span class="text-red-600 dark:text-red-400" aria-hidden="true">*</span>@endif</label>
+    <label for="{{ $fieldId }}" class="form-label mb-1.5">{!! $labelHtml !!}@if($required) <span class="text-red-600 dark:text-red-400" aria-hidden="true">*</span>@endif</label>
 
     @if(isset($input))
         {{-- Custom input slot --}}

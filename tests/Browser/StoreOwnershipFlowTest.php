@@ -69,6 +69,8 @@ class StoreOwnershipFlowTest extends DuskTestCase
             $this->waitForAlpine($browser);
 
             $this->clickAndAwait($browser, '@delete-store-button', fn (Browser $b) => $b->waitFor('@delete-store-form', 3));
+            // The name to type stands out in the sentence that asks for it (owner, 2026-10-01).
+            $browser->assertSeeIn('@confirm_name-typed-name', 'Alpha Mart');
             $this->jsType($browser, '@delete-store-name', 'Alpha Mart');
             $this->jsType($browser, '@delete-store-password', 'password');
             $browser->waitForReload(fn (Browser $b) => $this->jsClick($b, '@delete-store-confirm'));

@@ -261,39 +261,42 @@ test('a user without media-store cannot upload', function () {
         ->assertForbidden();
 });
 
-test('a user with media-update can rename a file and set its schedule', function () {
+test('a user with media-update renames a file, and nothing else of what is sent is kept', function () {
     $store = Store::factory()->create();
     $actor = createStoreUser($store, ['media-update']);
-    $media = Media::factory()->create(['store_id' => $store->id]);
+    $media = Media::factory()->create(['store_id' => $store->id, 'title' => 'IMG_2041']);
 
+    // A file keeps its name alone (owner, 2026-10-01): when it plays is said on its playlist line.
     $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
         ->putJson("/media/{$media->id}", [
             'title' => 'Breakfast Menu',
             'description' => 'Shown until 11am',
             'starts_at' => '2026-10-01T06:00:00Z',
             'expires_at' => '2026-10-31T11:00:00Z',
-        ])->assertOk();
+            'store_id' => 999,
+        ])->assertOk()->assertJsonPath('message', 'File renamed.');
 
-    $media->refresh();
-    expect($media->title)->toBe('Breakfast Menu');
-    expect($media->description)->toBe('Shown until 11am');
-    expect($media->starts_at)->not->toBeNull();
-    expect($media->expires_at)->not->toBeNull();
+    expect($media->fresh()->title)->toBe('Breakfast Menu')
+        ->and($media->fresh()->store_id)->toBe($store->id)
+        ->and(array_keys($media->fresh()->getAttributes()))->not->toContain('description', 'starts_at', 'expires_at');
+
+    $this->assertDatabaseHas('activity_logs', [
+        'action' => 'media.renamed', 'store_id' => $store->id, 'description' => 'Renamed IMG_2041 to Breakfast Menu',
+    ]);
 });
 
-test('an expiry before the start date is rejected', function () {
+test('a name is required, and no longer than 255 characters', function () {
     $store = Store::factory()->create();
     $actor = createStoreUser($store, ['media-update']);
-    $media = Media::factory()->create(['store_id' => $store->id]);
+    $media = Media::factory()->create(['store_id' => $store->id, 'title' => 'Menu']);
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
-        ->putJson("/media/{$media->id}", [
-            'title' => 'Breakfast Menu',
-            'starts_at' => '2026-10-31T06:00:00Z',
-            'expires_at' => '2026-10-01T06:00:00Z',
-        ])
-        ->assertStatus(422)
-        ->assertJsonValidationErrors(['expires_at']);
+    $rename = fn (mixed $title) => $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+        ->putJson("/media/{$media->id}", ['title' => $title]);
+
+    $rename('')->assertStatus(422)->assertJsonPath('errors.title.0', 'Title is required.');
+    $rename(str_repeat('x', 256))->assertStatus(422)->assertJsonPath('errors.title.0', 'Title may not be longer than 255 characters.');
+    $rename(['an', 'array'])->assertStatus(422)->assertJsonValidationErrors('title');
+    expect($media->fresh()->title)->toBe('Menu');
 });
 
 test('a user with media-destroy deletes the row and the files on disk', function () {

@@ -140,6 +140,12 @@ test('the platform deletes a store only with its name typed, and everything it o
         ->and(ActivityLog::where('action', 'store.deleted')->value('store_id'))->toBe($store->id);
 });
 
+test('the delete dialog picks out the name to type, and Alpine writes it as text', function () {
+    // Owner, 2026-10-01: the name stands out in "Type … to confirm". x-text, never x-html: a name is never markup.
+    $this->actingAs($this->admin)->get('/stores')->assertOk()
+        ->assertSee('Type <span class="confirm-name" x-text="selectedItem?.name" dusk="delete-store-typed-name"></span> to confirm', false);
+});
+
 test('support holding only store-view reads the list and changes nothing', function () {
     $support = createPlatformUser(['store-view']);
     $store = Store::factory()->create();

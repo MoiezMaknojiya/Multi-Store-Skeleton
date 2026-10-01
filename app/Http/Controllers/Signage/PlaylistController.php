@@ -766,8 +766,6 @@ class PlaylistController extends Controller
                     'thumbnail_url' => $item->media?->thumbnail_url,
                     // Both null means "always"; the player never sees an item whose
                     // window has closed, but the panel should say so.
-                    'starts_at' => $item->media?->starts_at?->toIso8601String(),
-                    'expires_at' => $item->media?->expires_at?->toIso8601String(),
                     // An Ad Builder page taken off the screens (unpublished) keeps its place and plays again once it
                     // is published — the panel says why it is not playing meanwhile.
                     'is_draft' => $item->media?->isDraft() ?? false,

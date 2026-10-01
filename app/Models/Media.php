@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -48,9 +47,9 @@ class Media extends Model
     public const MAX_VIDEO_SECONDS = 300;
 
     protected $fillable = [
-        'store_id', 'title', 'description', 'type', 'mime_type', 'disk', 'path',
+        'store_id', 'title', 'type', 'mime_type', 'disk', 'path',
         'thumbnail_path', 'size', 'width', 'height', 'duration_seconds',
-        'orientation', 'starts_at', 'expires_at', 'created_by',
+        'orientation', 'created_by',
     ];
 
     protected $appends = ['url', 'thumbnail_url'];
@@ -62,8 +61,6 @@ class Media extends Model
             'width' => 'integer',
             'height' => 'integer',
             'duration_seconds' => 'integer',
-            'starts_at' => 'datetime',
-            'expires_at' => 'datetime',
         ];
     }
 
@@ -141,6 +138,14 @@ class Media extends Model
     public function scopeOnNoPlaylist(Builder $query): Builder
     {
         return $query->whereNotExists(fn (QueryBuilder $line) => $line->selectRaw('1')
+            ->from('playlist_items')
+            ->whereColumn('playlist_items.media_id', 'media.id'));
+    }
+
+    /** Only the files a screen's playlist holds — the ones scopeOnNoPlaylist() leaves out, counted to say why. */
+    public function scopeOnSomePlaylist(Builder $query): Builder
+    {
+        return $query->whereExists(fn (QueryBuilder $line) => $line->selectRaw('1')
             ->from('playlist_items')
             ->whereColumn('playlist_items.media_id', 'media.id'));
     }
@@ -332,26 +337,13 @@ class Media extends Model
     }
 
     /**
-     * May a television show this file now — inside its own schedule window, and not an Ad Builder page taken
-     * off the screens (isDraft())?
-     *
-     * Takes an optional moment so the schedule resolver can ask about ONE instant
-     * for the whole manifest — a file expiring mid-loop must not be in and out of
-     * the same answer. These are absolute timestamps, not wall-clock times, so no
-     * screen timezone comes into it.
+     * May a television show this file — any file but an Ad Builder page taken off the screens (isDraft())? A file
+     * keeps no dates of its own (owner, 2026-10-01): when it plays is its playlist line's to say, and the
+     * schedule resolver asks that.
      */
-    public function isPlayableNow(?CarbonInterface $at = null): bool
+    public function isPlayableNow(): bool
     {
-        if ($this->isDraft()) {
-            return false;
-        }
-
-        $at ??= now();
-
-        $started = $this->starts_at === null || $this->starts_at->lte($at);
-        $ended = $this->expires_at !== null && $this->expires_at->lte($at);
-
-        return $started && ! $ended;
+        return ! $this->isDraft();
     }
 
     /**

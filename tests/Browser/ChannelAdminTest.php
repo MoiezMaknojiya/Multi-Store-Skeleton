@@ -50,6 +50,13 @@ class ChannelAdminTest extends DuskTestCase
             // A shop whose Ad Builder has published an ad: the platform's channel may show a shop's file.
             $store = Store::factory()->create(['name' => 'Alpha Mart']);
             $page = Media::factory()->adPage()->create(['store_id' => $store->id, 'title' => 'Burger Deal', 'thumbnail_path' => null]);
+            // A file plays from a playlist or from a channel, never both (owner's rule, 2026-09-26): an ad on a screen's
+            // playlist is not offered here — and the picker says so rather than look empty (owner, 2026-10-01).
+            $pizza = Media::factory()->adPage()->create(['store_id' => $store->id, 'title' => 'Pizza Night', 'thumbnail_path' => null]);
+            PlaylistItem::create(['screen_id' => Screen::factory()->create(['store_id' => $store->id])->id, 'media_id' => $pizza->id, 'position' => 0, 'duration_seconds' => 6]);
+            $bakery = Store::factory()->create(['name' => 'Beta Bakes']);
+            $bread = Media::factory()->adPage()->create(['store_id' => $bakery->id, 'title' => 'Bread Sale', 'thumbnail_path' => null]);
+            PlaylistItem::create(['screen_id' => Screen::factory()->create(['store_id' => $bakery->id])->id, 'media_id' => $bread->id, 'position' => 0, 'duration_seconds' => 6]);
 
             // -- Its ads page: an upload, which joins the platform's library first --
             $browser->visit('/channels/'.$channel->id);
@@ -112,8 +119,16 @@ class ChannelAdminTest extends DuskTestCase
             $this->jsClick($browser, '@channel-ad-source-ads');
             $browser->waitFor('@channel-ad-picker-empty')
                 ->assertSeeIn('@channel-ad-picker-empty', 'choose the shop above')
+                // A shop whose only published ad is on a playlist: an empty tab that says why.
+                ->select('@channel-ad-library', (string) $bakery->id)
+                ->waitForTextIn('@channel-ad-picker-empty', '1 published ad is on a playlist, so not listed here')
+                ->assertMissing('@channel-ad-pick-'.$bread->id)
+                ->screenshot('channel-ad-picker-all-on-playlists')
+                // A shop with one ad free and one on a playlist: the free one, and a line for the other.
                 ->select('@channel-ad-library', (string) $store->id)
-                ->waitFor('@channel-ad-pick-'.$page->id);
+                ->waitFor('@channel-ad-pick-'.$page->id)
+                ->assertMissing('@channel-ad-pick-'.$pizza->id)
+                ->assertSeeIn('@channel-ad-picker-note', '1 published ad is on a playlist, so not listed: nothing plays twice.');
             $this->jsClick($browser, '@channel-ad-pick-'.$page->id);
             $browser->assertVisible('@channel-ad-seconds');
             $this->jsType($browser, '@channel-ad-seconds', '15');

@@ -10,7 +10,6 @@ use App\Models\Screen;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
-use WeakMap;
 
 /**
  * What one screen should be showing at one moment.
@@ -21,11 +20,11 @@ use WeakMap;
  * all.
  *
  * WHEN something plays is said once, on the line, inside the screen — the screen
- * itself keeps no hours of its own. For a FILE two questions decide it, and either can
- * say no:
- *
- *   1. Is the file itself live?              (media start / expiry)
- *   2. Does any of the item's rules say yes? (no rules = whenever)
+ * itself keeps no hours of its own, and a file keeps no dates of its own (owner,
+ * 2026-10-01: the library is where files are kept, the playlist where they are
+ * scheduled). For a FILE one question decides it — does any of the item's rules say
+ * yes? (no rules = whenever) — and an Ad Builder page taken off the screens (a draft)
+ * never plays.
  *
  * A CHANNEL line asks a different first question — is the channel on the air, with
  * ads running today? — and follows one extra rule, because a shop darkens its screen
@@ -36,8 +35,8 @@ use WeakMap;
  *                                              own files is due, so it never lights up
  *                                              a screen the shop has left dark
  *   …and when no file on the playlist is live at all, an unscheduled channel plays on
- *   its own: a screen given only channels, or whose own files have all expired, is not
- *   a screen asking to be dark.
+ *   its own: a screen given only channels, or whose own files are all drafts, is not a
+ *   screen asking to be dark.
  *
  * Then, when the answer is nothing at all, three different nothings — because a TV
  * showing the wrong one looks broken:
@@ -50,35 +49,10 @@ use WeakMap;
  */
 class ScheduleResolver
 {
-    /**
-     * Each file's window — [starts, expires, draft] — read once per loaded model: a manifest's timeline asks
-     * about the same files at every change point (docs/AD-BUILDER-SPEC.md §15), and every read of a date
-     * attribute builds a new Carbon. Weak, so a model gone is an entry gone.
-     *
-     * @var WeakMap<Media, array{0: ?int, 1: ?int, 2: bool}>
-     */
-    private WeakMap $windows;
-
-    public function __construct()
+    /** Media::isPlayableNow(): there, and not an Ad Builder page taken off the screens. */
+    private function playable(?Media $media): bool
     {
-        $this->windows = new WeakMap;
-    }
-
-    /** Media::isPlayableNow(), from the remembered window: not a draft, started, and not yet expired. */
-    private function playable(?Media $media, CarbonImmutable $instant): bool
-    {
-        if ($media === null) {
-            return false;
-        }
-
-        [$starts, $expires, $draft] = $this->windows[$media] ??= [
-            $media->starts_at?->getTimestamp(),
-            $media->expires_at?->getTimestamp(),
-            $media->isDraft(),
-        ];
-        $at = $instant->getTimestamp();
-
-        return ! $draft && ($starts === null || $starts <= $at) && ($expires === null || $expires > $at);
+        return $media !== null && $media->isPlayableNow();
     }
 
     /**
@@ -127,7 +101,7 @@ class ScheduleResolver
     {
         $local = $screen->localTime($instant);
 
-        $liveFiles = $playlist->filter(fn (PlaylistItem $item) => $this->playable($item->media, $instant));
+        $liveFiles = $playlist->filter(fn (PlaylistItem $item) => $this->playable($item->media));
         $dueFileIds = $liveFiles->filter(fn (PlaylistItem $item) => $item->isDueAt($local))->pluck('id')->flip();
 
         // An unscheduled channel rides along with the shop's own content — or plays by
@@ -152,7 +126,7 @@ class ScheduleResolver
             })
             ->values();
 
-        $fallback = $due->isEmpty() ? $this->fallbackFor($screen, $instant) : null;
+        $fallback = $due->isEmpty() ? $this->fallbackFor($screen) : null;
 
         return [
             // Black only when there IS a playlist and none of it is due right now.
@@ -168,8 +142,7 @@ class ScheduleResolver
     /**
      * Every moment after $from, up to $until, at which this screen's answer can change — a superset, never
      * a miss: each local midnight (a rule's dates, a channel ad's dates, a weekday's hours all turn over
-     * there), every clock time a daypart on the playlist opens or closes at, on every day in between, and
-     * every instant a file on the playlist or the holding picture starts or stops being current. The
+     * there) and every clock time a daypart on the playlist opens or closes at, on every day in between. The
      * offline timeline asks the resolver about each (docs/AD-BUILDER-SPEC.md §15).
      *
      * @param  Collection<int, PlaylistItem>  $playlist
@@ -199,12 +172,6 @@ class ScheduleResolver
             }
         }
 
-        $files = $playlist->map(fn (PlaylistItem $item) => $item->media)->push($screen->defaultMedia)->filter();
-
-        foreach ($files as $media) {
-            array_push($points, ...array_filter([$media->starts_at, $media->expires_at]));
-        }
-
         return collect($points)
             ->map(fn (CarbonInterface $point) => CarbonImmutable::instance($point))
             ->filter(fn (CarbonImmutable $point) => $point->gt($from) && $point->lte($until))
@@ -214,16 +181,11 @@ class ScheduleResolver
             ->all();
     }
 
-    /**
-     * The holding picture, if the shop set one and it is still live itself.
-     *
-     * A default that has expired is not a default — showing it would break the very
-     * promise the expiry date makes.
-     */
-    private function fallbackFor(Screen $screen, CarbonImmutable $instant): ?Media
+    /** The holding picture, if the shop set one — never an Ad Builder page taken off the screens. */
+    private function fallbackFor(Screen $screen): ?Media
     {
         $media = $screen->defaultMedia;
 
-        return $this->playable($media, $instant) ? $media : null;
+        return $this->playable($media) ? $media : null;
     }
 }

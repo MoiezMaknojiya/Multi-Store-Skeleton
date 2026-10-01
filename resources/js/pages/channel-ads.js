@@ -23,7 +23,8 @@ import { dayLabel } from '../core/clock.js';
 
 const blankForm = () => ({ title: '', seconds: PlaylistItemDefaults.imageSeconds, starts_on: '', ends_on: '' });
 
-const blankPicker = () => ({ items: [], page: 1, lastPage: 1, loading: false, search: '', library: 'platform' });
+// onPlaylists: how many files of this library a playlist holds, which a channel leaves out — said, not hidden.
+const blankPicker = () => ({ items: [], page: 1, lastPage: 1, loading: false, search: '', library: 'platform', onPlaylists: 0 });
 
 /** Tiles fetched at a time; "Load more" asks for the next ones. */
 const PICKER_PAGE_SIZE = 24;
@@ -229,6 +230,7 @@ export function registerChannelAds(Alpine) {
                 this.picker.items = more ? [...this.picker.items, ...fresh] : fresh;
                 this.picker.page = data.currentPage;
                 this.picker.lastPage = data.lastPage;
+                this.picker.onPlaylists = Number(data.on_playlists ?? 0);
             } catch (error) {
                 if (ticket !== this.pickerTicket) return;
 
@@ -244,7 +246,22 @@ export function registerChannelAds(Alpine) {
             this.forgetErrors('media_id');
         },
 
+        /** "3 published ads are on a playlist", or "1 file is …": what the picker leaves out, in words. */
+        onPlaylistsText() {
+            const count = this.picker.onPlaylists;
+            const thing = this.source === 'ads' ? (count === 1 ? 'published ad is' : 'published ads are') : (count === 1 ? 'file is' : 'files are');
+
+            return `${count} ${thing} on a playlist`;
+        },
+
         pickerEmptyText() {
+            // Not empty, but every one of them is on a playlist (owner's rule, 2026-09-26): said, with the way out.
+            if (this.picker.onPlaylists > 0) {
+                const wayOut = this.picker.onPlaylists === 1 ? 'Take it off its playlist' : 'Take one off its playlist';
+
+                return `${this.onPlaylistsText()}, so not listed here: a file plays from a playlist or from a channel, never both. ${wayOut} to add it here.`;
+            }
+
             if (this.picker.search.trim() !== '') return 'Nothing here matches that search.';
 
             if (this.source === 'ads') {

@@ -207,14 +207,19 @@ test('the manifest carries the playlist in order, with a cache key per item', fu
     expect($items[0]['checksum'])->not->toBe($items[1]['checksum']);
 });
 
-test('a file outside its schedule window never reaches the TV', function () {
+test('a line outside its schedule never reaches the TV, and the panel keeps it', function () {
     $store = Store::factory()->create();
     $screen = Screen::factory()->withToken('tok')->create(['store_id' => $store->id]);
 
-    $live = Media::factory()->create(['store_id' => $store->id, 'title' => 'Live']);
-    $expired = Media::factory()->expired()->create(['store_id' => $store->id, 'title' => 'Expired']);
-    $future = Media::factory()->create(['store_id' => $store->id, 'starts_at' => now()->addWeek()]);
-    playlistOf($screen, [$live, $expired, $future]);
+    // When a file plays is its line's to say (owner, 2026-10-01): one line that ended, one that has not begun.
+    playlistOf($screen, [
+        Media::factory()->create(['store_id' => $store->id, 'title' => 'Live']),
+        Media::factory()->create(['store_id' => $store->id, 'title' => 'Last week']),
+        Media::factory()->create(['store_id' => $store->id, 'title' => 'Next week']),
+    ]);
+    [, $ended, $coming] = $screen->playlistItems()->orderBy('position')->get()->all();
+    $ended->scheduleRules()->create(['starts_on' => now()->subDays(10)->toDateString(), 'ends_on' => now()->subDays(3)->toDateString()]);
+    $coming->scheduleRules()->create(['starts_on' => now()->addWeek()->toDateString()]);
 
     $items = $this->withHeader('Authorization', 'Bearer tok')
         ->getJson('/device/playlist')->assertOk()->json('items');
@@ -355,20 +360,22 @@ test('the same file can appear more than once in a playlist, at different length
     expect($items[0]['id'])->not->toBe($items[2]['id']);
 });
 
-test('an expired video drops out while the images around it keep playing', function () {
+test('a video whose line has ended drops out while the images around it keep playing', function () {
     $store = Store::factory()->create();
     $screen = Screen::factory()->withToken('tok')->create(['store_id' => $store->id]);
 
     $before = Media::factory()->create(['store_id' => $store->id, 'title' => 'Before']);
-    $deadClip = Media::factory()->video()->expired()->create(['store_id' => $store->id, 'title' => 'Old Promo']);
+    $oldClip = Media::factory()->video()->create(['store_id' => $store->id, 'title' => 'Old Promo']);
     $after = Media::factory()->create(['store_id' => $store->id, 'title' => 'After']);
-    playlistOf($screen, [$before, $deadClip, $after]);
+    playlistOf($screen, [$before, $oldClip, $after]);
+    $screen->playlistItems()->where('media_id', $oldClip->id)->sole()
+        ->scheduleRules()->create(['ends_on' => now()->subDays(2)->toDateString()]);
 
     $items = $this->withHeader('Authorization', 'Bearer tok')->getJson('/device/playlist')->json('items');
 
     expect($items)->toHaveCount(2);
     expect(collect($items)->pluck('type')->all())->toBe(['image', 'image']);
-    // The panel still shows all three, so the owner can see what expired.
+    // The panel still shows all three, so the owner can see what ended.
     expect($screen->playlistItems()->count())->toBe(3);
 });
 

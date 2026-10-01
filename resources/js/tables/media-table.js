@@ -9,29 +9,13 @@
  *  - above the stores the page reads one library at a time — the platform's own
  *    or a shop's — and an upload joins the one chosen (docs/CHANNEL-CONTENT-SPEC.md);
  *  - a file a channel shows is refused before the delete is confirmed: the row
- *    carries the server's own words for it.
+ *    carries the server's own words for it;
+ *  - a file keeps its name alone (owner, 2026-10-01): Rename is the shared save of
+ *    one field, and when a file plays is said on its playlist line.
  */
-import axios from 'axios';
 import { createCrudTable } from '../core/crud-table-base.js';
 import { storageUsedText, storagePercent } from '../core/media-file.js';
-import { validate, required, maxLen, unreadableFields } from '../core/validate.js';
-
-/** ISO instant -> the value a datetime-local input expects, in the viewer's own
- *  timezone, so a shop owner in Karachi sees the time they typed. */
-function toLocalInput(iso) {
-    if (!iso) return '';
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return '';
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-/** datetime-local value -> an unambiguous instant for the server. */
-function toInstant(local) {
-    if (!local) return null;
-    const date = new Date(local);
-    return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
+import { validate, required, maxLen } from '../core/validate.js';
 
 export function registerMediaTable(Alpine) {
     Alpine.data('mediaTable', (config = {}) => createCrudTable({
@@ -56,14 +40,11 @@ export function registerMediaTable(Alpine) {
             refreshTimer: null,
         },
 
-        defaultForm: { title: '', description: '', starts_at: '', expires_at: '' },
+        defaultForm: { title: '' },
 
-        mapItemToForm: (media) => ({
-            title: media.title,
-            description: media.description ?? '',
-            starts_at: toLocalInput(media.starts_at),
-            expires_at: toLocalInput(media.expires_at),
-        }),
+        mapItemToForm: (media) => ({ title: media.title }),
+
+        validateForm: (form) => validate(form, { title: [required('Title'), maxLen('Title', 255)] }),
 
         extraMethods: {
             /* ── Listing filters ───────────────────────────────────────── */
@@ -105,56 +86,6 @@ export function registerMediaTable(Alpine) {
                 }, 400);
             },
 
-            /* ── Edit (title, description, schedule) ───────────────────── */
-            async saveItem(event) {
-                if (this.saving || !this.editingItem) return;
-
-                // A start or an expiry typed only in part reads as '' — never saved as "no expiry", which would let
-                // the file play for ever (unreadableFields, as the shared save does).
-                const errors = {
-                    ...validate(this.form, {
-                        title: [required('Title'), maxLen('Title', 255)],
-                        description: [maxLen('Description', 2000)],
-                    }),
-                    ...unreadableFields(event?.target),
-                };
-
-                // Mirrors the backend's after:starts_at rule.
-                if (this.form.starts_at && this.form.expires_at
-                    && new Date(this.form.expires_at) <= new Date(this.form.starts_at)) {
-                    errors.expires_at = ['The expiry date must be after the start date.'];
-                }
-
-                if (Object.keys(errors).length > 0) {
-                    this.formErrors = errors;
-                    this.focusFirstError();
-                    return;
-                }
-
-                this.formErrors = {};
-                this.saving = true;
-                try {
-                    const { data } = await axios.put(`/media/${this.editingItem.id}`, {
-                        title: this.form.title,
-                        description: this.form.description,
-                        starts_at: toInstant(this.form.starts_at),
-                        expires_at: toInstant(this.form.expires_at),
-                    });
-                    this.closeFormModal();
-                    window.toast(data?.message ?? 'File saved.', 'success');
-                    await this.fetchItems();
-                } catch (error) {
-                    if (error.response?.status === 422 && error.response.data.errors) {
-                        this.formErrors = error.response.data.errors;
-                        this.focusFirstError();
-                    } else {
-                        window.toast(error.response?.data?.message ?? 'An error occurred. Please try again.');
-                    }
-                } finally {
-                    this.saving = false;
-                }
-            },
-
             /* ── Delete ────────────────────────────────────────────────── */
             /** A file a channel shows cannot be deleted (the server refuses it too): said at once, rather
              *  than after a confirmation that could never succeed. */
@@ -190,18 +121,6 @@ export function registerMediaTable(Alpine) {
                 if (!seconds) return '';
                 const minutes = Math.floor(seconds / 60);
                 return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
-            },
-
-            /* "From Oct 1, 2026, 9:00 AM" / "Until …" / "From … to …" — a date and a time, no seconds. */
-            scheduleLabel(item) {
-                if (!item.starts_at && !item.expires_at) return 'Always';
-                const when = (value) => new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-                if (item.starts_at && item.expires_at) return `From ${when(item.starts_at)} to ${when(item.expires_at)}`;
-                return item.starts_at ? `From ${when(item.starts_at)}` : `Until ${when(item.expires_at)}`;
-            },
-
-            isExpired(item) {
-                return !!item.expires_at && new Date(item.expires_at) <= new Date();
             },
         },
     })());

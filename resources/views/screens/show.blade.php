@@ -110,8 +110,6 @@
                                 <p class="text-sm font-medium text-gray-800 dark:text-white truncate" x-text="item.title"></p>
                                 <p class="text-xs text-gray-500 dark:text-gray-400">
                                     <span x-text="typeLabel(item)"></span>
-                                    <span x-show="item.expires_at" class="text-amber-700 dark:text-amber-400"
-                                          x-text="' · expires ' + new Date(item.expires_at).toLocaleDateString()"></span>
                                     {{-- It keeps its place, and plays again once the ad is published. --}}
                                     <span x-show="item.is_draft" x-cloak class="text-amber-700 dark:text-amber-400"
                                           x-bind:dusk="'playlist-draft-' + index">&middot; Draft &mdash; not playing until it is published in the Ad Builder</span>

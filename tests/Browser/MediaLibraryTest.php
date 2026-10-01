@@ -61,8 +61,15 @@ class MediaLibraryTest extends DuskTestCase
             $this->assertNotNull($media->thumbnail_path);
             $this->assertTrue(Storage::disk('public')->exists($media->thumbnail_path), 'the upload made no thumbnail on disk');
 
-            // -- Rename --------------------------------------------------------
+            // -- Rename: a file keeps its name alone (owner, 2026-10-01) — no dates, no description, no Schedule column --
+            $browser->assertSeeIn('@edit-media-'.$media->id, 'Rename')
+                ->assertDontSee('Schedule')
+                ->assertDontSee('Expiry');
             $this->clickAndAwait($browser, '@edit-media-'.$media->id, fn (Browser $b) => $b->waitFor('@media-form', 3));
+            $browser->assertSee('Rename File');
+            $this->assertSame(['media-edit-title'], $browser->script(
+                'return [...document.querySelectorAll(\'[dusk="media-form"] input, [dusk="media-form"] textarea, [dusk="media-form"] select\')].map((field) => field.getAttribute("dusk"));'
+            )[0], 'the Rename dialog asks for more than the name');
             $this->jsType($browser, '@media-edit-title', 'Lunch Board');
             $this->jsClick($browser, '@media-save');
             $browser->waitForText('Lunch Board');

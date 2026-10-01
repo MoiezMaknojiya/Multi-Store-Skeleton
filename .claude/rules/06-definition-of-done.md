@@ -1,7 +1,7 @@
 # Definition of Done & Verification Loops
 
 ## Definition of Done
-1. Relevant tests pass (`php artisan test`) — and for changes touching UI or user flows, the Dusk browser suite passes too (`php artisan dusk`, per the Testing convention).
+1. The tests of what was built and of what it touches pass — the Pest tests of those features (`php artisan test` with a folder or `--filter`), the new tests written for the change, and for changes touching UI or user flows the Dusk tests of the pages it changes (per the Testing convention). Not the whole Pest and Dusk suites, nor a project-wide brute-force round, every time (owner's rule, 2026-10-01: "bs jo banaya woo test karo aur us k related cheez ho woo test karo") — those run when the owner asks, or when the change is wide (a shared component, a layout, a middleware every page runs), and the report says why.
 2. `vendor/bin/pint --dirty --format agent` reports no remaining issues.
 3. No debug leftovers (`dd()`, `dump()`, `ray()`, `var_dump()`, stray `Log::debug`) — and no dead code (owner's rule, 2026-09-30: "useless or unused code, class, id, function delete ya remove kar diya karo takay files ki kbs kum ho jaye"): a change that writes or edits CSS or JS removes, in the same commit, what it leaves unused — an Alpine method or a helper nothing calls, an import nothing reads, a config key the script no longer reads, a `@utility` or class no view uses, an id nothing points at — and the report says what the build lost in KB.
 4. Any new migration is reversible (`down()` implemented) and runs cleanly on a local DB.

@@ -179,7 +179,23 @@ test('both pickers say why a file is not there', function () {
         ->assertOk()
         ->assertSee('Files in a channel are not listed, so nothing plays twice.');
 
-    $this->get("/channels/{$this->channel->id}")
-        ->assertOk()
-        ->assertSee('Files on a playlist are not listed, so nothing plays twice.');
+    // The channel's pickers count what they leave out, for the same search, so an Ad Builder tab whose every ad is
+    // on a playlist says so instead of looking empty (owner, 2026-10-01: "khali q araha ha").
+    $onAPlaylist = BuilderAd::factory()->published()->create(['store_id' => $this->store->id, 'name' => 'Winter sale'])->media;
+    $free = BuilderAd::factory()->published()->create(['store_id' => $this->store->id, 'name' => 'Fresh coffee'])->media;
+    PlaylistItem::create(['screen_id' => $this->screen->id, 'media_id' => $onAPlaylist->id, 'position' => 0]);
+
+    $answer = $this->getJson("/channels/{$this->channel->id}/library?type=html")->assertOk();
+    expect(collect($answer->json('media'))->pluck('id')->all())->toBe([$free->id])
+        ->and($answer->json('on_playlists'))->toBe(1);
+
+    // The search counts too: the one it would have found is on a playlist.
+    expect($this->getJson("/channels/{$this->channel->id}/library?type=html&search=Winter")->json())
+        ->media->toBe([])
+        ->on_playlists->toBe(1);
+    expect($this->getJson("/channels/{$this->channel->id}/library?type=html&search=Nothing")->json('on_playlists'))->toBe(0);
+
+    // The page carries the words the picker says it in.
+    $this->get("/channels/{$this->channel->id}")->assertOk()
+        ->assertSee('so not listed: nothing plays twice.', false);
 });

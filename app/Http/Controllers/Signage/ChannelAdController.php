@@ -86,11 +86,8 @@ class ChannelAdController extends Controller implements HasMiddleware
         ]);
 
         // Never an Ad Builder page taken off the screens (unpublished): nobody picks one until it is published again.
-        // Nor a file a playlist holds (owner's rule, 2026-09-26): on a screen that also carries this channel it
-        // would play twice.
-        $query = Media::query()
+        $files = fn () => Media::query()
             ->withoutDrafts()
-            ->onNoPlaylist()
             ->when($channel->isPlatformChannel(),
                 fn (Builder $query) => ($filters['library'] ?? 'platform') === 'platform'
                     ? $query->platformOwned()
@@ -98,11 +95,18 @@ class ChannelAdController extends Controller implements HasMiddleware
                 fn (Builder $query) => $query->where('store_id', $channel->store_id))
             ->when($filters['type'] ?? null, fn (Builder $query, string $type) => $type === 'files'
                 ? $query->whereIn('type', [Media::TYPE_IMAGE, Media::TYPE_VIDEO])
-                : $query->where('type', $type))
-            ->latest();
+                : $query->where('type', $type));
 
-        return $this->paginatedResponse($request, $query, ['title'], 'media', ['*'],
-            fn (Collection $files) => $files->transform(fn (Media $media) => [
+        // Nor a file a playlist holds (owner's rule, 2026-09-26): on a screen that also carries this channel it would
+        // play twice. Those are counted — for the same search — so the picker says why they are not here rather than
+        // looking empty (owner, 2026-10-01: "Ad Builder k tab k ander khali q araha ha").
+        $search = trim((string) ($filters['search'] ?? ''));
+        $onPlaylists = $files()->onSomePlaylist()
+            ->when($search !== '', fn (Builder $query) => $query->where('title', 'like', "%{$search}%"))
+            ->count();
+
+        $listing = $this->paginatedResponse($request, $files()->onNoPlaylist()->latest(), ['title'], 'media', ['*'],
+            fn (Collection $found) => $found->transform(fn (Media $media) => [
                 'id' => $media->id,
                 'title' => $media->title,
                 'type' => $media->type,
@@ -110,6 +114,8 @@ class ChannelAdController extends Controller implements HasMiddleware
                 'duration_seconds' => $media->duration_seconds,
                 'thumbnail_url' => $media->thumbnail_url,
             ]));
+
+        return $listing->setData([...$listing->getData(true), 'on_playlists' => $onPlaylists]);
     }
 
     public function store(ChannelAdRequest $request, Channel $channel): JsonResponse

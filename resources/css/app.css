@@ -125,6 +125,13 @@
            disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
+/* The name a person types to confirm a big delete, where the field asks for it (owner, 2026-10-01: "isko highlight
+   ya kuch karo"): picked out from the words around it, so it is plain what to type, and one click selects it whole. */
+@utility confirm-name {
+    @apply rounded-md bg-gray-100 px-1.5 py-0.5 font-mono font-semibold text-gray-900 select-all break-all
+           dark:bg-gray-700 dark:text-white;
+}
+
 /* Makes a control claim its whole positioned ancestor as the click target.
    Used by the store card so the entire box is clickable, not just the words at
    the bottom — a card is what the eye reads as one thing, so it should be what

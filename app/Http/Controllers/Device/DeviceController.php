@@ -83,7 +83,7 @@ class DeviceController extends Controller
         // ONE instant answers the whole manifest — the items, the break, the timeline and server_time.
         $now = CarbonImmutable::now();
 
-        // The whole schedule — each file's own window and each item's rules — is
+        // The whole schedule — each line's rules — is
         // resolved HERE, not on the TV. A cheap box with a wrong clock still shows
         // the right thing, and nothing outside its window is even sent to the device.
         // This is also what makes a television switched on at two in the afternoon
@@ -97,11 +97,10 @@ class DeviceController extends Controller
         // to go wrong on a cheap box.
         $adBreak = $ads->breakFor($screen, $now);
 
-        // The holding picture travels alongside the items too (docs/AD-BUILDER-SPEC.md
-        // §15): a television working from a cached manifest, once everything in it has
-        // expired, falls back to it the way the server would have.
+        // The holding picture travels alongside the items too (docs/AD-BUILDER-SPEC.md §15), as the timeline's
+        // entries name it wherever nothing else is due.
         $fallback = $screen->defaultMedia;
-        $fallback = $fallback?->isPlayableNow($now) ? $this->manifestItem(0, $fallback, $fallback->playSeconds()) : null;
+        $fallback = $fallback?->isPlayableNow() ? $this->manifestItem(0, $fallback, $fallback->playSeconds()) : null;
 
         return response()->json([
             'screen' => [
@@ -264,10 +263,6 @@ class DeviceController extends Controller
             'checksum' => $media->cacheKey(),
             'duration' => $duration,
             'mime' => $media->mime_type,
-            // When the file itself stops being current, so a television working from a
-            // cached manifest can stop showing it at the right moment (§15). The schedule
-            // rules and dayparts are the server's alone and are not re-judged offline.
-            'expires_at' => $media->expires_at?->toIso8601String(),
         ];
     }
 

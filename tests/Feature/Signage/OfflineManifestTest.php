@@ -15,11 +15,12 @@ use App\Models\Store;
 | What a television is sent so it can keep playing with no line
 |--------------------------------------------------------------------------
 |
-| docs/AD-BUILDER-SPEC.md §15. The manifest says a little more than what plays now: when each file stops
-| being current (`expires_at`), the holding picture alongside the items (`fallback`), and what every
-| moment of the next days shows (`timeline`, OfflineTimelineTest) — which is also every file the set's
-| worker warms and keeps. None of it moves the version — it is a change to what plays that must. And each
-| file's cache key moves only when its bytes may have, so a new title or new dates cost no download.
+| docs/AD-BUILDER-SPEC.md §15. The manifest says a little more than what plays now: the holding picture
+| alongside the items (`fallback`), and what every moment of the next days shows (`timeline`,
+| OfflineTimelineTest) — which is also every file the set's worker warms and keeps. A file item carries no
+| dates of its own: a file keeps its name alone (owner, 2026-10-01). None of it moves the version — it is a
+| change to what plays that must. And each file's cache key moves only when its bytes may have, so a new
+| title costs no download.
 |
 */
 
@@ -56,17 +57,14 @@ function manifestOf($test): array
     return $test->withHeader('Authorization', 'Bearer tok')->getJson('/device/playlist')->assertOk()->json();
 }
 
-test('each file item says when it expires, and one that never does says so too', function () {
-    $ending = picture($this->store, 'Sale', ['expires_at' => now()->addHours(2)]);
-    $lasting = picture($this->store, 'Logo');
-    line($this->screen, $ending, 0);
-    line($this->screen, $lasting, 1);
+test('a file item carries no dates of its own: when it plays is its line\'s, worked out on the server', function () {
+    // A file keeps its name alone (owner, 2026-10-01); the timeline says what each moment shows.
+    line($this->screen, picture($this->store, 'Logo'), 0);
 
-    $items = collect(manifestOf($this)['items']);
+    $item = manifestOf($this)['items'][0];
 
-    expect($items->firstWhere('url', $ending->url)['expires_at'])->toBe($ending->expires_at->toIso8601String())
-        ->and($items->firstWhere('url', $lasting->url))->toHaveKey('expires_at')
-        ->and($items->firstWhere('url', $lasting->url)['expires_at'])->toBeNull();
+    expect($item)->not->toHaveKey('expires_at')
+        ->and(array_keys($item))->toBe(['id', 'type', 'url', 'checksum', 'duration', 'mime']);
 });
 
 test('the holding picture travels alongside the items, so a set can fall back to it by itself', function () {
@@ -80,11 +78,6 @@ test('the holding picture travels alongside the items, so a set can fall back to
         ->and($manifest['fallback']['id'])->toBe(0)
         ->and($manifest['fallback']['url'])->toBe($holding->url)
         ->and($manifest['fallback']['checksum'])->toBe($holding->cacheKey());
-
-    // A holding picture that has expired is not one — the same rule the resolver follows.
-    $holding->update(['expires_at' => now()->subMinute()]);
-
-    expect(manifestOf($this)['fallback'])->toBeNull();
 
     $this->screen->update(['default_media_id' => null]);
 
@@ -165,12 +158,12 @@ test('neither the fallback nor tomorrow’s files move the version: it is what p
 
 /* ── What moves a cache key: the bytes, and nothing else ────────────────── */
 
-test('a picture keeps its cache key through a new title and new dates — only a new file moves it', function () {
+test('a picture keeps its cache key through a new title — only a new file moves it', function () {
     $poster = picture($this->store, 'Poster', ['path' => 'media/1/01J8X0000000000000000000AA.jpg', 'size' => 1000]);
     $key = $poster->cacheKey();
 
     $this->travel(5)->minutes();
-    $poster->update(['title' => 'Poster, renamed', 'starts_at' => now()->subDay(), 'expires_at' => now()->addWeek()]);
+    $poster->update(['title' => 'Poster, renamed']);
 
     expect($poster->fresh()->cacheKey())->toBe($key);
 

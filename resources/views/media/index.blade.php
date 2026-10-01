@@ -47,8 +47,6 @@
                     <option value="oldest">Oldest first</option>
                     <option value="title_asc">Title A-Z</option>
                     <option value="title_desc">Title Z-A</option>
-                    <option value="expiry_asc">Expiry soonest</option>
-                    <option value="expiry_desc">Expiry latest</option>
                 </select>
                 <x-crud.search-input placeholder="Search media..." width="sm:w-56" />
             </div>
@@ -66,18 +64,17 @@
         @endcan
 
         {{-- No header of its own: its filters and its search are above. --}}
-        <x-crud.table-wrapper :search="false" :columns="6">
+        <x-crud.table-wrapper :search="false" :columns="5">
             <x-slot name="head">
                 <th class="px-5 py-3 text-left font-semibold">Preview</th>
                 <th class="px-5 py-3 text-left font-semibold">Title</th>
                 <th class="px-5 py-3 text-left font-semibold">Type</th>
                 <th class="px-5 py-3 text-left font-semibold">Size</th>
-                <th class="px-5 py-3 text-left font-semibold">Schedule</th>
                 <th class="px-5 py-3 text-right font-semibold">Actions</th>
             </x-slot>
 
             <x-slot name="body">
-                <x-crud.table-empty :columns="6" itemsVar="items" message="No files yet."
+                <x-crud.table-empty :columns="5" itemsVar="items" message="No files yet."
                     filtered="filterType !== '' || filterOrientation !== ''"
                     clearFilters="filterType = ''; filterOrientation = ''; applyFilters()" />
 
@@ -102,7 +99,6 @@
                         </td>
                         <td class="cell-prose px-5 py-4">
                             <p class="font-medium text-gray-800 dark:text-white" x-text="item.title"></p>
-                            <p class="text-xs text-gray-500 dark:text-gray-400" x-show="item.description" x-text="item.description"></p>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">
                             {{-- An Ad Builder page is stored as "html" — shown as what it is, an ad page. --}}
@@ -110,13 +106,10 @@
                             <span class="block text-xs text-gray-500 dark:text-gray-400" x-text="item.orientation ?? '-'"></span>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300 whitespace-nowrap" x-text="formatSize(item.size)"></td>
-                        <td class="px-5 py-4 text-gray-600 dark:text-gray-300 text-xs">
-                            <span class="whitespace-nowrap" x-text="scheduleLabel(item)"></span>
-                            <span x-show="isExpired(item)" class="block text-red-600 font-medium dark:text-red-400">Expired</span>
-                        </td>
                         <td class="px-5 py-4">
                             {{-- askToDelete: a file a channel shows is refused at once, before any confirmation. --}}
-                            <x-crud.table-actions editClick="openFormModal(item)" deleteClick="askToDelete(item)"
+                            {{-- A file keeps its name alone (owner, 2026-10-01): when it plays is said on its playlist line. --}}
+                            <x-crud.table-actions editClick="openFormModal(item)" deleteClick="askToDelete(item)" editLabel="Rename"
                                 editCan="media-update" deleteCan="media-destroy" dusk="media" />
                         </td>
                     </tr>
@@ -138,34 +131,15 @@
             <x-slot name="note">It also comes off every screen that plays it.</x-slot>
         </x-crud.confirm-delete-modal>
 
-        {{-- Edit Modal --}}
-        <x-modal name="media-form-modal" :show="false" maxWidth="2xl" persistent>
+        {{-- Rename: a file's name is all it keeps of what a person types; when it plays is its playlist line's. --}}
+        <x-modal name="media-form-modal" :show="false" maxWidth="md" focusable>
             <div class="p-6">
-                <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Edit File</h2>
+                <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Rename File</h2>
 
                 <form @submit.prevent="saveItem" novalidate dusk="media-form" class="mt-4 space-y-4">
                     <x-crud.form-field label="Title" field="title" :required="true">
                         <x-text-input x-model="form.title" dusk="media-edit-title" maxlength="255" autocomplete="off" />
                     </x-crud.form-field>
-
-                    {{-- h-auto: form-input is a 40 px line, and a description is a few lines. --}}
-                    <x-crud.form-field label="Description" field="description">
-                        <textarea x-model="form.description" dusk="media-edit-description" rows="3" maxlength="2000"
-                                  class="form-input h-auto min-h-24 py-2"></textarea>
-                    </x-crud.form-field>
-
-                    <p class="text-sm text-gray-500 dark:text-gray-400">
-                        Leave both empty to always play.
-                    </p>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <x-crud.form-field label="Start date and time" field="starts_at">
-                            <input type="datetime-local" x-model="form.starts_at" dusk="media-starts-at" class="form-input">
-                        </x-crud.form-field>
-                        <x-crud.form-field label="Expiry date and time" field="expires_at">
-                            <input type="datetime-local" x-model="form.expires_at" dusk="media-expires-at" class="form-input">
-                        </x-crud.form-field>
-                    </div>
 
                     <x-crud.form-actions savingVar="saving" dusk="media-save" />
                 </form>

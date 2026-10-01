@@ -176,13 +176,14 @@ test('cold registrations are throttled per address, and a refused one files noth
         ->and(Screen::count())->toBe(2);
 });
 
-test('the manifest never carries a file outside its schedule window', function () {
-    $expired = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Yesterday', 'expires_at' => now()->subDay()]);
-    PlaylistItem::create(['screen_id' => $this->screen->id, 'media_id' => $expired->id, 'position' => 1, 'duration_seconds' => 10]);
+test('the manifest never carries a file outside its line\'s schedule, not even in its timeline', function () {
+    $ended = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Yesterday']);
+    PlaylistItem::create(['screen_id' => $this->screen->id, 'media_id' => $ended->id, 'position' => 1, 'duration_seconds' => 10])
+        ->scheduleRules()->create(['ends_on' => now()->subDays(2)->toDateString()]);
 
     $manifest = json_encode($this->withHeader('Authorization', 'Bearer alpha-token')->getJson('/device/playlist')->assertOk()->json());
 
-    expect($manifest)->not->toContain('Yesterday')->not->toContain($expired->path);
+    expect($manifest)->not->toContain('Yesterday')->not->toContain($ended->path);
 });
 
 test('the token travels in the Authorization header only — an X-Device-Token header opens nothing', function () {

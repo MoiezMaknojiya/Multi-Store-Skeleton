@@ -83,6 +83,15 @@ test('out of the box only an Owner is shown deleting the store', function () {
     settingsAs($this->admin, $this->store)->get('/settings/store')->assertDontSee('Delete Store');
 });
 
+test('the name to type stands out in the sentence that asks for it, and is escaped like any other text', function () {
+    // Owner, 2026-10-01: "Type Stiedemann, Reinger and Leffler to confirm" read as one run of words, the name lost in it.
+    $this->store->update(['name' => "O'Brien <b>Deli</b> & Co"]);
+
+    settingsAs($this->owner, $this->store)->get('/settings/store')->assertOk()
+        ->assertSee('Type <span class="confirm-name" dusk="confirm_name-typed-name">O&#039;Brien &lt;b&gt;Deli&lt;/b&gt; &amp; Co</span> to confirm', false)
+        ->assertDontSee('<b>Deli</b>', false);
+});
+
 test('the store’s settings are the Stores tab of Settings; the sidebar does not list them', function () {
     settingsAs($this->owner, $this->store)->get('/profile')->assertOk()
         ->assertSee('dusk="settings-tab-store"', false)

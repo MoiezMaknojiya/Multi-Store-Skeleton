@@ -4,11 +4,13 @@ namespace Tests\Browser;
 
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
+use App\Models\Daypart;
 use App\Models\Media;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
 use App\Models\Store;
 use App\Services\AdPublisher;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
@@ -21,8 +23,8 @@ use Tests\DuskTestCase;
  * A television with no line (docs/AD-BUILDER-SPEC.md §15): paired and playing, its worker holds the page,
  * the manifest and every file; then the server goes away — put into maintenance, so every request it
  * gets is a 503 and the worker's network-first paths fall back to their caches, exactly as they do when
- * there is no network at all — and the set plays on: what has not expired, then the holding picture once
- * everything has, through a reboot, until the line returns and the server's own answer takes over.
+ * there is no network at all — and the set plays on: what its lines' rules still allow, then the holding
+ * picture once none does, through a reboot, until the line returns and the server's own answer takes over.
  *
  * Real Chrome, a real worker, real files: nothing here can be vouched for by a feature test.
  *
@@ -47,21 +49,28 @@ class OfflinePlayerTest extends DuskTestCase
 
     public function test_a_television_keeps_playing_from_its_cache_when_the_server_cannot_be_reached(): void
     {
+        $timezone = $this->daytimeZone();
         $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $screen = Screen::factory()->withToken('offline-token')->create(['store_id' => $store->id, 'name' => 'Counter TV']);
+        $screen = Screen::factory()->withToken('offline-token')->create(['store_id' => $store->id, 'name' => 'Counter TV', 'timezone' => $timezone]);
 
         $holding = $this->picture($store, 'holding.png', [30, 30, 30]);
         $screen->update(['default_media_id' => $holding->id]);
 
-        // Two pictures with short lives: the first ends while the line is down, the second a while after.
-        // Each picture stays up six seconds, the least one may (owner's rule, 2026-09-28).
-        $soon = $this->picture($store, 'soon.png', [200, 40, 40], now()->addSeconds(60));
-        $later = $this->picture($store, 'later.png', [40, 160, 60], now()->addSeconds(110));
+        // Two pictures whose lines play them until a minute of today: the first's window closes while the line is
+        // down, the second's a minute later. A file keeps no dates of its own (owner, 2026-10-01): its line's rule
+        // says when. Each picture stays up six seconds, the least one may (owner's rule, 2026-09-28).
+        $soonEnds = $this->wholeMinuteAfter($timezone, 60);
+        $laterEnds = $soonEnds->addMinute();
 
-        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $soon->id, 'position' => 0, 'duration_seconds' => 6]);
-        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $later->id, 'position' => 1, 'duration_seconds' => 6]);
+        $soon = $this->picture($store, 'soon.png', [200, 40, 40]);
+        $later = $this->picture($store, 'later.png', [40, 160, 60]);
 
-        $this->browse(function (Browser $tv) use ($soon, $later) {
+        $this->playOnlyBetween(PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $soon->id, 'position' => 0, 'duration_seconds' => 6]),
+            '00:00', $soonEnds->format('H:i'));
+        $this->playOnlyBetween(PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $later->id, 'position' => 1, 'duration_seconds' => 6]),
+            '00:00', $laterEnds->format('H:i'));
+
+        $this->browse(function (Browser $tv) use ($soonEnds, $laterEnds) {
             try {
                 $tv->visit('/login');
                 $tv->script("localStorage.clear(); localStorage.setItem('signage.device.token', 'offline-token');");
@@ -89,13 +98,12 @@ class OfflinePlayerTest extends DuskTestCase
                 $this->assertGreaterThan(0, $tv->script('return document.querySelector("#layer-a:not([hidden]) img, #layer-b:not([hidden]) img").naturalWidth;')[0],
                     'the picture on the glass really loaded — from the cache, since the server answers nothing');
 
-                /* ── 3. The first picture expires while the line is down: only the second plays on ── */
-                $tv->waitUsing(60, 500, fn () => now()->gt($soon->expires_at));
-                // The next poll, answered from memory, plays the timeline's entry for now — the one from the moment
-                // the first picture expired, which the server worked out without it (§15): nothing needs dropping.
+                /* ── 3. The first picture's window closes while the line is down: only the second plays on ── */
+                $tv->waitUsing(150, 500, fn () => now()->gt($soonEnds));
+                // The next poll, answered from memory, plays the timeline's entry for now — the one from the minute
+                // the first picture's window closed, which the server worked out without it (§15).
                 $tv->waitUsing(60, 500, fn () => (int) $tv->script('return Number(document.body.dataset.entry || 0);')[0] > 0,
-                    'after the first picture expired, the cached manifest did not move on to the timeline entry without it');
-                $this->assertSame('', $tv->script('return document.body.dataset.dropped;')[0], 'the timeline had already left it out');
+                    'after the first picture\'s window closed, the cached manifest did not move on to the timeline entry without it');
 
                 // Then the glass shows the second alone: two passes of a six-second picture with no sign of
                 // the first. (Seeing the second once proves nothing — the two took turns before.)
@@ -108,10 +116,10 @@ class OfflinePlayerTest extends DuskTestCase
                     }
 
                     return microtime(true) - $lastSeenSoon > 13 && str_contains($showing, 'later.png');
-                }, 'after the first picture expired, it kept coming back');
+                }, 'after the first picture\'s window closed, it kept coming back');
 
-                /* ── 4. …then the second: the holding picture takes the glass ── */
-                $tv->waitUsing(60, 500, fn () => now()->gt($later->expires_at));
+                /* ── 4. …then the second's: the holding picture takes the glass ── */
+                $tv->waitUsing(90, 500, fn () => now()->gt($laterEnds));
                 $this->waitForPicture($tv, 'holding.png', 60);
 
                 /* ── 5. Rebooted with no line, the set still has its page — and its holding picture ── */
@@ -134,26 +142,29 @@ class OfflinePlayerTest extends DuskTestCase
 
     public function test_with_its_line_cut_a_television_plays_its_ad_page_and_everything_the_page_loads_from_its_cache(): void
     {
+        $timezone = $this->daytimeZone();
         $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $screen = Screen::factory()->withToken('line-token')->create(['store_id' => $store->id, 'name' => 'Window TV']);
+        $screen = Screen::factory()->withToken('line-token')->create(['store_id' => $store->id, 'name' => 'Window TV', 'timezone' => $timezone]);
 
         // An ad page with a picture of its own and an entrance, so the frame loads the picture AND the runtime.
         $page = $this->publishedPage($store);
 
-        // A picture whose time comes while the line is down: only the timeline says when (§15).
+        // A picture whose line opens at a minute that comes while the line is down: only the timeline says when (§15).
         $later = $this->picture($store, 'later.png', [40, 160, 60]);
-        $later->update(['starts_at' => now()->addSeconds(100)]);
+        $laterStarts = $this->wholeMinuteAfter($timezone, 100);
 
-        // A file the next days bring — tomorrow — bigger than two pieces: warmed now, played by no one here.
-        $big = $this->bigFile($store, 'tomorrow.mp4', 2 * self::PART_BYTES + 123_456, now()->addDay());
+        // A file the next days bring — its line starts tomorrow — bigger than two pieces: warmed now, played by no one here.
+        $big = $this->bigFile($store, 'tomorrow.mp4', 2 * self::PART_BYTES + 123_456);
 
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->media_id, 'position' => 0, 'duration_seconds' => 6]);
-        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $later->id, 'position' => 1, 'duration_seconds' => 6]);
-        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $big->id, 'position' => 2]);
+        $this->playOnlyBetween(PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $later->id, 'position' => 1, 'duration_seconds' => 6]),
+            $laterStarts->format('H:i'), '23:59');
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $big->id, 'position' => 2])
+            ->scheduleRules()->create(['starts_on' => CarbonImmutable::now($timezone)->addDay()->toDateString()]);
 
         $server = $this->startLine();
 
-        $this->browse(function (Browser $tv) use (&$server, $later, $big) {
+        $this->browse(function (Browser $tv) use (&$server, $laterStarts, $big) {
             try {
                 $tv->visit(self::LINE_ORIGIN.'/up');
                 $tv->script("localStorage.clear(); localStorage.setItem('signage.device.token', 'line-token');");
@@ -175,7 +186,7 @@ class OfflinePlayerTest extends DuskTestCase
                 $this->assertStringStartsWith('/player/page?src=', $tv->script('return document.querySelector("#layer-a:not([hidden]) iframe, #layer-b:not([hidden]) iframe").getAttribute("src");')[0]);
 
                 /* ── 2. The line is cut: nothing answers at all ── */
-                $this->assertTrue(now()->lt($later->starts_at), 'the line was cut after the later picture’s time: the test proves nothing about the timeline');
+                $this->assertTrue(now()->lt($laterStarts), 'the line was cut after the later picture’s time: the test proves nothing about the timeline');
                 $this->cutLine($server);
                 $server = null;
 
@@ -186,7 +197,8 @@ class OfflinePlayerTest extends DuskTestCase
                 $this->waitForPage($tv, 'with the line cut', true);
 
                 /* ── 3. The later picture's time comes with the line still down: the timeline puts it on ── */
-                $tv->waitUsing(120, 250, fn () => str_contains($this->onScreen($tv), 'later.png'),
+                $tv->waitUsing(180, 500, fn () => now()->gte($laterStarts));
+                $tv->waitUsing(60, 250, fn () => str_contains($this->onScreen($tv), 'later.png'),
                     'the picture whose time came while the line was down never came on');
 
                 /* ── 4. Rebooted with no line: its page and its scripts from the cache, and the ad page plays ── */
@@ -307,8 +319,8 @@ class OfflinePlayerTest extends DuskTestCase
         return $ad->fresh();
     }
 
-    /** A file of $bytes on the Dusk disk, in the store's library, playable from $startsAt. */
-    private function bigFile(Store $store, string $file, int $bytes, $startsAt): Media
+    /** A file of $bytes on the Dusk disk, in the store's library. */
+    private function bigFile(Store $store, string $file, int $bytes): Media
     {
         $path = "media/{$store->id}/{$file}";
         Storage::disk('public')->put($path, str_repeat('signage ', intdiv($bytes, 8)).str_repeat('.', $bytes % 8));
@@ -322,7 +334,6 @@ class OfflinePlayerTest extends DuskTestCase
             'thumbnail_path' => null,
             'size' => $bytes,
             'duration_seconds' => 30,
-            'starts_at' => $startsAt,
         ]);
     }
 
@@ -397,8 +408,8 @@ class OfflinePlayerTest extends DuskTestCase
         return (int) (preg_match('/\s(\d{3})\s/', (string) ($headers[0] ?? ''), $match) ? $match[1] : 0);
     }
 
-    /** A real picture in the store's library, on the Dusk disk, playable until $expiresAt (or for ever). */
-    private function picture(Store $store, string $file, array $rgb, $expiresAt = null): Media
+    /** A real picture in the store's library, on the Dusk disk. */
+    private function picture(Store $store, string $file, array $rgb): Media
     {
         return Media::factory()->create([
             'store_id' => $store->id,
@@ -407,8 +418,30 @@ class OfflinePlayerTest extends DuskTestCase
             'mime_type' => 'image/png',
             'path' => $this->putImage("media/{$store->id}/{$file}", ...$rgb),
             'thumbnail_path' => null,
-            'expires_at' => $expiresAt,
         ]);
+    }
+
+    /** A line's rule that plays it only between two clock times of its screen's day. */
+    private function playOnlyBetween(PlaylistItem $line, string $start, string $end): void
+    {
+        $daypart = Daypart::factory()->between($start, $end)->create(['store_id' => Screen::whereKey($line->screen_id)->value('store_id')]);
+
+        $line->scheduleRules()->create(['daypart_id' => $daypart->id]);
+    }
+
+    /**
+     * A timezone in which it is daytime now — between 02:00 and 21:59 — so the windows these tests open and
+     * close a minute or two from now never run past the screen's midnight, whatever hour the suite runs at.
+     */
+    private function daytimeZone(): string
+    {
+        return now('UTC')->hour >= 2 && now('UTC')->hour <= 21 ? 'UTC' : 'Asia/Tokyo';
+    }
+
+    /** The first whole minute at least $seconds from now, on that timezone's clock: a daypart is said in minutes. */
+    private function wholeMinuteAfter(string $timezone, int $seconds): CarbonImmutable
+    {
+        return CarbonImmutable::now($timezone)->addSeconds($seconds)->startOfMinute()->addMinute();
     }
 
     /** The address of the picture on the glass, or '' while there is none. */

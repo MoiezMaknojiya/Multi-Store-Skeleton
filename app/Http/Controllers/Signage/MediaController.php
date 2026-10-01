@@ -31,8 +31,6 @@ class MediaController extends Controller
         'oldest' => ['created_at', 'asc'],
         'title_asc' => ['title', 'asc'],
         'title_desc' => ['title', 'desc'],
-        'expiry_asc' => ['expires_at', 'asc'],
-        'expiry_desc' => ['expires_at', 'desc'],
     ];
 
     /**
@@ -86,7 +84,7 @@ class MediaController extends Controller
         [$column, $direction] = self::SORTS[$filters['sort'] ?? 'newest'] ?? self::SORTS['newest'];
         $query->orderBy($column, $direction);
 
-        $listing = $this->paginatedResponse($request, $query, ['title', 'description'], 'media', ['*'],
+        $listing = $this->paginatedResponse($request, $query, ['title'], 'media', ['*'],
             // Why a file may not be deleted yet, so the panel says it before anybody confirms (spec §5).
             function (Collection $files) {
                 $refusals = Media::stillInChannelsMessages($files->pluck('id')->all());
@@ -134,12 +132,14 @@ class MediaController extends Controller
         // Route middleware is not enough: the target has to be inside the store the
         // actor is working in, or it does not exist for them (404, never 403).
         $media = Media::visibleTo(auth()->user())->findOrFail($media->id);
+        $before = $media->title;
 
-        $media->update($request->validated());
+        // A file keeps its name and nothing else of what a person types (owner, 2026-10-01: "srif naam rakho").
+        $media->update(['title' => $request->validated('title')]);
 
-        ActivityLog::record('media.updated', $media, "Updated media {$media->title}");
+        ActivityLog::record('media.renamed', $media, "Renamed {$before} to {$media->title}");
 
-        return response()->json(['message' => 'Media updated successfully', 'media' => $media]);
+        return response()->json(['message' => 'File renamed.', 'media' => $media]);
     }
 
     /** Delete a file, its thumbnail and its row. */

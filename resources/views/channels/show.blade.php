@@ -195,10 +195,10 @@
                                    x-bind:placeholder="source === 'ads' ? 'Search ads…' : 'Search files…'" aria-label="Search">
                         </div>
 
-                        {{-- The picker leaves them out rather than offering and refusing them (owner, 2026-09-26). --}}
-                        <p class="text-xs text-muted-soft" dusk="channel-ad-picker-note">
-                            Files on a playlist are not listed, so nothing plays twice.
-                        </p>
+                        {{-- The picker leaves them out rather than offering and refusing them (owner, 2026-09-26), and says how
+                             many it left out while others are listed (with none listed, the empty line says it). --}}
+                        <p x-show="picker.onPlaylists > 0 && picker.items.length > 0" x-cloak class="text-xs text-muted-soft" dusk="channel-ad-picker-note"
+                           x-text="onPlaylistsText() + ', so not listed: nothing plays twice.'"></p>
 
                         <p x-show="picker.loading && picker.items.length === 0" x-cloak class="py-6 text-center text-sm text-muted-soft">Loading…</p>
 

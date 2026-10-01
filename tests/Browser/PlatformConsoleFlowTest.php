@@ -315,6 +315,10 @@ class PlatformConsoleFlowTest extends DuskTestCase
             $browser->waitFor('@delete-store-'.$store->id);
             $this->clickAndAwait($browser, '@delete-store-'.$store->id, fn (Browser $b) => $b->waitFor('@delete-store-password', 3));
 
+            // The name to type stands out in the sentence that asks for it (owner, 2026-10-01).
+            $browser->assertSeeIn('@delete-store-typed-name', 'Doomed Deli');
+            $this->assertSame('600', (string) $browser->script('return getComputedStyle(document.querySelector(\'[dusk="delete-store-typed-name"]\')).fontWeight;')[0]);
+
             $this->jsType($browser, '@delete-store-name', 'Doomed Deli');
             $this->jsClick($browser, '@delete-store-confirm');
             $browser->waitForText('Password is required.');

@@ -246,7 +246,6 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
         $menu = Media::factory()->create([
             'store_id' => $alpha->id,
             'title' => 'Breakfast, Lunch and Dinner Specials Menu Board',
-            'description' => 'The one on the big screen by the counter — swap it every season, and again for Ramadan.',
         ]);
         $video = Media::factory()->create([
             'store_id' => $alpha->id,
@@ -254,7 +253,6 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
             'type' => Media::TYPE_VIDEO,
             'mime_type' => 'video/mp4',
             'duration_seconds' => 30,
-            'expires_at' => now()->addMonth(),
         ]);
 
         $screen = Screen::factory()->create(['store_id' => $alpha->id, 'name' => 'Front Counter Menu Board Television']);

@@ -173,10 +173,10 @@
                             </p>
                         </div>
 
-                        {{-- A bound :label, not an echo inside label="": the component echoes its label itself,
-                             so an echo here escaped the name twice and "Joe's" read "Joe&#039;s". --}}
+                        {{-- The name is handed over on its own (highlight), never echoed into label="": the component
+                             escapes it once and picks it out where the label says :name, so "Joe's" reads "Joe's". --}}
                         <x-auth.form-field name="confirm_name" bag="storeDeletion" :required="true"
-                            :label="'Type '.$store->name.' to confirm'" maxlength="255" autocomplete="off" dusk="delete-store-name" />
+                            label="Type :name to confirm" :highlight="$store->name" maxlength="255" autocomplete="off" dusk="delete-store-name" />
 
                         <x-auth.form-field name="password" id="delete_password" label="Your password" type="password" bag="storeDeletion"
                             :required="true" autocomplete="current-password" dusk="delete-store-password" />

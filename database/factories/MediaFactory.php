@@ -26,7 +26,6 @@ class MediaFactory extends Factory
         return [
             'store_id' => Store::factory(),
             'title' => fake()->words(3, true),
-            'description' => null,
             'type' => Media::TYPE_IMAGE,
             'mime_type' => 'image/jpeg',
             'disk' => 'public',
@@ -37,8 +36,6 @@ class MediaFactory extends Factory
             'height' => 1080,
             'duration_seconds' => null,
             'orientation' => 'landscape',
-            'starts_at' => null,
-            'expires_at' => null,
         ];
     }
 
@@ -66,15 +63,6 @@ class MediaFactory extends Factory
             'mime_type' => 'text/html',
             'path' => 'builder/1/ads/'.fake()->unique()->numberBetween(1, 1_000_000).'/index.html',
             'size' => 4_000,
-        ]);
-    }
-
-    /** Already past its expiry window. */
-    public function expired(): static
-    {
-        return $this->state(fn () => [
-            'starts_at' => now()->subMonth(),
-            'expires_at' => now()->subDay(),
         ]);
     }
 }

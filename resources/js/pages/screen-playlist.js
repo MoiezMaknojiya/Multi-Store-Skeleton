@@ -235,7 +235,6 @@ export function registerScreenPlaylist(Alpine) {
                     ? (media.duration_seconds || PlaylistItemDefaults.unmeasuredVideoSeconds)
                     : (media.type === 'html' && media.duration_seconds ? media.duration_seconds : PlaylistItemDefaults.imageSeconds),
                 runs_own_length: media.type === 'video' || (media.type === 'html' && Number(media.duration_seconds) > 0),
-                expires_at: null,
                 // The picker never offers an Ad Builder page taken off the screens (unpublished).
                 is_draft: false,
                 // No rules means "whenever the screen is on", which is what almost
@@ -270,7 +269,6 @@ export function registerScreenPlaylist(Alpine) {
                 pass_ads: channel.pass_ads,
                 pass_seconds: channel.pass_seconds,
                 duration_seconds: null,
-                expires_at: null,
                 rules: [],
             });
             this.dirty = true;

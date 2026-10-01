@@ -913,39 +913,39 @@ anywhere else the player is exactly what it was — online only — because ever
      so the worker holds a copy before any line drops. The player also asks the browser to keep its storage
      (`navigator.storage.persist()`), so a disk running low does not clear the one thing an offline set has.
 2. **The manifest** (`DeviceController::playlist`, one instant for all of it) says a little more than what
-   plays now: each file item carries `expires_at`; the holding picture travels as `fallback` whenever the
-   shop set one and it is still live, even while items are due; and **`timeline`** says what the screen shows
+   plays now: the holding picture travels as `fallback` whenever the shop set one and it is still on the
+   screens (never an unpublished ad page), even while items are due; and **`timeline`** says what the screen shows
    at every moment its answer changes over the next `TIMELINE_HOURS` (72) — a daypart opening or closing, a
-   new local day, a file starting or expiring, a campaign's window (`ScheduleResolver::changePoints`,
+   new local day (a line's dates turn over there), a campaign's window (`ScheduleResolver::changePoints`,
    `NetworkAdResolver::changePoints`) — each worked out by the very resolver that answers online
    (`resolveLoaded()` on the playlist loaded once; `NetworkAdResolver::breaksAt()`, one query per local
    date), and kept only when it differs from the one before. Entries name their lines by key into one
    `lines` map, so a line is sent once however many entries carry it: a 30-line, four-daypart menu board is
    about 16 KB, 2 KB gzipped, and costs some 40 ms. The timeline is also every file the next days may play —
-   the player warms from it, and nothing further off reaches the device (a file outside its window never
-   does, rule 02); the `assets[]` list the first design sent is gone. The `version` is moved by none of
+   the player warms from it, and nothing further off reaches the device (a line its rules keep off the air
+   never does, rule 02); the `assets[]` list the first design sent is gone. The `version` is moved by none of
    this: it is a change to what plays now that must. Each file's `checksum` moves only when its bytes may
    have — every screen downloads the file again when it does: a picture's or a video's is the file itself
-   (id, size, path — every upload is a new file with a name of its own, so a new title or new dates cost no
-   download); an ad page, rewritten in place on every publish, adds its row's stamp; a channel ad's is its
+   (id, size, path — every upload is a new file with a name of its own, so a new title costs no download;
+   a file keeps no dates of its own since 2026-10-01, when it plays being its line's rules alone); an ad page, rewritten in place on every publish, adds its row's stamp; a channel ad's is its
    file's own, so one file on a playlist and in a channel is one copy on the set; a campaign's is its file.
 3. **The player** (`resources/js/player.js`) registers the worker, versions every address, and after every
    live manifest names to the worker, most needed first: what is due now (with what those ad pages load —
    read by the browser's own parser, once per page version, its attributes and styles only, so words a
    person typed into an ad are never taken for an address), the holding picture, the network adverts, then
    every line the timeline brings later on. From a cached manifest it plays `fromMemory()`: the timeline's
-   entry for now (past its end, the last one), then any file that has expired since dropped, and when
-   nothing is left the holding picture, then black — the answer the server would have given. "Now" is the
+   entry for now (past its end, the last one), in which the server already put the holding picture wherever
+   nothing else is due, or black — the answer it would have given. "Now" is the
    set's clock corrected by the offset from the last live `server_time` — kept across reboots — and never
    earlier than the moment the manifest was made, so a box whose clock went back to 2020 after a power cut
    keeps playing the right day. The loop restarts only when what would be SHOWN changes, compared the same
    way live or from memory: the line dropping or coming back with the same things due restarts nothing (a
    video is not cut, a channel's rotation is not sent back to its start), while a new timeline entry
-   (lunch has begun) or a file expiring mid-outage does. What is on the glass and no longer on the list is
-   taken off at once when playing from memory, or once it has expired — black rather than yesterday's price
+   (lunch has begun) does. What is on the glass and no longer on the list is taken off at once when playing
+   from memory — black rather than yesterday's price
    while the next item loads, or fails to with no line; online, the next item is a moment away and cutting
    to black for that moment would be a flash. `<body data-source>` says `live` or `cache`, and from memory
-   `data-entry` and `data-dropped` say which entry and which lines it dropped. The `online` event asks for
+   `data-entry` says which entry it plays. The `online` event asks for
    the playlist at once rather than at the next poll.
 4. **The page's own policy** (`AdCompiler::contentSecurityPolicy`), first thing in its head after the
    character set: `default-src 'none'`; scripts only its own inline ones, by their SHA-256 digests, and —
@@ -977,13 +977,13 @@ television or Android box can "install" the player and open it full screen with 
 progressive part of the request. nginx serves `player-sw.js` with `Cache-Control: no-cache`, so a set
 asking for a new worker is given it.
 
-**Tests.** Pest: `OfflineManifestTest` — each item's `expires_at`, the fallback travelling alongside due
-items (and gone when it has expired or was never set), the timeline naming every file the next days may play
+**Tests.** Pest: `OfflineManifestTest` — a file item with no dates of its own, the fallback travelling
+alongside due items (and gone when it was never set), the timeline naming every file the next days may play
 and nothing further off (tomorrow's picture in, next year's out, never a draft), the network advert under the
 campaign's own key, none of it moving the version; the cache keys — a picture and a video keep theirs through
-a new title and new dates, a new file moves it, a channel ad's is its file's (one copy on the set), a
+a new title, a new file moves it, a channel ad's is its file's (one copy on the set), a
 campaign's survives a new name; the web-app manifest route. `OfflineTimelineTest` — dayparts over three days,
-the first entry now, the holding picture in the dark hours, expiry and start instants, an overnight window
+the first entry now, the holding picture in the dark hours, a line ending today and one starting tomorrow at the screen's midnight, an overnight window
 with a closed Friday, a channel's ads day by day, campaign windows, thirty lines staying small, the version
 unmoved. `AdPagePolicyTest` — the policy's place, every inline script by its digest, scripts only from the
 runtime's folder (a still page from nowhere), nothing reachable, typed words never the policy.
@@ -991,7 +991,7 @@ runtime's folder (a still page from nowhere), nothing reachable, typed words nev
 alone. `InputAbuseAttackTest` — text that is not UTF-8 anywhere a request carries it: 400, never 500.
 Dusk (`OfflinePlayerTest`): (1) a paired television's server is put into maintenance — every request a 503,
 which the worker's network-first paths treat as unreachable — and the set plays on from memory, its first
-picture expiring and never coming back, the holding picture after the second, through a reboot, until
+picture's daypart closing and the picture never coming back, the holding picture after the second's, through a reboot, until
 maintenance ends; (2) the line cut for real — the television served by a second server of its own (port 8002,
 `tests/Browser/support/range-router.php` answering range requests the way nginx does, since PHP's built-in
 server sends every file whole), which is killed, so nothing answers at all: live, everything is warmed and a

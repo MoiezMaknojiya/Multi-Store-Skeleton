@@ -123,18 +123,19 @@ test('the holding picture is what a dark hour shows, in the timeline as on the g
     ]);
 });
 
-test('a file that expires, or starts, inside the horizon changes the timeline at that very minute', function () {
+test('a line that ends today, or starts tomorrow, changes the timeline at the screen\'s own midnight', function () {
     localNow('2026-09-24 09:00');
-    // Stored as the app stores them — in UTC — whatever wall clock they were said on.
-    $sale = scheduledPicture($this->store, $this->screen, 'Sale', 0, media: ['expires_at' => CarbonImmutable::parse('2026-09-24 13:37', 'America/Chicago')->utc()]);
-    $launch = scheduledPicture($this->store, $this->screen, 'Launch', 1, media: ['starts_at' => CarbonImmutable::parse('2026-09-25 08:05', 'America/Chicago')->utc()]);
+    // A file keeps no dates of its own (owner, 2026-10-01): its line's rule says when, on the screen's wall clock.
+    $sale = scheduledPicture($this->store, $this->screen, 'Sale', 0);
+    $launch = scheduledPicture($this->store, $this->screen, 'Launch', 1);
+    PlaylistItem::where('media_id', $sale->id)->sole()->scheduleRules()->create(['ends_on' => '2026-09-24', 'position' => 0]);
+    PlaylistItem::where('media_id', $launch->id)->sole()->scheduleRules()->create(['starts_on' => '2026-09-25', 'position' => 0]);
 
     $entries = timelineOf($this, [$sale->url => 'Sale', $launch->url => 'Launch']);
 
     expect($entries)->toBe([
         ['2026-09-24 09:00', false, ['Sale']],
-        ['2026-09-24 13:37', true, []],
-        ['2026-09-25 08:05', false, ['Launch']],
+        ['2026-09-25 00:00', false, ['Launch']],
     ]);
 });
 

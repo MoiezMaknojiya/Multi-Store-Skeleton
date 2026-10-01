@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\BuilderAd;
 use App\Models\Daypart;
 use App\Models\Media;
 use App\Models\PlaylistItem;
@@ -137,20 +138,20 @@ test('an item plays if ANY of its rules says yes', function () {
     expect(resolveAt($this->screen, '2026-04-04 12:00')['items'])->toBeEmpty();
 });
 
-test('an expired file never plays, however welcoming its rule is', function () {
-    $expired = Media::factory()->create([
-        'store_id' => $this->store->id,
-        'title' => 'Eid offer',
-        'expires_at' => '2026-03-25 00:00:00',
-    ]);
+test('an Ad Builder page taken off the screens never plays, however welcoming its rule is', function () {
+    $ad = BuilderAd::factory()->published()->create(['store_id' => $this->store->id, 'name' => 'Eid offer']);
 
-    place($this->screen, $expired, [
+    place($this->screen, $ad->media, [
         'recurrence_type' => ScheduleRule::WEEKLY,
         'recurrence_weekdays' => [5],
     ]);
 
-    // A Friday before the expiry, and a Friday after it. The rule says yes to both.
+    // A Friday: the rule says yes, and so does the page while it is published…
     expect(resolveAt($this->screen, '2026-03-20 12:00')['items'])->toHaveCount(1);
+
+    // …and not once it is unpublished. A file keeps no dates of its own (owner, 2026-10-01): its line's rule is
+    // the whole of when it plays, and a draft is the one thing a rule cannot bring back.
+    $ad->update(['published_at' => null]);
     expect(resolveAt($this->screen, '2026-03-27 12:00')['items'])->toBeEmpty();
 });
 
@@ -177,16 +178,16 @@ test('an empty playlist falls back the same way a schedule gap does', function (
     expect(resolveAt($this->screen, '2026-03-20 12:00')['fallback']?->id)->toBe($holding->id);
 });
 
-test('an expired default media is not a default', function () {
-    // Showing it anyway would break the very promise the expiry date makes.
-    $stale = Media::factory()->create([
-        'store_id' => $this->store->id,
-        'title' => 'Old welcome',
-        'expires_at' => '2026-03-01 00:00:00',
-    ]);
-    $this->screen->update(['default_media_id' => $stale->id]);
+test('an Ad Builder page taken off the screens is not a default', function () {
+    // Unpublishing takes an ad off every screen, the holding picture's place included.
+    $ad = BuilderAd::factory()->published()->create(['store_id' => $this->store->id, 'name' => 'Old welcome']);
+    $this->screen->update(['default_media_id' => $ad->media_id]);
 
-    expect(resolveAt($this->screen, '2026-03-20 12:00')['fallback'])->toBeNull();
+    expect(resolveAt($this->screen, '2026-03-20 12:00')['fallback']?->id)->toBe($ad->media_id);
+
+    $ad->update(['published_at' => null]);
+
+    expect(resolveAt($this->screen->fresh(), '2026-03-20 12:00')['fallback'])->toBeNull();
 });
 
 test('with no default set a gap is simply black', function () {

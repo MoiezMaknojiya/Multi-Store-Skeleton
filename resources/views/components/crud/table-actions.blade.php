@@ -10,13 +10,15 @@
     'editCan' => null,
     'deleteCan' => null,
     'dusk' => null,
+    // The edit button's words, where a page changes one thing only ("Rename").
+    'editLabel' => 'Edit',
 ])
 
 <div class="flex items-center justify-end gap-2">
     @if($editClick && (! $editCan || auth()->user()->can($editCan)))
     {{-- Each says which row it acts on, for a screen reader passing a column of "Edit"s. --}}
-    <button @click="{{ $editClick }}" class="btn-row-neutral" x-bind:aria-label="'Edit ' + (item.name ?? item.title ?? '')"
-            @if($dusk) x-bind:dusk="'edit-{{ $dusk }}-' + item.id" @endif>Edit</button>
+    <button @click="{{ $editClick }}" class="btn-row-neutral" x-bind:aria-label="'{{ $editLabel }} ' + (item.name ?? item.title ?? '')"
+            @if($dusk) x-bind:dusk="'edit-{{ $dusk }}-' + item.id" @endif>{{ $editLabel }}</button>
     @endif
 
     @if($deleteClick && (! $deleteCan || auth()->user()->can($deleteCan)))
