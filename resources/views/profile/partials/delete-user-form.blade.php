@@ -4,7 +4,7 @@
             {{ __('Delete Account') }}
         </h2>
         <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            {{ __('You leave every store. What you added stays with the stores. An only Owner makes someone else an Owner first.') }}
+            {{ __('You leave every organization. What you added stays with the organizations. An only Owner makes someone else an Owner first.') }}
         </p>
     </header>
 

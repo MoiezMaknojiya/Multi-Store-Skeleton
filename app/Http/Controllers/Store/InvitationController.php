@@ -40,11 +40,11 @@ class InvitationController extends Controller
         $account = User::whereRaw('lower(email) = ?', [$email])->first();
 
         if ($account?->globalRole()) {
-            throw ValidationException::withMessages(['email' => 'This email belongs to a platform account and cannot join a store.']);
+            throw ValidationException::withMessages(['email' => 'This email belongs to a platform account and cannot join an organization.']);
         }
 
         if ($account !== null && $this->team->isMember($account, $store)) {
-            throw ValidationException::withMessages(['email' => "{$email} is already a member of this store."]);
+            throw ValidationException::withMessages(['email' => "{$email} is already a member of this organization."]);
         }
 
         if (Invitation::forStore($store)->where('email', $email)->exists()) {
@@ -101,7 +101,7 @@ class InvitationController extends Controller
         $role = Role::availableInStore($store->id)->find($roleId);
 
         if ($role === null) {
-            throw ValidationException::withMessages(['role_id' => 'Choose a role that exists in this store.']);
+            throw ValidationException::withMessages(['role_id' => 'Choose a role that exists in this organization.']);
         }
 
         if (! $this->team->mayAssign($actor, $store, $role)) {

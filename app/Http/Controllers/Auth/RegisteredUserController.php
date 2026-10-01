@@ -110,7 +110,7 @@ class RegisteredUserController extends Controller
         $request->session()->regenerate();
 
         ActivityLog::record('user.registered', $user,
-            "Self-registered: {$user->name} ({$user->email}) with store {$store->name}", storeId: $store->id);
+            "Self-registered: {$user->name} ({$user->email}) with organization {$store->name}", storeId: $store->id);
 
         // The address has to be confirmed before anything that uses the server's space (owner's rule, 2026-09-29):
         // the link goes out now, and "Check your inbox" says where. A link that could not go out — a mail server

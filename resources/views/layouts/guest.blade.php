@@ -44,7 +44,7 @@
                     </div>
                 </div>
                 <p class="text-3xl font-bold text-white mb-4">{{ config('app.name', 'Laravel') }}</p>
-                <p class="text-gray-400 text-sm max-w-xs mx-auto">Put your pictures, videos and ads on your shop's screens, from one place.</p>
+                <p class="text-gray-400 text-sm max-w-xs mx-auto">Put your pictures, videos and ads on your organization's screens, from one place.</p>
             </div>
         </div>
     </div>

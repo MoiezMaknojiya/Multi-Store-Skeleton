@@ -71,7 +71,7 @@ export function registerChannelsTable(Alpine) {
                     // A store's own channel only ever plays in that store.
                     return channel.store_name
                         ? plural(screens, 'screen')
-                        : `${plural(screens, 'screen')} in ${plural(channel.stores_count ?? 0, 'shop')}`;
+                        : `${plural(screens, 'screen')} in ${plural(channel.stores_count ?? 0, 'organization')}`;
                 },
             },
         })();

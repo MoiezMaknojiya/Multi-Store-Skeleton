@@ -177,19 +177,19 @@ class UserController extends Controller
             'store_id' => ['required', 'integer'],
             'role_id' => ['required', 'integer'],
         ], [
-            'store_id.required' => 'Choose a store.',
+            'store_id.required' => 'Choose an organization.',
             'role_id.required' => 'Choose a role.',
         ]);
 
         if ($user->globalRole() !== null) {
-            throw ValidationException::withMessages(['store_id' => "{$user->name} is on the platform team, which works above the stores. Remove their platform role first."]);
+            throw ValidationException::withMessages(['store_id' => "{$user->name} is on the platform team, which works above the organizations. Remove their platform role first."]);
         }
 
         $store = Store::find($validated['store_id'])
-            ?? throw ValidationException::withMessages(['store_id' => 'Choose a store that exists.']);
+            ?? throw ValidationException::withMessages(['store_id' => 'Choose an organization that exists.']);
 
         $role = Role::availableInStore($store->id)->find($validated['role_id'])
-            ?? throw ValidationException::withMessages(['role_id' => 'Choose a role that exists in this store.']);
+            ?? throw ValidationException::withMessages(['role_id' => 'Choose a role that exists in this organization.']);
 
         $this->team->changeTeam($store, function () use ($user, $store, $role) {
             if ($this->team->isMember($user, $store)) {
@@ -244,7 +244,7 @@ class UserController extends Controller
         $validated = $request->validate(['role_id' => ['required', 'integer']], ['role_id.required' => 'Choose a role.']);
 
         $role = Role::availableInStore($store->id)->find($validated['role_id'])
-            ?? throw ValidationException::withMessages(['role_id' => 'Choose a role that exists in this store.']);
+            ?? throw ValidationException::withMessages(['role_id' => 'Choose a role that exists in this organization.']);
 
         $current = $this->team->changeTeam($store, function () use ($user, $store, $role) {
             $current = $this->team->roleOf($user, $store) ?? abort(404);

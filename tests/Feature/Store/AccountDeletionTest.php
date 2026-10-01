@@ -60,7 +60,7 @@ test('the only Owner of a store must hand it on first', function () {
 
     $this->actingAs($person)->from('/profile')->delete('/profile', ['password' => 'password'])
         ->assertRedirect('/profile')
-        ->assertSessionHasErrorsIn('userDeletion', ['password' => 'You are the only Owner of Alpha Mart. Make someone else an Owner of it, or delete that store, first.']);
+        ->assertSessionHasErrorsIn('userDeletion', ['password' => 'You are the only Owner of Alpha Mart. Make someone else an Owner of it, or delete that organization, first.']);
 
     expect(User::find($person->id))->not->toBeNull();
 });

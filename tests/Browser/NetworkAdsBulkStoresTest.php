@@ -46,17 +46,17 @@ class NetworkAdsBulkStoresTest extends DuskTestCase
             $browser->waitForText('Alpha Mart')
                 ->assertSeeIn('@store-ads-'.$alpha->id, 'Off')
                 ->assertSeeIn('@store-ads-'.$beta->id, 'Off')
-                ->assertSee('tick the shops below')
+                ->assertSee('tick the organizations below')
                 ->assertAttribute('@stores-ads-on', 'disabled', 'true');
 
             // -- Tick both shops --------------------------------------------------
             $this->jsClick($browser, '@select-store-'.$alpha->id);
             $this->jsClick($browser, '@select-store-'.$beta->id);
-            $browser->waitForText('2 shops selected');
+            $browser->waitForText('2 organizations selected');
 
             // -- The confirmation states the real reach before it is pressed ------
             $this->jsClick($browser, '@stores-ads-on');
-            $browser->waitForText('Switch advertising on for 2 shops?')
+            $browser->waitForText('Switch advertising on for 2 organizations?')
                 ->assertSee('4 screens')
                 ->assertSee('Any screen you had set apart by hand is switched too.');
 
@@ -67,7 +67,7 @@ class NetworkAdsBulkStoresTest extends DuskTestCase
                 ->assertSeeIn('@store-ads-'.$beta->id, 'On — all 2')
                 // The selection empties itself on the refetch, so a second press
                 // cannot land on shops the operator has stopped looking at.
-                ->assertSee('tick the shops below');
+                ->assertSee('tick the organizations below');
         });
 
         $this->assertTrue($alpha->fresh()->accepts_network_ads);
@@ -86,7 +86,7 @@ class NetworkAdsBulkStoresTest extends DuskTestCase
 
             // The whole count, not just the start of the sentence: it proves the page-wide
             // tick picked up both shops, and their four televisions, before anything is pressed.
-            $browser->waitForText('Switch advertising off for 2 shops?')
+            $browser->waitForText('Switch advertising off for 2 organizations?')
                 ->assertSee('4 screens');
             $this->jsClick($browser, '@confirm-store-ads');
 

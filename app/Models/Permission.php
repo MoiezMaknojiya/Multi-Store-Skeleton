@@ -68,7 +68,7 @@ class Permission extends Model
 
     /** The label of every permission the application ships with. */
     public const LABELS = [
-        'store-update' => 'Update Store Details',
+        'store-update' => 'Update Organization Details',
         'member-view' => 'View Members',
         'member-invite' => 'Invite Members',
         'member-update' => 'Change Member Roles',
@@ -96,9 +96,9 @@ class Permission extends Model
         'ad-destroy' => 'Delete Ads',
         'user-view' => 'View Accounts',
         'user-destroy' => 'Delete Accounts',
-        'store-view' => 'View Stores',
-        'store-store' => 'Create Stores',
-        'store-destroy' => 'Delete Stores',
+        'store-view' => 'View Organizations',
+        'store-store' => 'Create Organizations',
+        'store-destroy' => 'Delete Organizations',
         'channel-view' => 'View Channels',
         'channel-store' => 'Create Channels',
         'channel-update' => 'Update Channels',

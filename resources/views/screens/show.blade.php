@@ -296,7 +296,7 @@
                                         {{-- A channel the store made for itself, told apart from the platform's; kept out of
                                              the truncated name so a long name never hides it. --}}
                                         <span x-show="channel.is_store_channel" class="badge-neutral shrink-0"
-                                              x-bind:dusk="'channel-picker-own-' + channel.id">This store</span>
+                                              x-bind:dusk="'channel-picker-own-' + channel.id">This organization</span>
                                     </p>
                                     <p class="text-xs"
                                        x-bind:class="channelWarning(channel) ? 'text-amber-700 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'"
@@ -565,7 +565,7 @@
                     </template>
                     <template x-if="!copyLoading && copyTargets.length === 0">
                         <p class="text-sm text-gray-500 dark:text-gray-400" dusk="copy-no-targets">
-                            There are no other screens in this store.
+                            There are no other screens in this organization.
                         </p>
                     </template>
 

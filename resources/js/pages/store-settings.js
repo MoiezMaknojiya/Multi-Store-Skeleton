@@ -12,7 +12,7 @@ export function registerStoreSettings(Alpine) {
             runClientValidation(event,
                 ['name', 'street', 'suite', 'city', 'state', 'zip_code', 'country'],
                 {
-                    name: [required('Store name'), maxLen('Store name', 255)],
+                    name: [required('Organization name'), maxLen('Organization name', 255)],
                     street: [required('Street'), maxLen('Street', 255)],
                     suite: [maxLen('Suite / Unit', 100)],
                     city: [required('City'), maxLen('City', 100)],
@@ -30,7 +30,7 @@ export function registerStoreSettings(Alpine) {
             runClientValidation(event,
                 ['store_name', 'store_street', 'store_suite', 'store_city', 'store_state', 'store_zip_code', 'store_country'],
                 {
-                    store_name: [required('Store name'), maxLen('Store name', 255)],
+                    store_name: [required('Organization name'), maxLen('Organization name', 255)],
                     store_street: [required('Street'), maxLen('Street', 255)],
                     store_suite: [maxLen('Suite / Unit', 100)],
                     store_city: [required('City'), maxLen('City', 100)],
@@ -48,8 +48,8 @@ export function registerStoreSettings(Alpine) {
         validateBeforeSubmit(event) {
             runClientValidation(event, ['confirm_name', 'password'], {
                 confirm_name: [
-                    required('Store name'),
-                    (value) => (String(value ?? '').trim() === storeName ? null : 'Type the store name exactly as it is shown.'),
+                    required('Organization name'),
+                    (value) => (String(value ?? '').trim() === storeName ? null : 'Type the organization name exactly as it is shown.'),
                 ],
                 password: [required('Password')],
             });

@@ -234,7 +234,7 @@ test('the platform builds for a shop it names, or for every shop when it names n
     $this->flushSession();
 
     $this->postJson('/builder', ['name' => 'For nobody', 'document' => adDocument(), 'store_id' => 999999])
-        ->assertStatus(422)->assertJsonValidationErrors(['store_id' => 'That shop no longer exists. Reload the page and choose again.']);
+        ->assertStatus(422)->assertJsonValidationErrors(['store_id' => 'That organization no longer exists. Reload the page and choose again.']);
     expect(BuilderAd::count())->toBe(0);
 
     $this->postJson('/builder', ['name' => 'For every shop', 'document' => adDocument()])->assertOk();

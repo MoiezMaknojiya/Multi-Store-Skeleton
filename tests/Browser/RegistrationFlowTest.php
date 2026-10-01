@@ -28,7 +28,7 @@ class RegistrationFlowTest extends DuskTestCase
             $this->jsClick($browser, '[dusk="register-form"] button[type="submit"]');
 
             $browser->waitForText('First name is required.')
-                ->assertSee('Store name is required.')
+                ->assertSee('Organization name is required.')
                 ->assertPresent('[data-client-invalid]')
                 ->assertPathIs('/register');
         });

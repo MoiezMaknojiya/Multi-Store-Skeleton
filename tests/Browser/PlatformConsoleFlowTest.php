@@ -39,7 +39,7 @@ class PlatformConsoleFlowTest extends DuskTestCase
             $this->jsType($browser, '@store-owner-email', 'gina@example.com');
             $this->jsClick($browser, '@store-save');
 
-            $browser->waitForText('Store created. An invitation to own it was sent to gina@example.com.');
+            $browser->waitForText('Organization created. An invitation to own it was sent to gina@example.com.');
 
             // Nobody is in the store until the invitation is accepted, so it is still offered an owner.
             $store = Store::where('name', 'Gamma Grocers')->firstOrFail();
@@ -71,12 +71,12 @@ class PlatformConsoleFlowTest extends DuskTestCase
 
             $this->jsClick($browser, '@sidebar-settings');
             $browser->waitForLocation('/profile')->waitFor('@settings-tab-store')
-                ->assertSeeIn('@settings-tab-store', 'Stores');
+                ->assertSeeIn('@settings-tab-store', 'Organizations');
             $this->jsClick($browser, '@settings-tab-store');
             // A store changes hands on its Members page: Settings has no handover of its own.
             $browser->waitForLocation('/settings/store')
-                ->waitForText('Store Details')
-                ->assertSee('Delete Store')
+                ->waitForText('Organization Details')
+                ->assertSee('Delete Organization')
                 ->assertDontSee('Transfer Ownership')
                 ->assertSeeIn('@your-stores', 'Gamma Grocers');
 
@@ -143,7 +143,7 @@ class PlatformConsoleFlowTest extends DuskTestCase
             $browser->assertScript("document.querySelector('[dusk=\"role-type-store\"]').checked", true)
                 ->assertMissing('@permission-activity-destroy')
                 ->assertMissing('@permission-permission-view')
-                ->assertSeeIn('@permission-group-channel', 'This store only');
+                ->assertSeeIn('@permission-group-channel', 'This organization only');
 
             $this->jsType($browser, '@role-name', 'Shift Lead');
             $this->jsClick($browser, '@permission-screen-view');
@@ -168,7 +168,7 @@ class PlatformConsoleFlowTest extends DuskTestCase
             $this->jsType($browser, '@role-name', 'Crew');
             $this->jsClick($browser, '@permission-screen-store');
             $this->jsClick($browser, '@role-save');
-            $browser->waitForText('Role Crew updated in every store.')
+            $browser->waitForText('Role Crew updated in every organization.')
                 ->waitForTextIn('@role-name-'.$staff->id, 'Crew');
 
             $this->assertSame('Crew', $staff->fresh()->name);
@@ -198,7 +198,7 @@ class PlatformConsoleFlowTest extends DuskTestCase
             $this->waitForAlpine($browser);
             $browser->waitFor('@manage-stores-'.$casey->id);
             $this->clickAndAwait($browser, '@manage-stores-'.$casey->id, fn (Browser $b) => $b->waitFor('@assign-store', 5));
-            $browser->assertSeeIn('@manage-stores', 'Not in any store yet.');
+            $browser->assertSeeIn('@manage-stores', 'Not in any organization yet.');
 
             $ownerId = Role::owner()->id;
             $browser->select('@assign-store', (string) $beta->id)

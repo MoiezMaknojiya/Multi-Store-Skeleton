@@ -92,7 +92,7 @@ class DaypartRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'name.unique' => 'This store already has a daypart with that name.',
+            'name.unique' => 'This organization already has a daypart with that name.',
             'end_time.different' => 'The start and end time cannot be the same. To run past midnight, set an end time EARLIER than the start.',
             'exceptions.*.weekday.distinct' => 'Each day can only be listed once.',
             'exceptions.*.weekday.required' => 'Choose a day for this exception.',

@@ -46,7 +46,7 @@ class UploadLimitsTest extends DuskTestCase
 
             // Three megabytes, with two left: refused as it is chosen.
             $this->choose($browser, 'media-file', "new File([new Uint8Array(3 * 1024 * 1024)], 'big.jpg', { type: 'image/jpeg' })");
-            $browser->waitForText('Not enough storage: this needs 3 MB, and this shop has 2 MB left of its 512 MB.');
+            $browser->waitForText('Not enough storage: this needs 3 MB, and this organization has 2 MB left of its 512 MB.');
 
             // A six-minute video: refused as it is chosen, in the server's own words.
             $this->choose($browser, 'media-file', "window.__makeVideo(360, 'long.webm')");

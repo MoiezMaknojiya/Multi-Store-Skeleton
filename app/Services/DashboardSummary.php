@@ -123,7 +123,7 @@ class DashboardSummary
         if ($user->can('channel-view')) {
             $cards[] = [
                 'key' => 'channels', 'label' => 'Channels', 'value' => Channel::where('store_id', $store->id)->count(),
-                'detail' => 'made by this shop',
+                'detail' => 'made by this organization',
                 'href' => route('channels.view'),
             ];
         }
@@ -151,7 +151,7 @@ class DashboardSummary
 
         $stores = Store::count();
         $cards[] = [
-            'key' => 'stores', 'label' => 'Stores', 'value' => $stores,
+            'key' => 'stores', 'label' => 'Organizations', 'value' => $stores,
             'detail' => Store::where('is_active', true)->count().' active',
             'href' => $user->can('store-view') ? route('stores.view') : null,
         ];
@@ -217,12 +217,12 @@ class DashboardSummary
                     'key' => "store-ownerless-{$store->id}",
                     'tone' => 'warning',
                     'text' => "{$store->name} has no Owner",
-                    'detail' => 'Invite one from the Stores page',
+                    'detail' => 'Invite one from the Organizations page',
                     'href' => route('stores.view'),
                 ];
             }
             $attention = [...$attention, ...$this->andMore('store-ownerless-more', $ownerless->count(), 'warning',
-                'more stores have no Owner', 'They are all on the Stores page', route('stores.view'))];
+                'more organizations have no Owner', 'They are all on the Organizations page', route('stores.view'))];
         }
 
         return [

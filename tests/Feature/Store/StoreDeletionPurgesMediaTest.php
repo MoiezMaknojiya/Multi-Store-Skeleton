@@ -98,7 +98,7 @@ test('the log says how many screens and files went with the store', function () 
     deleteStoreAsPlatform($store)->assertOk();
 
     $this->assertDatabaseHas('activity_logs', [
-        'action' => 'store.deleted', 'description' => 'Deleted store Alpha Mart with its 0 screens and 2 media files',
+        'action' => 'store.deleted', 'description' => 'Deleted organization Alpha Mart with its 0 screens and 2 media files',
     ]);
 });
 

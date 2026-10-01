@@ -25,7 +25,7 @@ test('the profile lists every store the person belongs to, with their role in ea
     $member->stores()->attach($this->beta->id, ['role_id' => Role::starter(Role::STAFF)->id]);
 
     $this->actingAs($member)->get('/profile')->assertOk()
-        ->assertSee('Your stores')
+        ->assertSee('Your organizations')
         ->assertSee('Alpha Mart')
         ->assertSee("Joe's Diner")
         ->assertSee('Viewer')

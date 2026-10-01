@@ -176,8 +176,8 @@
                      page's list does — and the first save fixes it. A saved ad says it beside its shape. --}}
                 @if ($platformUser && ! $ad)
                     <select x-model.number="storeId" @change="shopChanged()" x-bind:disabled="!!adId" class="form-select h-9 w-44"
-                            dusk="ad-store" aria-label="Shop" x-bind:title="adId ? 'Chosen with the first save' : ''">
-                        <option value="">All shops</option>
+                            dusk="ad-store" aria-label="Organization" x-bind:title="adId ? 'Chosen with the first save' : ''">
+                        <option value="">All organizations</option>
                         @foreach ($stores as $store)
                             <option value="{{ $store['id'] }}">{{ $store['name'] }}</option>
                         @endforeach
@@ -1118,7 +1118,7 @@
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Unpublish this ad?</h2>
                     <p class="mt-2 text-sm text-gray-600 dark:text-gray-400"
                        x-text="isShared()
-                           ? 'Shops no longer see it, and it leaves every channel, until you publish it again. Nothing is deleted.'
+                           ? 'Organizations no longer see it, and it leaves every channel, until you publish it again. Nothing is deleted.'
                            : 'It leaves every screen and channel until you publish it again. Nothing is deleted.'">
                         It leaves every screen and channel until you publish it again. Nothing is deleted.
                     </p>

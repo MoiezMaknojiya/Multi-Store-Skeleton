@@ -194,7 +194,7 @@ test('the first steps are ticked as they are done, and go once all are', functio
 
     // A new shop: pair and upload (nothing to put a file on yet).
     expect($steps())->toBe(['pair' => false, 'upload' => false]);
-    dashboardFor($owner, $alpha)->assertSee('Get your shop on screen')->assertSee('0 of 2 done');
+    dashboardFor($owner, $alpha)->assertSee('Get your organization on screen')->assertSee('0 of 2 done');
 
     $screen = Screen::factory()->create(['store_id' => $alpha->id]);
     expect($steps())->toBe(['pair' => true, 'upload' => false, 'play' => false]);

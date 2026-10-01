@@ -10,7 +10,7 @@
 
     <p style="margin:0 0 16px 0; font-size:15px; line-height:24px; color:#374151;">
         The {{ config('app.name') }} server has only <strong style="color:#111827;">{{ $free }}</strong> of free
-        space left. Uploads still work for now, but they stop for every shop once only
+        space left. Uploads still work for now, but they stop for every organization once only
         <strong style="color:#111827;">{{ $reserve }}</strong> is left.
     </p>
 

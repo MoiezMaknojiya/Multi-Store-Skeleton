@@ -83,7 +83,7 @@
                 <form @submit.prevent="saveItem" novalidate dusk="daypart-form" class="mt-4 space-y-4">
 
                     <div x-show="!hasStore && !editingItem" x-cloak class="alert-warning">
-                        Select a store first.
+                        Select an organization first.
                     </div>
 
                     <x-crud.form-field label="Name" field="name" :required="true">

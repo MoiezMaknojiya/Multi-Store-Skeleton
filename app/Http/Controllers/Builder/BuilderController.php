@@ -167,7 +167,7 @@ class BuilderController extends Controller
         $this->savePoster($ad, $request->input('thumbnail'));
 
         ActivityLog::record('ad.created', $ad, $ad->isShared()
-            ? "Created {$ad->orientation} ad {$ad->name} for every shop"
+            ? "Created {$ad->orientation} ad {$ad->name} for every organization"
             : "Created {$ad->orientation} ad {$ad->name}", storeId: $this->logStoreOf($ad));
 
         return response()->json([
@@ -206,7 +206,7 @@ class BuilderController extends Controller
         return response()->json([
             'message' => $changed && $ad->isPublished()
                 ? ($ad->isShared()
-                    ? 'Changes saved — shops keep the published version until you publish them'
+                    ? 'Changes saved — organizations keep the published version until you publish them'
                     : 'Changes saved — the screens keep the published version until you publish them')
                 : 'Ad saved',
             'ad' => $this->summary($ad->fresh()),
@@ -326,7 +326,7 @@ class BuilderController extends Controller
 
         $media = $publisher->publish($ad, auth()->id());
 
-        ActivityLog::record('ad.published', $ad, $ad->isShared() ? "Published ad {$ad->name} for every shop" : "Published ad {$ad->name}",
+        ActivityLog::record('ad.published', $ad, $ad->isShared() ? "Published ad {$ad->name} for every organization" : "Published ad {$ad->name}",
             storeId: $this->logStoreOf($ad));
 
         $screens = $publisher->screensShowing($media);
@@ -335,7 +335,7 @@ class BuilderController extends Controller
             'message' => match (true) {
                 // Its page is in the platform's library, where only the platform's channels reach it; every shop now
                 // sees this version, and copies it to play it on its own screens.
-                $ad->isShared() => 'Published — every shop sees it now and can copy it',
+                $ad->isShared() => 'Published — every organization sees it now and can copy it',
                 $screens > 0 => "Published — {$screens} ".($screens === 1 ? 'screen is' : 'screens are').' now showing the new version',
                 default => 'Published to your media library, ready for a playlist',
             },
@@ -369,7 +369,7 @@ class BuilderController extends Controller
         $message = $reach !== '' ? "Unpublished — taken off {$reach}" : 'Unpublished — it is a draft again';
 
         return response()->json([
-            'message' => $ad->isShared() ? "{$message}. Shops no longer see it" : $message,
+            'message' => $ad->isShared() ? "{$message}. Organizations no longer see it" : $message,
             'ad' => $this->summary($ad->fresh()),
         ]);
     }
@@ -408,7 +408,7 @@ class BuilderController extends Controller
 
         // A shared ad goes from every shop at once: the platform's alone to delete (owner, 2026-10-01).
         abort_unless($this->mayDelete($ad), 403, $ad->isShared() && ! $this->aboveTheStores()
-            ? 'An ad for every shop is the platform\'s: only the platform deletes it.'
+            ? 'An ad for every organization is the platform\'s: only the platform deletes it.'
             : 'Deleting an ad needs the Delete Ads permission.');
 
         // Its published page is a library row; a channel showing it would lose the ad without anybody
@@ -429,7 +429,7 @@ class BuilderController extends Controller
         DB::transaction(fn () => $ad->delete());
 
         // The copies shops made of a shared ad are theirs, and stay.
-        ActivityLog::record('ad.deleted', null, $shared ? "Deleted ad {$name}, shared with every shop" : "Deleted ad {$name}", storeId: $storeId);
+        ActivityLog::record('ad.deleted', null, $shared ? "Deleted ad {$name}, shared with every organization" : "Deleted ad {$name}", storeId: $storeId);
 
         return response()->json([
             'message' => $screens > 0
@@ -475,7 +475,7 @@ class BuilderController extends Controller
     private function authorizeChange(BuilderAd $ad): void
     {
         abort_unless($this->mayUpdate($ad), 403, $ad->isShared() && ! $this->aboveTheStores()
-            ? 'An ad for every shop is the platform\'s: copy it to change it.'
+            ? 'An ad for every organization is the platform\'s: copy it to change it.'
             : 'Changing an ad needs the Update Ads permission.');
     }
 
@@ -492,7 +492,7 @@ class BuilderController extends Controller
             return null;
         }
 
-        return $this->aboveTheStores() ? 'Every shop' : 'From the platform';
+        return $this->aboveTheStores() ? 'Every organization' : 'From the platform';
     }
 
     /** The store a log entry belongs to: the ad's shop, or for a shared ad the shop the person is working in (if any). */
@@ -617,7 +617,7 @@ class BuilderController extends Controller
 
             if (! Store::whereKey($storeId)->exists()) {
                 throw ValidationException::withMessages([
-                    'store_id' => 'That shop no longer exists. Reload the page and choose again.',
+                    'store_id' => 'That organization no longer exists. Reload the page and choose again.',
                 ]);
             }
 
@@ -628,7 +628,7 @@ class BuilderController extends Controller
 
         if (! $storeId) {
             throw ValidationException::withMessages([
-                'name' => 'Select a store before saving an ad — an ad belongs to the shop it was made for.',
+                'name' => 'Select an organization before saving an ad — an ad belongs to the organization it was made for.',
             ]);
         }
 

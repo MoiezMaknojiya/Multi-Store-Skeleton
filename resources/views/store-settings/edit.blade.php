@@ -17,14 +17,14 @@
                 <div class="card p-4 sm:p-8">
                     <section>
                         <header>
-                            <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Store Details</h2>
+                            <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Organization Details</h2>
                             <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">The name and address of {{ $store->name }}.</p>
                         </header>
 
                         @unless ($canUpdate)
                             <dl class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm" dusk="store-details-readonly">
                                 <div>
-                                    <dt class="text-gray-500 dark:text-gray-400">Store name</dt>
+                                    <dt class="text-gray-500 dark:text-gray-400">Organization name</dt>
                                     <dd class="mt-1 font-medium text-gray-900 dark:text-gray-100">{{ $store->name }}</dd>
                                 </div>
                                 <div>
@@ -35,7 +35,7 @@
                                     </dd>
                                 </div>
                             </dl>
-                            <p class="mt-4 text-xs text-gray-500 dark:text-gray-400">Your role here does not let you change the store's details.</p>
+                            <p class="mt-4 text-xs text-gray-500 dark:text-gray-400">Your role here does not let you change the organization's details.</p>
                         @else
                         {{-- A container: the address rows go side by side only when the CARD is wide enough, since the
                              card shares the row with Your stores on large screens. --}}
@@ -44,7 +44,7 @@
                             @csrf
                             @method('put')
 
-                            <x-auth.form-field name="name" label="Store name" bag="storeDetails" :value="$store->name" :required="true" maxlength="255" autocomplete="organization" />
+                            <x-auth.form-field name="name" label="Organization name" bag="storeDetails" :value="$store->name" :required="true" maxlength="255" autocomplete="organization" />
 
                             <div class="grid grid-cols-1 @lg:grid-cols-3 gap-6">
                                 <div class="@lg:col-span-2">
@@ -90,19 +90,19 @@
                 <div class="card p-4 sm:p-8" dusk="delete-store">
                     <section class="max-w-xl space-y-6">
                         <header>
-                            <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Delete Store</h2>
+                            <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Delete Organization</h2>
                             <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
                                 Permanently deletes {{ $store->name }} and everything in it:
                                 {{ $contents['screens'] }} {{ str('screen')->plural($contents['screens']) }} (they stop playing at once),
                                 {{ $contents['media'] }} media {{ str('file')->plural($contents['media']) }}, playlists, dayparts, the roles made in it,
-                                the store's own channels, its Ad Builder designs and the assets they are made from, open invitations,
+                                the organization's own channels, its Ad Builder designs and the assets they are made from, open invitations,
                                 and the access of all {{ $contents['members'] }} {{ str('member')->plural($contents['members']) }}.
                                 The people's accounts are not deleted.
                             </p>
                         </header>
 
                         <x-danger-button x-data x-on:click.prevent="$dispatch('open-modal', 'confirm-store-deletion')" dusk="delete-store-button">
-                            {{ __('Delete Store') }}
+                            {{ __('Delete Organization') }}
                         </x-danger-button>
                     </section>
                 </div>
@@ -116,13 +116,13 @@
                         @csrf
 
                         <div>
-                            <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ __('Create Store') }}</h2>
+                            <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ __('Create Organization') }}</h2>
                             <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
                                 You'll be its Owner.
                             </p>
                         </div>
 
-                        <x-auth.form-field name="store_name" label="Store name" bag="newStore" :required="true" maxlength="255" autocomplete="off" dusk="open-store-name" />
+                        <x-auth.form-field name="store_name" label="Organization name" bag="newStore" :required="true" maxlength="255" autocomplete="off" dusk="open-store-name" />
 
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div class="sm:col-span-2">
@@ -151,7 +151,7 @@
 
                         <div class="flex flex-wrap justify-end gap-3">
                             <x-secondary-button x-on:click="$dispatch('close')">{{ __('Cancel') }}</x-secondary-button>
-                            <x-primary-button dusk="open-store-confirm">{{ __('Create Store') }}</x-primary-button>
+                            <x-primary-button dusk="open-store-confirm">{{ __('Create Organization') }}</x-primary-button>
                         </div>
                     </form>
                 </x-modal>
@@ -168,7 +168,7 @@
                         <div>
                             <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Are you sure you want to delete {{ $store->name }}?</h2>
                             <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                                The store and everything in it are removed for good, and its screens stop playing immediately.
+                                The organization and everything in it are removed for good, and its screens stop playing immediately.
                                 <span class="font-semibold text-red-600 dark:text-red-400">It cannot be undone.</span>
                             </p>
                         </div>
@@ -183,7 +183,7 @@
 
                         <div class="flex flex-wrap justify-end gap-3">
                             <x-secondary-button x-on:click="$dispatch('close')">{{ __('Cancel') }}</x-secondary-button>
-                            <x-danger-button dusk="delete-store-confirm">{{ __('Delete Store') }}</x-danger-button>
+                            <x-danger-button dusk="delete-store-confirm">{{ __('Delete Organization') }}</x-danger-button>
                         </div>
                     </form>
                 </x-modal>

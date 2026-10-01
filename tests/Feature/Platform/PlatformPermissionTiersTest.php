@@ -68,7 +68,7 @@ test("deleting old years never goes on a store's role, however it is asked — n
     $this->actingAs($this->admin)->putJson("/roles/{$staff->id}", [
         'name' => 'Staff',
         'permissions' => Permission::whereIn('name', ['screen-view', 'activity-destroy'])->pluck('id')->all(),
-    ])->assertStatus(422)->assertJsonValidationErrors(['permissions' => 'A store role cannot hold Delete Old Activity Logs: it works above the stores only.']);
+    ])->assertStatus(422)->assertJsonValidationErrors(['permissions' => 'An organization role cannot hold Delete Old Activity Logs: it works above the organizations only.']);
 
     expect(Role::where('name', 'Nosy Cashier')->exists())->toBeFalse()
         ->and($staff->fresh()->permissions->pluck('name'))->not->toContain('activity-destroy');

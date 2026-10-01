@@ -19,7 +19,7 @@ test('super admin dashboard shows the real store count', function () {
     $response->assertOk();
     $response->assertViewHas('summary', fn (array $summary) => collect($summary['cards'])->firstWhere('key', 'stores')['value'] === 3);
     // The number on the Stores card itself — a bare "3" turns up all over a page.
-    expect($response->getContent())->toMatch('/dusk="dashboard-card-stores"[^>]*>[\s\S]*?>\s*3\s*<\/div>\s*<div[^>]*>\s*Stores\s*</');
+    expect($response->getContent())->toMatch('/dusk="dashboard-card-stores"[^>]*>[\s\S]*?>\s*3\s*<\/div>\s*<div[^>]*>\s*Organizations\s*</');
 });
 
 test('the store selection page runs the same number of queries for ten stores as for two', function () {

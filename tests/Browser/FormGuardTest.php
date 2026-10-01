@@ -113,7 +113,7 @@ class FormGuardTest extends DuskTestCase
             $this->jsClick($browser, '@permission-screen-view');
             $this->jsClick($browser, '@role-save');
 
-            $browser->waitForTextIn('@role-form', 'There is already a store role called Owner, and every store has it. Choose another name.');
+            $browser->waitForTextIn('@role-form', 'There is already an organization role called Owner, and every organization has it. Choose another name.');
         });
 
         $this->assertSame(1, Role::whereRaw('lower(name) = ?', ['owner'])->count());

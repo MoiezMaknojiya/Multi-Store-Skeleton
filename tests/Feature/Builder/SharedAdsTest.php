@@ -83,7 +83,7 @@ function makeForEveryShop(TestCase $test, string $name = 'Winter sale', bool $pu
         ->assertOk()->json('ad.id');
 
     if ($publish) {
-        $test->postJson("/builder/{$id}/publish")->assertOk()->assertJsonPath('message', 'Published — every shop sees it now and can copy it');
+        $test->postJson("/builder/{$id}/publish")->assertOk()->assertJsonPath('message', 'Published — every organization sees it now and can copy it');
     }
 
     return BuilderAd::findOrFail($id);
@@ -112,13 +112,13 @@ test('an ad for every shop is the platform\'s: no shop, its own folder, the plat
 
     $created = ActivityLog::where('action', 'ad.created')->sole();
     expect($created->store_id)->toBeNull()
-        ->and($created->description)->toBe('Created landscape ad Winter sale for every shop')
-        ->and(ActivityLog::where('action', 'ad.published')->sole()->description)->toBe('Published ad Winter sale for every shop');
+        ->and($created->description)->toBe('Created landscape ad Winter sale for every organization')
+        ->and(ActivityLog::where('action', 'ad.published')->sole()->description)->toBe('Published ad Winter sale for every organization');
 
     // Above the stores its card and its editor say whose it is.
     $row = collect($this->getJson('/builder/data')->assertOk()->json('ads'))->firstWhere('id', $ad->id);
-    expect($row)->toMatchArray(['shared' => true, 'owner_label' => 'Every shop', 'can' => ['update' => true, 'copy' => true, 'delete' => true]]);
-    $this->get("/builder/{$ad->id}")->assertOk()->assertSee('dusk="ad-owner"', false)->assertSee('Every shop')->assertDontSee('dusk="ad-store"', false);
+    expect($row)->toMatchArray(['shared' => true, 'owner_label' => 'Every organization', 'can' => ['update' => true, 'copy' => true, 'delete' => true]]);
+    $this->get("/builder/{$ad->id}")->assertOk()->assertSee('dusk="ad-owner"', false)->assertSee('Every organization')->assertDontSee('dusk="ad-store"', false);
 });
 
 test('a shop sees the platform\'s ad once it is published, as it was published, and with nobody\'s name from above', function () {
@@ -127,7 +127,7 @@ test('a shop sees the platform\'s ad once it is published, as it was published, 
 
     // The platform changes its ad after publishing it, and has not published that yet.
     $this->putJson("/builder/{$ad->id}", ['name' => 'Winter sale 2', 'document' => everyShopDocument('Half done')])->assertOk()
-        ->assertJsonPath('message', 'Changes saved — shops keep the published version until you publish them');
+        ->assertJsonPath('message', 'Changes saved — organizations keep the published version until you publish them');
 
     $seen = adsSeenIn($this, $this->designer, $this->store);
 
@@ -202,12 +202,12 @@ test('a shop\'s people see, use and copy the platform\'s ad, and nothing more �
 
     $this->get("/builder/{$ad->id}")->assertForbidden();
     $this->putJson("/builder/{$ad->id}", ['name' => 'Mine', 'document' => everyShopDocument('Mine')])
-        ->assertForbidden()->assertJsonPath('message', 'An ad for every shop is the platform\'s: copy it to change it.');
+        ->assertForbidden()->assertJsonPath('message', 'An ad for every organization is the platform\'s: copy it to change it.');
     $this->postJson("/builder/{$ad->id}/publish")->assertForbidden();
     $this->postJson("/builder/{$ad->id}/unpublish")->assertForbidden();
     $this->postJson("/builder/{$ad->id}/discard")->assertForbidden();
     $this->deleteJson("/builder/{$ad->id}", ['password' => 'password'])
-        ->assertForbidden()->assertJsonPath('message', 'An ad for every shop is the platform\'s: only the platform deletes it.');
+        ->assertForbidden()->assertJsonPath('message', 'An ad for every organization is the platform\'s: only the platform deletes it.');
 
     // The draft is not there at all.
     $this->get("/builder/{$draft->id}")->assertNotFound();
@@ -235,19 +235,19 @@ test('above the stores the platform\'s ads are changed with Update Ads and delet
     $this->flushSession();
 
     $seen = collect($this->getJson('/builder/data')->assertOk()->json('ads'))->keyBy('id');
-    expect($seen[$ad->id])->toMatchArray(['owner_label' => 'Every shop', 'can' => ['update' => true, 'copy' => true, 'delete' => true]])
+    expect($seen[$ad->id])->toMatchArray(['owner_label' => 'Every organization', 'can' => ['update' => true, 'copy' => true, 'delete' => true]])
         ->and($seen->has($draft->id))->toBeTrue();
 
-    $this->get("/builder/{$ad->id}")->assertOk()->assertSee('Every shop');
+    $this->get("/builder/{$ad->id}")->assertOk()->assertSee('Every organization');
     $this->putJson("/builder/{$ad->id}", ['name' => 'Winter sale', 'document' => everyShopDocument('Twenty percent off')])->assertOk()
-        ->assertJsonPath('message', 'Changes saved — shops keep the published version until you publish them');
-    $this->postJson("/builder/{$ad->id}/publish")->assertOk()->assertJsonPath('message', 'Published — every shop sees it now and can copy it');
+        ->assertJsonPath('message', 'Changes saved — organizations keep the published version until you publish them');
+    $this->postJson("/builder/{$ad->id}/publish")->assertOk()->assertJsonPath('message', 'Published — every organization sees it now and can copy it');
 
     expect($ad->fresh()->published_document['elements'][0]['text'])->toBe('Twenty percent off')
         ->and(ActivityLog::where('action', 'ad.updated')->sole()->store_id)->toBeNull();
 
     // Taken off, it leaves every shop's Ads until it is published again.
-    $this->postJson("/builder/{$ad->id}/unpublish")->assertOk()->assertJsonPath('message', 'Unpublished — it is a draft again. Shops no longer see it');
+    $this->postJson("/builder/{$ad->id}/unpublish")->assertOk()->assertJsonPath('message', 'Unpublished — it is a draft again. Organizations no longer see it');
     expect(adsSeenIn($this, $this->designer, $this->store)->all())->toBe([]);
 
     // A channel showing it keeps it; out of the channel it goes — and Beta Deli's copy stays theirs.
@@ -263,7 +263,7 @@ test('above the stores the platform\'s ads are changed with Update Ads and delet
     expect(BuilderAd::find($ad->id))->toBeNull()
         ->and(Media::find($ad->media_id))->toBeNull()
         ->and(BuilderAd::find($copyId)?->store_id)->toBe($this->other->id)
-        ->and(ActivityLog::where('action', 'ad.deleted')->sole()->description)->toBe('Deleted ad Winter sale, shared with every shop');
+        ->and(ActivityLog::where('action', 'ad.deleted')->sole()->description)->toBe('Deleted ad Winter sale, shared with every organization');
     Storage::disk('public')->assertMissing("builder/platform/ads/{$ad->id}/index.html");
 });
 
@@ -277,7 +277,7 @@ test('above the stores a copy of the platform\'s ad stays the platform\'s; witho
     $this->flushSession();
 
     expect(collect($this->getJson('/builder/data')->assertOk()->json('ads'))->firstWhere('id', $ad->id))
-        ->toMatchArray(['owner_label' => 'Every shop', 'can' => ['update' => false, 'copy' => false, 'delete' => false]]);
+        ->toMatchArray(['owner_label' => 'Every organization', 'can' => ['update' => false, 'copy' => false, 'delete' => false]]);
 
     $this->postJson("/builder/{$ad->id}/duplicate")->assertForbidden();
     $this->putJson("/builder/{$ad->id}", ['name' => 'X', 'document' => everyShopDocument('X')])->assertForbidden();
@@ -336,9 +336,9 @@ test('a shared file an ad for every shop uses stays, and a shop is told so witho
     $this->actingAs(createSuperAdmin());
     $this->flushSession();
 
-    expect(collect($this->getJson('/builder/assets/data')->json('assets'))->firstWhere('id', $file->id)['used_by'])->toBe(['Secret launch (every shop)']);
+    expect(collect($this->getJson('/builder/assets/data')->json('assets'))->firstWhere('id', $file->id)['used_by'])->toBe(['Secret launch (every organization)']);
     $this->deleteJson("/builder/assets/{$file->id}")->assertStatus(422)
-        ->assertJsonValidationErrors(['title' => 'Still used by Secret launch (every shop). Take it out of those ads first, and publish the ones whose screens still show it.']);
+        ->assertJsonValidationErrors(['title' => 'Still used by Secret launch (every organization). Take it out of those ads first, and publish the ones whose screens still show it.']);
 });
 
 test('a deleted shop leaves the platform\'s ads', function () {

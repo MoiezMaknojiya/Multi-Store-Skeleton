@@ -49,7 +49,7 @@ function storeDetails(array $overrides = []): array
 */
 
 test('a member with store-update edits the details; Staff cannot even open the page', function () {
-    settingsAs($this->admin, $this->store)->get('/settings/store')->assertOk()->assertSee('Store Details')
+    settingsAs($this->admin, $this->store)->get('/settings/store')->assertOk()->assertSee('Organization Details')
         // A tab of Settings, beside the profile.
         ->assertSee('dusk="settings-tab-profile"', false)->assertSee('dusk="settings-tab-store"', false);
 
@@ -79,7 +79,7 @@ test('the details form cannot switch advertising on or change anything it does n
 
 test('out of the box only an Owner is shown deleting the store', function () {
     // Delete Stores starts with the Owner role alone.
-    settingsAs($this->owner, $this->store)->get('/settings/store')->assertSee('Delete Store');
+    settingsAs($this->owner, $this->store)->get('/settings/store')->assertSee('Delete Organization');
     settingsAs($this->admin, $this->store)->get('/settings/store')->assertDontSee('Delete Store');
 });
 

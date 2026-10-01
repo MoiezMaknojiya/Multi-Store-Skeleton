@@ -41,7 +41,7 @@ class ZeroToHeroTest extends DuskTestCase
         // The box is on the page itself (owner, 2026-09-30). A fresh owner has exactly one store and is already
         // inside it, so nothing asks them to choose one first.
         $panel->waitFor('@media-upload');
-        $panel->assertDontSeeIn('@media-upload', 'Select a store first');
+        $panel->assertDontSeeIn('@media-upload', 'Select an organization first');
 
         $this->uploadThrough($panel, 'media', $path);
 

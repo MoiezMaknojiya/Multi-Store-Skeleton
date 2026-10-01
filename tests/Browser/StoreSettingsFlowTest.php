@@ -35,7 +35,7 @@ class StoreSettingsFlowTest extends DuskTestCase
 
             $browser->visit('/settings/store');
             $this->waitForAlpine($browser);
-            $browser->waitFor('@store-details-form')->assertSee('Store Details');
+            $browser->waitFor('@store-details-form')->assertSee('Organization Details');
 
             $this->jsType($browser, '#name', 'Alpha Mart Downtown');
             $this->jsType($browser, '#street', '500 Congress Ave');

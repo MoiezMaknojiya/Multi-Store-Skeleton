@@ -62,8 +62,8 @@ class ChannelRequest extends FormRequest
 
                 if ($taken) {
                     $fail($storeId === null
-                        ? 'There is already a channel with this name. Every shop sees the name, so it has to be different.'
-                        : 'There is already a channel with this name in this store\'s list. Choose a different name.');
+                        ? 'There is already a channel with this name. Every organization sees the name, so it has to be different.'
+                        : 'There is already a channel with this name in this organization\'s list. Choose a different name.');
                 }
             }],
             'ads_per_pass' => ['nullable', 'integer', 'min:1', 'max:'.Channel::MAX_ADS_PER_PASS],

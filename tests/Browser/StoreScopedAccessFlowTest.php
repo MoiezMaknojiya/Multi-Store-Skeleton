@@ -38,7 +38,7 @@ class StoreScopedAccessFlowTest extends DuskTestCase
             $browser->assertScript("document.querySelector('[dusk=\"role-type-store\"]').checked", true)
                 ->assertMissing('@permission-activity-destroy')
                 ->assertMissing('@permission-permission-view')
-                ->assertSeeIn('@permission-group-activity', 'This store only');
+                ->assertSeeIn('@permission-group-activity', 'This organization only');
 
             $this->jsType($browser, '@role-name', 'Area Manager');
             foreach (['screen-view', 'store-view', 'channel-view', 'channel-store', 'activity-view'] as $permission) {

@@ -11,7 +11,7 @@
         {{-- A bound :title — the wrapper echoes it itself, and an echo here as well escaped a store's name twice. The
              one fact that governs the page is its line under the title; Add Channel stands beside the search. --}}
         <x-crud.table-wrapper :title="$store ? 'Channels of '.$store->name : 'All Channels'" searchPlaceholder="Search channels..." :columns="6"
-            :description="$store ? 'Put a channel on a screen from that screen\'s Channels box.' : 'Every shop can put these on its screens.'">
+            :description="$store ? 'Put a channel on a screen from that screen\'s Channels box.' : 'Every organization can put these on its screens.'">
             @can('channel-store')
                 <x-slot name="actions">
                     <x-crud.add-button label="Add Channel" @click="openFormModal()" dusk="add-channel" />
@@ -39,7 +39,7 @@
                             <div class="mt-1">
                                 <span x-bind:class="item.store_name ? 'badge-neutral' : 'badge-info'"
                                       x-bind:dusk="'channel-reach-' + item.id"
-                                      x-text="item.store_name ? item.store_name + ' only' : 'Every shop'"></span>
+                                      x-text="item.store_name ? item.store_name + ' only' : 'Every organization'"></span>
                             </div>
                             @else
                             {{-- Inside a store, the platform's channels are there to look at, never to change. --}}

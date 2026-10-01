@@ -34,7 +34,7 @@ class BuilderExamples extends Command
         {--no-publish : Leave the ads as drafts instead of putting them in the media library}
         {--no-fonts : Do not download their Google fonts (the ads fall back to a system face until installed)}';
 
-    protected $description = 'Create the example ads (Winter Sale, Fresh Coffee, Grand Opening, Burger Deal) in a store';
+    protected $description = 'Create the example ads (Winter Sale, Fresh Coffee, Grand Opening, Burger Deal) in an organization';
 
     public function handle(
         ExampleArtwork $artwork,
@@ -46,7 +46,7 @@ class BuilderExamples extends Command
         $store = Store::find((int) $this->argument('store'));
 
         if ($store === null) {
-            $this->error('There is no store with that id.');
+            $this->error('There is no organization with that id.');
 
             return self::FAILURE;
         }

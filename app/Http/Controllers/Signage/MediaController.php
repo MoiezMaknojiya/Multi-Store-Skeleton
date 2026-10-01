@@ -185,7 +185,7 @@ class MediaController extends Controller
 
             if (! $storeId) {
                 throw ValidationException::withMessages([
-                    'file' => 'Select a store before uploading — media belongs to the store it is uploaded in.',
+                    'file' => 'Select an organization before uploading — media belongs to the organization it is uploaded in.',
                 ]);
             }
 
@@ -196,7 +196,7 @@ class MediaController extends Controller
 
         if ($storeId !== 0 && ! Store::whereKey($storeId)->exists()) {
             throw ValidationException::withMessages([
-                'file' => 'That shop no longer exists. Reload the page and choose again.',
+                'file' => 'That organization no longer exists. Reload the page and choose again.',
             ]);
         }
 

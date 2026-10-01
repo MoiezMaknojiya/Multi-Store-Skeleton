@@ -26,13 +26,13 @@
                 <div class="min-w-0">
                     <h2 class="text-subheading">Network advertising</h2>
                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-xl">
-                        Only you see this. Turn it on once the shop agrees, then choose which screens carry adverts.
+                        Only you see this. Turn it on once the organization agrees, then choose which screens carry adverts.
                     </p>
                 </div>
 
                 <button @click="toggleStoreAds()" x-bind:disabled="savingAds" dusk="store-ads-toggle"
                         x-bind:class="storeAcceptsAds ? 'btn-row-danger' : 'btn-primary'">
-                    <span x-text="storeAcceptsAds ? 'Turn off for this shop' : 'This shop has agreed'"></span>
+                    <span x-text="storeAcceptsAds ? 'Turn off for this organization' : 'This organization has agreed'"></span>
                 </button>
             </div>
 
@@ -41,7 +41,7 @@
                  or nobody can tell that they do the same thing. --}}
             <div x-show="storeAcceptsAds" x-cloak class="mt-4 flex flex-wrap items-center gap-2">
                 <span class="text-xs text-gray-500 dark:text-gray-400">
-                    Every screen in this shop at once:
+                    Every screen in this organization at once:
                 </span>
                 <button @click="allScreenAds(true)" x-bind:disabled="savingAds"
                         dusk="all-screens-ads-on" class="btn-row-neutral">Adverts On</button>
@@ -207,7 +207,7 @@
 
                 <form @submit.prevent="pairScreen" novalidate dusk="screen-pair-form" class="mt-4 space-y-4">
                     <div x-show="!hasStore && pairForm.mode === 'new'" x-cloak class="alert-warning">
-                        Select a store first.
+                        Select an organization first.
                     </div>
 
                     <x-crud.form-field label="Pairing code" field="code" :required="true">

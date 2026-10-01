@@ -274,7 +274,7 @@ export function registerScreensTable(Alpine) {
             },
 
             adsLabel(screen) {
-                if (! this.storeAcceptsAds) return 'Shop has not agreed';
+                if (! this.storeAcceptsAds) return 'Organization has not agreed';
 
                 return screen.accepts_network_ads ? 'Carries adverts' : 'Kept clear';
             },

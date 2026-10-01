@@ -96,7 +96,7 @@ class MemberController extends Controller
 
         $role = Role::availableInStore($store->id)->find($validated['role_id']);
         if ($role === null) {
-            throw ValidationException::withMessages(['role_id' => 'Choose a role that exists in this store.']);
+            throw ValidationException::withMessages(['role_id' => 'Choose a role that exists in this organization.']);
         }
 
         abort_if($actor->is($user), 403, 'You cannot change your own role.');
@@ -145,7 +145,7 @@ class MemberController extends Controller
         $this->team->roleOf($user, $store) ?? abort(404);
 
         if ($actor->is($user)) {
-            return response()->json(['message' => 'To leave this store, use Leave store.'], 422);
+            return response()->json(['message' => 'To leave this organization, use Leave Organization.'], 422);
         }
 
         abort_unless($this->team->mayManage($actor, $store, $user), 403, 'You cannot remove someone who has access you do not have.');

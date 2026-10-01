@@ -81,7 +81,7 @@ export function registerUsersTable(Alpine) {
                     await this.loadAccess();
                     this.$dispatch('open-modal', 'manage-stores');
                 } catch (error) {
-                    window.toast(error.response?.data?.message ?? 'Could not load their stores.');
+                    window.toast(error.response?.data?.message ?? 'Could not load their organizations.');
                 } finally {
                     this.loadingAccess = false;
                 }
@@ -157,7 +157,7 @@ export function registerUsersTable(Alpine) {
                     if (passwordError) {
                         this.removePasswordError = passwordError;
                     } else {
-                        window.toast(error.response?.data?.message ?? 'Could not remove them from the store.');
+                        window.toast(error.response?.data?.message ?? 'Could not remove them from the organization.');
                     }
                 } finally {
                     this.removingBusy = false;
@@ -167,7 +167,7 @@ export function registerUsersTable(Alpine) {
             async assignToStore() {
                 if (this.assigning) return;
 
-                const errors = validate(this.assignForm, { store_id: [required('Store')], role_id: [required('Role')] });
+                const errors = validate(this.assignForm, { store_id: [required('Organization')], role_id: [required('Role')] });
                 if (Object.keys(errors).length) {
                     this.assignErrors = errors;
                     return;
@@ -186,7 +186,7 @@ export function registerUsersTable(Alpine) {
                     if (error.response?.status === 422 && error.response.data.errors) {
                         this.assignErrors = error.response.data.errors;
                     } else {
-                        window.toast(error.response?.data?.message ?? 'Could not add them to the store.');
+                        window.toast(error.response?.data?.message ?? 'Could not add them to the organization.');
                     }
                 } finally {
                     this.assigning = false;

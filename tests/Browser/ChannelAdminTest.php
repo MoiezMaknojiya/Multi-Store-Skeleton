@@ -118,7 +118,7 @@ class ChannelAdminTest extends DuskTestCase
             $browser->waitFor('@channel-ad-form');
             $this->jsClick($browser, '@channel-ad-source-ads');
             $browser->waitFor('@channel-ad-picker-empty')
-                ->assertSeeIn('@channel-ad-picker-empty', 'or choose a shop above')
+                ->assertSeeIn('@channel-ad-picker-empty', 'or choose an organization above')
                 // A shop whose only published ad is on a playlist: an empty tab that says why.
                 ->select('@channel-ad-library', (string) $bakery->id)
                 ->waitForTextIn('@channel-ad-picker-empty', '1 published ad is on a playlist, so not listed here')
@@ -177,11 +177,11 @@ class ChannelAdminTest extends DuskTestCase
             $browser->visit('/channels');
             $this->waitForAlpine($browser);
             $browser->waitFor('@delete-channel-'.$channel->id)
-                ->assertSeeIn('@channel-usage-'.$channel->id, '1 screen in 1 shop');
+                ->assertSeeIn('@channel-usage-'.$channel->id, '1 screen in 1 organization');
 
             $this->jsClick($browser, '@delete-channel-'.$channel->id);
             $browser->waitFor('@channel-delete-usage')
-                ->assertSeeIn('@channel-delete-usage', '1 screen in 1 shop')
+                ->assertSeeIn('@channel-delete-usage', '1 screen in 1 organization')
                 ->pause(400)
                 ->screenshot('channel-delete-confirm');
             // A big delete asks for the password — the seeded admin's is SEED_ADMIN_PASSWORD (phpunit.dusk.xml).

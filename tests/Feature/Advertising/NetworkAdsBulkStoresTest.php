@@ -136,7 +136,7 @@ test('several shops in one press, and the message counts both shops and screens'
         'store_ids' => [$this->shop->id, $this->other->id], 'accepts' => true,
     ])->assertOk();
 
-    expect($response->json('message'))->toContain('2 shops')->toContain('3 screens');
+    expect($response->json('message'))->toContain('2 organizations')->toContain('3 screens');
     expect(Store::whereIn('id', [$this->shop->id, $this->other->id])
         ->where('accepts_network_ads', false)->count())->toBe(0);
     expect(Screen::where('accepts_network_ads', false)->count())->toBe(0);
@@ -173,7 +173,7 @@ test('the switch is written to the activity log', function () {
     $entry = ActivityLog::where('action', 'store.network_ads_updated')->latest('id')->first();
 
     expect($entry)->not->toBeNull();
-    expect($entry->description)->toContain('Enabled')->toContain('1 shop')->toContain('2 screens');
+    expect($entry->description)->toContain('Enabled')->toContain('1 organization')->toContain('2 screens');
 });
 
 /*

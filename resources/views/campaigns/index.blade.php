@@ -201,7 +201,7 @@
                     <fieldset class="min-w-0 pt-2 border-t border-gray-200 dark:border-gray-700">
                         <legend class="form-label float-left w-full">Screens</legend>
                         <p class="clear-left text-xs text-gray-500 dark:text-gray-400 mb-2">
-                            Only shops that agreed to advertising can be chosen.
+                            Only organizations that agreed to advertising can be chosen.
                             <span x-show="loadingScreens" x-cloak class="inline-flex items-center gap-1">
                                 <x-spinner class="h-3 w-3" /> Loading&hellip;
                             </span>

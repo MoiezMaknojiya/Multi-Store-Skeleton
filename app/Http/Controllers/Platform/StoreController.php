@@ -89,12 +89,12 @@ class StoreController extends Controller
 
         $sent = $invitation->sendLink($token);
 
-        ActivityLog::record('store.created', $store, "Created store {$store->name} and invited {$email} to own it");
+        ActivityLog::record('store.created', $store, "Created organization {$store->name} and invited {$email} to own it");
 
         return response()->json([
             'message' => $sent
-                ? "Store created. An invitation to own it was sent to {$email}."
-                : "Store created, but the invitation email to {$email} could not be sent. Use Invite owner to send it again.",
+                ? "Organization created. An invitation to own it was sent to {$email}."
+                : "Organization created, but the invitation email to {$email} could not be sent. Use Invite owner to send it again.",
             'email_sent' => $sent,
             'store' => $store,
         ], 201);
@@ -110,9 +110,9 @@ class StoreController extends Controller
 
         // Pausing a store closes it to its own people (EnsureStoreIsActive), so it is said as what it is.
         [$action, $description, $message] = match (true) {
-            $store->wasChanged('is_active') && ! $store->is_active => ['store.paused', "Paused store {$store->name}", "{$store->name} is paused."],
-            $store->wasChanged('is_active') => ['store.resumed', "Turned store {$store->name} back on", "{$store->name} is active again."],
-            default => ['store.updated', "Updated store {$store->name}", "Store {$store->name} updated."],
+            $store->wasChanged('is_active') && ! $store->is_active => ['store.paused', "Paused organization {$store->name}", "{$store->name} is paused."],
+            $store->wasChanged('is_active') => ['store.resumed', "Turned organization {$store->name} back on", "{$store->name} is active again."],
+            default => ['store.updated', "Updated organization {$store->name}", "Organization {$store->name} updated."],
         };
 
         ActivityLog::record($action, $store, $description);
@@ -126,11 +126,11 @@ class StoreController extends Controller
         $request->validate([
             'confirm_name' => ['required', 'string', function (string $attribute, mixed $value, \Closure $fail) use ($store) {
                 if ($value !== $store->name) {
-                    $fail('Type the store name exactly as it is shown.');
+                    $fail('Type the organization name exactly as it is shown.');
                 }
             }],
         ], [
-            'confirm_name.required' => 'Type the store name to confirm.',
+            'confirm_name.required' => 'Type the organization name to confirm.',
         ]);
 
         $this->confirmPassword($request);
@@ -142,7 +142,7 @@ class StoreController extends Controller
         DB::transaction(fn () => $store->delete());
 
         ActivityLog::record('store.deleted', null,
-            "Deleted store {$name} with its {$screens} ".str('screen')->plural($screens)." and {$media} media ".str('file')->plural($media),
+            "Deleted organization {$name} with its {$screens} ".str('screen')->plural($screens)." and {$media} media ".str('file')->plural($media),
             storeId: $store->id);
 
         return response()->json(['message' => "{$name} was deleted."]);
@@ -216,15 +216,15 @@ class StoreController extends Controller
         $user = auth()->user();
 
         if ($user->globalRole() !== null) {
-            abort(403, 'The platform team works above the stores. Use "Log In As" to see a store as one of its members.');
+            abort(403, 'The platform team works above the organizations. Use "Log In As" to see an organization as one of its members.');
         }
 
         $store = Store::find($request->integer('store_id'));
-        abort_unless($store !== null && $this->team->isMember($user, $store), 403, 'You are not a member of this store.');
+        abort_unless($store !== null && $this->team->isMember($user, $store), 403, 'You are not a member of this organization.');
 
         session(['current_store_id' => $store->id]);
 
-        ActivityLog::record('store.switched', $store, "Switched into store {$store->name}");
+        ActivityLog::record('store.switched', $store, "Switched into organization {$store->name}");
 
         return redirect()->route('dashboard')->with('status', "Switched to {$store->name}.");
     }
@@ -249,7 +249,7 @@ class StoreController extends Controller
     private function ensureEmailCanOwnAStore(string $email, string $field): void
     {
         if (User::whereRaw('lower(email) = ?', [$email])->first()?->globalRole() !== null) {
-            throw ValidationException::withMessages([$field => 'This email belongs to a platform account and cannot own a store.']);
+            throw ValidationException::withMessages([$field => 'This email belongs to a platform account and cannot own an organization.']);
         }
     }
 

@@ -242,7 +242,7 @@ export function registerMembersPage(Alpine) {
                 const { data } = await axios.post('/members/leave');
                 window.location.href = data.redirect;
             } catch (error) {
-                window.toast(error.response?.data?.message ?? 'Could not leave this store.');
+                window.toast(error.response?.data?.message ?? 'Could not leave this organization.');
                 this.leaving = false;
             }
         },

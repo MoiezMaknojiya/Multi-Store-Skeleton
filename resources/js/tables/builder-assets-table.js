@@ -98,7 +98,7 @@ export function registerBuilderAssetsTable(Alpine) {
                 const elsewhere = Number(asset.used_elsewhere ?? 0);
                 const platform = Number(asset.used_by_platform ?? 0);
                 const others = [
-                    elsewhere > 0 ? `${elsewhere} ${elsewhere === 1 ? 'ad' : 'ads'} of other shops` : '',
+                    elsewhere > 0 ? `${elsewhere} ${elsewhere === 1 ? 'ad' : 'ads'} of other organizations` : '',
                     platform > 0 ? `${platform} platform ${platform === 1 ? 'ad' : 'ads'}` : '',
                 ].filter(Boolean).join(' and ');
 

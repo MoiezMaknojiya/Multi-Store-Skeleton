@@ -12,6 +12,6 @@
 
     @if ($__storeTab)
         <a href="{{ route('store-settings.edit') }}" dusk="settings-tab-store" class="tab-link"
-           @if ($active === 'store') aria-current="page" @endif>Stores</a>
+           @if ($active === 'store') aria-current="page" @endif>Organizations</a>
     @endif
 </nav>

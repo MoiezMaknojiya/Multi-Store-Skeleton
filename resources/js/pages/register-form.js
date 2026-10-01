@@ -22,7 +22,7 @@ export function registerRegisterForm(Alpine) {
                         minLen('Password', 8),
                         (v, d) => v && v !== d.password_confirmation ? 'Password confirmation does not match.' : null,
                     ],
-                    store_name: [required('Store name'), maxLen('Store name', 255)],
+                    store_name: [required('Organization name'), maxLen('Organization name', 255)],
                     street: [required('Street'), maxLen('Street', 255)],
                     suite: [maxLen('Suite', 100)],
                     city: [required('City'), maxLen('City', 100)],

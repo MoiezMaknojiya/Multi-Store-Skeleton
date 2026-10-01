@@ -34,7 +34,7 @@ class StoreOwnershipFlowTest extends DuskTestCase
             // Settings has no handover of its own.
             $browser->visit('/settings/store');
             $this->waitForAlpine($browser);
-            $browser->waitForText('Delete Store')->assertDontSee('Transfer Ownership');
+            $browser->waitForText('Delete Organization')->assertDontSee('Transfer Ownership');
 
             $browser->visit('/members');
             $this->waitForAlpine($browser);
@@ -108,7 +108,7 @@ class StoreOwnershipFlowTest extends DuskTestCase
             // The server would say the very same words, so the words alone prove nothing. The
             // marker only the browser's own check puts on a field, and a submit the page kept to
             // itself, are what show it never left.
-            $browser->waitForText('Type the store name exactly as it is shown.')
+            $browser->waitForText('Type the organization name exactly as it is shown.')
                 ->assertPresent('#confirm_name[data-client-invalid]');
             $this->assertSame(['stopped'], $this->formSubmits($browser), 'the mistyped name was sent to the server');
             $this->assertNotNull(Store::find($store->id));

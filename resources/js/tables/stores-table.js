@@ -12,7 +12,7 @@ export function registerStoresTable(Alpine) {
     Alpine.data('storesTable', (config = {}) => createCrudTable({
         fetchUrl: '/stores/data',
         dataKey: 'stores',
-        entityLabel: 'store',
+        entityLabel: 'organization',
         formModalName: 'store-form-modal',
         deleteModalName: 'confirm-store-deletion',
         extraState: {
@@ -117,7 +117,7 @@ export function registerStoresTable(Alpine) {
                 const errors = {};
                 // Trimmed, as the server reads it (TrimStrings): a stray space is not a different name.
                 if (String(this.deleteConfirmName ?? '').trim() !== this.selectedItem.name) {
-                    errors.confirm_name = ['Type the store name exactly as it is shown.'];
+                    errors.confirm_name = ['Type the organization name exactly as it is shown.'];
                 }
                 if (!this.deletePassword) {
                     errors.password = ['Password is required.'];
@@ -142,7 +142,7 @@ export function registerStoresTable(Alpine) {
                     if (error.response?.status === 422 && error.response.data.errors) {
                         this.deleteErrors = error.response.data.errors;
                     } else {
-                        window.toast(error.response?.data?.message ?? 'Could not delete the store.');
+                        window.toast(error.response?.data?.message ?? 'Could not delete the organization.');
                     }
                 } finally {
                     this.deleting = false;

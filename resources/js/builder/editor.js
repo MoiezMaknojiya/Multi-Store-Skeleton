@@ -601,7 +601,7 @@ export function registerAdEditor(Alpine) {
 
                 if (lost > 0) {
                     window.toast(`${lost} ${lost === 1 ? 'file on the stage' : 'files on the stage'} will not show: `
-                        + (this.isShared() ? 'an ad for every shop uses shared files only.' : 'they belong to another shop.'));
+                        + (this.isShared() ? 'an ad for every organization uses shared files only.' : 'they belong to another organization.'));
                 }
             },
 
@@ -1454,7 +1454,7 @@ export function registerAdEditor(Alpine) {
             /** Short, because the bar is narrow on a laptop; publicationHint() is the whole sentence. */
             publicationStatus() {
                 if (!this.adId) return '';
-                if (!this.published) return this.isShared() ? 'Draft · shops do not see it' : 'Draft · not on screens';
+                if (!this.published) return this.isShared() ? 'Draft · organizations do not see it' : 'Draft · not on screens';
 
                 return this.changesWaiting() ? 'Changes not published' : 'Published';
             },
@@ -1468,11 +1468,11 @@ export function registerAdEditor(Alpine) {
             publicationHint() {
                 // An ad for every shop is published for the shops to see and copy (owner, 2026-10-01).
                 if (this.isShared()) {
-                    if (!this.published) return 'No shop sees it until you publish it.';
+                    if (!this.published) return 'No organization sees it until you publish it.';
 
                     return this.changesWaiting()
-                        ? 'Shops keep seeing the published version until you publish these changes.'
-                        : 'Every shop sees it, exactly as it is here, and can copy it.';
+                        ? 'Organizations keep seeing the published version until you publish these changes.'
+                        : 'Every organization sees it, exactly as it is here, and can copy it.';
                 }
 
                 if (!this.published) return 'Not on any screen until you publish it.';
@@ -1491,7 +1491,7 @@ export function registerAdEditor(Alpine) {
 
             publishHint() {
                 if (this.isShared()) {
-                    return this.changesWaiting() ? 'Show these changes to every shop' : 'Let every shop see this ad and copy it';
+                    return this.changesWaiting() ? 'Show these changes to every organization' : 'Let every organization see this ad and copy it';
                 }
 
                 return this.changesWaiting()

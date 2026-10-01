@@ -1,7 +1,7 @@
 The server is running low on space.
 
 The {!! config('app.name') !!} server has only {!! $free !!} of free space left.
-Uploads still work for now, but they stop for every shop once only {!! $reserve !!} is left.
+Uploads still work for now, but they stop for every organization once only {!! $reserve !!} is left.
 
 To make room before then, delete files nobody uses, or give the server a bigger disk.
 

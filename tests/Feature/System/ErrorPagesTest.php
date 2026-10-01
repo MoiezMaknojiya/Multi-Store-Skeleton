@@ -56,7 +56,7 @@ test('a refusal says why in plain words: Laravel\'s own are replaced, ours are k
 
     // A refusal of our own keeps its reason.
     $html = $this->actingAs(createSuperAdmin())->post('/stores/switch', ['store_id' => $store->id])->assertForbidden()->getContent();
-    expect($html)->toContain('The platform team works above the stores. Use &quot;Log In As&quot; to see a store as one of its members.');
+    expect($html)->toContain('The platform team works above the organizations. Use &quot;Log In As&quot; to see an organization as one of its members.');
 });
 
 test('an expired page, too many tries, a crash and a pause each say what happened', function () {

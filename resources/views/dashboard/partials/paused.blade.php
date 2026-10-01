@@ -10,7 +10,7 @@
             Its pages are closed for now, and its screens keep playing. Contact support to turn it back on.
         </p>
         @if ($hasOtherStores)
-            <a href="{{ route('stores.select') }}" class="btn-secondary mt-6" dusk="dashboard-paused-switch">Choose Another Store</a>
+            <a href="{{ route('stores.select') }}" class="btn-secondary mt-6" dusk="dashboard-paused-switch">Choose Another Organization</a>
         @endif
     </div>
 </div>

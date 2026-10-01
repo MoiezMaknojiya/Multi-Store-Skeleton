@@ -41,9 +41,9 @@
         </div>
 
         {{-- Section 2: their store --}}
-        <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500 pt-2 border-t border-gray-100">Your Store</h2>
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500 pt-2 border-t border-gray-100">Your Organization</h2>
 
-        <x-auth.form-field name="store_name" label="Store Name" placeholder="e.g. Fresh Mart" maxlength="255" autocomplete="organization" :required="true" />
+        <x-auth.form-field name="store_name" label="Organization Name" placeholder="e.g. Fresh Mart" maxlength="255" autocomplete="organization" :required="true" />
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <x-auth.form-field name="street" label="Street" placeholder="Street address" maxlength="255" autocomplete="address-line1" :required="true" />

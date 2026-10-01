@@ -15,8 +15,8 @@
             <div class="ml-auto flex flex-wrap items-center gap-3">
                 @if ($aboveTheStores)
                     <select x-model="filterStore" @change="applyFilters()" class="form-select sm:w-52"
-                            dusk="assets-filter-store" aria-label="Shop">
-                        <option value="">All shops</option>
+                            dusk="assets-filter-store" aria-label="Organization">
+                        <option value="">All organizations</option>
                         @foreach ($stores as $store)
                             <option value="{{ $store['id'] }}">{{ $store['name'] }}</option>
                         @endforeach
@@ -133,7 +133,7 @@
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
                     <span class="font-medium" x-text="selectedItem?.title"></span> goes for good. No ad uses it.
                     <span x-show="selectedItem?.shared" x-cloak dusk="confirm-asset-deletion-shared">It is shared with every
-                        shop, so it goes from every shop's shelf.</span>
+                        organization, so it goes from every organization's shelf.</span>
                 </p>
 
                 <div class="mt-6 flex flex-wrap justify-end gap-3">

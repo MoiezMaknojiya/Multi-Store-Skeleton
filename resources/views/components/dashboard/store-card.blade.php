@@ -56,7 +56,7 @@
                 <input type="hidden" name="store_id" value="{{ $store['id'] }}">
                 <button type="submit" dusk="switch-store-{{ $store['id'] }}" aria-label="Open {{ $store['name'] }}"
                     class="stretch-to-box cursor-pointer text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 inline-flex items-center gap-1 focus:outline-none">
-                    Open Store
+                    Open Organization
                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                     </svg>

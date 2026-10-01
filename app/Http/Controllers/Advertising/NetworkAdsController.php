@@ -44,13 +44,13 @@ class NetworkAdsController extends Controller
         ActivityLog::record(
             'store.network_ads_updated',
             $store,
-            ($validated['accepts'] ? 'Enabled' : 'Disabled')." network advertising for store {$store->name}"
+            ($validated['accepts'] ? 'Enabled' : 'Disabled')." network advertising for organization {$store->name}"
         );
 
         return response()->json([
             'message' => $validated['accepts']
-                ? 'This store now carries network advertising.'
-                : 'Network advertising is off for this store.',
+                ? 'This organization now carries network advertising.'
+                : 'Network advertising is off for this organization.',
             'accepts_network_ads' => $store->accepts_network_ads,
         ]);
     }
@@ -80,7 +80,7 @@ class NetworkAdsController extends Controller
 
         if ($screens->isEmpty()) {
             throw ValidationException::withMessages([
-                'screen_ids' => 'None of those screens are in this store.',
+                'screen_ids' => 'None of those screens are in this organization.',
             ]);
         }
 
@@ -92,7 +92,7 @@ class NetworkAdsController extends Controller
             $store,
             ($validated['accepts'] ? 'Enabled' : 'Disabled').' network advertising on '
                 .$screens->count().' screen'.($screens->count() === 1 ? '' : 's')
-                .' in store '.$store->name
+                .' in organization '.$store->name
         );
 
         return response()->json([
@@ -124,7 +124,7 @@ class NetworkAdsController extends Controller
 
         if ($stores->isEmpty()) {
             throw ValidationException::withMessages([
-                'store_ids' => 'None of those stores exist.',
+                'store_ids' => 'None of those organizations exist.',
             ]);
         }
 
@@ -140,7 +140,7 @@ class NetworkAdsController extends Controller
                 ->update(['accepts_network_ads' => $accepts]);
         });
 
-        $shops = $stores->count().' shop'.($stores->count() === 1 ? '' : 's');
+        $shops = $stores->count().' organization'.($stores->count() === 1 ? '' : 's');
         $screens = $screenCount.' screen'.($screenCount === 1 ? '' : 's');
 
         ActivityLog::record(
@@ -166,7 +166,7 @@ class NetworkAdsController extends Controller
 
         if (! $storeId) {
             throw ValidationException::withMessages([
-                'accepts' => 'Select a store first — advertising is agreed per shop.',
+                'accepts' => 'Select an organization first — advertising is agreed per organization.',
             ]);
         }
 

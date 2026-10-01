@@ -34,7 +34,7 @@
             <td style="padding-top:20px; font-size:13px; line-height:20px; color:#6b7280;">
                 This link works for <strong style="color:#374151;">{{ $minutes }} minutes</strong>. If it has
                 expired, sign in and ask for a new one. An account that is not confirmed within
-                <strong style="color:#374151;">{{ $days }} days</strong> is removed, with its store. If you didn't
+                <strong style="color:#374151;">{{ $days }} days</strong> is removed, with its organization. If you didn't
                 sign up, ignore this email: nothing more will happen.
             </td>
         </tr>

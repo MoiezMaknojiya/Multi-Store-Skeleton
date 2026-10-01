@@ -102,7 +102,7 @@ export function storageError(file, storage) {
 
     if (file.size <= left) return null;
 
-    return `Not enough storage: this needs ${bytesInWords(file.size)}, and this shop has `
+    return `Not enough storage: this needs ${bytesInWords(file.size)}, and this organization has `
         + (left > 0 ? `${bytesInWords(left)} left` : 'no space left')
         + ` of its ${bytesInWords(storage.limit)}. Delete files you no longer use to make room.`;
 }

@@ -267,7 +267,7 @@ export function registerChannelAds(Alpine) {
             if (this.source === 'ads') {
                 // An ad publishes into its shop's library, and one made for every shop into the platform's own.
                 return this.libraries.length > 0 && this.picker.library === 'platform'
-                    ? 'No ad for every shop is published yet. Publish one in the Ad Builder, or choose a shop above.'
+                    ? 'No ad for every organization is published yet. Publish one in the Ad Builder, or choose an organization above.'
                     : 'No published ads here yet. Publish one in the Ad Builder, then choose it here.';
             }
 

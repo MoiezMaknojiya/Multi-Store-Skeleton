@@ -331,7 +331,7 @@ class AdBuilderFlowTest extends DuskTestCase
             $browser->waitFor('@ad-stage');
 
             // All shops comes first, and is what a new ad is for.
-            $this->assertSame('All shops', $browser->script('return document.querySelector(\'[dusk="ad-store"]\').selectedOptions[0].textContent.trim();')[0]);
+            $this->assertSame('All organizations', $browser->script('return document.querySelector(\'[dusk="ad-store"]\').selectedOptions[0].textContent.trim();')[0]);
 
             $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
             $this->uploadThrough($browser, 'picker', $this->fixtureImage('Brand logo.png', 30, 90, 200));
@@ -355,7 +355,7 @@ class AdBuilderFlowTest extends DuskTestCase
             $browser->assertDisabled('@ad-store');
 
             $this->jsClick($browser, '@ad-publish');
-            $browser->waitForText('every shop sees it now');
+            $browser->waitForText('every organization sees it now');
             $browser->waitUsing(20, 250, fn () => $ad->fresh()->isPublished());
             $this->assertNull($ad->fresh()->media->store_id);
 
@@ -411,7 +411,7 @@ class AdBuilderFlowTest extends DuskTestCase
             $browser->waitUsing(20, 250, fn () => BuilderAsset::count() === 1);
             $brand = BuilderAsset::sole();
             $this->assertNull($brand->store_id, 'the picture was not shared with every shop');
-            $browser->waitFor('@asset-card-'.$brand->id)->assertSeeIn('@asset-owner-'.$brand->id, 'Every shop');
+            $browser->waitFor('@asset-card-'.$brand->id)->assertSeeIn('@asset-owner-'.$brand->id, 'Every organization');
 
             /* ── 2. One shop chosen: the picture is that shop's alone ───── */
             $browser->select('@assets-filter-store', (string) $beta->id)

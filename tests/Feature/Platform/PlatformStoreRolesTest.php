@@ -74,7 +74,7 @@ test('only a role that store has, never twice in one store, never a platform acc
     $support = createPlatformUser(['user-view']);
 
     $this->actingAs($this->superAdmin)->postJson("/users/{$person->id}/stores", ['store_id' => $this->beta->id, 'role_id' => Role::create(['name' => 'Alpha Only', 'store_id' => $this->alpha->id])->id])
-        ->assertStatus(422)->assertJsonValidationErrors(['role_id' => 'Choose a role that exists in this store.']);
+        ->assertStatus(422)->assertJsonValidationErrors(['role_id' => 'Choose a role that exists in this organization.']);
     $this->actingAs($this->superAdmin)->postJson("/users/{$person->id}/stores", ['store_id' => $this->beta->id, 'role_id' => $platformRole->id])
         ->assertStatus(422)->assertJsonValidationErrors('role_id');
     $this->actingAs($this->superAdmin)->postJson("/users/{$person->id}/stores", ['store_id' => $this->alpha->id, 'role_id' => Role::starter(Role::VIEWER)->id])

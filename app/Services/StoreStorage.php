@@ -109,7 +109,7 @@ class StoreStorage
 
         return DB::transaction(function () use ($storeId, $bytes, $write, $attribute) {
             if (Store::whereKey($storeId)->lockForUpdate()->first(['id']) === null) {
-                throw ValidationException::withMessages([$attribute => 'That shop no longer exists. Reload the page and choose again.']);
+                throw ValidationException::withMessages([$attribute => 'That organization no longer exists. Reload the page and choose again.']);
             }
 
             $used = $this->used($storeId);
@@ -143,7 +143,7 @@ class StoreStorage
     /** "Not enough storage: this needs 120.4 MB, and Alpha Mart has 30.2 MB left of its 512 MB. …" */
     public function fullMessage(int $storeId, int $needed, int $used): string
     {
-        $name = Store::whereKey($storeId)->value('name') ?? 'This shop';
+        $name = Store::whereKey($storeId)->value('name') ?? 'This organization';
         $left = max(0, self::LIMIT_BYTES - $used);
 
         return 'Not enough storage: this needs '.self::inWords($needed).', and '.$name.' has '

@@ -14,7 +14,7 @@ import { validate, required, maxLen, minCount } from '../core/validate.js';
 /* Group titles, in the order a store is set up and run. Anything else is appended. The catalogue's own
    permissions (permission-*) are listed for the Super-Admin role alone. */
 const GROUPS = {
-    store: 'Stores',
+    store: 'Organizations',
     member: 'Members',
     role: 'Roles',
     screen: 'Screens',
@@ -33,7 +33,7 @@ const SCOPED_GROUPS = ['store', 'channel', 'activity'];
 
 const KINDS = {
     super_admin: { label: 'Super admin', badge: 'badge-danger' },
-    store: { label: 'Store role', badge: 'badge-warning' },
+    store: { label: 'Organization role', badge: 'badge-warning' },
     platform: { label: 'Platform role', badge: 'badge-info' },
     custom: { label: 'Custom role', badge: 'badge-neutral' },
 };
@@ -118,18 +118,18 @@ export function registerRolesPage(Alpine) {
         formHint() {
             const type = this.formType();
             if (this.editingRole?.is_owner_role) {
-                return 'This is the Owner role: whoever holds it owns their store. You can rename it and change what it allows; it is never deleted.';
+                return 'This is the Owner role: whoever holds it owns their organization. You can rename it and change what it allows; it is never deleted.';
             }
-            if (type === 'store') return 'A store role is offered in every store. What you save here applies in all of them at once.';
-            if (type === 'platform') return 'A platform role works above the stores: what it allows reaches every store. The permission catalogue stays with Super-Admin.';
-            if (this.isPlatform) return `A custom role of ${this.editingRole?.store_name ?? 'one store'}: it is offered there alone.`;
+            if (type === 'store') return 'An organization role is offered in every organization. What you save here applies in all of them at once.';
+            if (type === 'platform') return 'A platform role works above the organizations: what it allows reaches every organization. The permission catalogue stays with Super-Admin.';
+            if (this.isPlatform) return `A custom role of ${this.editingRole?.store_name ?? 'one organization'}: it is offered there alone.`;
 
             return `A custom role of ${this.storeName}. You can only give it permissions you hold yourself.`;
         },
 
         /** The hint beside a group whose permissions reach the member's own store alone on a store's role. */
         groupHint(group) {
-            return this.formType() !== 'platform' && SCOPED_GROUPS.includes(group.key) ? 'This store only' : '';
+            return this.formType() !== 'platform' && SCOPED_GROUPS.includes(group.key) ? 'This organization only' : '';
         },
 
         async loadAssignable(params) {

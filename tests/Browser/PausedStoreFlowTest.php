@@ -42,7 +42,7 @@ class PausedStoreFlowTest extends DuskTestCase
                 ->waitForLocation('/dashboard', 10)
                 ->waitFor('@dashboard-paused')
                 ->assertSeeIn('@dashboard-paused', 'Alpha Mart is paused')
-                ->assertSeeIn('@dashboard-paused', 'Choose Another Store');
+                ->assertSeeIn('@dashboard-paused', 'Choose Another Organization');
 
             // The menu offers none of its pages.
             $browser->assertMissing('a[href$="/screens"]')->assertMissing('a[href$="/media"]');
@@ -73,7 +73,7 @@ class PausedStoreFlowTest extends DuskTestCase
             $browser->waitForText('Alpha Mart');
 
             $this->clickAndAwait($browser, '@edit-store-'.$alpha->id, fn (Browser $b) => $b->waitFor('@store-active', 3));
-            $browser->assertSee('Off pauses the store: its people cannot open it, and its screens keep playing.');
+            $browser->assertSee('Off pauses the organization: its people cannot open it, and its screens keep playing.');
             $browser->uncheck('@store-active');
             $this->jsClick($browser, '@store-save');
 

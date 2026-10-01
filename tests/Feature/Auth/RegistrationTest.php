@@ -34,7 +34,7 @@ function validSignupPayload(): array
 }
 
 test('the registration screen renders with the store fields', function () {
-    $this->get('/register')->assertOk()->assertSee('Your Store')->assertSee('Store Name');
+    $this->get('/register')->assertOk()->assertSee('Your Organization')->assertSee('Organization Name');
 });
 
 test('signing up creates the account, the store, and makes the person its Owner', function () {

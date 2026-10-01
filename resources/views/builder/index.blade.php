@@ -17,8 +17,8 @@
 
                 @if ($stores !== [])
                     <select x-model="filterStore" @change="applyFilters()" class="form-select sm:w-44"
-                            dusk="ads-filter-store" aria-label="Shop">
-                        <option value="">All shops</option>
+                            dusk="ads-filter-store" aria-label="Organization">
+                        <option value="">All organizations</option>
                         @foreach ($stores as $store)
                             <option value="{{ $store['id'] }}">{{ $store['name'] }}</option>
                         @endforeach
@@ -51,11 +51,11 @@
                     <div class="mx-auto max-w-md space-y-3 py-12 text-center" dusk="table-no-match">
                         <p class="text-sm text-gray-700 dark:text-gray-200">
                             <span x-show="search">No ad matches &ldquo;<span class="font-medium" x-text="search"></span>&rdquo;.</span>
-                            <span x-show="!search">This shop has no ads yet.</span>
+                            <span x-show="!search">This organization has no ads yet.</span>
                         </p>
                         <div class="flex flex-wrap justify-center gap-2">
                             <button type="button" x-show="search" class="btn-row-neutral" @click="search = ''" dusk="table-clear-search">Clear Search</button>
-                            <button type="button" x-show="!search" class="btn-row-neutral" @click="filterStore = ''; applyFilters()" dusk="table-clear-filters">Show Every Shop</button>
+                            <button type="button" x-show="!search" class="btn-row-neutral" @click="filterStore = ''; applyFilters()" dusk="table-clear-filters">Show Every Organization</button>
                         </div>
                     </div>
                 </template>
@@ -213,7 +213,7 @@
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
                     <span class="font-medium" x-text="selectedItem?.name"></span> and its published copy go for good —
                     including from any playlist that plays it.
-                    <span x-show="selectedItem?.shared" x-cloak dusk="confirm-ad-deletion-shared">It goes from every shop; the copies shops made stay theirs.</span>
+                    <span x-show="selectedItem?.shared" x-cloak dusk="confirm-ad-deletion-shared">It goes from every organization; the copies organizations made stay theirs.</span>
                 </p>
 
                 <x-crud.password-confirm id="delete-ad-password" />

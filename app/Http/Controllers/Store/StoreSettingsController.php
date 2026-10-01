@@ -28,7 +28,7 @@ class StoreSettingsController extends Controller
 
     /** The details a store is described by, as the store's own forms ask them. */
     private const DETAIL_LABELS = [
-        'name' => 'store name', 'street' => 'street', 'suite' => 'suite', 'city' => 'city',
+        'name' => 'organization name', 'street' => 'street', 'suite' => 'suite', 'city' => 'city',
         'state' => 'state', 'zip_code' => 'zip code', 'country' => 'country',
     ];
 
@@ -63,7 +63,7 @@ class StoreSettingsController extends Controller
 
         $store->update($validated);
 
-        ActivityLog::record('store.updated', $store, "Updated the details of store {$store->name}");
+        ActivityLog::record('store.updated', $store, "Updated the details of organization {$store->name}");
 
         return redirect()->route('store-settings.edit')->with('status', 'store-updated');
     }
@@ -88,10 +88,10 @@ class StoreSettingsController extends Controller
             return $newStore;
         });
 
-        ActivityLog::record('store.created', $newStore, "Opened store {$newStore->name}, owned by {$actor->name}");
+        ActivityLog::record('store.created', $newStore, "Opened organization {$newStore->name}, owned by {$actor->name}");
 
         return redirect()->route('store-settings.edit')
-            ->with('status', "{$newStore->name} is open, and you are its Owner. Switch to it from the store menu.");
+            ->with('status', "{$newStore->name} is open, and you are its Owner. Switch to it from the organization menu.");
     }
 
     /**
@@ -107,11 +107,11 @@ class StoreSettingsController extends Controller
         $request->validateWithBag('storeDeletion', [
             'confirm_name' => ['required', 'string', function (string $attribute, mixed $value, \Closure $fail) use ($store) {
                 if ($value !== $store->name) {
-                    $fail('Type the store name exactly as it is shown.');
+                    $fail('Type the organization name exactly as it is shown.');
                 }
             }],
         ], [
-            'confirm_name.required' => 'Type the store name to confirm.',
+            'confirm_name.required' => 'Type the organization name to confirm.',
         ]);
 
         $this->confirmPassword($request, 'storeDeletion');
@@ -125,7 +125,7 @@ class StoreSettingsController extends Controller
         session()->forget('current_store_id');
 
         ActivityLog::record('store.deleted', null,
-            "Deleted store {$name} with its {$screens} ".str('screen')->plural($screens)." and {$media} media ".str('file')->plural($media),
+            "Deleted organization {$name} with its {$screens} ".str('screen')->plural($screens)." and {$media} media ".str('file')->plural($media),
             storeId: $store->id);
 
         return redirect()->route('dashboard')->with('status', "{$name} was deleted.");

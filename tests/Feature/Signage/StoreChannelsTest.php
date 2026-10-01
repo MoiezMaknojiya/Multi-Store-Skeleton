@@ -134,7 +134,7 @@ test("a playlist refuses another store's channel, and carries its own", function
 
     $save([['channel_id' => $this->betaChannel->id]])
         ->assertStatus(422)
-        ->assertJsonValidationErrors(['items' => 'One of those channels has been deleted, or is not offered to this store. Reload the page to see the current list.']);
+        ->assertJsonValidationErrors(['items' => 'One of those channels has been deleted, or is not offered to this organization. Reload the page to see the current list.']);
 
     $save([['channel_id' => $this->alphaChannel->id], ['channel_id' => $this->platformChannel->id]])->assertOk();
 
@@ -144,7 +144,7 @@ test("a playlist refuses another store's channel, and carries its own", function
 
 test("a name must stand apart within one store's list — the platform's channels and the store's own", function () {
     asKeeper($this)->postJson('/channels', ['name' => 'GAMA'])
-        ->assertStatus(422)->assertJsonValidationErrors(['name' => "There is already a channel with this name in this store's list. Choose a different name."]);
+        ->assertStatus(422)->assertJsonValidationErrors(['name' => "There is already a channel with this name in this organization's list. Choose a different name."]);
     asKeeper($this)->postJson('/channels', ['name' => 'Alpha Specials'])->assertStatus(422)->assertJsonValidationErrors('name');
 
     // Another store's list is its own business.
@@ -153,7 +153,7 @@ test("a name must stand apart within one store's list — the platform's channel
     // And a store's name never blocks the platform.
     $this->actingAs($this->superAdmin)->postJson('/channels', ['name' => 'Alpha Specials'])->assertOk();
     $this->actingAs($this->superAdmin)->postJson('/channels', ['name' => 'GAMA'])
-        ->assertStatus(422)->assertJsonValidationErrors(['name' => 'There is already a channel with this name. Every shop sees the name, so it has to be different.']);
+        ->assertStatus(422)->assertJsonValidationErrors(['name' => 'There is already a channel with this name. Every organization sees the name, so it has to be different.']);
 });
 
 test("deleting a store takes its own channels, their files and their playlist lines — and leaves everybody else's", function () {

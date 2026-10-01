@@ -221,7 +221,7 @@ class PlaylistController extends Controller
 
         if ($targets->isEmpty()) {
             throw ValidationException::withMessages([
-                'target_screen_ids' => 'None of those screens are in this store.',
+                'target_screen_ids' => 'None of those screens are in this organization.',
             ]);
         }
 
@@ -326,7 +326,7 @@ class PlaylistController extends Controller
                 if ($rule->daypart_id !== null
                     && ! Daypart::where('id', $rule->daypart_id)->where('store_id', $screen->store_id)->exists()) {
                     throw ValidationException::withMessages([
-                        'rules' => 'Those opening hours belong to a different store.',
+                        'rules' => 'Those opening hours belong to a different organization.',
                     ]);
                 }
 
@@ -363,7 +363,7 @@ class PlaylistController extends Controller
 
         if ($allowed !== $ids->count()) {
             throw ValidationException::withMessages([
-                'items' => 'One of those files is not in this store\'s library.',
+                'items' => 'One of those files is not in this organization\'s library.',
             ]);
         }
     }
@@ -459,7 +459,7 @@ class PlaylistController extends Controller
 
         if (Channel::availableTo($screen)->whereIn('id', $ids)->count() !== $ids->count()) {
             throw ValidationException::withMessages([
-                'items' => 'One of those channels has been deleted, or is not offered to this store. Reload the page to see the current list.',
+                'items' => 'One of those channels has been deleted, or is not offered to this organization. Reload the page to see the current list.',
             ]);
         }
     }
@@ -484,7 +484,7 @@ class PlaylistController extends Controller
 
         if ($allowed !== $ids->count()) {
             throw ValidationException::withMessages([
-                'items' => 'Those opening hours belong to a different store.',
+                'items' => 'Those opening hours belong to a different organization.',
             ]);
         }
     }

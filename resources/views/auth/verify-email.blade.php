@@ -39,7 +39,7 @@
 
         @if ($removedOn)
             <p class="mt-3 text-xs text-gray-500" dusk="verify-email-removal">
-                An account that is not confirmed is removed, with its store, after {{ $removedOn->toFormattedDayDateString() }}.
+                An account that is not confirmed is removed, with its organization, after {{ $removedOn->toFormattedDayDateString() }}.
             </p>
         @endif
 

@@ -257,7 +257,7 @@ test('platform and store accounts never cross over', function () {
 
     $this->actingAs($ops)->post("/invitations/{$storeToken}/accept")
         ->assertRedirect(route('invitations.show', $storeToken))
-        ->assertSessionHas('error', 'Platform accounts cannot join a store.');
+        ->assertSessionHas('error', 'Platform accounts cannot join an organization.');
 
     // …and a store member cannot join the platform team.
     $platformRole = Role::create(['name' => 'Support', 'is_global' => true]);

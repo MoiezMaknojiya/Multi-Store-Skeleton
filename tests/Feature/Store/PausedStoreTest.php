@@ -77,7 +77,7 @@ test('another store of theirs, leaving the paused one and their profile stay ope
     $staff->stores()->attach($beta->id, ['role_id' => Role::owner()->id]);
 
     // Several stores: the paused one's page points to the others.
-    workingIn($staff, $this->store)->get('/dashboard')->assertOk()->assertSee('Choose Another Store');
+    workingIn($staff, $this->store)->get('/dashboard')->assertOk()->assertSee('Choose Another Organization');
 
     workingIn($staff, $this->store)->post('/stores/switch', ['store_id' => $beta->id])->assertRedirect(route('dashboard'));
     workingIn($staff, $beta)->get('/screens')->assertOk();
@@ -126,7 +126,7 @@ test('pausing and turning back on are logged as what they are', function () {
     $this->actingAs($admin)->putJson("/stores/{$this->store->id}", [...$details, 'is_active' => true])
         ->assertOk()->assertJsonPath('message', 'Alpha Mart is active again.');
     $this->actingAs($admin)->putJson("/stores/{$this->store->id}", [...$details, 'name' => 'Alpha Market', 'is_active' => true])
-        ->assertOk()->assertJsonPath('message', 'Store Alpha Market updated.');
+        ->assertOk()->assertJsonPath('message', 'Organization Alpha Market updated.');
 
     expect(ActivityLog::where('store_id', $this->store->id)->orderBy('id')->pluck('action')->all())
         ->toBe(['store.paused', 'store.resumed', 'store.updated']);
@@ -135,5 +135,5 @@ test('pausing and turning back on are logged as what they are', function () {
 test('the Stores page says Paused, and the switch says what it does', function () {
     $this->actingAs(createSuperAdmin())->get('/stores')->assertOk()
         ->assertSee('<span x-show="!item.is_active" class="badge-neutral">Paused</span>', false)
-        ->assertSee('Off pauses the store: its people cannot open it, and its screens keep playing.');
+        ->assertSee('Off pauses the organization: its people cannot open it, and its screens keep playing.');
 });

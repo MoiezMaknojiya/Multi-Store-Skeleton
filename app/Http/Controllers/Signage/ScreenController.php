@@ -228,7 +228,7 @@ class ScreenController extends Controller
         // A foreign key a client could post any number into, so it is looked up
         // through the store wall before it is trusted.
         $this->assertBelongsToSameStore($screen, $validated['default_media_id'] ?? null,
-            'default_media_id', 'That file is not in this store\'s library.');
+            'default_media_id', 'That file is not in this organization\'s library.');
 
         $screen->update($validated);
 
@@ -361,7 +361,7 @@ class ScreenController extends Controller
 
         if (! $storeId) {
             throw ValidationException::withMessages([
-                'code' => 'Select a store before pairing — a screen belongs to the store it is paired in.',
+                'code' => 'Select an organization before pairing — a screen belongs to the organization it is paired in.',
             ]);
         }
 

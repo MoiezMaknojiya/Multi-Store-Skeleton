@@ -64,7 +64,7 @@ class PlatformInvitationController extends Controller
 
         // User::stores() joins real stores, so the platform row (store_id = 0) is never among them.
         if ($account !== null && $account->stores()->exists()) {
-            throw ValidationException::withMessages(['email' => 'This email belongs to a store account, which cannot join the platform team.']);
+            throw ValidationException::withMessages(['email' => 'This email belongs to an organization account, which cannot join the platform team.']);
         }
 
         if (Invitation::forPlatform()->where('email', $email)->exists()) {

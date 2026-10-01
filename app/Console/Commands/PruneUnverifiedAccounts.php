@@ -20,7 +20,7 @@ class PruneUnverifiedAccounts extends Command
 {
     protected $signature = 'accounts:prune-unverified';
 
-    protected $description = 'Remove accounts never confirmed within '.User::UNVERIFIED_DAYS.' days, with the empty stores they made';
+    protected $description = 'Remove accounts never confirmed within '.User::UNVERIFIED_DAYS.' days, with the empty organizations they made';
 
     /** What a store may hold, table by table (each with a store_id): a store holding any of it is not empty. */
     private const WHAT_A_STORE_HOLDS = ['media', 'screens', 'dayparts', 'channels', 'builder_ads', 'builder_assets', 'invitations', 'roles'];
@@ -64,14 +64,14 @@ class PruneUnverifiedAccounts extends Command
 
                     ActivityLog::record('account.pruned', null,
                         "Removed {$email}, never confirmed within ".User::UNVERIFIED_DAYS.' days'
-                        .($stores->isEmpty() ? '' : ', with the store '.$stores->pluck('name')->implode(', ')),
+                        .($stores->isEmpty() ? '' : ', with the organization '.$stores->pluck('name')->implode(', ')),
                         storeId: $stores->first()?->id);
 
                     $removed++;
                 });
             });
 
-        $this->info("{$removed} account(s) removed.".($kept > 0 ? " {$kept} kept: a store of theirs has people or things in it." : ''));
+        $this->info("{$removed} account(s) removed.".($kept > 0 ? " {$kept} kept: an organization of theirs has people or things in it." : ''));
 
         return self::SUCCESS;
     }
@@ -84,12 +84,12 @@ class PruneUnverifiedAccounts extends Command
         }
 
         if (DB::table('store_user')->whereIn('store_id', $storeIds)->where('user_id', '!=', $userId)->exists()) {
-            return 'a store of theirs has other people in it';
+            return 'an organization of theirs has other people in it';
         }
 
         $holding = collect(self::WHAT_A_STORE_HOLDS)
             ->first(fn (string $table) => DB::table($table)->whereIn('store_id', $storeIds)->exists());
 
-        return $holding !== null ? "a store of theirs is not empty ({$holding})" : null;
+        return $holding !== null ? "an organization of theirs is not empty ({$holding})" : null;
     }
 }

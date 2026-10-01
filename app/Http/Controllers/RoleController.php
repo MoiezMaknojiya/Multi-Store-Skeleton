@@ -124,7 +124,7 @@ class RoleController extends Controller
         });
 
         ActivityLog::record('role.created', $role, match ($type) {
-            'store' => "Created store role {$role->name}, offered in every store",
+            'store' => "Created organization role {$role->name}, offered in every organization",
             'platform' => "Created platform role {$role->name}",
             default => "Created role {$role->name} in {$store->name}",
         });
@@ -151,13 +151,13 @@ class RoleController extends Controller
         $renamed = $before !== $role->name ? " (was {$before})" : '';
 
         ActivityLog::record('role.updated', $role, match (true) {
-            $type === 'store' => "Updated store role {$role->name}{$renamed}, in every store",
+            $type === 'store' => "Updated organization role {$role->name}{$renamed}, in every organization",
             $type === 'platform' => "Updated platform role {$role->name}{$renamed}",
             $store === null => "Updated role {$role->name}{$renamed} in {$roleStore->name}, from the platform",
             default => "Updated role {$role->name}{$renamed}",
         });
 
-        return response()->json(['message' => $type === 'store' ? "Role {$role->name} updated in every store." : "Role {$role->name} updated."]);
+        return response()->json(['message' => $type === 'store' ? "Role {$role->name} updated in every organization." : "Role {$role->name} updated."]);
     }
 
     public function destroy(Request $request, Role $role): JsonResponse
@@ -244,7 +244,7 @@ class RoleController extends Controller
             return $store;
         }
 
-        abort_unless(auth()->user()->isSuperAdmin(), 403, 'Roles are managed inside a store, or by a super admin.');
+        abort_unless(auth()->user()->isSuperAdmin(), 403, 'Roles are managed inside an organization, or by a super admin.');
 
         return null;
     }
@@ -259,12 +259,12 @@ class RoleController extends Controller
     {
         if ($store === null) {
             abort_if($role->isSuperAdmin(), 403, 'The Super-Admin role always holds every permission, and is never changed.');
-            abort_if($deleting && $role->isOwner(), 403, 'The Owner role is never deleted: it is how a store has an owner. Rename it or change what it allows instead.');
+            abort_if($deleting && $role->isOwner(), 403, 'The Owner role is never deleted: it is how an organization has an owner. Rename it or change what it allows instead.');
 
             return $this->typeOf($role);
         }
 
-        abort_if($role->isStoreRole(), 403, 'Store roles are changed by the super admin, for every store at once.');
+        abort_if($role->isStoreRole(), 403, 'Organization roles are changed by the super admin, for every organization at once.');
         abort_unless($role->isCustomRole() && $role->store_id === $store->id, 404);
 
         $actor = auth()->user();
@@ -320,7 +320,7 @@ class RoleController extends Controller
                 if ($clash !== null) {
                     $fail(match (true) {
                         $clash->isCustomRole() && $type === 'store' => "{$clash->store?->name} already has a custom role called {$clash->name}. Choose another name.",
-                        $clash->isStoreRole() && $type === 'custom' => "There is already a store role called {$clash->name}, and every store has it. Choose another name.",
+                        $clash->isStoreRole() && $type === 'custom' => "There is already an organization role called {$clash->name}, and every organization has it. Choose another name.",
                         default => "There is already a role called {$clash->name}. Choose another name.",
                     });
                 }
@@ -379,7 +379,7 @@ class RoleController extends Controller
 
         if ($aboveTheStores->isNotEmpty()) {
             throw ValidationException::withMessages([
-                'permissions' => 'A store role cannot hold '.$aboveTheStores->pluck('display_name')->join(', ', ' or ').': it works above the stores only.',
+                'permissions' => 'An organization role cannot hold '.$aboveTheStores->pluck('display_name')->join(', ', ' or ').': it works above the organizations only.',
             ]);
         }
 

@@ -90,11 +90,11 @@ test('the super admin gives a store role what works inside a store — and nothi
 
     $this->actingAs($this->superAdmin)->putJson("/roles/{$owner->id}", ['name' => 'Owner', 'permissions' => [...$keep, ...grantPermissions(['activity-destroy'])->pluck('id')]])
         ->assertStatus(422)
-        ->assertJsonValidationErrors(['permissions' => 'A store role cannot hold Delete Old Activity Logs: it works above the stores only.']);
+        ->assertJsonValidationErrors(['permissions' => 'An organization role cannot hold Delete Old Activity Logs: it works above the organizations only.']);
 
     $this->actingAs($this->superAdmin)->putJson("/roles/{$owner->id}", ['name' => 'Owner', 'permissions' => [...$keep, ...grantPermissions(['user-destroy'])->pluck('id')]])
         ->assertStatus(422)
-        ->assertJsonValidationErrors(['permissions' => 'A store role cannot hold Delete Accounts: it works above the stores only.']);
+        ->assertJsonValidationErrors(['permissions' => 'An organization role cannot hold Delete Accounts: it works above the organizations only.']);
 
     $this->actingAs($this->superAdmin)->putJson("/roles/{$owner->id}", ['name' => 'Owner', 'permissions' => [...$keep, ...grantPermissions(['permission-view'])->pluck('id')]])
         ->assertStatus(422)
@@ -139,7 +139,7 @@ test('inside a store a member gives a custom role only what they hold — its pl
     $this->actingAs($owner)->withSession(['current_store_id' => $this->alpha->id])->postJson('/roles', [
         'name' => 'Nosy',
         'permissions' => grantPermissions(['user-view'])->pluck('id')->all(),
-    ])->assertStatus(422)->assertJsonValidationErrors(['permissions' => 'A store role cannot hold View Accounts: it works above the stores only.']);
+    ])->assertStatus(422)->assertJsonValidationErrors(['permissions' => 'An organization role cannot hold View Accounts: it works above the organizations only.']);
 
     expect(Role::firstWhere('name', 'Closer')->permissions->pluck('name')->sort()->values()->all())->toBe(['store-destroy', 'store-update']);
 });
@@ -166,7 +166,7 @@ test('the Owner starts with store-destroy; without it even an Owner cannot delet
     // Given to Admins instead.
     grantToStoreRole(Role::ADMIN, ['store-destroy']);
     $this->actingAs($admin)->withSession(['current_store_id' => $this->alpha->id])
-        ->get('/settings/store')->assertOk()->assertSee('Delete Store');
+        ->get('/settings/store')->assertOk()->assertSee('Delete Organization');
     $this->actingAs($admin)->withSession(['current_store_id' => $this->alpha->id])
         ->delete('/settings/store', ['confirm_name' => 'Alpha Mart', 'password' => 'password'])->assertRedirect(route('dashboard'));
 
@@ -179,12 +179,12 @@ test('the Stores tab opens with View Stores, and every card on it is a permissio
     $viewer = createStoreMember($this->alpha, Role::VIEWER);
     $this->actingAs($viewer)->withSession(['current_store_id' => $this->alpha->id])->get('/settings/store')->assertForbidden();
     $this->actingAs($viewer)->withSession(['current_store_id' => $this->alpha->id])->get('/profile')->assertOk()
-        ->assertDontSee('dusk="settings-tab-store"', false)->assertSee('Your stores');
+        ->assertDontSee('dusk="settings-tab-store"', false)->assertSee('Your organizations');
 
     // View Stores alone: the details to read and the stores they belong to — nothing to press.
     $reader = createStoreUser($this->alpha, ['store-view'], 'Reader');
     $this->actingAs($reader)->withSession(['current_store_id' => $this->alpha->id])->get('/settings/store')->assertOk()
-        ->assertSee('Your role here does not let you change the store\'s details.', false)
+        ->assertSee('Your role here does not let you change the organization\'s details.', false)
         ->assertDontSee('dusk="store-details-form"', false)
         ->assertSee('dusk="your-stores"', false)
         ->assertDontSee('dusk="delete-store"', false)->assertDontSee('dusk="open-store-button"', false);
@@ -235,7 +235,7 @@ test('Create store opens a store the person owns at once — no invitation, and 
         'store_name' => 'Alpha Mart East', 'store_street' => '9 Side St', 'store_city' => 'Austin', 'store_state' => 'TX',
         'store_zip_code' => '73301', 'store_country' => 'USA', 'is_active' => false, 'owner_email' => 'someone@example.com',
     ])->assertRedirect(route('store-settings.edit'))
-        ->assertSessionHas('status', 'Alpha Mart East is open, and you are its Owner. Switch to it from the store menu.');
+        ->assertSessionHas('status', 'Alpha Mart East is open, and you are its Owner. Switch to it from the organization menu.');
 
     $branch = Store::firstWhere('name', 'Alpha Mart East');
     expect($branch->is_active)->toBeTrue()
@@ -258,7 +258,7 @@ test('Create store asks for store-store, and checks the details under their own 
         ->post('/settings/store/open', ['store_name' => '', 'store_zip_code' => '7A'])
         ->assertRedirect('/settings/store')
         ->assertSessionHasErrorsIn('newStore', [
-            'store_name' => 'The store name field is required.',
+            'store_name' => 'The organization name field is required.',
             'store_zip_code' => 'Zip code can only contain numbers.',
         ])
         // The details form of the store being worked in never reads them back as its own.

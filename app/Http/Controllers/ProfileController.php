@@ -191,7 +191,7 @@ class ProfileController extends Controller
         if ($soleOwned->isNotEmpty()) {
             throw ValidationException::withMessages([
                 'password' => 'You are the only Owner of '.$soleOwned->pluck('name')->join(', ', ' and ')
-                    .'. Make someone else an Owner of '.($soleOwned->count() === 1 ? 'it' : 'them').', or delete '.($soleOwned->count() === 1 ? 'that store' : 'those stores').', first.',
+                    .'. Make someone else an Owner of '.($soleOwned->count() === 1 ? 'it' : 'them').', or delete '.($soleOwned->count() === 1 ? 'that organization' : 'those organizations').', first.',
             ])->errorBag('userDeletion');
         }
     }

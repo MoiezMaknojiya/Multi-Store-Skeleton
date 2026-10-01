@@ -127,7 +127,7 @@ class DaypartController extends Controller
 
         if (! $storeId) {
             throw ValidationException::withMessages([
-                'name' => 'Select a store before creating a daypart — opening hours belong to the store they were set for.',
+                'name' => 'Select an organization before creating a daypart — opening hours belong to the organization they were set for.',
             ]);
         }
 

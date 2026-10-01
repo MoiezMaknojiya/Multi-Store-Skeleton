@@ -67,7 +67,7 @@ test('above the stores a new ad is for every shop at once: the picker takes a fi
 
         expect(alpineConfig($html, 'uploadDropzone', 'picker-dropzone'))->not->toHaveKey('needsStore')
             ->and(alpineConfig($html, 'adEditor'))->toMatchArray(['canUpload' => true, 'choosesShop' => true, 'storeId' => null])
-            ->and($html)->toContain('<option value="">All shops</option>')
+            ->and($html)->toContain('<option value="">All organizations</option>')
             ->not->toContain('Choose the shop this ad is for first');
     }
 });

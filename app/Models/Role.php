@@ -146,7 +146,7 @@ class Role extends Model
     public function description(): string
     {
         if ($this->isSuperAdmin()) {
-            return 'Full control of the platform: every store, every account and the permission catalogue.';
+            return 'Full control of the platform: every organization, every account and the permission catalogue.';
         }
 
         $labels = $this->permissions->sortBy('id')->map(fn (Permission $permission) => $permission->display_name)->values();
@@ -158,7 +158,7 @@ class Role extends Model
         };
 
         return match (true) {
-            $this->isOwner() => "Owns the store. {$allows}",
+            $this->isOwner() => "Owns the organization. {$allows}",
             $this->isGlobal() => "Platform team. {$allows}",
             default => $allows,
         };

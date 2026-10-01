@@ -68,7 +68,7 @@ test('an upload above the stores with no shop chosen is shared with every shop, 
     Storage::disk('public')->assertExists($asset->path);
 
     $entry = ActivityLog::where('action', 'ad_asset.uploaded')->sole();
-    expect($entry->store_id)->toBeNull()->and($entry->description)->toContain('shared with every shop');
+    expect($entry->store_id)->toBeNull()->and($entry->description)->toContain('shared with every organization');
 });
 
 test('the chunked uploader shares a file too when no shop is chosen', function () {
@@ -137,7 +137,7 @@ test('a shared file is deleted above the stores alone — never by a shop, never
         ->and(json_encode($row))->not->toContain('Beta secret campaign');
 
     $this->deleteJson("/builder/assets/{$shared->id}")->assertForbidden()
-        ->assertJsonPath('message', 'A file shared with every shop is the platform\'s: only the platform deletes it.');
+        ->assertJsonPath('message', 'A file shared with every organization is the platform\'s: only the platform deletes it.');
 
     // Above the stores it waits for every shop's ad to let it go.
     $this->actingAs(createSuperAdmin());
@@ -185,7 +185,7 @@ test('above the stores the Shop list shows everything, what is shared, or one sh
         ->and($ids('?store_id='.$this->other->id))->toBe(collect([$shared->id, $beta->id])->sort()->values()->all());
 
     $labels = collect($this->getJson('/builder/assets/data')->json('assets'))->pluck('owner_label', 'id');
-    expect($labels[$shared->id])->toBe('Every shop')->and($labels[$beta->id])->toBe('Beta Deli');
+    expect($labels[$shared->id])->toBe('Every organization')->and($labels[$beta->id])->toBe('Beta Deli');
 
     // All shops is the one option for every shop: there is no "shared" to ask for besides.
     $this->getJson('/builder/assets/data?store_id=nope')->assertStatus(422);

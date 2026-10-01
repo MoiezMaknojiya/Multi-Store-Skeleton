@@ -45,7 +45,7 @@
             <div class="relative mr-1" x-data="{ storeMenu: false }"
                  @keydown.escape.window="if (storeMenu) { storeMenu = false; $refs.storeButton.focus() }"
                  @focusout="if (! $el.contains($event.relatedTarget)) storeMenu = false">
-                <button @click="storeMenu = !storeMenu" x-ref="storeButton" dusk="store-switcher" aria-label="Switch store — {{ $__currentStore['name'] ?? 'Select store' }}"
+                <button @click="storeMenu = !storeMenu" x-ref="storeButton" dusk="store-switcher" aria-label="Switch organization — {{ $__currentStore['name'] ?? 'Select organization' }}"
                     aria-haspopup="true" :aria-expanded="storeMenu.toString()"
                     class="flex items-center gap-2 px-3 py-1.5 rounded-xs border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-sm">
                     <svg class="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -54,7 +54,7 @@
                     {{-- On a phone the button is the icon alone, so the page title keeps some room; the
                          open menu still marks the current store. --}}
                     <span class="hidden max-w-[9rem] truncate font-medium text-gray-700 dark:text-gray-300 sm:block">
-                        {{ $__currentStore['name'] ?? 'Select store' }}
+                        {{ $__currentStore['name'] ?? 'Select organization' }}
                     </span>
                     <svg class="w-4 h-4 text-gray-500 flex-shrink-0 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
@@ -63,7 +63,7 @@
 
                 <div x-show="storeMenu" @click.outside="storeMenu = false" x-cloak
                     class="absolute right-0 mt-2 w-60 max-h-72 overflow-y-auto rounded-xs shadow-lg z-50 py-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
-                    <p class="px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Switch store</p>
+                    <p class="px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Switch organization</p>
                     @foreach($__stores as $__s)
                         <form method="POST" action="{{ route('store.switch') }}">
                             @csrf

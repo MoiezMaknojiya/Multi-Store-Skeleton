@@ -90,17 +90,17 @@ test('on the platform the super admin renames and changes a store role — in ev
 
     rolesAs($superAdmin)->putJson("/roles/{$staff->id}", ['name' => 'Cashier', 'permissions' => permissionIds(['screen-view', 'screen-store', 'media-view'])])
         ->assertOk()
-        ->assertJsonPath('message', 'Role Cashier updated in every store.');
+        ->assertJsonPath('message', 'Role Cashier updated in every organization.');
 
     $staff->refresh();
     expect($staff->name)->toBe('Cashier')
         ->and($staff->permissions()->pluck('name')->sort()->values()->all())->toBe(['media-view', 'screen-store', 'screen-view'])
         ->and($staff->description())->toBe('Allows View Screens, Pair Screens and View Media Library.')
-        ->and(ActivityLog::where('action', 'role.updated')->value('description'))->toBe('Updated store role Cashier (was Staff), in every store');
+        ->and(ActivityLog::where('action', 'role.updated')->value('description'))->toBe('Updated organization role Cashier (was Staff), in every organization');
 
     // What cannot work inside one store never goes on a store role.
     rolesAs($superAdmin)->putJson("/roles/{$staff->id}", ['name' => 'Cashier', 'permissions' => permissionIds(['activity-destroy', 'screen-view'])])
-        ->assertStatus(422)->assertJsonValidationErrors(['permissions' => 'A store role cannot hold Delete Old Activity Logs: it works above the stores only.']);
+        ->assertStatus(422)->assertJsonValidationErrors(['permissions' => 'An organization role cannot hold Delete Old Activity Logs: it works above the organizations only.']);
 
     // Super-Admin is never changed.
     rolesAs($superAdmin)->putJson('/roles/'.Role::superAdminId(), ['name' => 'Boss', 'permissions' => permissionIds(['screen-view'])])->assertForbidden();
@@ -117,7 +117,7 @@ test('the Owner role is renamed like any other, and never deleted; an unheld sto
         ->and(roleKeyIn($this->owner, $this->store))->toBe(Role::OWNER);
 
     rolesAs($superAdmin)->deleteJson("/roles/{$ownerRole->id}", ['password' => 'password'])
-        ->assertForbidden()->assertJsonPath('message', 'The Owner role is never deleted: it is how a store has an owner. Rename it or change what it allows instead.');
+        ->assertForbidden()->assertJsonPath('message', 'The Owner role is never deleted: it is how an organization has an owner. Rename it or change what it allows instead.');
 
     rolesAs($superAdmin)->deleteJson("/roles/{$viewer->id}", ['password' => 'password'])->assertOk();
     expect(Role::find($viewer->id))->toBeNull()->and(Role::find($ownerRole->id))->not->toBeNull();
@@ -140,7 +140,7 @@ test('the super admin says what a new role is for: a store role for every store,
     expect(Role::firstWhere('name', 'Floor Lead'))->is_global->toBeFalse()->store_id->toBeNull()
         ->and(Role::firstWhere('name', 'Support')->is_global)->toBeTrue()
         ->and(ActivityLog::where('action', 'role.created')->orderBy('id')->pluck('description')->all())
-        ->toBe(['Created store role Floor Lead, offered in every store', 'Created platform role Support']);
+        ->toBe(['Created organization role Floor Lead, offered in every organization', 'Created platform role Support']);
 
     // A store role is offered in every store's pickers; a store role never holds what works above the stores.
     expect(Role::availableInStore(Store::factory()->create()->id)->pluck('name'))->toContain('Floor Lead')->not->toContain('Support');
@@ -275,7 +275,7 @@ test('a role still held cannot be deleted; a store never changes the store roles
     rolesAs($this->owner, $this->store)->deleteJson("/roles/{$role->id}")
         ->assertStatus(422)->assertJsonPath('message', 'Please unassign Cashier from everyone first: 1 person still holds it.');
     rolesAs($this->owner, $this->store)->deleteJson('/roles/'.Role::starter(Role::STAFF)->id)
-        ->assertForbidden()->assertJsonPath('message', 'Store roles are changed by the super admin, for every store at once.');
+        ->assertForbidden()->assertJsonPath('message', 'Organization roles are changed by the super admin, for every organization at once.');
     rolesAs($this->owner, $this->store)->putJson('/roles/'.Role::starter(Role::VIEWER)->id, ['name' => 'Peeker', 'permissions' => permissionIds(['screen-view'])])
         ->assertForbidden();
 

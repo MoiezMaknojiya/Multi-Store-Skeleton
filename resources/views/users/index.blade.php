@@ -62,8 +62,8 @@
                                     x-bind:aria-label="'Log in as ' + item.name"
                                     @click="impersonate(item)" x-bind:disabled="impersonating" x-bind:dusk="'impersonate-' + item.id">Log In As</button>
                                 <button type="button" class="btn-row-neutral" x-show="item.can.manage_stores"
-                                    x-bind:aria-label="item.name + '’s stores'"
-                                    @click="openManageStores(item)" x-bind:disabled="loadingAccess" x-bind:dusk="'manage-stores-' + item.id">Stores</button>
+                                    x-bind:aria-label="item.name + '’s organizations'"
+                                    @click="openManageStores(item)" x-bind:disabled="loadingAccess" x-bind:dusk="'manage-stores-' + item.id">Organizations</button>
                                 <button type="button" class="btn-row-danger" x-show="item.can.remove_platform_role"
                                     x-bind:aria-label="'Remove the platform role of ' + item.name"
                                     @click="confirmRemoveRole(item)" x-bind:dusk="'remove-platform-role-' + item.id">Remove Platform Role</button>
@@ -136,7 +136,7 @@
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Invite to the platform team</h2>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        Platform staff work above the stores.
+                        Platform staff work above the organizations.
                     </p>
                 </div>
 
@@ -162,16 +162,16 @@
         <x-modal name="manage-stores" :show="false" maxWidth="2xl" focusable>
             <div class="p-6 space-y-6" dusk="manage-stores">
                 <div>
-                    <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"><span x-text="accessTarget?.name"></span>'s stores</h2>
+                    <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"><span x-text="accessTarget?.name"></span>'s organizations</h2>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        Add them to a store, change their role or take them out. It happens at once.
+                        Add them to an organization, change their role or take them out. It happens at once.
                     </p>
                 </div>
 
                 {{-- The stores they are in --}}
                 <section>
                     <h3 class="text-sm font-semibold text-gray-800 dark:text-gray-100">Member of</h3>
-                    <p x-show="access.memberships.length === 0" class="mt-2 text-sm text-gray-500 dark:text-gray-400">Not in any store yet.</p>
+                    <p x-show="access.memberships.length === 0" class="mt-2 text-sm text-gray-500 dark:text-gray-400">Not in any organization yet.</p>
                     <ul class="mt-2 divide-y divide-gray-100 dark:divide-gray-700">
                         <template x-for="membership in access.memberships" :key="membership.store_id">
                             <li class="py-3" x-bind:dusk="'membership-' + membership.store_id">
@@ -179,7 +179,7 @@
                                     <p class="sm:w-44 text-sm font-medium text-gray-800 dark:text-gray-100 truncate" x-text="membership.store_name"></p>
                                     <div class="flex-1 min-w-0">
                                         <select class="form-select" x-model.number="membership.selected_role_id" x-bind:dusk="'membership-role-' + membership.store_id"
-                                                aria-label="Role in this store">
+                                                aria-label="Role in this organization">
                                             <template x-for="role in rolesFor(membership.store_id)" :key="role.id">
                                                 <option x-bind:value="role.id" x-text="role.name" x-bind:selected="role.id === membership.selected_role_id"></option>
                                             </template>
@@ -206,7 +206,7 @@
                           class="alert-error mt-3">
                         <p>
                             Take <span class="font-semibold" x-text="accessTarget?.name"></span> out of
-                            <span class="font-semibold" x-text="removing?.store_name"></span>? What they made there stays with the store.
+                            <span class="font-semibold" x-text="removing?.store_name"></span>? What they made there stays with the organization.
                         </p>
                         {{-- They can be put back in, so it asks only that it is you. --}}
                         <x-crud.password-confirm id="remove-membership-password" model="removePassword" error="removePasswordError" hint="Confirm it is you." />
@@ -214,7 +214,7 @@
                             <x-secondary-button x-on:click="removing = null">Cancel</x-secondary-button>
                             <x-danger-button x-bind:disabled="removingBusy" dusk="remove-membership-confirm">
                                 <x-spinner x-show="removingBusy" x-cloak />
-                                Remove from Store
+                                Remove from Organization
                             </x-danger-button>
                         </div>
                     </form>
@@ -222,12 +222,12 @@
 
                 {{-- Add them to another store --}}
                 <section class="border-t border-gray-200 dark:border-gray-700 pt-5">
-                    <h3 class="text-sm font-semibold text-gray-800 dark:text-gray-100">Add to a store</h3>
-                    <p x-show="access.stores.length === 0" class="mt-2 text-sm text-gray-500 dark:text-gray-400">They are already in every store.</p>
+                    <h3 class="text-sm font-semibold text-gray-800 dark:text-gray-100">Add to an organization</h3>
+                    <p x-show="access.stores.length === 0" class="mt-2 text-sm text-gray-500 dark:text-gray-400">They are already in every organization.</p>
                     <form x-show="access.stores.length > 0" @submit.prevent="assignToStore()" class="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-start" dusk="assign-store-form">
                         <div x-bind:class="assignErrors.store_id ? 'crud-field-error' : ''">
-                            <select class="form-select" x-model="assignForm.store_id" @change="assignForm.role_id = ''" dusk="assign-store" aria-label="Store">
-                                <option value="">Choose a store</option>
+                            <select class="form-select" x-model="assignForm.store_id" @change="assignForm.role_id = ''" dusk="assign-store" aria-label="Organization">
+                                <option value="">Choose an organization</option>
                                 <template x-for="option in access.stores" :key="option.id">
                                     <option x-bind:value="option.id" x-text="option.name + (option.city ? ' — ' + option.city : '')"></option>
                                 </template>
@@ -301,18 +301,18 @@
             <form @submit.prevent="deleteItem()" class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Delete <span x-text="selectedItem?.name"></span>'s account?</h2>
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                    The account and its access to every store are deleted. What they added stays with the stores.
+                    The account and its access to every organization are deleted. What they added stays with the organizations.
                     <span class="font-semibold text-red-600 dark:text-red-400">This cannot be undone.</span>
                 </p>
                 <div x-show="selectedItem?.sole_owner_of?.length" x-cloak class="alert-warning mt-4">
                     They are the only Owner of <span class="font-semibold" x-text="(selectedItem?.sole_owner_of ?? []).join(', ')"></span>.
-                    <span x-text="(selectedItem?.sole_owner_of?.length ?? 0) === 1 ? 'That store' : 'Those stores'"></span>
+                    <span x-text="(selectedItem?.sole_owner_of?.length ?? 0) === 1 ? 'That organization' : 'Those organizations'"></span>
                     {{-- Only the ways back this viewer actually has: Stores here is the super admin's alone, and
                          Invite owner on the Stores page needs View Stores and Create Stores (routes/web.php). --}}
                     @can('super-admin-tier')
-                        will have no owner until you give it one — Invite owner on Stores, or Stores here on Users.
+                        will have no owner until you give it one — Invite owner on Organizations, or Organizations here on Users.
                     @elsecan(['store-view', 'store-store'])
-                        will have no owner until you give it one — Invite owner on Stores.
+                        will have no owner until you give it one — Invite owner on Organizations.
                     @else
                         will have no owner until one is given.
                     @endcan

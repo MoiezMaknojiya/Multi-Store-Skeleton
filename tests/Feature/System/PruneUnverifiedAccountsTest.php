@@ -43,7 +43,7 @@ test('an account never confirmed is removed after seven days, with its store', f
 
     $entry = ActivityLog::where('action', 'account.pruned')->sole();
     expect($entry->store_id)->toBe($storeId)
-        ->and($entry->description)->toBe('Removed spam@example.com, never confirmed within 7 days, with the store Store of spam@example.com');
+        ->and($entry->description)->toBe('Removed spam@example.com, never confirmed within 7 days, with the organization Store of spam@example.com');
 });
 
 test('a week is counted to the second; a confirmed account, or a newer one, is never touched', function () {
@@ -69,8 +69,8 @@ test('a store somebody put people or files in is kept, with the account, and the
     Media::factory()->create(['store_id' => $withFile->stores()->value('stores.id')]);
 
     $this->artisan('accounts:prune-unverified')
-        ->expectsOutputToContain('Kept shared@example.com: a store of theirs has other people in it.')
-        ->expectsOutputToContain('Kept files@example.com: a store of theirs is not empty (media).')
+        ->expectsOutputToContain('Kept shared@example.com: an organization of theirs has other people in it.')
+        ->expectsOutputToContain('Kept files@example.com: an organization of theirs is not empty (media).')
         ->expectsOutputToContain('0 account(s) removed. 2 kept')
         ->assertSuccessful();
 

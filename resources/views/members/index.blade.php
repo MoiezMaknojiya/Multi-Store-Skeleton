@@ -272,7 +272,7 @@
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'leave-store')">Cancel</x-secondary-button>
                     <x-danger-button x-on:click="leave()" x-bind:disabled="leaving" dusk="leave-store-confirm">
                         <x-spinner x-show="leaving" x-cloak />
-                        Leave Store
+                        Leave Organization
                     </x-danger-button>
                 </div>
             </div>
@@ -290,7 +290,7 @@
                 </div>
                 <button type="button" class="btn-secondary" dusk="leave-store"
                     x-on:click="isSoleOwner() ? window.toast('You are the only Owner of ' + storeName + '. Make someone else an Owner before you leave.') : $dispatch('open-modal', 'leave-store')">
-                    Leave Store
+                    Leave Organization
                 </button>
             </div>
         </div>

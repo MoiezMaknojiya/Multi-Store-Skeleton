@@ -196,12 +196,12 @@ class InvitationResponseController extends Controller
 
             // stores() joins real stores, so the platform row (store_id = 0) is never among them.
             return $user->stores()->exists()
-                ? 'Your account is a member of one or more stores. A store account cannot join the platform team.'
+                ? 'Your account is a member of one or more organizations. An organization account cannot join the platform team.'
                 : null;
         }
 
         return $user->globalRole() !== null
-            ? 'Platform accounts cannot join a store.'
+            ? 'Platform accounts cannot join an organization.'
             : null;
     }
 

@@ -5,16 +5,16 @@
 <section>
     <header class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
-            <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ __('Your stores') }}</h2>
+            <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ __('Your organizations') }}</h2>
             <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                {{ __('Your stores and your role in each.') }}
+                {{ __('Your organizations and your role in each.') }}
             </p>
         </div>
 
         @if ($canOpenStore ?? false)
             {{-- Secondary: this card's own action stands beside the page's Save changes, which is the primary. --}}
             <x-secondary-button class="shrink-0" x-data x-on:click.prevent="$dispatch('open-modal', 'open-store')" dusk="open-store-button">
-                {{ __('Create Store') }}
+                {{ __('Create Organization') }}
             </x-secondary-button>
         @endif
     </header>
@@ -26,7 +26,7 @@
     @endif
 
     @if ($memberships->isEmpty())
-        <p class="mt-6 text-sm text-gray-500 dark:text-gray-400" dusk="no-store-memberships">{{ __('You are not a member of any store yet.') }}</p>
+        <p class="mt-6 text-sm text-gray-500 dark:text-gray-400" dusk="no-store-memberships">{{ __('You are not a member of any organization yet.') }}</p>
     @else
         <ul class="mt-6 divide-y divide-gray-100 dark:divide-gray-700 rounded-md border border-gray-200 dark:border-gray-700">
             @foreach ($memberships as $membership)
@@ -60,12 +60,12 @@
 
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">{{ __('Leave :store?', ['store' => $memberStore->name]) }}</h2>
                     <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                        {{ __('You lose access to this store straight away. What you added there stays with the store. To come back, someone in the store has to invite you again.') }}
+                        {{ __('You lose access to this organization straight away. What you added there stays with the organization. To come back, someone in the organization has to invite you again.') }}
                     </p>
 
                     <div class="mt-6 flex flex-wrap justify-end gap-3">
                         <x-secondary-button x-on:click="$dispatch('close')">{{ __('Cancel') }}</x-secondary-button>
-                        <x-danger-button dusk="leave-store-{{ $memberStore->id }}-confirm">{{ __('Leave Store') }}</x-danger-button>
+                        <x-danger-button dusk="leave-store-{{ $memberStore->id }}-confirm">{{ __('Leave Organization') }}</x-danger-button>
                     </div>
                 </form>
             </x-modal>

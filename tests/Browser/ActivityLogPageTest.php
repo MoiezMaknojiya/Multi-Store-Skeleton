@@ -29,7 +29,7 @@ class ActivityLogPageTest extends DuskTestCase
             $this->jsType($browser, '@store-zip', '75201');
             $this->jsType($browser, '@store-owner-email', 'audit@example.com');
             $this->jsClick($browser, '@store-save');
-            $browser->waitForText('Store created.');
+            $browser->waitForText('Organization created.');
 
             // The entry shows on the Activity Log page under the DEFAULT range
             // ("Last 30 days"). This also guards the timezone fix: the just-created
@@ -38,9 +38,9 @@ class ActivityLogPageTest extends DuskTestCase
             // midnight UTC.
             $browser->visit('/activity');
             $this->waitForAlpine($browser);
-            // The action reads in words ("Store created"), its code name kept as the badge's tooltip.
-            $browser->waitForText('Created store Audit Mart and invited audit@example.com to own it')
-                ->assertSee('Store created')
+            // The action reads in words ("Organization created"), its code name kept as the badge's tooltip.
+            $browser->waitForText('Created organization Audit Mart and invited audit@example.com to own it')
+                ->assertSee('Organization created')
                 ->assertPresent('[title="store.created"]');
         });
     }

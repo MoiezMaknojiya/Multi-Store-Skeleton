@@ -214,7 +214,7 @@ export function arrangePanel() {
             const skipped = copied.length - usable.length;
 
             if (usable.length === 0) {
-                window.toast('Those pictures are not on this shop\'s shelf, so there was nothing to paste.');
+                window.toast('Those pictures are not on this organization\'s shelf, so there was nothing to paste.');
 
                 return;
             }
@@ -278,7 +278,7 @@ export function arrangePanel() {
             this.commit('Paste');
 
             if (skipped > 0) {
-                window.toast(`${skipped} ${skipped === 1 ? 'element was' : 'elements were'} left out: the picture is not on this shop's shelf.`);
+                window.toast(`${skipped} ${skipped === 1 ? 'element was' : 'elements were'} left out: the picture is not on this organization's shelf.`);
             }
         },
 

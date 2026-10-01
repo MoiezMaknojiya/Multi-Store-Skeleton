@@ -12,7 +12,7 @@
 
 <x-app-layout>
     <x-slot name="header">
-        <h1 class="page-title">{{ __('Stores') }}</h1>
+        <h1 class="page-title">{{ __('Organizations') }}</h1>
     </x-slot>
 
     <div x-data="storesTable()"
@@ -26,8 +26,8 @@
                 <span class="text-xs text-gray-500 dark:text-gray-400">
                     Network advertising &mdash;
                     <span x-text="selectedStoreIds.length === 0
-                        ? 'tick the shops below'
-                        : selectedStoreIds.length + (selectedStoreIds.length === 1 ? ' shop' : ' shops') + ' selected'">tick the shops below</span>
+                        ? 'tick the organizations below'
+                        : selectedStoreIds.length + (selectedStoreIds.length === 1 ? ' organization' : ' organizations') + ' selected'">tick the organizations below</span>
                 </span>
                 {{-- Page actions on the ticked shops: a disabled button looks disabled by itself (btn-secondary). --}}
                 <button type="button" @click="askStoreAds(true)" dusk="stores-ads-on" class="btn-secondary"
@@ -38,10 +38,10 @@
         </div>
         @endif
 
-        <x-crud.table-wrapper title="All Stores" searchPlaceholder="Search stores..." :columns="$columns">
+        <x-crud.table-wrapper title="All Organizations" searchPlaceholder="Search organizations..." :columns="$columns">
             @can('store-store')
                 <x-slot name="actions">
-                    <x-crud.add-button label="Add Store" @click="openFormModal()" dusk="add-store" />
+                    <x-crud.add-button label="Add Organization" @click="openFormModal()" dusk="add-store" />
                 </x-slot>
             @endcan
             <x-slot name="head">
@@ -49,7 +49,7 @@
                 <th class="px-5 py-3 text-left font-semibold w-10">
                     <input type="checkbox" class="form-checkbox" dusk="select-all-stores"
                            x-bind:checked="allOnPageSelected()" @change="toggleSelectAll()"
-                           x-bind:disabled="items.length === 0" aria-label="Select every shop on this page">
+                           x-bind:disabled="items.length === 0" aria-label="Select every organization on this page">
                 </th>
                 @endif
                 <th class="px-5 py-3 text-left font-semibold">Name</th>
@@ -63,7 +63,7 @@
             </x-slot>
 
             <x-slot name="body">
-                <x-crud.table-empty :columns="$columns" itemsVar="items" message="No stores yet." />
+                <x-crud.table-empty :columns="$columns" itemsVar="items" message="No organizations yet." />
 
                 <template x-for="item in items" :key="item.id">
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -122,12 +122,12 @@
             <div class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
                     x-text="(pendingAdsAccepts ? 'Switch advertising on for ' : 'Switch advertising off for ')
-                        + selectedStoreIds.length + (selectedStoreIds.length === 1 ? ' shop?' : ' shops?')"></h2>
+                        + selectedStoreIds.length + (selectedStoreIds.length === 1 ? ' organization?' : ' organizations?')"></h2>
 
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
                     This also switches the
                     <span class="font-semibold" x-text="selectedScreenCount() + (selectedScreenCount() === 1 ? ' screen' : ' screens')"></span>
-                    inside those shops.
+                    inside those organizations.
                 </p>
 
                 <p class="alert-warning mt-3" x-show="selectedScreenCount() > 0" x-cloak>
@@ -175,7 +175,7 @@
                     <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-store-deletion')">Cancel</x-secondary-button>
                     <x-danger-button x-bind:disabled="deleting" dusk="delete-store-confirm">
                         <x-spinner x-show="deleting" x-cloak />
-                        Delete Store
+                        Delete Organization
                     </x-danger-button>
                 </div>
             </form>
@@ -187,7 +187,7 @@
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Give <span x-text="ownerStore?.name"></span> an owner</h2>
                     <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                        Someone already in the store becomes its Owner at once. Anyone else gets an email invitation.
+                        Someone already in the organization becomes its Owner at once. Anyone else gets an email invitation.
                     </p>
                 </div>
                 <div>
@@ -209,10 +209,10 @@
         <x-modal name="store-form-modal" :show="false" maxWidth="2xl" persistent>
             <div class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
-                    x-text="editingItem ? 'Edit Store' : 'Add Store'"></h2>
+                    x-text="editingItem ? 'Edit Organization' : 'Add Organization'"></h2>
                 <form @submit.prevent="saveItem" novalidate dusk="store-form" class="mt-4 space-y-4">
 
-                    <x-crud.form-field label="Store Name" field="name" :required="true">
+                    <x-crud.form-field label="Organization Name" field="name" :required="true">
                         <x-text-input x-model="form.name" dusk="store-name" maxlength="255" autocomplete="off" />
                     </x-crud.form-field>
 
@@ -257,7 +257,7 @@
                         <x-crud.form-field label="Owner's email" field="owner_email" :required="true">
                             <x-text-input type="email" x-model="form.owner_email" dusk="store-owner-email" maxlength="255" autocomplete="off" placeholder="owner@example.com" />
                         </x-crud.form-field>
-                        <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">They'll get an email invitation to own this store.</p>
+                        <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">They'll get an email invitation to own this organization.</p>
                     </div>
 
                     {{-- Active Checkbox: switching a store on or off is the platform's alone. Off, the store is paused
@@ -268,7 +268,7 @@
                                 aria-describedby="store-active-hint" class="form-checkbox">
                             <label for="is_active" class="text-sm text-gray-700 dark:text-gray-300">Active</label>
                         </div>
-                        <p id="store-active-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">Off pauses the store: its people cannot open it, and its screens keep playing.</p>
+                        <p id="store-active-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">Off pauses the organization: its people cannot open it, and its screens keep playing.</p>
                     </div>
 
                     <x-crud.form-actions savingVar="saving" dusk="store-save" />

@@ -53,7 +53,11 @@ shops) is out of scope; these rules stay the same if it is added later.
 
 - **Account** (`users`) — an identity: name, phone, email, password. Owned by the person.
 - **Store** — the organization. Owns members, custom roles, invitations, screens, media, playlists, dayparts,
-  its own channels, and its Ad Builder designs and assets.
+  its own channels, and its Ad Builder designs and assets. **On the screens it is called an Organization**
+  (owner, 2026-10-01: the app is sold to hospitals, schools and other institutes as well as shops): every word a
+  person reads says organization where it said store or shop, while the code, the tables, the routes and the
+  permission names keep "store" — the Stores page reads Organizations, a store role an Organization role, View
+  Stores reads View Organizations (see `.claude/rules/02-project-conventions.md`, "People read organization").
 - **Membership** — a `store_user` row `(user_id, store_id > 0, role_id)`. One role per person per store.
 - **Platform membership** — a `store_user` row with `store_id = 0` holding a global role (unchanged sentinel).
 - **Store role** — a role the super admin makes for the stores: offered in every store, the same everywhere.

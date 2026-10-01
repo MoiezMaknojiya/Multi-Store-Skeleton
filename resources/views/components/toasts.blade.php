@@ -32,7 +32,7 @@
 
 {{-- A saved form says so as a toast in words — a key is never shown raw — and the email's own keys stay beside the
      email field on the profile, which says them there. --}}
-@php($__said = ['profile-updated' => 'Your profile is saved.', 'password-updated' => 'Your password is changed.', 'store-updated' => 'Store details saved.'])
+@php($__said = ['profile-updated' => 'Your profile is saved.', 'password-updated' => 'Your password is changed.', 'store-updated' => 'Organization details saved.'])
 @php($__toast = is_string($__flash) && ! in_array($__flash, ['email-pending', 'email-link-resent', 'email-changed', 'email-change-cancelled', 'verification-link-sent'], true) ? ($__said[$__flash] ?? $__flash) : null)
 @if ($__toast)
     <script>

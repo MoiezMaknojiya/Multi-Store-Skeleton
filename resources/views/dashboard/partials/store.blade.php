@@ -10,7 +10,7 @@
     @if (count($summary['steps']))
         <section class="card" aria-labelledby="dashboard-steps-title" dusk="dashboard-steps">
             <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-                <h2 id="dashboard-steps-title" class="text-base font-semibold text-gray-800 dark:text-white">Get your shop on screen</h2>
+                <h2 id="dashboard-steps-title" class="text-base font-semibold text-gray-800 dark:text-white">Get your organization on screen</h2>
                 <span class="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap" dusk="dashboard-steps-progress">
                     {{ collect($summary['steps'])->where('done', true)->count() }} of {{ count($summary['steps']) }} done
                 </span>

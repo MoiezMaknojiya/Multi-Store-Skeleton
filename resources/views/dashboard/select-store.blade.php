@@ -1,9 +1,9 @@
 <x-focused-layout>
-    <x-slot name="header">Choose a store</x-slot>
+    <x-slot name="header">Choose an organization</x-slot>
 
     <div class="mb-4">
         <p class="text-sm text-gray-500 dark:text-gray-400">
-            Choose the store you want to work in.
+            Choose the organization you want to work in.
         </p>
     </div>
 

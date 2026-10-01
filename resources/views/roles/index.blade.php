@@ -21,9 +21,9 @@
                     <h2 class="text-subheading">{{ $store ? 'Roles in '.$store->name : 'All roles' }}</h2>
                     <p class="mt-1 max-w-3xl text-sm text-gray-500 dark:text-gray-400">
                         @if ($store)
-                            Store roles come from the platform. Custom roles are {{ $store->name }}'s own.
+                            Organization roles come from the platform. Custom roles are {{ $store->name }}'s own.
                         @else
-                            Store roles are offered in every store. Platform roles are for your team.
+                            Organization roles are offered in every organization. Platform roles are for your team.
                         @endif
                     </p>
                 </div>
@@ -96,8 +96,8 @@
         <div class="card" dusk="store-custom-roles" x-show="!loading && storeCustomRoles().length > 0" x-cloak>
             <div class="card-header">
                 <div>
-                    <h2 class="text-subheading">Custom roles made in stores</h2>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Each belongs to its own store and is offered there alone.</p>
+                    <h2 class="text-subheading">Custom roles made in organizations</h2>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Each belongs to its own organization and is offered there alone.</p>
                 </div>
             </div>
             <div class="overflow-x-auto">
@@ -105,7 +105,7 @@
                     <thead>
                         <tr class="table-head-row">
                             <th class="px-5 py-3 text-left font-semibold">Role</th>
-                            <th class="px-5 py-3 text-left font-semibold">Store</th>
+                            <th class="px-5 py-3 text-left font-semibold">Organization</th>
                             <th class="px-5 py-3 text-left font-semibold">Permissions</th>
                             <th class="px-5 py-3 text-left font-semibold">Members</th>
                             <th class="px-5 py-3 text-right font-semibold">Actions</th>
@@ -160,15 +160,15 @@
                         <label class="role-choice">
                             <input type="radio" name="role-type" value="store" class="mt-0.5 accent-blue-600" x-model="form.type" @change="changeType('store')" dusk="role-type-store">
                             <span>
-                                <span class="block text-sm font-medium text-gray-800 dark:text-gray-100">Store role</span>
-                                <span class="block text-xs text-gray-500 dark:text-gray-400">Offered in every store. Its permissions reach the member's own store.</span>
+                                <span class="block text-sm font-medium text-gray-800 dark:text-gray-100">Organization role</span>
+                                <span class="block text-xs text-gray-500 dark:text-gray-400">Offered in every organization. Its permissions reach the member's own organization.</span>
                             </span>
                         </label>
                         <label class="role-choice">
                             <input type="radio" name="role-type" value="platform" class="mt-0.5 accent-blue-600" x-model="form.type" @change="changeType('platform')" dusk="role-type-platform">
                             <span>
                                 <span class="block text-sm font-medium text-gray-800 dark:text-gray-100">Platform role</span>
-                                <span class="block text-xs text-gray-500 dark:text-gray-400">For your team above the stores. Its permissions reach every store.</span>
+                                <span class="block text-xs text-gray-500 dark:text-gray-400">For your team above the organizations. Its permissions reach every organization.</span>
                             </span>
                         </label>
                     </div>

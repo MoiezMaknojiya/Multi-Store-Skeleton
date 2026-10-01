@@ -325,7 +325,7 @@ export function registerCampaignsTable(Alpine) {
 
             /** Why this screen cannot be chosen, in words. */
             blockedReason(screen) {
-                if (! screen.store_accepts) return 'this shop has not agreed to advertising';
+                if (! screen.store_accepts) return 'this organization has not agreed to advertising';
                 if (! screen.screen_accepts) return 'this screen is kept clear of advertising';
 
                 return '';

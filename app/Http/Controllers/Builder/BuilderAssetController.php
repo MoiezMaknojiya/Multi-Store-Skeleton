@@ -125,7 +125,7 @@ class BuilderAssetController extends Controller
         );
 
         ActivityLog::record('ad_asset.uploaded', $asset, $storeId === null
-            ? "Uploaded {$asset->title} to the ad builder, shared with every shop"
+            ? "Uploaded {$asset->title} to the ad builder, shared with every organization"
             : "Uploaded {$asset->title} to the ad builder", storeId: $storeId);
 
         $request->forgetFinishedUpload();
@@ -143,7 +143,7 @@ class BuilderAssetController extends Controller
         $asset = BuilderAsset::visibleTo(auth()->user())->findOrFail($asset->id);
 
         abort_unless($this->mayDelete($asset), 403, $asset->isShared() && ! $this->aboveTheStores()
-            ? 'A file shared with every shop is the platform\'s: only the platform deletes it.'
+            ? 'A file shared with every organization is the platform\'s: only the platform deletes it.'
             : 'Deleting a file needs the Delete Ads permission.');
 
         $usage = $this->usageFor(collect([$asset]))[$asset->id] ?? null;
@@ -162,7 +162,7 @@ class BuilderAssetController extends Controller
         DB::transaction(fn () => $asset->delete());
 
         ActivityLog::record('ad_asset.deleted', null, $shared
-            ? "Deleted {$title}, shared with every shop, from the ad builder"
+            ? "Deleted {$title}, shared with every organization, from the ad builder"
             : "Deleted ad asset {$title}", storeId: $storeId);
 
         return response()->json(['message' => 'Deleted', 'storage' => $this->quota->summary($shared ? $this->standingStoreId() : $storeId)]);
@@ -229,7 +229,7 @@ class BuilderAssetController extends Controller
                         $usage[$assetId]['names'][] = match (true) {
                             $viewerStore !== null || ! $sharedFile => $ad->name,
                             $ad->store !== null => "{$ad->name} ({$ad->store->name})",
-                            default => "{$ad->name} (every shop)",
+                            default => "{$ad->name} (every organization)",
                         };
                     }
                 }
@@ -252,8 +252,8 @@ class BuilderAssetController extends Controller
         $others = implode(' and ', array_filter([
             match (true) {
                 $elsewhere === 0 => null,
-                $elsewhere === 1 => 'an ad of another shop',
-                default => "{$elsewhere} ads of other shops",
+                $elsewhere === 1 => 'an ad of another organization',
+                default => "{$elsewhere} ads of other organizations",
             },
             match (true) {
                 $platform === 0 => null,
@@ -263,13 +263,13 @@ class BuilderAssetController extends Controller
         ]));
 
         if ($names === []) {
-            return "Still used by {$others}, so it stays: it can go once no shop's ad uses it.";
+            return "Still used by {$others}, so it stays: it can go once no organization's ad uses it.";
         }
 
         $named = implode(', ', array_slice($names, 0, 3)).(count($names) > 3 ? ' and '.(count($names) - 3).' more' : '');
 
         return $others !== ''
-            ? "Still used by {$named}, and by {$others}, so it stays: it can go once no shop's ad uses it."
+            ? "Still used by {$named}, and by {$others}, so it stays: it can go once no organization's ad uses it."
             : "Still used by {$named}. Take it out of those ads first, and publish the ones whose screens still show it.";
     }
 
@@ -283,7 +283,7 @@ class BuilderAssetController extends Controller
     private function ownerLabel(BuilderAsset $asset): ?string
     {
         if ($this->aboveTheStores()) {
-            return $asset->isShared() ? 'Every shop' : $asset->store?->name;
+            return $asset->isShared() ? 'Every organization' : $asset->store?->name;
         }
 
         return $asset->isShared() ? 'From the platform' : null;
@@ -307,7 +307,7 @@ class BuilderAssetController extends Controller
 
             if (! Store::whereKey($storeId)->exists()) {
                 throw ValidationException::withMessages([
-                    'file' => 'That shop no longer exists. Reload the page and choose again.',
+                    'file' => 'That organization no longer exists. Reload the page and choose again.',
                 ]);
             }
 
@@ -318,7 +318,7 @@ class BuilderAssetController extends Controller
 
         if (! $storeId) {
             throw ValidationException::withMessages([
-                'file' => 'Select a store before uploading — an ad\'s pictures belong to the shop they were uploaded for.',
+                'file' => 'Select an organization before uploading — an ad\'s pictures belong to the organization they were uploaded for.',
             ]);
         }
 

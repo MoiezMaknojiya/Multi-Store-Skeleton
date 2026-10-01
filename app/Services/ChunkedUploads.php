@@ -233,14 +233,14 @@ class ChunkedUploads
         abort_unless($user->can('media-store'), 403);
 
         if ($user->globalRole() === null) {
-            return $this->currentStore('Select a store before uploading — media belongs to the store it is uploaded in.');
+            return $this->currentStore('Select an organization before uploading — media belongs to the organization it is uploaded in.');
         }
 
         if ($library === null || $library === '' || $library === 'platform') {
             return null;
         }
 
-        return $this->existingStore($library, 'That shop no longer exists. Reload the page and choose again.');
+        return $this->existingStore($library, 'That organization no longer exists. Reload the page and choose again.');
     }
 
     /** A channel's Upload joins the channel's library: the shop's for a shop's channel, none for the platform's. */
@@ -274,10 +274,10 @@ class ChunkedUploads
         if ($user->globalRole() !== null) {
             return $store === null || $store === '' || $store === 'shared'
                 ? null
-                : $this->existingStore($store, 'That shop no longer exists. Reload the page and choose again.');
+                : $this->existingStore($store, 'That organization no longer exists. Reload the page and choose again.');
         }
 
-        return $this->currentStore('Select a store before uploading — an ad\'s pictures belong to the shop they were uploaded for.');
+        return $this->currentStore('Select an organization before uploading — an ad\'s pictures belong to the organization they were uploaded for.');
     }
 
     private function currentStore(string $missing): int
@@ -311,7 +311,7 @@ class ChunkedUploads
     {
         return DB::transaction(function () use ($storeId, $size, $create) {
             if (Store::whereKey($storeId)->lockForUpdate()->first(['id']) === null) {
-                throw ValidationException::withMessages(['file' => 'That shop no longer exists. Reload the page and choose again.']);
+                throw ValidationException::withMessages(['file' => 'That organization no longer exists. Reload the page and choose again.']);
             }
 
             $taken = $this->quota->used($storeId) + (int) Upload::where('store_id', $storeId)->open()->sum('size');
