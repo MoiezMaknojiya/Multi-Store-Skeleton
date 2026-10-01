@@ -11,12 +11,12 @@ use Illuminate\Support\Facades\Storage;
 
 /**
  * A file on its way in, sent in chunks by the tus protocol (docs/UPLOADS-SPEC.md). It belongs to the person sending
- * it and to the purpose it was opened for, counts to the shop it will join (store_id, NULL for the platform's library
+ * it and to the purpose it was opened for, counts to the organization it will join (organization_id, NULL for the platform's library
  * and the ads network), and lives until the form it was chosen for makes its row — or until it expires.
  *
  * @property string $id
  * @property int $user_id
- * @property int|null $store_id
+ * @property int|null $organization_id
  * @property string $purpose
  * @property string $filename
  * @property string|null $file_type
@@ -34,13 +34,13 @@ class Upload extends Model
     /** Where the bytes wait (config/filesystems.php): private, never served, a folder of its own per environment. */
     public const DISK = 'uploads';
 
-    protected $fillable = ['user_id', 'store_id', 'purpose', 'filename', 'file_type', 'size', 'received', 'expires_at'];
+    protected $fillable = ['user_id', 'organization_id', 'purpose', 'filename', 'file_type', 'size', 'received', 'expires_at'];
 
     protected function casts(): array
     {
         return [
             'user_id' => 'integer',
-            'store_id' => 'integer',
+            'organization_id' => 'integer',
             'size' => 'integer',
             'received' => 'integer',
             'expires_at' => 'datetime',

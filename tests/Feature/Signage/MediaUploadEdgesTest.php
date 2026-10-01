@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\VideoFiles;
@@ -19,16 +19,16 @@ use Tests\Support\VideoFiles;
 
 test('an absurdly long filename becomes a usable title instead of a database error', function () {
     Storage::fake('public');
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['media-store']);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['media-store']);
 
     // A real filesystem caps names near 255, but a crafted request is not bound
-    // by that. Untrimmed this lands in a varchar(255) column and the shop owner
+    // by that. Untrimmed this lands in a varchar(255) column and the organization owner
     // gets a 500 rather than a file in their library.
     $name = str_repeat('a', 400).'.jpg';
 
     $this->actingAs($actor)
-        ->withSession(['current_store_id' => $store->id])
+        ->withSession(['current_organization_id' => $organization->id])
         ->post('/media', ['file' => UploadedFile::fake()->image($name)])
         ->assertOk();
 
@@ -39,13 +39,13 @@ test('an absurdly long filename becomes a usable title instead of a database err
 
 test('a file with no name of its own still gets a title', function () {
     Storage::fake('public');
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['media-store']);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['media-store']);
 
     // ".jpg" has an extension and nothing else, so the name-without-extension is
     // empty. A blank row in the library is a row nobody can identify or search.
     $this->actingAs($actor)
-        ->withSession(['current_store_id' => $store->id])
+        ->withSession(['current_organization_id' => $organization->id])
         ->post('/media', ['file' => UploadedFile::fake()->image('.jpg')])
         ->assertOk();
 
@@ -54,11 +54,11 @@ test('a file with no name of its own still gets a title', function () {
 
 test('a title of nothing but spaces falls back to the file name', function () {
     Storage::fake('public');
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['media-store']);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['media-store']);
 
     $this->actingAs($actor)
-        ->withSession(['current_store_id' => $store->id])
+        ->withSession(['current_organization_id' => $organization->id])
         ->post('/media', [
             'file' => UploadedFile::fake()->image('breakfast.jpg'),
             'title' => '   ',
@@ -70,11 +70,11 @@ test('a title of nothing but spaces falls back to the file name', function () {
 
 test('a title the owner actually typed is kept, spaces trimmed', function () {
     Storage::fake('public');
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['media-store']);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['media-store']);
 
     $this->actingAs($actor)
-        ->withSession(['current_store_id' => $store->id])
+        ->withSession(['current_organization_id' => $organization->id])
         ->post('/media', [
             'file' => UploadedFile::fake()->image('ignored.jpg'),
             'title' => '  Breakfast Board  ',
@@ -86,14 +86,14 @@ test('a title the owner actually typed is kept, spaces trimmed', function () {
 
 test('a typed title longer than the column is refused, not silently cut', function () {
     Storage::fake('public');
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['media-store']);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['media-store']);
 
     // Deliberately different from the filename fallback above: what somebody
     // TYPED should come back as an error they can see and fix, not be quietly
     // shortened behind their back.
     $this->actingAs($actor)
-        ->withSession(['current_store_id' => $store->id])
+        ->withSession(['current_organization_id' => $organization->id])
         ->postJson('/media', [
             'file' => UploadedFile::fake()->image('menu.jpg'),
             'title' => str_repeat('b', 256),
@@ -106,13 +106,13 @@ test('a typed title longer than the column is refused, not silently cut', functi
 
 test('a file bigger than the limit is refused with a message about the size', function () {
     Storage::fake('public');
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['media-store']);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['media-store']);
 
     // The cap is declared in StoreMediaRequest but was never exercised, so
     // nothing proved the limit or its wording actually reached anyone.
     $this->actingAs($actor)
-        ->withSession(['current_store_id' => $store->id])
+        ->withSession(['current_organization_id' => $organization->id])
         ->postJson('/media', [
             'file' => UploadedFile::fake()->create('feature.mp4', 300_000, 'video/mp4'),
         ])
@@ -124,13 +124,13 @@ test('a file bigger than the limit is refused with a message about the size', fu
 
 test('a file right on the limit is still accepted', function () {
     Storage::fake('public');
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['media-store']);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['media-store']);
 
     // The boundary matters as much as the refusal: an off-by-one here would turn
     // away files the product promises to take.
     $this->actingAs($actor)
-        ->withSession(['current_store_id' => $store->id])
+        ->withSession(['current_organization_id' => $organization->id])
         ->post('/media', [
             // A real video's bytes, reporting exactly the ceiling's size.
             'file' => VideoFiles::upload(VideoFiles::mp4(120), 'feature.mp4', 256_000),
@@ -142,8 +142,8 @@ test('a file right on the limit is still accepted', function () {
 
 test('an empty file is refused', function () {
     Storage::fake('public');
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['media-store']);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['media-store']);
 
     // A REAL empty file, not UploadedFile::fake() — the fake declares its own
     // mime type from the extension, which is exactly the check being tested here.
@@ -154,7 +154,7 @@ test('an empty file is refused', function () {
 
     try {
         $this->actingAs($actor)
-            ->withSession(['current_store_id' => $store->id])
+            ->withSession(['current_organization_id' => $organization->id])
             ->postJson('/media', ['file' => new UploadedFile($path, 'empty.jpg', null, null, true)])
             ->assertStatus(422)
             ->assertJsonValidationErrors(['file']);

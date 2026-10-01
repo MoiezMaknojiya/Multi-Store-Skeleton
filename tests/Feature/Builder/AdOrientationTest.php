@@ -3,8 +3,8 @@
 use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Support\Facades\Storage;
 
 /*
@@ -22,13 +22,13 @@ use Illuminate\Support\Facades\Storage;
 beforeEach(function () {
     Storage::fake('public');
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->designer = createStoreUser(
-        $this->store,
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->designer = createOrganizationUser(
+        $this->organization,
         ['ad-view', 'ad-store', 'ad-update', 'ad-destroy', 'screen-view', 'screen-update', 'screen-playlist', 'channel-view', 'channel-update'],
         'Designer',
     );
-    $this->actingAs($this->designer)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->designer)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 /** A minimal, valid design of the given shape: one line of text on the stage. */
@@ -119,7 +119,7 @@ test('a stage that is not its orientation’s size is refused — when the ad is
     expect(BuilderAd::count())->toBe(0);
 
     // A saved portrait ad cannot be turned into a landscape one by saving a landscape design…
-    $ad = BuilderAd::factory()->portrait()->withText()->create(['store_id' => $this->store->id]);
+    $ad = BuilderAd::factory()->portrait()->withText()->create(['organization_id' => $this->organization->id]);
 
     $this->putJson("/builder/{$ad->id}", ['name' => $ad->name, 'document' => orientedDocument('landscape')])
         ->assertStatus(422)->assertJsonValidationErrors(['document.stage.width', 'document.stage.height']);
@@ -148,7 +148,7 @@ test('an orientation nobody offers is refused', function () {
 });
 
 test('publishing a portrait ad writes a page of its own size, on a portrait media row, with the stage colour around it', function () {
-    $ad = BuilderAd::factory()->portrait()->withText('Menu of the day')->create(['store_id' => $this->store->id, 'name' => 'Menu board']);
+    $ad = BuilderAd::factory()->portrait()->withText('Menu of the day')->create(['organization_id' => $this->organization->id, 'name' => 'Menu board']);
 
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
 
@@ -170,7 +170,7 @@ test('publishing a portrait ad writes a page of its own size, on a portrait medi
 });
 
 test('a landscape ad still publishes as it always did', function () {
-    $ad = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id]);
+    $ad = BuilderAd::factory()->withText()->create(['organization_id' => $this->organization->id]);
 
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
 
@@ -184,7 +184,7 @@ test('a landscape ad still publishes as it always did', function () {
 });
 
 test('a copy keeps the orientation', function () {
-    $ad = BuilderAd::factory()->portrait()->withText()->create(['store_id' => $this->store->id, 'name' => 'Menu board']);
+    $ad = BuilderAd::factory()->portrait()->withText()->create(['organization_id' => $this->organization->id, 'name' => 'Menu board']);
 
     $this->postJson("/builder/{$ad->id}/duplicate")->assertOk()->assertJsonPath('ad.orientation', 'portrait');
 
@@ -195,11 +195,11 @@ test('a copy keeps the orientation', function () {
 });
 
 test('every picker and playlist line says which way a portrait page is', function () {
-    $ad = BuilderAd::factory()->portrait()->withText()->published()->create(['store_id' => $this->store->id, 'name' => 'Menu board']);
+    $ad = BuilderAd::factory()->portrait()->withText()->published()->create(['organization_id' => $this->organization->id, 'name' => 'Menu board']);
     // The factory's published row is a plain ad page; the publisher is what stamps the shape on it.
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
     $media = $ad->fresh()->media;
-    $screen = Screen::factory()->create(['store_id' => $this->store->id, 'orientation' => 'landscape']);
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id, 'orientation' => 'landscape']);
 
     expect($media->orientation)->toBe('portrait');
 
@@ -213,7 +213,7 @@ test('every picker and playlist line says which way a portrait page is', functio
 
     // …a channel's library — asked first: once the page is on a playlist, a channel's pickers leave it out
     // (a file plays from playlists or from channels, never both — 2026-09-26)…
-    $channel = Channel::factory()->create(['store_id' => $this->store->id]);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id]);
     $inLibrary = collect($this->getJson("/channels/{$channel->id}/library?type=html")->assertOk()->json('media'))->firstWhere('id', $media->id);
     expect($inLibrary['orientation'])->toBe('portrait');
 

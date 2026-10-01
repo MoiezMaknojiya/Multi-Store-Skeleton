@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\BuilderAd;
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -22,11 +22,11 @@ test('every ad made before the column existed is landscape, and the migration is
 
     expect(Schema::hasColumn('builder_ads', 'orientation'))->toBeFalse();
 
-    $store = Store::factory()->create();
+    $organization = Organization::factory()->create();
 
     // A row written by the app as it was: no orientation at all.
     $id = DB::table('builder_ads')->insertGetId([
-        'store_id' => $store->id,
+        'organization_id' => $organization->id,
         'name' => 'Made before',
         'document' => json_encode(BuilderAd::blankDocument()),
         'created_at' => '2026-09-20 08:00:00',

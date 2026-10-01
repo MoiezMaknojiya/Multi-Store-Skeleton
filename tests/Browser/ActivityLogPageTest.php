@@ -17,18 +17,18 @@ class ActivityLogPageTest extends DuskTestCase
 
         $this->browse(function (Browser $browser) use ($admin) {
             $this->freshSession($browser);
-            $browser->loginAs($admin)->visit('/stores');
+            $browser->loginAs($admin)->visit('/organizations');
             $this->waitForAlpine($browser);
 
-            // Do something loggable: create a store through the real form.
-            $this->clickAndAwait($browser, '@add-store', fn (Browser $b) => $b->waitFor('@store-form', 3));
-            $this->jsType($browser, '@store-name', 'Audit Mart');
-            $this->jsType($browser, '@store-street', '1 Ledger Lane');
-            $this->jsType($browser, '@store-city', 'Dallas');
-            $browser->select('@store-state', 'TX');
-            $this->jsType($browser, '@store-zip', '75201');
-            $this->jsType($browser, '@store-owner-email', 'audit@example.com');
-            $this->jsClick($browser, '@store-save');
+            // Do something loggable: create an organization through the real form.
+            $this->clickAndAwait($browser, '@add-organization', fn (Browser $b) => $b->waitFor('@organization-form', 3));
+            $this->jsType($browser, '@organization-name', 'Audit Mart');
+            $this->jsType($browser, '@organization-street', '1 Ledger Lane');
+            $this->jsType($browser, '@organization-city', 'Dallas');
+            $browser->select('@organization-state', 'TX');
+            $this->jsType($browser, '@organization-zip', '75201');
+            $this->jsType($browser, '@organization-owner-email', 'audit@example.com');
+            $this->jsClick($browser, '@organization-save');
             $browser->waitForText('Organization created.');
 
             // The entry shows on the Activity Log page under the DEFAULT range
@@ -41,7 +41,7 @@ class ActivityLogPageTest extends DuskTestCase
             // The action reads in words ("Organization created"), its code name kept as the badge's tooltip.
             $browser->waitForText('Created organization Audit Mart and invited audit@example.com to own it')
                 ->assertSee('Organization created')
-                ->assertPresent('[title="store.created"]');
+                ->assertPresent('[title="organization.created"]');
         });
     }
 }

@@ -10,8 +10,8 @@ return [
     | A curated list rather than the whole of Google Fonts, for three reasons: a picker with 1,600
     | families in it is not a picker, the Google Fonts Developer API would need a key nobody wants to
     | manage, and every family offered here is one we can DOWNLOAD and host ourselves — a television in
-    | a shop may have no internet at all, so an advert that depends on fonts.googleapis.com is an
-    | advert that renders in Times New Roman on the day the shop's wifi drops.
+    | an organization may have no internet at all, so an advert that depends on fonts.googleapis.com is an
+    | advert that renders in Times New Roman on the day the organization's wifi drops.
     |
     | Picking a family in the editor installs it: the server fetches the weights below, writes them to
     | `storage/app/public/fonts/{slug}/` with a small stylesheet, and records it in `builder_fonts`.
@@ -79,7 +79,7 @@ return [
         ['name' => 'JetBrains Mono', 'kind' => 'mono', 'weights' => [400, 700]],
         ['name' => 'Space Mono', 'kind' => 'mono', 'weights' => [400, 700]],
 
-        // ── Urdu / Arabic script, for a shop that writes in it ────────────
+        // ── Urdu / Arabic script, for an organization that writes in it ────────────
         ['name' => 'Noto Nastaliq Urdu', 'kind' => 'urdu', 'weights' => [400, 700]],
         ['name' => 'Noto Kufi Arabic', 'kind' => 'urdu', 'weights' => [400, 700]],
         ['name' => 'Cairo', 'kind' => 'urdu', 'weights' => [400, 600, 700, 900]],

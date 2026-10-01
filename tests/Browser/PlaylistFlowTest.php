@@ -3,9 +3,9 @@
 namespace Tests\Browser;
 
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Models\User;
 use App\Services\MediaStorage;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -18,11 +18,11 @@ class PlaylistFlowTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    private function makeOwner(Store $store): User
+    private function makeOwner(Organization $organization): User
     {
         $this->seedSuperAdmin();
 
-        return $this->storeMember($store, [
+        return $this->organizationMember($organization, [
             'screen-view', 'screen-store', 'screen-update', 'screen-destroy', 'screen-playlist',
             'media-view', 'media-store', 'media-update', 'media-destroy',
         ]);
@@ -67,16 +67,16 @@ class PlaylistFlowTest extends DuskTestCase
     /**
      * The whole product in one test: a TV pairs itself, the owner uploads a file
      * and drops it on the playlist, and the picture appears on the TV — with no
-     * page reload anywhere and nobody but the shop owner involved.
+     * page reload anywhere and nobody but the organization owner involved.
      */
     public function test_content_reaches_the_tv_end_to_end(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->makeOwner($store);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->makeOwner($organization);
         // The file's name is its title in the library (docs/UPLOADS-SPEC.md).
         $poster = $this->fixtureImage('Opening Poster.png', 210, 60, 90);
 
-        $this->browse(function (Browser $tv, Browser $panel) use ($owner, $store, $poster) {
+        $this->browse(function (Browser $tv, Browser $panel) use ($owner, $organization, $poster) {
             // -- 1. The TV asks to be adopted -----------------------------------
             $tv->visit('/player');
             $tv->waitFor('@pairing-code', 15);
@@ -86,7 +86,7 @@ class PlaylistFlowTest extends DuskTestCase
             // -- 2. The owner pairs it from their own dashboard ------------------
             $this->freshSession($panel);
             $panel->loginAs($owner);
-            $this->switchToStore($panel, $store);
+            $this->switchToOrganization($panel, $organization);
 
             $panel->visit('/screens');
             $this->waitForAlpine($panel);
@@ -145,14 +145,14 @@ class PlaylistFlowTest extends DuskTestCase
 
     /**
      * Several files on one screen: the TV shows each in turn, for its own
-     * duration, and then starts again at the top. This is the loop a shop
+     * duration, and then starts again at the top. This is the loop an organization
      * actually runs all day.
      */
     public function test_a_screen_cycles_through_several_images(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
         $screen = Screen::factory()->withToken('loop-token')->create([
-            'store_id' => $store->id, 'name' => 'Counter TV',
+            'organization_id' => $organization->id, 'name' => 'Counter TV',
         ]);
 
         // Real files on the Dusk disk (storage/app/dusk-public, served at /dusk-storage),
@@ -168,7 +168,7 @@ class PlaylistFlowTest extends DuskTestCase
         foreach ($palette as $position => [$name, $r, $g, $b]) {
             $upload = new UploadedFile($this->fixtureImage($name, $r, $g, $b), $name, 'image/png', null, true);
             $row = Media::create([
-                ...app(MediaStorage::class)->store($upload, $store->id, []),
+                ...app(MediaStorage::class)->store($upload, $organization->id, []),
                 'title' => $name,
             ]);
             $media[] = $row;
@@ -226,24 +226,24 @@ class PlaylistFlowTest extends DuskTestCase
     }
 
     /**
-     * The shop switches the TV off at night and on again in the morning.
+     * The organization switches the TV off at night and on again in the morning.
      *
      * Nobody goes near the panel and nobody re-enters a code: the player has to
      * pick itself up from the token it kept, ask the server what to show, and
      * report itself alive again — all on its own. This is the single most common
-     * thing that will ever happen to a screen in a shop, and it happens every day
+     * thing that will ever happen to a screen in an organization, and it happens every day
      * of its life, so it is worth proving rather than assuming.
      */
     public function test_a_tv_switched_off_overnight_comes_back_on_its_own(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
         $screen = Screen::factory()->withToken('restart-token')->create([
-            'store_id' => $store->id, 'name' => 'Counter TV',
+            'organization_id' => $organization->id, 'name' => 'Counter TV',
         ]);
 
         $upload = new UploadedFile($this->fixtureImage('restart-poster.png', 200, 90, 40), 'restart-poster.png', 'image/png', null, true);
         $poster = Media::create([
-            ...app(MediaStorage::class)->store($upload, $store->id, []),
+            ...app(MediaStorage::class)->store($upload, $organization->id, []),
             'title' => 'Morning Poster',
         ]);
 
@@ -302,26 +302,26 @@ class PlaylistFlowTest extends DuskTestCase
      */
     public function test_a_video_that_will_not_play_does_not_stop_the_screen(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
         $screen = Screen::factory()->withToken('mixed-token')->create([
-            'store_id' => $store->id, 'name' => 'Counter TV',
+            'organization_id' => $organization->id, 'name' => 'Counter TV',
         ]);
 
         $images = [];
         foreach ([['mixed-a.png', 200, 30, 60], ['mixed-b.png', 30, 120, 200]] as [$name, $r, $g, $b]) {
             $upload = new UploadedFile($this->fixtureImage($name, $r, $g, $b), $name, 'image/png', null, true);
             $images[] = Media::create([
-                ...app(MediaStorage::class)->store($upload, $store->id, []),
+                ...app(MediaStorage::class)->store($upload, $organization->id, []),
                 'title' => $name,
             ]);
         }
 
         // A file that says it is a video and is not: exactly what a bad upload or
         // an unsupported codec looks like to the browser.
-        $brokenPath = "media/{$store->id}/broken-clip.mp4";
+        $brokenPath = "media/{$organization->id}/broken-clip.mp4";
         Storage::disk('public')->put($brokenPath, 'this is not a video');
         $broken = Media::create([
-            'store_id' => $store->id,
+            'organization_id' => $organization->id,
             'title' => 'Broken Clip',
             'type' => Media::TYPE_VIDEO,
             'mime_type' => 'video/mp4',
@@ -399,29 +399,29 @@ class PlaylistFlowTest extends DuskTestCase
      * There is no encoder on the machine running these tests, so the video is
      * recorded by the browser itself: a canvas captured through MediaRecorder
      * produces a genuine MP4, which is then uploaded exactly like any other file.
-     * MP4 rather than WebM because MP4 is what a shop owner actually uploads —
+     * MP4 rather than WebM because MP4 is what an organization owner actually uploads —
      * it comes off their phone — so that is the path worth proving. A Chrome
      * without an MP4 encoder skips the test instead of falling back to a format
      * nobody uses in practice.
      */
     public function test_a_real_video_plays_and_the_screen_moves_on_when_it_ends(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->makeOwner($store);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->makeOwner($organization);
         $screen = Screen::factory()->withToken('video-token')->create([
-            'store_id' => $store->id, 'name' => 'Counter TV',
+            'organization_id' => $organization->id, 'name' => 'Counter TV',
         ]);
 
         $poster = new UploadedFile($this->fixtureImage('after-clip.png', 250, 120, 20), 'after-clip.png', 'image/png', null, true);
         $image = Media::create([
-            ...app(MediaStorage::class)->store($poster, $store->id, []),
+            ...app(MediaStorage::class)->store($poster, $organization->id, []),
             'title' => 'After Clip',
         ]);
 
-        $this->browse(function (Browser $panel, Browser $tv) use ($owner, $store, $screen, $image) {
+        $this->browse(function (Browser $panel, Browser $tv) use ($owner, $organization, $screen, $image) {
             $this->freshSession($panel);
             $panel->loginAs($owner);
-            $this->switchToStore($panel, $store);
+            $this->switchToOrganization($panel, $organization);
             $panel->visit('/media');
             $this->waitForAlpine($panel);
 
@@ -515,20 +515,20 @@ class PlaylistFlowTest extends DuskTestCase
     /** Every control on the playlist builder. */
     public function test_every_button_on_the_playlist_page(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->makeOwner($store);
-        $screen = Screen::factory()->create(['store_id' => $store->id, 'name' => 'Counter TV']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->makeOwner($organization);
+        $screen = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Counter TV']);
 
-        $one = Media::factory()->create(['store_id' => $store->id, 'title' => 'Poster One']);
-        $two = Media::factory()->create(['store_id' => $store->id, 'title' => 'Poster Two']);
+        $one = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Poster One']);
+        $two = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Poster Two']);
         $clip = Media::factory()->video()->create([
-            'store_id' => $store->id, 'title' => 'Promo Clip', 'duration_seconds' => 25,
+            'organization_id' => $organization->id, 'title' => 'Promo Clip', 'duration_seconds' => 25,
         ]);
 
-        $this->browse(function (Browser $browser) use ($owner, $store, $screen, $one, $two, $clip) {
+        $this->browse(function (Browser $browser) use ($owner, $organization, $screen, $one, $two, $clip) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             // -- Reached by the row's Playlist button, the main way in ----------
             $browser->visit('/screens');
@@ -638,21 +638,21 @@ class PlaylistFlowTest extends DuskTestCase
         });
     }
 
-    /** A screen can never be pointed at another store's library. */
-    public function test_the_picker_only_offers_this_store_s_files(): void
+    /** A screen can never be pointed at another organization's library. */
+    public function test_the_picker_only_offers_this_organization_s_files(): void
     {
-        $alpha = Store::factory()->create(['name' => 'Alpha Mart']);
-        $beta = Store::factory()->create(['name' => 'Beta Store']);
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $beta = Organization::factory()->create(['name' => 'Beta Organization']);
         $owner = $this->makeOwner($alpha);
-        $screen = Screen::factory()->create(['store_id' => $alpha->id, 'name' => 'Counter TV']);
+        $screen = Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Counter TV']);
 
-        Media::factory()->create(['store_id' => $alpha->id, 'title' => 'Alpha Poster']);
-        Media::factory()->create(['store_id' => $beta->id, 'title' => 'Beta Poster']);
+        Media::factory()->create(['organization_id' => $alpha->id, 'title' => 'Alpha Poster']);
+        Media::factory()->create(['organization_id' => $beta->id, 'title' => 'Beta Poster']);
 
         $this->browse(function (Browser $browser) use ($owner, $alpha, $screen) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $alpha);
+            $this->switchToOrganization($browser, $alpha);
 
             $browser->visit("/screens/{$screen->id}");
             $this->waitForAlpine($browser);

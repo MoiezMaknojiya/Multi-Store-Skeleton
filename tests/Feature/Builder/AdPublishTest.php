@@ -3,9 +3,9 @@
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Support\Facades\Storage;
 
 /*
@@ -23,14 +23,14 @@ use Illuminate\Support\Facades\Storage;
 beforeEach(function () {
     Storage::fake('public');
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->other = Store::factory()->create(['name' => 'Beta Deli']);
-    $this->designer = createStoreUser($this->store, ['ad-view', 'ad-store', 'ad-update', 'ad-destroy', 'screen-view', 'screen-playlist'], 'Designer');
-    $this->actingAs($this->designer)->withSession(['current_store_id' => $this->store->id]);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->other = Organization::factory()->create(['name' => 'Beta Deli']);
+    $this->designer = createOrganizationUser($this->organization, ['ad-view', 'ad-store', 'ad-update', 'ad-destroy', 'screen-view', 'screen-playlist'], 'Designer');
+    $this->actingAs($this->designer)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 test('publishing writes a page and puts it in the library as an html media row', function () {
-    $ad = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $this->store->id, 'name' => 'Winter sale']);
+    $ad = BuilderAd::factory()->withText('Winter sale')->create(['organization_id' => $this->organization->id, 'name' => 'Winter sale']);
 
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
 
@@ -41,7 +41,7 @@ test('publishing writes a page and puts it in the library as an html media row',
         ->and($ad->isPublished())->toBeTrue()
         ->and($media->type)->toBe(Media::TYPE_HTML)
         ->and($media->mime_type)->toBe('text/html')
-        ->and($media->store_id)->toBe($this->store->id)
+        ->and($media->organization_id)->toBe($this->organization->id)
         ->and($media->title)->toBe('Winter sale')
         ->and($media->width)->toBe(1920)
         ->and($media->height)->toBe(1080);
@@ -72,7 +72,7 @@ test('nothing a person typed is ever written as code', function () {
         'animations' => [],
     ]];
 
-    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'name' => 'Nasty', 'document' => $document]);
+    $ad = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Nasty', 'document' => $document]);
 
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
 
@@ -103,7 +103,7 @@ test('nothing a person typed is ever written as code', function () {
         'id' => 'el_1', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 800, 'h' => 200, 'z' => 0,
         'text' => 'Sale', 'style' => ['fontFamily' => 'Playfair Display'], 'animations' => [],
     ]];
-    $plain = BuilderAd::factory()->create(['store_id' => $this->store->id, 'name' => 'Plain', 'document' => $document]);
+    $plain = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Plain', 'document' => $document]);
     $this->postJson("/builder/{$plain->id}/publish")->assertOk();
 
     expect(Storage::disk('public')->get($plain->fresh()->media->path))
@@ -111,13 +111,13 @@ test('nothing a person typed is ever written as code', function () {
 });
 
 test('publishing again refreshes the same media row, so the playlists keep it', function () {
-    $ad = BuilderAd::factory()->withText('First')->create(['store_id' => $this->store->id, 'name' => 'Promo']);
+    $ad = BuilderAd::factory()->withText('First')->create(['organization_id' => $this->organization->id, 'name' => 'Promo']);
 
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
     $media = Media::sole();
 
     // It is on a screen now.
-    $screen = Screen::factory()->create(['store_id' => $this->store->id]);
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
     PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $media->id, 'position' => 0, 'duration_seconds' => 12]);
 
     // Change the design and publish again.
@@ -137,11 +137,11 @@ test('publishing again refreshes the same media row, so the playlists keep it', 
 });
 
 test('a published ad plays like any other file — the device gets it for the length its design says', function () {
-    $ad = BuilderAd::factory()->withText('On air')->create(['store_id' => $this->store->id, 'name' => 'On air']);
+    $ad = BuilderAd::factory()->withText('On air')->create(['organization_id' => $this->organization->id, 'name' => 'On air']);
     $ad->update(['document' => [...$ad->document, 'duration' => 8]]);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
 
-    $screen = Screen::factory()->withToken('ad-token')->create(['store_id' => $this->store->id]);
+    $screen = Screen::factory()->withToken('ad-token')->create(['organization_id' => $this->organization->id]);
     // A line written before the ad had a length, or by hand: the ad's own eight seconds are what plays.
     PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => Media::sole()->id, 'position' => 0, 'duration_seconds' => 15]);
 
@@ -154,9 +154,9 @@ test('a published ad plays like any other file — the device gets it for the le
         ->and($item['checksum'])->not->toBeEmpty();
 });
 
-test('an ad only ever compiles with its own store’s pictures', function () {
-    $mine = BuilderAsset::factory()->create(['store_id' => $this->store->id, 'path' => 'builder/1/assets/mine.jpg']);
-    $theirs = BuilderAsset::factory()->create(['store_id' => $this->other->id, 'path' => 'builder/2/assets/theirs.jpg']);
+test('an ad only ever compiles with its own organization’s pictures', function () {
+    $mine = BuilderAsset::factory()->create(['organization_id' => $this->organization->id, 'path' => 'builder/1/assets/mine.jpg']);
+    $theirs = BuilderAsset::factory()->create(['organization_id' => $this->other->id, 'path' => 'builder/2/assets/theirs.jpg']);
 
     $document = BuilderAd::blankDocument();
     $document['elements'] = [
@@ -164,7 +164,7 @@ test('an ad only ever compiles with its own store’s pictures', function () {
         ['id' => 'b', 'type' => 'image', 'x' => 500, 'y' => 0, 'w' => 400, 'h' => 300, 'z' => 1, 'assetId' => $theirs->id, 'style' => [], 'animations' => []],
     ];
 
-    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => $document]);
+    $ad = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'document' => $document]);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
 
     $html = Storage::disk('public')->get(Media::sole()->path);
@@ -173,11 +173,11 @@ test('an ad only ever compiles with its own store’s pictures', function () {
 });
 
 test('deleting the ad takes the published page off the screens', function () {
-    $ad = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id]);
+    $ad = BuilderAd::factory()->withText()->create(['organization_id' => $this->organization->id]);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
 
     $media = Media::sole();
-    $screen = Screen::factory()->create(['store_id' => $this->store->id]);
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
     PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $media->id, 'position' => 0, 'duration_seconds' => 10]);
 
     $response = $this->deleteJson("/builder/{$ad->id}", ['password' => 'password'])->assertOk();

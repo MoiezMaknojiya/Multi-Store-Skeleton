@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Daypart;
+use App\Models\Organization;
 use App\Models\ScheduleRule;
-use App\Models\Store;
 use Carbon\CarbonImmutable;
 
 /*
@@ -106,7 +106,7 @@ test('a monthly date falls only on that date, and skips months that have no such
     expect($payday->coversDay(on('2026-03-31')))->toBeTrue();
 
     // February has no 31st, and neither has April. Clamping to the 28th or the 30th
-    // would put the item on a day the shop never asked for.
+    // would put the item on a day the organization never asked for.
     expect($payday->coversDay(on('2026-02-28')))->toBeFalse();
     expect($payday->coversDay(on('2026-04-30')))->toBeFalse();
 });
@@ -175,8 +175,8 @@ test('every second day counts from the start, not from the calendar', function (
 
 test('a daypart that runs past midnight is counted against the day it OPENED', function () {
     // The whole reason coversAt asks the daypart which day its window began on.
-    $store = Store::factory()->create();
-    $night = Daypart::factory()->overnight()->create(['store_id' => $store->id]);  // 22:00 – 02:00
+    $organization = Organization::factory()->create();
+    $night = Daypart::factory()->overnight()->create(['organization_id' => $organization->id]);  // 22:00 – 02:00
 
     $fridayNights = new ScheduleRule([
         'recurrence_type' => ScheduleRule::WEEKLY,
@@ -188,7 +188,7 @@ test('a daypart that runs past midnight is counted against the day it OPENED', f
     expect($fridayNights->coversAt(on('2026-03-20 23:00')))->toBeTrue();
 
     // Half past midnight is a SATURDAY by the calendar — but the window that is open
-    // began on Friday, and the shop said "Friday night". Checking the calendar date
+    // began on Friday, and the organization said "Friday night". Checking the calendar date
     // instead would switch the item off at midnight, halfway through the evening.
     expect($fridayNights->coversAt(on('2026-03-21 00:30')))->toBeTrue();
 
@@ -211,8 +211,8 @@ test('a daypart id with nothing behind it plays never, not all day', function ()
 });
 
 test('the next fourteen days are listed with the window each day opens', function () {
-    $store = Store::factory()->create();
-    $lunch = Daypart::factory()->between('11:00', '15:00')->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $lunch = Daypart::factory()->between('11:00', '15:00')->create(['organization_id' => $organization->id]);
 
     $rule = new ScheduleRule([
         'recurrence_type' => ScheduleRule::WEEKLY,
@@ -229,8 +229,8 @@ test('the next fourteen days are listed with the window each day opens', functio
 });
 
 test('a day the daypart is closed is left out of the preview entirely', function () {
-    $store = Store::factory()->create();
-    $hours = Daypart::factory()->between('09:00', '17:00')->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $hours = Daypart::factory()->between('09:00', '17:00')->create(['organization_id' => $organization->id]);
     $hours->syncExceptions([['weekday' => 7, 'start_time' => null, 'end_time' => null]]);  // Sunday shut
 
     $everyDay = new ScheduleRule(['daypart_id' => $hours->id]);

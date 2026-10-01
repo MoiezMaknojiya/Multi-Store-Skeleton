@@ -12,8 +12,8 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Inviting people onto the platform team (docs/STORE-ORGANIZATION-SPEC.md rule 19) — super
- * admins only, on the routes. Accepting creates the store_id = 0 membership; see
+ * Inviting people onto the platform team (docs/ORGANIZATION-SPEC.md rule 19) — super
+ * admins only, on the routes. Accepting creates the organization_id = 0 membership; see
  * InvitationResponseController.
  */
 class PlatformInvitationController extends Controller
@@ -62,8 +62,8 @@ class PlatformInvitationController extends Controller
             throw ValidationException::withMessages(['email' => "{$email} is already on the platform team."]);
         }
 
-        // User::stores() joins real stores, so the platform row (store_id = 0) is never among them.
-        if ($account !== null && $account->stores()->exists()) {
+        // User::organizations() joins real organizations, so the platform row (organization_id = 0) is never among them.
+        if ($account !== null && $account->organizations()->exists()) {
             throw ValidationException::withMessages(['email' => 'This email belongs to an organization account, which cannot join the platform team.']);
         }
 

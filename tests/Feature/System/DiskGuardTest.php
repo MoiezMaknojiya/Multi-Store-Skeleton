@@ -3,7 +3,7 @@
 use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Notifications\DiskAlmostFullNotification;
 use App\Notifications\DiskSpaceLowNotification;
 use App\Services\DiskGuard;
@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Storage;
 | The server's own disk keeps its reserve
 |--------------------------------------------------------------------------
 |
-| Owner's decision, 2026-09-29: every shop has its 512 MB, but anybody with an inbox can make a shop, and the
+| Owner's decision, 2026-09-29: every organization has its 512 MB, but anybody with an inbox can make an organization, and the
 | platform's library and the ads network have no wall of their own — so an upload that would leave the server's
 | disk with less than its reserve (5 GB) is refused at every door, whoever uploads, and the super admins are told
 | by email at most once every six hours. The disk is measured through a closure here, so nothing is filled.
@@ -36,17 +36,17 @@ beforeEach(function () {
     $this->free = 50 * GB;
     app()->instance(DiskGuard::class, new DiskGuard(fn () => $this->free));
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->manager = createStoreUser($this->store, ['media-store', 'channel-update', 'ad-store', 'ad-update'], 'Manager');
-    $this->actingAs($this->manager)->withSession(['current_store_id' => $this->store->id]);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->manager = createOrganizationUser($this->organization, ['media-store', 'channel-update', 'ad-store', 'ad-update'], 'Manager');
+    $this->actingAs($this->manager)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 test('an upload that would eat into the reserve is refused at every door, and nothing of it is kept', function () {
     Notification::fake();
     $this->free = 5 * GB + 512 * 1024;   // half a megabyte above the reserve
 
-    $channel = Channel::factory()->create(['store_id' => $this->store->id]);
-    $ad = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id]);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id]);
+    $ad = BuilderAd::factory()->withText()->create(['organization_id' => $this->organization->id]);
 
     $this->postJson('/media', ['file' => UploadedFile::fake()->create('menu.jpg', 1024)])
         ->assertStatus(422)->assertJsonValidationErrors(['file' => DISK_FULL]);
@@ -59,7 +59,7 @@ test('an upload that would eat into the reserve is refused at every door, and no
     $this->free = 5 * GB + 100;
     $this->postJson("/builder/{$ad->id}/publish")->assertStatus(422)->assertJsonValidationErrors(['publish' => DISK_FULL]);
 
-    // Above the stores: the platform's own library and the ads network have no wall of their own, but the disk does.
+    // Above the organizations: the platform's own library and the ads network have no wall of their own, but the disk does.
     $this->actingAs(createSuperAdmin())->withSession([]);
     $this->postJson('/media', ['file' => UploadedFile::fake()->create('platform.jpg', 1024)])
         ->assertStatus(422)->assertJsonValidationErrors(['file' => DISK_FULL]);
@@ -88,7 +88,7 @@ test('the super admins are told once, and again only after six hours', function 
 
     Notification::assertSentToTimes($first, DiskAlmostFullNotification::class, 1);
     Notification::assertSentToTimes($second, DiskAlmostFullNotification::class, 1);
-    // The shop's own people are not the ones who can make room on the server.
+    // The organization's own people are not the ones who can make room on the server.
     Notification::assertNotSentTo($this->manager, DiskAlmostFullNotification::class);
 
     $this->travel(DiskGuard::ALERT_HOURS)->hours();

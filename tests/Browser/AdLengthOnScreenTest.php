@@ -6,10 +6,10 @@ use App\Models\ActivityLog;
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Services\MediaStorage;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\UploadedFile;
@@ -30,19 +30,19 @@ class AdLengthOnScreenTest extends DuskTestCase
     public function test_an_eight_second_ad_over_a_twenty_second_background_video_moves_on_at_eight_seconds(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store, Role::OWNER, 'owner@example.com');
-        Screen::factory()->withToken('length-token')->create(['store_id' => $store->id, 'name' => 'Counter TV']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization, Role::OWNER, 'owner@example.com');
+        Screen::factory()->withToken('length-token')->create(['organization_id' => $organization->id, 'name' => 'Counter TV']);
 
         $picture = Media::create([
-            ...app(MediaStorage::class)->store(new UploadedFile($this->fixtureImage('after-the-ad.png', 30, 160, 60), 'after-the-ad.png', 'image/png', null, true), $store->id, []),
+            ...app(MediaStorage::class)->store(new UploadedFile($this->fixtureImage('after-the-ad.png', 30, 160, 60), 'after-the-ad.png', 'image/png', null, true), $organization->id, []),
             'title' => 'After the ad',
         ]);
 
-        $this->browse(function (Browser $panel, Browser $tv) use ($owner, $store, $picture) {
+        $this->browse(function (Browser $panel, Browser $tv) use ($owner, $organization, $picture) {
             $this->freshSession($panel);
             $panel->loginAs($owner);
-            $this->switchToStore($panel, $store);
+            $this->switchToOrganization($panel, $organization);
             $panel->visit('/builder/assets');
             $this->waitForAlpine($panel);
 
@@ -74,7 +74,7 @@ class AdLengthOnScreenTest extends DuskTestCase
                 'id' => 'bg_video', 'type' => 'video', 'assetId' => $asset->id, 'fit' => 'cover', 'visible' => true, 'opacity' => 1,
             ]];
             $ad = BuilderAd::create([
-                'store_id' => $store->id, 'name' => 'Eight seconds', 'orientation' => BuilderAd::LANDSCAPE,
+                'organization_id' => $organization->id, 'name' => 'Eight seconds', 'orientation' => BuilderAd::LANDSCAPE,
                 'document' => $document, 'created_by' => $owner->id,
             ]);
 
@@ -90,7 +90,7 @@ class AdLengthOnScreenTest extends DuskTestCase
             $this->assertStringContainsString('autoplay muted loop playsinline', (string) Storage::disk('public')->get($page->path), 'the background repeats while the ad is up');
 
             // On the playlist: the ad, then the picture.
-            $screen = Screen::where('store_id', $store->id)->sole();
+            $screen = Screen::where('organization_id', $organization->id)->sole();
             PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->id, 'position' => 0, 'duration_seconds' => 8]);
             PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $picture->id, 'position' => 1, 'duration_seconds' => 6]);
 
@@ -137,17 +137,17 @@ class AdLengthOnScreenTest extends DuskTestCase
     public function test_play_and_preview_start_the_ad_again_at_its_length(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store, Role::OWNER, 'owner@example.com');
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization, Role::OWNER, 'owner@example.com');
 
         // The shortest an ad may be: six seconds (owner's rule, 2026-09-28).
-        $ad = BuilderAd::factory()->withText('Six seconds')->create(['store_id' => $store->id, 'name' => 'Six seconds']);
+        $ad = BuilderAd::factory()->withText('Six seconds')->create(['organization_id' => $organization->id, 'name' => 'Six seconds']);
         $ad->update(['document' => [...$ad->document, 'duration' => 6]]);
 
-        $this->browse(function (Browser $browser) use ($owner, $store, $ad) {
+        $this->browse(function (Browser $browser) use ($owner, $organization, $ad) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
             $browser->visit('/builder/'.$ad->id);
             $this->waitForAlpine($browser);
             $browser->waitFor('@ad-length')->assertInputValue('@ad-length', '6');
@@ -200,19 +200,19 @@ class AdLengthOnScreenTest extends DuskTestCase
     public function test_a_design_with_no_length_of_its_own_keeps_each_screens_seconds_until_it_is_given_one(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store, Role::OWNER, 'owner@example.com');
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization, Role::OWNER, 'owner@example.com');
 
         // As designs were before 2026-09-28: no length in the design, none on its page's row.
-        $ad = BuilderAd::factory()->withText('Old sale')->published()->create(['store_id' => $store->id, 'name' => 'Old sale']);
+        $ad = BuilderAd::factory()->withText('Old sale')->published()->create(['organization_id' => $organization->id, 'name' => 'Old sale']);
         $earlier = collect($ad->document)->except('duration')->all();
         BuilderAd::withoutTimestamps(fn () => $ad->forceFill(['document' => $earlier, 'published_document' => $earlier])->save());
         $ad->media->update(['duration_seconds' => null]);
 
-        $this->browse(function (Browser $panel) use ($owner, $store, $ad) {
+        $this->browse(function (Browser $panel) use ($owner, $organization, $ad) {
             $this->freshSession($panel);
             $panel->loginAs($owner);
-            $this->switchToStore($panel, $store);
+            $this->switchToOrganization($panel, $organization);
 
             $panel->visit('/builder/'.$ad->id);
             $this->waitForAlpine($panel);

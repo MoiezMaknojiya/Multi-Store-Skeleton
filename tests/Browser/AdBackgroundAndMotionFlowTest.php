@@ -5,7 +5,7 @@ namespace Tests\Browser;
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Services\MediaStorage;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\UploadedFile;
@@ -32,14 +32,14 @@ class AdBackgroundAndMotionFlowTest extends DuskTestCase
     public function test_a_background_is_built_from_layers_and_a_picture_is_framed_and_filtered(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember($store, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
-        $picture = $this->assetOnTheShelf($store, 'Snow pattern');
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($organization, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $picture = $this->assetOnTheShelf($organization, 'Snow pattern');
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $picture) {
+        $this->browse(function (Browser $browser) use ($designer, $organization, $picture) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
@@ -162,13 +162,13 @@ class AdBackgroundAndMotionFlowTest extends DuskTestCase
     public function test_an_element_arrives_then_floats_is_previewed_and_the_published_page_moves(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember($store, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($organization, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
 
-        $this->browse(function (Browser $browser) use ($designer, $store) {
+        $this->browse(function (Browser $browser) use ($designer, $organization) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
@@ -307,22 +307,22 @@ class AdBackgroundAndMotionFlowTest extends DuskTestCase
     public function test_the_example_ads_open_in_the_editor_and_play(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember($store, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($organization, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
 
-        Artisan::call('builder:examples', ['store' => $store->id, '--no-fonts' => true, '--no-publish' => true]);
-        $this->assertSame(4, BuilderAd::where('store_id', $store->id)->count());
+        Artisan::call('builder:examples', ['organization' => $organization->id, '--no-fonts' => true, '--no-publish' => true]);
+        $this->assertSame(4, BuilderAd::where('organization_id', $organization->id)->count());
 
-        $this->browse(function (Browser $browser) use ($designer, $store) {
+        $this->browse(function (Browser $browser) use ($designer, $organization) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             // The browser's log belongs to the browser, which Dusk keeps from one test of this class
             // to the next — reading it empties it, so this test starts from a clean one.
             $browser->driver->manage()->getLog('browser');
 
-            foreach (BuilderAd::where('store_id', $store->id)->orderBy('id')->get() as $ad) {
+            foreach (BuilderAd::where('organization_id', $organization->id)->orderBy('id')->get() as $ad) {
                 $browser->visit('/builder/'.$ad->id);
                 $this->waitForAlpine($browser);
                 $browser->waitFor('@ad-stage');
@@ -371,15 +371,15 @@ class AdBackgroundAndMotionFlowTest extends DuskTestCase
     public function test_the_smaller_controls_do_what_they_say(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember($store, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
-        $first = $this->assetOnTheShelf($store, 'First picture');
-        $second = $this->assetOnTheShelf($store, 'Second picture');
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($organization, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $first = $this->assetOnTheShelf($organization, 'First picture');
+        $second = $this->assetOnTheShelf($organization, 'Second picture');
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $first, $second) {
+        $this->browse(function (Browser $browser) use ($designer, $organization, $first, $second) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
@@ -483,8 +483,8 @@ class AdBackgroundAndMotionFlowTest extends DuskTestCase
         });
     }
 
-    /** A real PNG on the store's shelf, stored the way an upload is. */
-    private function assetOnTheShelf(Store $store, string $title): BuilderAsset
+    /** A real PNG on the organization's shelf, stored the way an upload is. */
+    private function assetOnTheShelf(Organization $organization, string $title): BuilderAsset
     {
         $directory = storage_path('framework/testing');
         File::ensureDirectoryExists($directory);
@@ -494,9 +494,9 @@ class AdBackgroundAndMotionFlowTest extends DuskTestCase
         imagefilledrectangle($image, 0, 0, 256, 256, imagecolorallocate($image, 200, 220, 255));
         imagepng($image, $path);
 
-        $stored = app(MediaStorage::class)->storeBuilderAsset(new UploadedFile($path, basename($path), 'image/png', null, true), $store->id);
+        $stored = app(MediaStorage::class)->storeBuilderAsset(new UploadedFile($path, basename($path), 'image/png', null, true), $organization->id);
 
-        return BuilderAsset::fromStoredFile($store->id, $title, $stored, null);
+        return BuilderAsset::fromStoredFile($organization->id, $title, $stored, null);
     }
 
     /** Set a field's value through the DOM and raise the event Alpine listens for. */

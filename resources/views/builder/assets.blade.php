@@ -6,19 +6,19 @@
 
     <div x-data="builderAssetsTable({{ Js::from(['storage' => $storage]) }})" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        {{-- The shop's storage where a note once stood (owner, 2026-09-30), the shop list and the search beside it. The
-             meter shows only for a shop's shelf: the platform's shared one (All shops) has no wall. --}}
+        {{-- The organization's storage where a note once stood (owner, 2026-09-30), the organization list and the search beside it. The
+             meter shows only for an organization's shelf: the platform's shared one (All organizations) has no wall. --}}
         <div class="flex flex-wrap items-center justify-between gap-3">
-            {{-- The shelf counts toward the shop's 512 MB like its library does. --}}
+            {{-- The shelf counts toward the organization's 512 MB like its library does. --}}
             <x-storage-meter class="w-full sm:w-96" :initial="$storage" />
 
             <div class="ml-auto flex flex-wrap items-center gap-3">
-                @if ($aboveTheStores)
-                    <select x-model="filterStore" @change="applyFilters()" class="form-select sm:w-52"
-                            dusk="assets-filter-store" aria-label="Organization">
+                @if ($aboveTheOrganizations)
+                    <select x-model="filterOrganization" @change="applyFilters()" class="form-select sm:w-52"
+                            dusk="assets-filter-organization" aria-label="Organization">
                         <option value="">All organizations</option>
-                        @foreach ($stores as $store)
-                            <option value="{{ $store['id'] }}">{{ $store['name'] }}</option>
+                        @foreach ($organizations as $organization)
+                            <option value="{{ $organization['id'] }}">{{ $organization['name'] }}</option>
                         @endforeach
                     </select>
                 @endif
@@ -30,12 +30,12 @@
         @can('ad-store')
             {{-- The shared uploader (docs/UPLOADS-SPEC.md): each picture or video joins the shelf as it arrives. The
                  page listens here, not on the box: an expression on the box runs with the box's own `this`. --}}
-            {{-- Above the stores a shop chosen in the Shop list gets the file; with All shops it is shared with every
-                 shop. --}}
+            {{-- Above the organizations an organization chosen in the Organization list gets the file; with All organizations it is shared with every
+                 organization. --}}
             <div x-on:upload-added="onUploaded($event.detail)" dusk="upload-asset">
                 <x-upload-dropzone purpose="asset" mode="add" :multiple="true" add-url="/builder/assets" dusk="asset"
                     :max-video-seconds="\App\Models\BuilderAsset::MAX_VIDEO_SECONDS"
-                    context="{ store: filterStore || null, fields: filterStore ? { store_id: filterStore } : {}, storage: storage }"
+                    context="{ organization: filterOrganization || null, fields: filterOrganization ? { organization_id: filterOrganization } : {}, storage: storage }"
                     hint="JPG, PNG, GIF, WEBP, MP4 or WEBM, up to 250 MB each. Videos up to 30 seconds." />
             </div>
         @endcan
@@ -92,7 +92,7 @@
                                           x-bind:dusk="'asset-details-' + item.id" x-text="assetDetails(item)"></span>
                                 </div>
 
-                                {{-- A shop's own file with Delete Ads; a shared one only above the stores: the row says
+                                {{-- An organization's own file with Delete Ads; a shared one only above the organizations: the row says
                                      which this person may (can_delete), the controller asks again. --}}
                                 @can('ad-destroy')
                                     <button type="button" x-show="item.can_delete" x-cloak @click="askToDelete(item)"
@@ -108,7 +108,7 @@
                                 <p class="truncate text-sm font-medium text-gray-800 dark:text-white" x-bind:title="item.title"
                                    x-bind:dusk="'asset-title-' + item.id" x-text="item.title"></p>
 
-                                {{-- Two pills: whose it is (above the stores its shop or "Every shop"; inside a store, the
+                                {{-- Two pills: whose it is (above the organizations its organization or "Every organization"; inside an organization, the
                                      platform's) and whether an ad uses it — green in use, grey not yet. --}}
                                 <div class="flex flex-wrap items-center gap-1">
                                     <span x-show="item.owner_label" x-cloak x-bind:class="item.shared ? 'badge-info' : 'badge-neutral'"

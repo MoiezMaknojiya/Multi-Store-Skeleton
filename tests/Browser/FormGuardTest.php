@@ -3,8 +3,8 @@
 namespace Tests\Browser;
 
 use App\Models\Invitation;
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -18,15 +18,15 @@ class FormGuardTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    /** An Owner signed in to their store, on the given page with Alpine ready. */
+    /** An Owner signed in to their organization, on the given page with Alpine ready. */
     private function ownerOn(Browser $browser, string $path): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store, Role::OWNER);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization, Role::OWNER);
 
         $this->freshSession($browser);
         $browser->loginAs($owner);
-        $this->switchToStore($browser, $store);
+        $this->switchToOrganization($browser, $organization);
         $browser->visit($path);
         $this->waitForAlpine($browser);
     }
@@ -100,7 +100,7 @@ class FormGuardTest extends DuskTestCase
     }
 
     /** A rule only the server knows must still reach the person, under the field it is about. */
-    public function test_a_store_role_name_is_refused_with_the_reason_shown(): void
+    public function test_a_organization_role_name_is_refused_with_the_reason_shown(): void
     {
         $this->seedSuperAdmin();
 

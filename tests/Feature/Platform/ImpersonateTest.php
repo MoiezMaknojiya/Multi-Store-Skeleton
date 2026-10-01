@@ -1,7 +1,7 @@
 <?php
 
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -58,15 +58,15 @@ test('stopping works only for the account being impersonated', function () {
         ->and(session('impersonating_original_id'))->toBeNull();
 });
 
-test('impersonating clears any store context the admin had selected', function () {
+test('impersonating clears any organization context the admin had selected', function () {
     $admin = createSuperAdmin();
     $target = User::factory()->create();
 
     $this->actingAs($admin)
-        ->withSession(['current_store_id' => 42])
+        ->withSession(['current_organization_id' => 42])
         ->post("/users/{$target->id}/impersonate");
 
-    expect(session('current_store_id'))->toBeNull();
+    expect(session('current_organization_id'))->toBeNull();
 });
 
 test('stopping impersonation attributes the audit row to the returning super admin, not the impersonated user', function () {
@@ -89,10 +89,10 @@ test('stopping impersonation attributes the audit row to the returning super adm
 
 test('a non-super-admin cannot impersonate anyone', function () {
     // A platform team member passes the route's global-tier lock, so the refusal has to come from the
-    // controller's own super-admin check — the one this test is about. (A store member would be turned
+    // controller's own super-admin check — the one this test is about. (An organization member would be turned
     // away at the lock and never reach it.)
     $support = createPlatformUser(['user-view']);
-    $target = createStoreMember(Store::factory()->create(), Role::STAFF);
+    $target = createOrganizationMember(Organization::factory()->create(), Role::STAFF);
 
     $this->actingAs($support)->postJson("/users/{$target->id}/impersonate")
         ->assertForbidden()
@@ -145,7 +145,7 @@ test('stopping impersonation logs out if the original admin was demoted from Sup
     $target = User::factory()->create();
 
     $this->actingAs($admin)->post("/users/{$target->id}/impersonate");
-    DB::table('store_user')->where('user_id', $admin->id)->delete();
+    DB::table('organization_user')->where('user_id', $admin->id)->delete();
 
     $response = $this->post('/impersonate/stop');
 
@@ -153,15 +153,15 @@ test('stopping impersonation logs out if the original admin was demoted from Sup
     expect(auth()->check())->toBeFalse();
 });
 
-test('stopping impersonation clears the store context the impersonated user had selected', function () {
+test('stopping impersonation clears the organization context the impersonated user had selected', function () {
     $admin = createSuperAdmin();
     $target = User::factory()->create();
 
     $this->actingAs($admin)->post("/users/{$target->id}/impersonate");
 
-    $this->withSession(['current_store_id' => 7])->post('/impersonate/stop');
+    $this->withSession(['current_organization_id' => 7])->post('/impersonate/stop');
 
-    expect(session('current_store_id'))->toBeNull();
+    expect(session('current_organization_id'))->toBeNull();
 });
 
 test('stopping impersonation when nothing is being impersonated is a harmless no-op', function () {
@@ -176,7 +176,7 @@ test('stopping impersonation when nothing is being impersonated is a harmless no
 test('the users list offers "Log in as" for everyone but super admins and yourself', function () {
     $admin = createSuperAdmin(['user-view']);
     $otherAdmin = User::factory()->create();
-    $otherAdmin->stores()->attach(0, ['role_id' => Role::where('name', 'Super-Admin')->value('id')]);
+    $otherAdmin->organizations()->attach(0, ['role_id' => Role::where('name', 'Super-Admin')->value('id')]);
     $regular = User::factory()->create();
 
     $users = collect($this->actingAs($admin)->getJson('/users/data')->assertOk()->json('users'))->keyBy('id');
@@ -187,15 +187,15 @@ test('the users list offers "Log in as" for everyone but super admins and yourse
         ->and($users[$regular->id]['can']['impersonate'])->toBeTrue();
 });
 
-test('the way back is offered on the store picker too, where a member of several stores lands', function () {
+test('the way back is offered on the organization picker too, where a member of several organizations lands', function () {
     $admin = createSuperAdmin();
     $target = User::factory()->create();
 
-    foreach (Store::factory()->count(2)->create() as $store) {
-        $target->stores()->attach($store->id, ['role_id' => Role::owner()->id]);
+    foreach (Organization::factory()->count(2)->create() as $organization) {
+        $target->organizations()->attach($organization->id, ['role_id' => Role::owner()->id]);
     }
 
     $this->actingAs($admin)->post("/users/{$target->id}/impersonate")->assertRedirect(route('dashboard'));
 
-    $this->get('/select-store')->assertOk()->assertSee('Return to Super Admin');
+    $this->get('/select-organization')->assertOk()->assertSee('Return to Super Admin');
 });

@@ -1,6 +1,6 @@
 /**
- * Channels — ads a shop may add to its screens: above the stores every channel (the platform's,
- * offered to every shop, and each store's own); inside a store, that store's own channels.
+ * Channels — ads an organization may add to its screens: above the organizations every channel (the platform's,
+ * offered to every organization, and each organization's own); inside an organization, that organization's own channels.
  *
  * A plain CRUD table: a channel itself is only a name, how many of its ads play each
  * time, and whether it is on the air. Its ads are managed on the channel's own page
@@ -68,10 +68,10 @@ export function registerChannelsTable(Alpine) {
                     const screens = channel?.screens_count ?? 0;
                     if (screens === 0) return 'No screens yet';
 
-                    // A store's own channel only ever plays in that store.
-                    return channel.store_name
+                    // An organization's own channel only ever plays in that organization.
+                    return channel.organization_name
                         ? plural(screens, 'screen')
-                        : `${plural(screens, 'screen')} in ${plural(channel.stores_count ?? 0, 'organization')}`;
+                        : `${plural(screens, 'screen')} in ${plural(channel.organizations_count ?? 0, 'organization')}`;
                 },
             },
         })();

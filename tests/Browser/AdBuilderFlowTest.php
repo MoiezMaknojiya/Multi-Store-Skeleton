@@ -5,11 +5,11 @@ namespace Tests\Browser;
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Models\User;
 use App\Services\AdPublisher;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -30,18 +30,18 @@ class AdBuilderFlowTest extends DuskTestCase
     public function test_a_designer_draws_an_ad_saves_it_and_finds_it_again(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember(
-            $store,
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember(
+            $organization,
             ['ad-view', 'ad-store', 'ad-update', 'ad-destroy'],
             'designer@example.com',
             'Designer',
         );
 
-        $this->browse(function (Browser $browser) use ($designer, $store) {
+        $this->browse(function (Browser $browser) use ($designer, $organization) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             /* ── 1. The section: its ads, and Assets beside them in the sidebar ─ */
             $browser->visit('/builder');
@@ -90,7 +90,7 @@ class AdBuilderFlowTest extends DuskTestCase
             $browser->waitUsing(15, 250, fn () => BuilderAd::where('name', 'Winter sale')->exists());
             $ad = BuilderAd::firstWhere('name', 'Winter sale');
 
-            $this->assertSame($store->id, $ad->store_id);
+            $this->assertSame($organization->id, $ad->organization_id);
             $this->assertSame('Winter sale', $ad->document['elements'][0]['text']);
             $this->assertSame(200, (int) $ad->document['elements'][0]['x']);
 
@@ -112,14 +112,14 @@ class AdBuilderFlowTest extends DuskTestCase
     public function test_an_element_is_nudged_undone_and_deleted(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember($store, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
-        $ad = BuilderAd::factory()->withText()->create(['store_id' => $store->id, 'name' => 'Winter sale']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($organization, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $ad = BuilderAd::factory()->withText()->create(['organization_id' => $organization->id, 'name' => 'Winter sale']);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad) {
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/builder/'.$ad->id);
             $this->waitForAlpine($browser);
@@ -153,18 +153,18 @@ class AdBuilderFlowTest extends DuskTestCase
     public function test_a_picture_is_uploaded_used_in_an_ad_and_neither_goes_out_from_under_the_other(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember(
-            $store,
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember(
+            $organization,
             ['ad-view', 'ad-store', 'ad-update', 'ad-destroy'],
             'designer@example.com',
             'Designer',
         );
 
-        $this->browse(function (Browser $browser) use ($designer, $store) {
+        $this->browse(function (Browser $browser) use ($designer, $organization) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             /* ── 1. A picture onto the shelf ────────────────────────────── */
             $browser->visit('/builder/assets');
@@ -173,8 +173,8 @@ class AdBuilderFlowTest extends DuskTestCase
             // Onto the shelf as soon as every byte is in: no Save to press.
             $this->uploadThrough($browser, 'asset', $this->fixtureImage('builder-logo.png', 30, 120, 220));
 
-            $browser->waitUsing(20, 250, fn () => BuilderAsset::where('store_id', $store->id)->exists());
-            $asset = BuilderAsset::firstWhere('store_id', $store->id);
+            $browser->waitUsing(20, 250, fn () => BuilderAsset::where('organization_id', $organization->id)->exists());
+            $asset = BuilderAsset::firstWhere('organization_id', $organization->id);
             $browser->waitFor('@asset-card-'.$asset->id)
                 ->assertSeeIn('@asset-usage-'.$asset->id, 'Not used yet');
 
@@ -240,28 +240,28 @@ class AdBuilderFlowTest extends DuskTestCase
     }
 
     /**
-     * A picture uploaded straight from the editor's picker (owner, 2026-09-30) joins the shop's shelf and is there to
-     * pick the moment it is in; without Create Ads the picker takes no file; and above the stores a new ad is for All
-     * shops, so a platform designer's file goes to the shelf shared with every shop, with no shop to choose first.
+     * A picture uploaded straight from the editor's picker (owner, 2026-09-30) joins the organization's shelf and is there to
+     * pick the moment it is in; without Create Ads the picker takes no file; and above the organizations a new ad is for All
+     * organizations, so a platform designer's file goes to the shelf shared with every organization, with no organization to choose first.
      */
     public function test_a_picture_is_uploaded_from_the_editors_picker_and_placed_at_once(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember($store, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
-        $editor = $this->storeMember($store, ['ad-view', 'ad-update'], 'editor@example.com', 'Editor');
-        $saved = BuilderAd::factory()->create(['store_id' => $store->id, 'name' => 'Old poster']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($organization, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $editor = $this->organizationMember($organization, ['ad-view', 'ad-update'], 'editor@example.com', 'Editor');
+        $saved = BuilderAd::factory()->create(['organization_id' => $organization->id, 'name' => 'Old poster']);
 
         // A platform designer: a platform role holding the ordinary Ad Builder permissions.
         $platformDesigner = User::factory()->create(['email' => 'platform-designer@example.com']);
         $platformRole = Role::create(['name' => 'Platform Designer', 'is_global' => true]);
         $platformRole->permissions()->sync(Permission::whereIn('name', ['ad-view', 'ad-store', 'ad-update'])->pluck('id'));
-        $platformDesigner->stores()->attach(0, ['role_id' => $platformRole->id]);
+        $platformDesigner->organizations()->attach(0, ['role_id' => $platformRole->id]);
 
-        $this->browse(function (Browser $browser) use ($platformDesigner, $designer, $editor, $store, $saved) {
+        $this->browse(function (Browser $browser) use ($platformDesigner, $designer, $editor, $organization, $saved) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
@@ -273,8 +273,8 @@ class AdBuilderFlowTest extends DuskTestCase
 
             $this->uploadThrough($browser, 'picker', $this->fixtureImage('Picker logo.png', 220, 40, 90));
 
-            $browser->waitUsing(20, 250, fn () => BuilderAsset::where('store_id', $store->id)->exists());
-            $asset = BuilderAsset::firstWhere('store_id', $store->id);
+            $browser->waitUsing(20, 250, fn () => BuilderAsset::where('organization_id', $organization->id)->exists());
+            $asset = BuilderAsset::firstWhere('organization_id', $organization->id);
             $this->assertSame('Picker logo', $asset->title);
 
             // On the grid at once, first, without leaving the editor.
@@ -290,15 +290,15 @@ class AdBuilderFlowTest extends DuskTestCase
             // Without Create Ads the picker takes no file: the shelf's upload asks for it, as its route does.
             $this->freshSession($browser);
             $browser->loginAs($editor);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
             $browser->visit('/builder/'.$saved->id);
             $this->waitForAlpine($browser);
             $browser->waitFor('@ad-stage');
             $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
             $browser->waitFor('@pick-asset-'.$asset->id)->assertMissing('@picker-upload');
 
-            // Above the stores a new ad is for All shops (owner, 2026-10-01): the file goes to the shelf shared with
-            // every shop at once, and nothing asks for a shop first.
+            // Above the organizations a new ad is for All organizations (owner, 2026-10-01): the file goes to the shelf shared with
+            // every organization at once, and nothing asks for an organization first.
             $this->freshSession($browser);
             $browser->loginAs($platformDesigner)->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
@@ -306,38 +306,38 @@ class AdBuilderFlowTest extends DuskTestCase
             $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
             $this->uploadThrough($browser, 'picker', $this->fixtureImage('Shared logo.png'));
 
-            $browser->waitUsing(20, 250, fn () => BuilderAsset::whereNull('store_id')->exists());
-            $shared = BuilderAsset::whereNull('store_id')->sole();
+            $browser->waitUsing(20, 250, fn () => BuilderAsset::whereNull('organization_id')->exists());
+            $shared = BuilderAsset::whereNull('organization_id')->sole();
             $this->assertSame('Shared logo', $shared->title);
-            $browser->waitFor('@pick-asset-'.$shared->id)->assertDontSee('Choose the shop this ad is for first');
+            $browser->waitFor('@pick-asset-'.$shared->id)->assertDontSee('Choose the organization this ad is for first');
         });
     }
 
     /**
-     * The owner's own steps (2026-10-01): above the stores a new ad is for All shops, a picture dropped into the picker
-     * goes to the shelf shared with every shop at once — no "choose the shop first" — and once the ad is published a
-     * shop's designer finds it "From the platform", copies it, and opens the copy as their own.
+     * The owner's own steps (2026-10-01): above the organizations a new ad is for All organizations, a picture dropped into the picker
+     * goes to the shelf shared with every organization at once — no "choose the organization first" — and once the ad is published an
+     * organization's designer finds it "From the platform", copies it, and opens the copy as their own.
      */
-    public function test_the_platform_makes_an_ad_for_every_shop_and_a_shop_copies_it(): void
+    public function test_the_platform_makes_an_ad_for_every_organization_and_a_organization_copies_it(): void
     {
         $admin = $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember($store, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($organization, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
 
-        $this->browse(function (Browser $browser) use ($admin, $store, $designer) {
+        $this->browse(function (Browser $browser) use ($admin, $organization, $designer) {
             $this->freshSession($browser);
             $browser->loginAs($admin)->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
             $browser->waitFor('@ad-stage');
 
-            // All shops comes first, and is what a new ad is for.
-            $this->assertSame('All organizations', $browser->script('return document.querySelector(\'[dusk="ad-store"]\').selectedOptions[0].textContent.trim();')[0]);
+            // All organizations comes first, and is what a new ad is for.
+            $this->assertSame('All organizations', $browser->script('return document.querySelector(\'[dusk="ad-organization"]\').selectedOptions[0].textContent.trim();')[0]);
 
             $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
             $this->uploadThrough($browser, 'picker', $this->fixtureImage('Brand logo.png', 30, 90, 200));
 
-            $browser->waitUsing(20, 250, fn () => BuilderAsset::whereNull('store_id')->exists());
-            $asset = BuilderAsset::whereNull('store_id')->sole();
+            $browser->waitUsing(20, 250, fn () => BuilderAsset::whereNull('organization_id')->exists());
+            $asset = BuilderAsset::whereNull('organization_id')->sole();
             $this->assertSame('Brand logo', $asset->title);
 
             $browser->waitFor('@pick-asset-'.$asset->id);
@@ -348,21 +348,21 @@ class AdBuilderFlowTest extends DuskTestCase
             $this->jsClick($browser, '@ad-save');
             $browser->waitUsing(20, 250, fn () => BuilderAd::where('name', 'Winter sale')->exists());
             $ad = BuilderAd::firstWhere('name', 'Winter sale');
-            $this->assertNull($ad->store_id);
+            $this->assertNull($ad->organization_id);
             $this->assertSame($asset->id, $ad->document['elements'][0]['assetId'] ?? null);
 
             // Saved, it stays whose it was made for.
-            $browser->assertDisabled('@ad-store');
+            $browser->assertDisabled('@ad-organization');
 
             $this->jsClick($browser, '@ad-publish');
             $browser->waitForText('every organization sees it now');
             $browser->waitUsing(20, 250, fn () => $ad->fresh()->isPublished());
-            $this->assertNull($ad->fresh()->media->store_id);
+            $this->assertNull($ad->fresh()->media->organization_id);
 
-            // A shop's designer finds it, from the platform, and copies it — it is not theirs to change or delete.
+            // An organization's designer finds it, from the platform, and copies it — it is not theirs to change or delete.
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
             $browser->visit('/builder');
             $this->waitForAlpine($browser);
             $browser->waitFor('@ad-card-'.$ad->id)
@@ -372,61 +372,61 @@ class AdBuilderFlowTest extends DuskTestCase
 
             $this->jsClick($browser, '@duplicate-ad-'.$ad->id);
             $browser->waitForText('Copied to your ads');
-            $browser->waitUsing(20, 250, fn () => BuilderAd::where('store_id', $store->id)->exists());
-            $copy = BuilderAd::firstWhere('store_id', $store->id);
+            $browser->waitUsing(20, 250, fn () => BuilderAd::where('organization_id', $organization->id)->exists());
+            $copy = BuilderAd::firstWhere('organization_id', $organization->id);
             $this->assertSame('Winter sale', $copy->name);
 
             // The copy is theirs, to open and change.
             $browser->waitFor('@edit-ad-'.$copy->id)->screenshot('shared-ad-copied');
             $browser->visit('/builder/'.$copy->id);
             $this->waitForAlpine($browser);
-            $browser->waitFor('@ad-stage')->assertMissing('@ad-store')->assertMissing('@ad-owner');
+            $browser->waitFor('@ad-stage')->assertMissing('@ad-organization')->assertMissing('@ad-owner');
         });
     }
 
     /**
-     * Above the stores an upload goes to the shop chosen in the Shop list — or, with none chosen, it is shared with
-     * every shop (owner, 2026-09-29: "sub store k liya upload karna ho"), and a shop's designer finds it on their
+     * Above the organizations an upload goes to the organization chosen in the Organization list — or, with none chosen, it is shared with
+     * every organization (owner, 2026-09-29: "sub store k liya upload karna ho"), and an organization's designer finds it on their
      * shelf, marked as the platform's, and in the editor's picker.
      */
-    public function test_the_platform_shares_a_picture_with_every_shop_or_gives_it_to_the_shop_chosen(): void
+    public function test_the_platform_shares_a_picture_with_every_organization_or_gives_it_to_the_organization_chosen(): void
     {
         $admin = $this->seedSuperAdmin();
-        $alpha = Store::factory()->create(['name' => 'Alpha Mart']);
-        $beta = Store::factory()->create(['name' => 'Beta Deli']);
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $beta = Organization::factory()->create(['name' => 'Beta Deli']);
         $brandPicture = $this->fixtureImage('Brand logo.png', 200, 60, 30);
         $menuPicture = $this->fixtureImage('Beta menu.png', 30, 60, 200);
-        $designer = $this->storeMember($alpha, ['ad-view', 'ad-store', 'ad-update', 'ad-destroy'], 'designer@example.com', 'Designer');
+        $designer = $this->organizationMember($alpha, ['ad-view', 'ad-store', 'ad-update', 'ad-destroy'], 'designer@example.com', 'Designer');
 
         $this->browse(function (Browser $browser) use ($admin, $alpha, $beta, $brandPicture, $menuPicture, $designer) {
             $this->freshSession($browser);
             $browser->loginAs($admin)->visit('/builder/assets');
             $this->waitForAlpine($browser);
             $browser->waitFor('@assets-empty')
-                ->assertSelected('@assets-filter-store', '')      // "All shops": the shared shelf, with no wall
+                ->assertSelected('@assets-filter-organization', '')      // "All organizations": the shared shelf, with no wall
                 ->assertMissing('@storage-meter');
 
-            /* ── 1. All shops: the picture is shared with every shop ────── */
+            /* ── 1. All organizations: the picture is shared with every organization ────── */
             $this->uploadThrough($browser, 'asset', $brandPicture);
             $browser->waitUsing(20, 250, fn () => BuilderAsset::count() === 1);
             $brand = BuilderAsset::sole();
-            $this->assertNull($brand->store_id, 'the picture was not shared with every shop');
+            $this->assertNull($brand->organization_id, 'the picture was not shared with every organization');
             $browser->waitFor('@asset-card-'.$brand->id)->assertSeeIn('@asset-owner-'.$brand->id, 'Every organization');
 
-            /* ── 2. One shop chosen: the picture is that shop's alone ───── */
-            $browser->select('@assets-filter-store', (string) $beta->id)
-                ->waitFor('@asset-card-'.$brand->id)                // a shop's shelf shows the shared file too
-                ->waitFor('@storage-meter');                        // and the shop's own 512 MB where the note once was
+            /* ── 2. One organization chosen: the picture is that organization's alone ───── */
+            $browser->select('@assets-filter-organization', (string) $beta->id)
+                ->waitFor('@asset-card-'.$brand->id)                // an organization's shelf shows the shared file too
+                ->waitFor('@storage-meter');                        // and the organization's own 512 MB where the note once was
             $this->uploadThrough($browser, 'asset', $menuPicture);
             $browser->waitUsing(20, 250, fn () => BuilderAsset::count() === 2);
             $menu = BuilderAsset::where('title', 'Beta menu')->sole();
-            $this->assertSame($beta->id, $menu->store_id, 'the picture went to a shop other than the one chosen');
+            $this->assertSame($beta->id, $menu->organization_id, 'the picture went to an organization other than the one chosen');
             $browser->waitFor('@asset-card-'.$menu->id)->assertSeeIn('@asset-owner-'.$menu->id, 'Beta Deli');
 
             /* ── 3. Alpha's designer: the shared file, marked, and no Delete on it; Beta's is not theirs ── */
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $alpha);
+            $this->switchToOrganization($browser, $alpha);
             $browser->visit('/builder/assets');
             $this->waitForAlpine($browser);
             $browser->waitFor('@asset-card-'.$brand->id)
@@ -444,18 +444,18 @@ class AdBuilderFlowTest extends DuskTestCase
     }
 
     /**
-     * The whole point of the Builder, end to end: a design is published, a shop puts it on a screen,
+     * The whole point of the Builder, end to end: a design is published, an organization puts it on a screen,
      * and the television plays it — in a frame of its own, with its own animations, alongside ordinary
      * files. Nothing about the playlist, the schedule or the device knows it was ever a "design".
      */
     public function test_a_published_ad_reaches_a_television(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store, Role::OWNER, 'owner@example.com');
-        $ad = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $store->id, 'name' => 'Winter sale']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization, Role::OWNER, 'owner@example.com');
+        $ad = BuilderAd::factory()->withText('Winter sale')->create(['organization_id' => $organization->id, 'name' => 'Winter sale']);
 
-        $this->browse(function (Browser $tv, Browser $panel) use ($owner, $store, $ad) {
+        $this->browse(function (Browser $tv, Browser $panel) use ($owner, $organization, $ad) {
             /* ── 1. A television asks to be adopted ─────────────────────── */
             $tv->visit('/player');
             $tv->waitFor('@pairing-code', 15);
@@ -465,7 +465,7 @@ class AdBuilderFlowTest extends DuskTestCase
             /* ── 2. The owner pairs it ──────────────────────────────────── */
             $this->freshSession($panel);
             $panel->loginAs($owner);
-            $this->switchToStore($panel, $store);
+            $this->switchToOrganization($panel, $organization);
 
             $panel->visit('/screens');
             $this->waitForAlpine($panel);
@@ -474,8 +474,8 @@ class AdBuilderFlowTest extends DuskTestCase
             $this->jsType($panel, '@screen-name', 'Counter TV');
             $this->jsClick($panel, '@screen-pair-save');
 
-            $panel->waitUsing(20, 250, fn () => Screen::where('store_id', $store->id)->exists());
-            $screen = Screen::where('store_id', $store->id)->firstOrFail();
+            $panel->waitUsing(20, 250, fn () => Screen::where('organization_id', $organization->id)->exists());
+            $screen = Screen::where('organization_id', $organization->id)->firstOrFail();
 
             /* ── 3. Publish the design ──────────────────────────────────── */
             $panel->visit('/builder/'.$ad->id);
@@ -483,7 +483,7 @@ class AdBuilderFlowTest extends DuskTestCase
             $panel->waitFor('@ad-publish');
             $this->jsClick($panel, '@ad-publish');
 
-            $panel->waitUsing(25, 250, fn () => Media::where('store_id', $store->id)->where('type', Media::TYPE_HTML)->exists());
+            $panel->waitUsing(25, 250, fn () => Media::where('organization_id', $organization->id)->where('type', Media::TYPE_HTML)->exists());
             $media = Media::where('type', Media::TYPE_HTML)->firstOrFail();
 
             $this->assertSame($media->id, $ad->fresh()->media_id, 'the ad now has a copy in the library');
@@ -524,22 +524,22 @@ class AdBuilderFlowTest extends DuskTestCase
     public function test_a_published_ad_is_changed_discarded_unpublished_and_published_again(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember(
-            $store,
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember(
+            $organization,
             ['ad-view', 'ad-store', 'ad-update', 'media-view', 'screen-view', 'screen-playlist'],
             'designer@example.com',
             'Designer',
         );
-        $ad = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $store->id, 'name' => 'Winter sale']);
+        $ad = BuilderAd::factory()->withText('Winter sale')->create(['organization_id' => $organization->id, 'name' => 'Winter sale']);
         $page = app(AdPublisher::class)->publish($ad);
-        $screen = Screen::factory()->create(['store_id' => $store->id, 'name' => 'Counter TV']);
+        $screen = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Counter TV']);
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->id, 'position' => 0, 'duration_seconds' => 10]);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad, $page, $screen) {
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad, $page, $screen) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             /* ── 1. Opened: published and up to date ────────────────────────── */
             $browser->visit('/builder/'.$ad->id);
@@ -626,15 +626,15 @@ class AdBuilderFlowTest extends DuskTestCase
     public function test_the_editor_bar_fits_a_laptop(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember($store, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
-        $ad = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $store->id, 'name' => 'Winter sale']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($organization, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $ad = BuilderAd::factory()->withText('Winter sale')->create(['organization_id' => $organization->id, 'name' => 'Winter sale']);
         app(AdPublisher::class)->publish($ad);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad) {
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
             $browser->resize(1100, 800);
 
             try {
@@ -685,14 +685,14 @@ class AdBuilderFlowTest extends DuskTestCase
     public function test_an_ad_is_copied_and_opened_from_the_listing(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember($store, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
-        $ad = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $store->id, 'name' => 'Winter sale']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($organization, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $ad = BuilderAd::factory()->withText('Winter sale')->create(['organization_id' => $organization->id, 'name' => 'Winter sale']);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad) {
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/builder');
             $this->waitForAlpine($browser);

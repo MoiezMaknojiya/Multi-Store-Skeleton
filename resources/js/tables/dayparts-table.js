@@ -1,7 +1,7 @@
 /**
  * Dayparts table Alpine component.
  *
- * A daypart is a named window of time the shop reuses — "Deli hours 07:00–20:00".
+ * A daypart is a named window of time the organization reuses — "Deli hours 07:00–20:00".
  * Beyond the shared CRUD behaviour this adds two things: the repeating rows of
  * per-weekday exceptions, and a plain-English summary that updates as you type, so
  * nobody has to work out from four inputs what they have just told the screens to do.
@@ -26,9 +26,9 @@ export function registerDaypartsTable(Alpine) {
         deleteModalName: 'confirm-daypart-deletion',
 
         extraState: {
-            /* Creating one needs a store context — the backend refuses without it, so
+            /* Creating one needs an organization context — the backend refuses without it, so
              * the modal says why instead of letting the save fail. */
-            hasStore: config.hasStore ?? false,
+            hasOrganization: config.hasOrganization ?? false,
             /* { "1": "Monday", … } straight from Daypart::WEEKDAYS. */
             weekdays: config.weekdays ?? {},
         },

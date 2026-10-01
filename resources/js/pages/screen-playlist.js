@@ -606,7 +606,7 @@ export function registerScreenPlaylist(Alpine) {
         },
 
         /**
-         * The Time options for one rule. The page is handed the store's live dayparts plus any
+         * The Time options for one rule. The page is handed the organization's live dayparts plus any
          * retired one a rule on this screen still uses (ScreenController::daypartOptions); a
          * retired daypart is offered only to the rule that already has it, so it stays readable
          * there — not "All day" — and is never picked afresh.
@@ -684,7 +684,7 @@ export function registerScreenPlaylist(Alpine) {
         /**
          * A file the other way round from the screen plays with bars — a portrait menu board on a landscape
          * television at the sides, a landscape poster on a portrait one above and below (§12). Said on the
-         * line and in the picker, never refused: it is the shop's to notice. Nothing for a file whose way is
+         * line and in the picker, never refused: it is the organization's to notice. Nothing for a file whose way is
          * unknown, one that matches, or a channel (its ads are many, each its own way).
          */
         orientationNote(item) {

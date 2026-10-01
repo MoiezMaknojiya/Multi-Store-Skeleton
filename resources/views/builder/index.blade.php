@@ -5,7 +5,7 @@
 
     <div x-data="adsTable()" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        {{-- Create Ad, then the shop list (above the stores; a store sees its own only) and the search, on one line:
+        {{-- Create Ad, then the organization list (above the organizations; an organization sees its own only) and the search, on one line:
              the button first, as on every page (owner, 2026-09-30). --}}
         <div class="flex flex-wrap items-center justify-end gap-3">
             <div class="flex w-full flex-wrap items-center gap-3 sm:w-auto">
@@ -15,12 +15,12 @@
                     <x-crud.add-button label="Create Ad" dusk="new-ad" @click="$dispatch('open-modal', 'new-ad-orientation')" />
                 @endcan
 
-                @if ($stores !== [])
-                    <select x-model="filterStore" @change="applyFilters()" class="form-select sm:w-44"
-                            dusk="ads-filter-store" aria-label="Organization">
+                @if ($organizations !== [])
+                    <select x-model="filterOrganization" @change="applyFilters()" class="form-select sm:w-44"
+                            dusk="ads-filter-organization" aria-label="Organization">
                         <option value="">All organizations</option>
-                        @foreach ($stores as $store)
-                            <option value="{{ $store['id'] }}">{{ $store['name'] }}</option>
+                        @foreach ($organizations as $organization)
+                            <option value="{{ $organization['id'] }}">{{ $organization['name'] }}</option>
                         @endforeach
                     </select>
                 @endif
@@ -30,8 +30,8 @@
         </div>
 
         {{-- A gallery, not a table: an ad is a picture, and a picture is how a person finds it again. The same three
-             "nothing to show" cases as every listing (x-crud.table-empty): a list that did not load, a search or a
-             shop that matched nothing, and no ads at all. --}}
+             "nothing to show" cases as every listing (x-crud.table-empty): a list that did not load, a search or an
+             organization that matched nothing, and no ads at all. --}}
         <div class="card" data-list-card>
             <div class="p-5" x-bind:aria-busy="loading ? 'true' : 'false'">
                 <template x-if="loading">
@@ -47,7 +47,7 @@
                     </div>
                 </template>
 
-                <template x-if="!loading && items.length === 0 && !loadFailed && (search || filterStore)">
+                <template x-if="!loading && items.length === 0 && !loadFailed && (search || filterOrganization)">
                     <div class="mx-auto max-w-md space-y-3 py-12 text-center" dusk="table-no-match">
                         <p class="text-sm text-gray-700 dark:text-gray-200">
                             <span x-show="search">No ad matches &ldquo;<span class="font-medium" x-text="search"></span>&rdquo;.</span>
@@ -55,12 +55,12 @@
                         </p>
                         <div class="flex flex-wrap justify-center gap-2">
                             <button type="button" x-show="search" class="btn-row-neutral" @click="search = ''" dusk="table-clear-search">Clear Search</button>
-                            <button type="button" x-show="!search" class="btn-row-neutral" @click="filterStore = ''; applyFilters()" dusk="table-clear-filters">Show Every Organization</button>
+                            <button type="button" x-show="!search" class="btn-row-neutral" @click="filterOrganization = ''; applyFilters()" dusk="table-clear-filters">Show Every Organization</button>
                         </div>
                     </div>
                 </template>
 
-                <template x-if="!loading && items.length === 0 && !loadFailed && !search && !filterStore">
+                <template x-if="!loading && items.length === 0 && !loadFailed && !search && !filterOrganization">
                     <div class="mx-auto max-w-md py-12 text-center" dusk="ads-empty">
                         <p class="text-sm font-medium text-gray-700 dark:text-gray-200">No ads yet.</p>
                     </div>
@@ -73,7 +73,7 @@
                              x-bind:dusk="'ad-card-' + item.id">
 
                             {{-- The poster the editor captured when the ad was saved. It opens the editor — which
-                                 is Update Ads, and above the stores alone for an ad made for every shop — so it is a
+                                 is Update Ads, and above the organizations alone for an ad made for every organization — so it is a
                                  link only for somebody who may change this ad (the row's `can`); a mouse's short cut
                                  only, since the name and Edit below lead to the same place (tabindex -1). --}}
                             {{-- The tile stays a television's shape; a portrait poster is drawn inside it whole
@@ -127,17 +127,17 @@
                                     @endcan
 
                                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                        <span x-show="item.store_name" x-cloak x-text="item.store_name + ' · '"></span>
+                                        <span x-show="item.organization_name" x-cloak x-text="item.organization_name + ' · '"></span>
                                         <span x-text="item.updated_by_name ? 'by ' + item.updated_by_name : ''"></span>
                                     </p>
 
-                                    {{-- Made for every shop (owner, 2026-10-01): "Every shop" above the stores, "From the
+                                    {{-- Made for every organization (owner, 2026-10-01): "Every organization" above the organizations, "From the
                                          platform" inside one, as the Assets page says it of a shared file. --}}
                                     <span x-show="item.shared" x-cloak class="badge-info mr-1 mt-2 inline-block"
                                           x-bind:dusk="'ad-owner-' + item.id" x-text="item.owner_label"></span>
 
                                     {{-- The industry's draft/publish model (docs/AD-BUILDER-SPEC.md §9): a changed ad
-                                         stays on the screens as it was published until the changes are published. A shop
+                                         stays on the screens as it was published until the changes are published. An organization
                                          is only ever shown the platform's published version, so its card says no more. --}}
                                     <span class="mt-2 inline-block" x-show="!item.shared || item.can?.update" x-cloak
                                           x-bind:class="{ published: 'badge-success', changed: 'badge-warning' }[item.status] ?? 'badge-neutral'"
@@ -152,8 +152,8 @@
                                 {{-- Each names the ad it acts on. A design a channel shows is not deleted: said at once,
                                      before the password (askToDelete). --}}
                                 {{-- What may be done to this ad comes with it (`can`): Update Ads and Delete Ads, and
-                                     for one made for every shop only above the stores. A shop's Copy of the platform's
-                                     ad makes it the shop's own. --}}
+                                     for one made for every organization only above the organizations. An organization's Copy of the platform's
+                                     ad makes it the organization's own. --}}
                                 <div class="flex shrink-0 items-center gap-2">
                                     @can('ad-update')
                                         <a x-show="item.can?.update" x-bind:href="'/builder/' + item.id" class="btn-row-neutral"

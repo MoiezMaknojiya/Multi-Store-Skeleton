@@ -4,7 +4,7 @@ namespace Tests\Browser;
 
 use App\Models\Campaign;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Models\Upload;
 use App\Models\User;
 use Facebook\WebDriver\Chrome\ChromeDevToolsDriver;
@@ -33,11 +33,11 @@ class ChunkedUploadFlowTest extends DuskTestCase
 
     public function test_files_dropped_on_the_box_go_up_together_and_join_the_library(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization);
 
-        $this->browse(function (Browser $browser) use ($owner, $store) {
-            $this->openMediaUpload($browser, $owner, $store);
+        $this->browse(function (Browser $browser) use ($owner, $organization) {
+            $this->openMediaUpload($browser, $owner, $organization);
 
             // A drag over the box says what letting go does.
             $browser->script(<<<'JS'
@@ -77,11 +77,11 @@ class ChunkedUploadFlowTest extends DuskTestCase
 
     public function test_a_picture_larger_than_a_chunk_goes_up_in_pieces_and_arrives_whole(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization);
 
-        $this->browse(function (Browser $browser) use ($owner, $store) {
-            $this->openMediaUpload($browser, $owner, $store);
+        $this->browse(function (Browser $browser) use ($owner, $organization) {
+            $this->openMediaUpload($browser, $owner, $organization);
             $this->countChunks($browser);
 
             $this->choose($browser, 'media-file', "window.__noise('Big poster.png', 1800)");
@@ -103,11 +103,11 @@ class ChunkedUploadFlowTest extends DuskTestCase
 
     public function test_an_upload_waits_out_a_lost_connection_and_can_be_paused_resumed_and_cancelled(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization);
 
-        $this->browse(function (Browser $browser) use ($owner, $store) {
-            $this->openMediaUpload($browser, $owner, $store);
+        $this->browse(function (Browser $browser) use ($owner, $organization) {
+            $this->openMediaUpload($browser, $owner, $organization);
             $browser->script('window.__samePage = true;');
 
             try {
@@ -192,11 +192,11 @@ class ChunkedUploadFlowTest extends DuskTestCase
         });
     }
 
-    private function openMediaUpload(Browser $browser, User $owner, Store $store): void
+    private function openMediaUpload(Browser $browser, User $owner, Organization $organization): void
     {
         $this->freshSession($browser);
         $browser->loginAs($owner);
-        $this->switchToStore($browser, $store);
+        $this->switchToOrganization($browser, $organization);
         $browser->visit('/media');
         $this->waitForAlpine($browser);
         // The drop box is on the page itself (owner, 2026-09-30), not in a dialog.

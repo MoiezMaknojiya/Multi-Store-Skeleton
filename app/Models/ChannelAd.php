@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * One ad inside a channel: WHICH file (a row of a media library, by id — docs/CHANNEL-CONTENT-SPEC.md), how
  * long it shows, and the dates it runs.
  *
- * The file belongs to a library — the channel's shop's, or the platform's — never to the channel: taking the
+ * The file belongs to a library — the channel's organization's, or the platform's — never to the channel: taking the
  * ad out leaves the file where it is, and a published Ad Builder ad re-published later is shown new here
  * without a second copy anywhere. Everything about the file (its kind, its address, a video's own length) is
  * read through the media row, under the names this model always had, so nothing that reads an ad changes.
@@ -22,8 +22,8 @@ class ChannelAd extends Model
     use HasFactory;
 
     /**
-     * The longest an IMAGE (or an ad page) may stay up in one go. A channel line sits inside a shop's own
-     * loop, and one still holding the wall for ten minutes is the channel swallowing the shop.
+     * The longest an IMAGE (or an ad page) may stay up in one go. A channel line sits inside an organization's own
+     * loop, and one still holding the wall for ten minutes is the channel swallowing the organization.
      */
     public const MAX_IMAGE_SECONDS = 300;
 

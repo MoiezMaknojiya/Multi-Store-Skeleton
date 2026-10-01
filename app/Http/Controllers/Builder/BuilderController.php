@@ -10,12 +10,12 @@ use App\Models\ActivityLog;
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
-use App\Models\Store;
 use App\Services\AdCompiler;
 use App\Services\AdPublisher;
 use App\Services\MediaStorage;
-use App\Services\StoreStorage;
+use App\Services\OrganizationStorage;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -33,41 +33,41 @@ use Illuminate\View\View;
  * The Ad Builder (docs/AD-BUILDER-SPEC.md): two pages — Ads and Assets — around one editor that
  * draws an advert the shape of a television: 1920×1080, or 1080×1920 for one mounted upright (§12).
  *
- * An ad belongs to a store, like everything else a shop makes, and the platform works above them all:
- * `BuilderAd::visibleTo` decides which, so a store's person never sees another shop's design and a super
- * admin sees every one with the shop's name beside it. The platform may also make an ad for every shop (owner,
- * 2026-10-01): every shop sees it once it is published and copies it into its own Ads, and only above the stores is
- * it changed or deleted — with the ordinary Update Ads and Delete Ads there; a shop's people see, use and copy it,
+ * An ad belongs to an organization, like everything else an organization makes, and the platform works above them all:
+ * `BuilderAd::visibleTo` decides which, so an organization's person never sees another organization's design and a super
+ * admin sees every one with the organization's name beside it. The platform may also make an ad for every organization (owner,
+ * 2026-10-01): every organization sees it once it is published and copies it into its own Ads, and only above the organizations is
+ * it changed or deleted — with the ordinary Update Ads and Delete Ads there; an organization's people see, use and copy it,
  * nothing more ("srif delete nahi kar sakta ha"). Each action asks it of the ad (mayUpdate, mayDelete).
  */
 class BuilderController extends Controller
 {
     use ConfirmsPassword, HandlesCrudData;
 
-    public function __construct(private readonly MediaStorage $storage, private readonly StoreStorage $quota) {}
+    public function __construct(private readonly MediaStorage $storage, private readonly OrganizationStorage $quota) {}
 
-    /** The Ads page: everything this person may open — and, above the stores, a filter by shop. */
+    /** The Ads page: everything this person may open — and, above the organizations, a filter by organization. */
     public function index(): View
     {
-        return view('builder.index', ['stores' => $this->storesToFilterBy()]);
+        return view('builder.index', ['organizations' => $this->organizationsToFilterBy()]);
     }
 
     /** The saved ads, newest first. */
     public function data(Request $request): JsonResponse
     {
-        $filters = $request->validate(['store_id' => ['nullable', 'integer', 'min:1']]);
+        $filters = $request->validate(['organization_id' => ['nullable', 'integer', 'min:1']]);
 
-        // The filter only ever NARROWS what visibleTo allows: inside a store, asking for another shop's
-        // ads finds none, because the store's own wall is already on the query.
+        // The filter only ever NARROWS what visibleTo allows: inside an organization, asking for another organization's
+        // ads finds none, because the organization's own wall is already on the query.
         $query = BuilderAd::visibleTo(auth()->user())
-            ->when($filters['store_id'] ?? null, fn (Builder $query, int|string $storeId) => $query->where('store_id', $storeId))
-            ->with(['store:id,name', 'updater:id,first_name,last_name', 'media:id,thumbnail_path'])
+            ->when($filters['organization_id'] ?? null, fn (Builder $query, int|string $organizationId) => $query->where('organization_id', $organizationId))
+            ->with(['organization:id,name', 'updater:id,first_name,last_name', 'media:id,thumbnail_path'])
             ->latest('updated_at');
 
         return $this->paginatedResponse(
             $request,
             $query,
-            // A shop finds the platform's ad by the name it was published under, which is the one its card shows.
+            // An organization finds the platform's ad by the name it was published under, which is the one its card shows.
             ['name', 'published_name'],
             'ads',
             ['*'],
@@ -80,16 +80,16 @@ class BuilderController extends Controller
                 $rows->each(function (BuilderAd $ad) use ($refusals) {
                     $ad->setAttribute('is_published', $ad->isPublished());
                     $ad->setAttribute('status', $ad->status());
-                    $ad->setAttribute('store_name', $ad->store?->name);
+                    $ad->setAttribute('organization_name', $ad->organization?->name);
                     $ad->setAttribute('updated_by_name', $ad->updater?->name);
                     $ad->setAttribute('in_channels_message', $ad->media_id === null ? null : ($refusals[$ad->media_id] ?? null));
                     $ad->setAttribute('shared', $ad->isShared());
                     $ad->setAttribute('owner_label', $this->ownerLabel($ad));
                     $ad->setAttribute('can', ['update' => $this->mayUpdate($ad), 'copy' => $this->mayCopy($ad), 'delete' => $this->mayDelete($ad)]);
 
-                    // Inside a shop the platform's ad is the platform's: shown as it was published — never its unfinished
-                    // changes — and with nobody's name from above the stores (as the platform's channels are shown).
-                    if ($ad->isShared() && ! $this->aboveTheStores()) {
+                    // Inside an organization the platform's ad is the platform's: shown as it was published — never its unfinished
+                    // changes — and with nobody's name from above the organizations (as the platform's channels are shown).
+                    if ($ad->isShared() && ! $this->aboveTheOrganizations()) {
                         $ad->setAttribute('updated_by_name', null);
                         $ad->makeHidden(['created_by', 'updated_by']);
 
@@ -108,7 +108,7 @@ class BuilderController extends Controller
 
     /**
      * A new ad: the editor with an empty stage of the shape New ad asked for. Nothing is written until the
-     * first save. The platform team says which shop a new ad is for, so they are handed the shops to choose
+     * first save. The platform team says which organization a new ad is for, so they are handed the organizations to choose
      * from.
      */
     public function create(Request $request): View|RedirectResponse
@@ -127,15 +127,15 @@ class BuilderController extends Controller
             'orientation' => $orientation,
             'document' => BuilderAd::blankDocument($orientation),
             'assets' => $this->assetsForEditor(),
-            'stores' => $this->storesToFilterBy(),
+            'organizations' => $this->organizationsToFilterBy(),
         ]);
     }
 
     /** The editor, opened on a saved ad. */
     public function edit(BuilderAd $ad): View
     {
-        // Route middleware is not enough: the target has to be inside the store the actor is working in,
-        // or it does not exist for them (404, never 403) — and a shared one opens above the stores alone.
+        // Route middleware is not enough: the target has to be inside the organization the actor is working in,
+        // or it does not exist for them (404, never 403) — and a shared one opens above the organizations alone.
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
         $this->authorizeChange($ad);
 
@@ -144,7 +144,7 @@ class BuilderController extends Controller
             'orientation' => $ad->orientation,
             'document' => $ad->document,
             'assets' => $this->assetsForEditor($ad),
-            'ownerLabel' => $this->ownerLabel($ad) ?? ($this->aboveTheStores() ? $ad->store?->name : null),
+            'ownerLabel' => $this->ownerLabel($ad) ?? ($this->aboveTheOrganizations() ? $ad->organization?->name : null),
         ]);
     }
 
@@ -152,10 +152,10 @@ class BuilderController extends Controller
     public function store(BuilderAdRequest $request): JsonResponse
     {
         $validated = $request->validated();
-        $storeId = $this->targetStoreId($validated);
+        $organizationId = $this->targetOrganizationId($validated);
 
         $ad = BuilderAd::create([
-            'store_id' => $storeId,
+            'organization_id' => $organizationId,
             'name' => $validated['name'],
             // Said once, here; from now on the column decides what size a save may be (§12).
             'orientation' => $request->orientation(),
@@ -168,7 +168,7 @@ class BuilderController extends Controller
 
         ActivityLog::record('ad.created', $ad, $ad->isShared()
             ? "Created {$ad->orientation} ad {$ad->name} for every organization"
-            : "Created {$ad->orientation} ad {$ad->name}", storeId: $this->logStoreOf($ad));
+            : "Created {$ad->orientation} ad {$ad->name}", organizationId: $this->logOrganizationOf($ad));
 
         return response()->json([
             'message' => 'Ad saved',
@@ -198,7 +198,7 @@ class BuilderController extends Controller
                 'updated_by' => auth()->id(),
             ])->save();
 
-            ActivityLog::record('ad.updated', $ad, "Updated ad {$ad->name}", storeId: $this->logStoreOf($ad));
+            ActivityLog::record('ad.updated', $ad, "Updated ad {$ad->name}", organizationId: $this->logOrganizationOf($ad));
         }
 
         $this->savePoster($ad, $request->input('thumbnail'));
@@ -216,23 +216,23 @@ class BuilderController extends Controller
     /**
      * A copy to work from, with its own name. The copy is a draft even if the original was published.
      *
-     * Inside a shop a copy is that shop's own, whichever ad it was made from — the platform's shared ones included
-     * (owner, 2026-10-01: "woo copy kar sake"), and then it is of what the shop was shown: the version the platform
-     * published, never its unfinished changes, under that name while the shop has no ad called so. Above the stores a
-     * copy stays where its original is: a shared ad's copy is shared too, as every ad made there with no shop is.
+     * Inside an organization a copy is that organization's own, whichever ad it was made from — the platform's shared ones included
+     * (owner, 2026-10-01: "woo copy kar sake"), and then it is of what the organization was shown: the version the platform
+     * published, never its unfinished changes, under that name while the organization has no ad called so. Above the organizations a
+     * copy stays where its original is: a shared ad's copy is shared too, as every ad made there with no organization is.
      */
     public function duplicate(BuilderAd $ad): JsonResponse
     {
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
-        $storeId = $this->aboveTheStores() ? $ad->store_id : $this->standingStoreId();
-        $fromThePlatform = $ad->isShared() && $storeId !== null;
+        $organizationId = $this->aboveTheOrganizations() ? $ad->organization_id : $this->standingOrganizationId();
+        $fromThePlatform = $ad->isShared() && $organizationId !== null;
         $published = $fromThePlatform && $ad->isPublished() && $ad->published_document !== null;
         $name = $published ? ($ad->published_name ?? $ad->name) : $ad->name;
         $original = $published ? $ad->media?->thumbnail_path : $ad->thumbnail_path;
 
         $copy = BuilderAd::create([
-            'store_id' => $storeId,
-            'name' => $this->copyName($name, $storeId, keepItIfFree: $fromThePlatform),
+            'organization_id' => $organizationId,
+            'name' => $this->copyName($name, $organizationId, keepItIfFree: $fromThePlatform),
             'orientation' => $ad->orientation,
             'document' => $published ? $ad->published_document : $ad->document,
             'created_by' => auth()->id(),
@@ -240,12 +240,12 @@ class BuilderController extends Controller
         ]);
 
         // The poster is the design's picture, so the copy starts with it — as a file of its own. Sharing the
-        // original's file would let deleting the original take the copy's picture with it. A shop with no room
-        // for it gets its copy without one: a poster is never a reason to refuse (StoreStorage).
+        // original's file would let deleting the original take the copy's picture with it. An organization with no room
+        // for it gets its copy without one: a poster is never a reason to refuse (OrganizationStorage).
         if ($original && Storage::disk('public')->exists($original)) {
             $poster = $copy->storageDirectory().'/poster.jpg';
 
-            $this->quota->withRoomOrSkip($copy->store_id, (int) Storage::disk('public')->size($original), function () use ($original, $copy, $poster) {
+            $this->quota->withRoomOrSkip($copy->organization_id, (int) Storage::disk('public')->size($original), function () use ($original, $copy, $poster) {
                 Storage::disk('public')->copy($original, $poster);
                 $copy->update(['thumbnail_path' => $poster]);
 
@@ -256,7 +256,7 @@ class BuilderController extends Controller
         if ($fromThePlatform) {
             ActivityLog::record('ad.copied', $copy, "Copied ad {$name} from the platform".($copy->name !== $name ? " as {$copy->name}" : ''));
         } else {
-            ActivityLog::record('ad.duplicated', $copy, "Duplicated ad {$ad->name} as {$copy->name}", storeId: $this->logStoreOf($copy));
+            ActivityLog::record('ad.duplicated', $copy, "Duplicated ad {$ad->name} as {$copy->name}", organizationId: $this->logOrganizationOf($copy));
         }
 
         return response()->json([
@@ -281,7 +281,7 @@ class BuilderController extends Controller
 
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
 
-        // A shop is shown the platform's ad as it was published, as its gallery shows it — never the changes the
+        // An organization is shown the platform's ad as it was published, as its gallery shows it — never the changes the
         // platform has not published yet. Only read, never saved.
         if ($this->showsPublishedVersion($ad) && $ad->published_document !== null) {
             $ad = (clone $ad)->forceFill(['document' => $ad->published_document, 'name' => $ad->published_name ?? $ad->name]);
@@ -327,13 +327,13 @@ class BuilderController extends Controller
         $media = $publisher->publish($ad, auth()->id());
 
         ActivityLog::record('ad.published', $ad, $ad->isShared() ? "Published ad {$ad->name} for every organization" : "Published ad {$ad->name}",
-            storeId: $this->logStoreOf($ad));
+            organizationId: $this->logOrganizationOf($ad));
 
         $screens = $publisher->screensShowing($media);
 
         return response()->json([
             'message' => match (true) {
-                // Its page is in the platform's library, where only the platform's channels reach it; every shop now
+                // Its page is in the platform's library, where only the platform's channels reach it; every organization now
                 // sees this version, and copies it to play it on its own screens.
                 $ad->isShared() => 'Published — every organization sees it now and can copy it',
                 $screens > 0 => "Published — {$screens} ".($screens === 1 ? 'screen is' : 'screens are').' now showing the new version',
@@ -363,9 +363,9 @@ class BuilderController extends Controller
         $publisher->unpublish($ad);
 
         ActivityLog::record('ad.unpublished', $ad, "Unpublished ad {$ad->name}".($reach !== '' ? " — taken off {$reach}" : ''),
-            storeId: $this->logStoreOf($ad));
+            organizationId: $this->logOrganizationOf($ad));
 
-        // A shared ad leaves every shop's Ads too, until it is published again; the copies shops made stay theirs.
+        // A shared ad leaves every organization's Ads too, until it is published again; the copies organizations made stay theirs.
         $message = $reach !== '' ? "Unpublished — taken off {$reach}" : 'Unpublished — it is a draft again';
 
         return response()->json([
@@ -390,7 +390,7 @@ class BuilderController extends Controller
 
         $publisher->discardChanges($ad, auth()->id());
 
-        ActivityLog::record('ad.changes_discarded', $ad, "Discarded the unpublished changes of ad {$ad->name}", storeId: $this->logStoreOf($ad));
+        ActivityLog::record('ad.changes_discarded', $ad, "Discarded the unpublished changes of ad {$ad->name}", organizationId: $this->logOrganizationOf($ad));
 
         return response()->json([
             'message' => 'Changes discarded — back to the version on the screens',
@@ -406,8 +406,8 @@ class BuilderController extends Controller
     {
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
 
-        // A shared ad goes from every shop at once: the platform's alone to delete (owner, 2026-10-01).
-        abort_unless($this->mayDelete($ad), 403, $ad->isShared() && ! $this->aboveTheStores()
+        // A shared ad goes from every organization at once: the platform's alone to delete (owner, 2026-10-01).
+        abort_unless($this->mayDelete($ad), 403, $ad->isShared() && ! $this->aboveTheOrganizations()
             ? 'An ad for every organization is the platform\'s: only the platform deletes it.'
             : 'Deleting an ad needs the Delete Ads permission.');
 
@@ -421,15 +421,15 @@ class BuilderController extends Controller
 
         $name = $ad->name;
         $shared = $ad->isShared();
-        $storeId = $this->logStoreOf($ad);
+        $organizationId = $this->logOrganizationOf($ad);
         $screens = $ad->media_id === null
             ? 0
             : PlaylistItem::where('media_id', $ad->media_id)->count();
 
         DB::transaction(fn () => $ad->delete());
 
-        // The copies shops made of a shared ad are theirs, and stay.
-        ActivityLog::record('ad.deleted', null, $shared ? "Deleted ad {$name}, shared with every organization" : "Deleted ad {$name}", storeId: $storeId);
+        // The copies organizations made of a shared ad are theirs, and stay.
+        ActivityLog::record('ad.deleted', null, $shared ? "Deleted ad {$name}, shared with every organization" : "Deleted ad {$name}", organizationId: $organizationId);
 
         return response()->json([
             'message' => $screens > 0
@@ -439,33 +439,33 @@ class BuilderController extends Controller
     }
 
     /**
-     * The pictures and videos the editor may put on the stage: the ad's shop's own and those the platform shares
-     * with every shop (owner, 2026-09-29) — for an ad shared with every shop, the shared ones alone. A new ad's are
-     * everything in reach, and the editor keeps to the shelf of the shop chosen for it (onThisShelf).
+     * The pictures and videos the editor may put on the stage: the ad's organization's own and those the platform shares
+     * with every organization (owner, 2026-09-29) — for an ad shared with every organization, the shared ones alone. A new ad's are
+     * everything in reach, and the editor keeps to the shelf of the organization chosen for it (onThisShelf).
      */
     private function assetsForEditor(?BuilderAd $ad = null): array
     {
         return BuilderAsset::visibleTo(auth()->user())
-            ->when($ad !== null, fn (Builder $query) => $query->onShelfOf($ad->store_id))
+            ->when($ad !== null, fn (Builder $query) => $query->onShelfOf($ad->organization_id))
             ->latest()
             ->limit(200)
-            ->get(['id', 'store_id', 'title', 'kind', 'disk', 'path', 'thumbnail_path', 'width', 'height', 'duration_seconds'])
+            ->get(['id', 'organization_id', 'title', 'kind', 'disk', 'path', 'thumbnail_path', 'width', 'height', 'duration_seconds'])
             ->toArray();
     }
 
-    /** Update Ads — and, for an ad the platform shares with every shop, standing above the stores. */
+    /** Update Ads — and, for an ad the platform shares with every organization, standing above the organizations. */
     private function mayUpdate(BuilderAd $ad): bool
     {
-        return Gate::allows('ad-update') && (! $ad->isShared() || $this->aboveTheStores());
+        return Gate::allows('ad-update') && (! $ad->isShared() || $this->aboveTheOrganizations());
     }
 
-    /** Delete Ads — and, for an ad the platform shares with every shop, standing above the stores. */
+    /** Delete Ads — and, for an ad the platform shares with every organization, standing above the organizations. */
     private function mayDelete(BuilderAd $ad): bool
     {
-        return Gate::allows('ad-destroy') && (! $ad->isShared() || $this->aboveTheStores());
+        return Gate::allows('ad-destroy') && (! $ad->isShared() || $this->aboveTheOrganizations());
     }
 
-    /** Create Ads: inside a shop the copy is the shop's own, above the stores it stays where its original is. */
+    /** Create Ads: inside an organization the copy is the organization's own, above the organizations it stays where its original is. */
     private function mayCopy(BuilderAd $ad): bool
     {
         return Gate::allows('ad-store');
@@ -474,54 +474,54 @@ class BuilderController extends Controller
     /** Changing, publishing and taking an ad off: refused with the reason, never as a bare 403. */
     private function authorizeChange(BuilderAd $ad): void
     {
-        abort_unless($this->mayUpdate($ad), 403, $ad->isShared() && ! $this->aboveTheStores()
+        abort_unless($this->mayUpdate($ad), 403, $ad->isShared() && ! $this->aboveTheOrganizations()
             ? 'An ad for every organization is the platform\'s: copy it to change it.'
             : 'Changing an ad needs the Update Ads permission.');
     }
 
-    /** Whether a shop's person is shown the version the platform published rather than its draft: always, inside a shop. */
+    /** Whether an organization's person is shown the version the platform published rather than its draft: always, inside an organization. */
     private function showsPublishedVersion(BuilderAd $ad): bool
     {
-        return $ad->isShared() && $ad->isPublished() && ! $this->aboveTheStores();
+        return $ad->isShared() && $ad->isPublished() && ! $this->aboveTheOrganizations();
     }
 
-    /** Whose ad this is, for a shared one: above the stores "Every shop", inside a shop "From the platform". */
+    /** Whose ad this is, for a shared one: above the organizations "Every organization", inside an organization "From the platform". */
     private function ownerLabel(BuilderAd $ad): ?string
     {
         if (! $ad->isShared()) {
             return null;
         }
 
-        return $this->aboveTheStores() ? 'Every organization' : 'From the platform';
+        return $this->aboveTheOrganizations() ? 'Every organization' : 'From the platform';
     }
 
-    /** The store a log entry belongs to: the ad's shop, or for a shared ad the shop the person is working in (if any). */
-    private function logStoreOf(BuilderAd $ad): ?int
+    /** The organization a log entry belongs to: the ad's organization, or for a shared ad the organization the person is working in (if any). */
+    private function logOrganizationOf(BuilderAd $ad): ?int
     {
-        return $ad->store_id ?? $this->standingStoreId();
+        return $ad->organization_id ?? $this->standingOrganizationId();
     }
 
-    private function aboveTheStores(): bool
+    private function aboveTheOrganizations(): bool
     {
         return auth()->user()->globalRole() !== null;
     }
 
-    /** The shop a store's person is working in; none above the stores. */
-    private function standingStoreId(): ?int
+    /** The organization an organization's person is working in; none above the organizations. */
+    private function standingOrganizationId(): ?int
     {
-        return $this->aboveTheStores() ? null : ((int) session('current_store_id') ?: null);
+        return $this->aboveTheOrganizations() ? null : ((int) session('current_organization_id') ?: null);
     }
 
     /**
-     * The shops a platform person may filter the listing by — none for a store's own people, who only
-     * ever see their own shop.
+     * The organizations a platform person may filter the listing by — none for an organization's own people, who only
+     * ever see their own organization.
      *
      * @return array<int, array{id: int, name: string}>
      */
-    private function storesToFilterBy(): array
+    private function organizationsToFilterBy(): array
     {
         return auth()->user()->globalRole() !== null
-            ? Store::orderBy('name')->get(['id', 'name'])->toArray()
+            ? Organization::orderBy('name')->get(['id', 'name'])->toArray()
             : [];
     }
 
@@ -537,7 +537,7 @@ class BuilderController extends Controller
             // draft | published | changed — changed: on the screens, with saved changes they do not show yet.
             'status' => $ad->status(),
             'has_published_version' => $ad->hasPublishedVersion(),
-            // Made for every shop, by the platform (owner, 2026-10-01)?
+            // Made for every organization, by the platform (owner, 2026-10-01)?
             'shared' => $ad->isShared(),
             'updated_at' => $ad->updated_at?->toIso8601String(),
         ];
@@ -559,23 +559,23 @@ class BuilderController extends Controller
             return;
         }
 
-        // Only while the shop has room for it — written and recorded on the design under the shop's lock, so it is
-        // counted from the moment it exists; without room the design keeps the poster it had (StoreStorage). A
+        // Only while the organization has room for it — written and recorded on the design under the organization's lock, so it is
+        // counted from the moment it exists; without room the design keeps the poster it had (OrganizationStorage). A
         // photograph of the design is not a change to it: it must not move `updated_at`, which would make a
         // published ad read as edited since — a draft, off every screen (BuilderAd::isPublished()).
-        $this->storage->storePosterWithin($ad->store_id, "{$ad->storageDirectory()}/poster.jpg", $dataUri,
+        $this->storage->storePosterWithin($ad->organization_id, "{$ad->storageDirectory()}/poster.jpg", $dataUri,
             fn (string $path) => BuilderAd::withoutTimestamps(fn () => $ad->update(['thumbnail_path' => $path])));
     }
 
     /**
-     * "Winter sale" → "Winter sale (copy)", and "(copy 2)" after that, among the ads of the place the copy goes to. A
-     * shop's copy of the platform's ad keeps the name while the shop has no ad called so: it is the shop's first.
+     * "Winter sale" → "Winter sale (copy)", and "(copy 2)" after that, among the ads of the place the copy goes to. An
+     * organization's copy of the platform's ad keeps the name while the organization has no ad called so: it is the organization's first.
      */
-    private function copyName(string $name, ?int $storeId, bool $keepItIfFree = false): string
+    private function copyName(string $name, ?int $organizationId, bool $keepItIfFree = false): string
     {
         $base = preg_replace('/ \(copy( \d+)?\)$/', '', $name) ?? $name;
         $taken = BuilderAd::query()
-            ->when($storeId === null, fn (Builder $query) => $query->whereNull('store_id'), fn (Builder $query) => $query->where('store_id', $storeId))
+            ->when($organizationId === null, fn (Builder $query) => $query->whereNull('organization_id'), fn (Builder $query) => $query->where('organization_id', $organizationId))
             ->pluck('name')
             ->all();
 
@@ -597,41 +597,41 @@ class BuilderController extends Controller
     }
 
     /**
-     * Which shop the new ad belongs to — or none, for an ad the platform makes for every shop.
+     * Which organization the new ad belongs to — or none, for an ad the platform makes for every organization.
      *
-     * A store's person builds in the store they are working in — there is nothing to choose. The platform
-     * team stands in no store at all (the tiers are exclusive), so they say which shop the ad is for, and
-     * the answer has to be a store that exists; or no shop at all — All shops, the editor's first choice
-     * (owner, 2026-10-01) — and the ad is shared with every shop.
+     * An organization's person builds in the organization they are working in — there is nothing to choose. The platform
+     * team stands in no organization at all (the tiers are exclusive), so they say which organization the ad is for, and
+     * the answer has to be an organization that exists; or no organization at all — All organizations, the editor's first choice
+     * (owner, 2026-10-01) — and the ad is shared with every organization.
      *
      * @param  array<string, mixed>  $validated
      */
-    private function targetStoreId(array $validated): ?int
+    private function targetOrganizationId(array $validated): ?int
     {
-        if ($this->aboveTheStores()) {
-            $storeId = (int) ($validated['store_id'] ?? 0);
+        if ($this->aboveTheOrganizations()) {
+            $organizationId = (int) ($validated['organization_id'] ?? 0);
 
-            if ($storeId === 0) {
+            if ($organizationId === 0) {
                 return null;
             }
 
-            if (! Store::whereKey($storeId)->exists()) {
+            if (! Organization::whereKey($organizationId)->exists()) {
                 throw ValidationException::withMessages([
-                    'store_id' => 'That organization no longer exists. Reload the page and choose again.',
+                    'organization_id' => 'That organization no longer exists. Reload the page and choose again.',
                 ]);
             }
 
-            return $storeId;
+            return $organizationId;
         }
 
-        $storeId = (int) session('current_store_id');
+        $organizationId = (int) session('current_organization_id');
 
-        if (! $storeId) {
+        if (! $organizationId) {
             throw ValidationException::withMessages([
                 'name' => 'Select an organization before saving an ad — an ad belongs to the organization it was made for.',
             ]);
         }
 
-        return $storeId;
+        return $organizationId;
     }
 }

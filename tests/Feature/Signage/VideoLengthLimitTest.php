@@ -4,8 +4,8 @@ use App\Models\BuilderAsset;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Rules\VideoLength;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -17,7 +17,7 @@ use Tests\Support\VideoFiles;
 |--------------------------------------------------------------------------
 |
 | Owner's rules, 2026-09-28: "Media Library aur Channel mein 5 min se zyada wali video upload na ho", and for
-| the Ad Builder, whose videos repeat for as long as an ad is up, "max 30 seconds". A video reaches a shop's
+| the Ad Builder, whose videos repeat for as long as an ad is up, "max 30 seconds". A video reaches an organization's
 | screens through its library, a channel's Upload and the Ad Builder's shelf, and each door measures the FILE —
 | the browser's number is only a field. Rounded as a phone shows it: 5:00 goes in, 5:01 does not.
 |
@@ -26,10 +26,10 @@ use Tests\Support\VideoFiles;
 beforeEach(function () {
     Storage::fake('public');
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->manager = createStoreUser($this->store, ['media-view', 'media-store', 'channel-view', 'channel-update', 'ad-view', 'ad-store'], 'Manager');
-    $this->actingAs($this->manager)->withSession(['current_store_id' => $this->store->id]);
-    $this->channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'GHRA Ware House']);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->manager = createOrganizationUser($this->organization, ['media-view', 'media-store', 'channel-view', 'channel-update', 'ad-view', 'ad-store'], 'Manager');
+    $this->actingAs($this->manager)->withSession(['current_organization_id' => $this->organization->id]);
+    $this->channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => 'GHRA Ware House']);
 });
 
 /** Upload through one of the three doors, the way its page does. */
@@ -145,24 +145,24 @@ test("changing a channel ad's file to a video over five minutes is refused, and 
     expect($ad->fresh()->media->duration_seconds)->toBe(30)->and(Media::count())->toBe(1);
 });
 
-test('the platform team is held to the same five minutes, in the platform\'s library and in a shop\'s', function () {
+test('the platform team is held to the same five minutes, in the platform\'s library and in an organization\'s', function () {
     $this->actingAs(createSuperAdmin())->withSession([]);
 
     $this->postJson('/media', ['file' => VideoFiles::upload(VideoFiles::mp4(420), 'brand.mp4')])
         ->assertStatus(422)->assertJsonValidationErrors(['file' => 'A video may be at most 5 minutes long. This one is 7:00.']);
 
-    $this->postJson('/media', ['file' => VideoFiles::upload(VideoFiles::mp4(420), 'brand.mp4'), 'store_id' => $this->store->id])
+    $this->postJson('/media', ['file' => VideoFiles::upload(VideoFiles::mp4(420), 'brand.mp4'), 'organization_id' => $this->organization->id])
         ->assertStatus(422)->assertJsonValidationErrors('file');
 
     expect(Media::count())->toBe(0);
 });
 
 test('a video line on a playlist keeps its file\'s own length, whatever the save sends', function () {
-    $screen = Screen::factory()->create(['store_id' => $this->store->id]);
-    $video = Media::factory()->create(['store_id' => $this->store->id, 'type' => Media::TYPE_VIDEO, 'mime_type' => 'video/mp4', 'duration_seconds' => 40]);
-    $image = Media::factory()->create(['store_id' => $this->store->id]);
-    $manager = createStoreUser($this->store, ['screen-view', 'screen-playlist'], 'Screens');
-    $this->actingAs($manager)->withSession(['current_store_id' => $this->store->id]);
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
+    $video = Media::factory()->create(['organization_id' => $this->organization->id, 'type' => Media::TYPE_VIDEO, 'mime_type' => 'video/mp4', 'duration_seconds' => 40]);
+    $image = Media::factory()->create(['organization_id' => $this->organization->id]);
+    $manager = createOrganizationUser($this->organization, ['screen-view', 'screen-playlist'], 'Screens');
+    $this->actingAs($manager)->withSession(['current_organization_id' => $this->organization->id]);
     $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
 
     // A day written by hand for the video: its line keeps the file's forty seconds (the player's backstop);

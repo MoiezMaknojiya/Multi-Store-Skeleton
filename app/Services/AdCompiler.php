@@ -30,7 +30,7 @@ use Illuminate\Support\Facades\Storage;
  *                              rotation
  *
  * One self-contained file: no build step, no framework, no request anywhere but this server — because
- * it runs on a cheap box in a shop, possibly with no internet at all.
+ * it runs on a cheap box in an organization, possibly with no internet at all.
  */
 class AdCompiler
 {
@@ -223,8 +223,8 @@ class AdCompiler
         $tree = $this->tree(is_array($document['elements'] ?? null) ? $document['elements'] : []);
         $elements = $this->reachable($tree);
 
-        // Asset ids are resolved against THIS AD'S STORE, never against the ids alone: a document
-        // carrying another shop's asset id must compile to a missing picture, not a borrowed one.
+        // Asset ids are resolved against THIS AD'S ORGANIZATION, never against the ids alone: a document
+        // carrying another organization's asset id must compile to a missing picture, not a borrowed one.
         $assets = $this->assetsFor($ad, $elements, $stage);
 
         $animations = $this->animations->forElements($elements);
@@ -1036,8 +1036,8 @@ class AdCompiler
     /* ── Readers ───────────────────────────────────────────────────────── */
 
     /**
-     * Every asset the design names, keyed by id — this store's own and those the platform shares with every shop; for
-     * an ad shared with every shop, the shared ones alone.
+     * Every asset the design names, keyed by id — this organization's own and those the platform shares with every organization; for
+     * an ad shared with every organization, the shared ones alone.
      */
     private function assetsFor(BuilderAd $ad, array $elements, array $stage): Collection
     {
@@ -1054,7 +1054,7 @@ class AdCompiler
         }
 
         return BuilderAsset::whereIn('id', $ids)
-            ->onShelfOf($ad->store_id)
+            ->onShelfOf($ad->organization_id)
             ->get()
             ->keyBy('id');
     }

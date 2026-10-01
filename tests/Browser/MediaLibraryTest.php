@@ -5,8 +5,8 @@ namespace Tests\Browser;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Dusk\Browser;
@@ -17,23 +17,23 @@ class MediaLibraryTest extends DuskTestCase
     use DatabaseMigrations;
 
     /**
-     * A shop owner uploads a file, renames it, and deletes it — the whole library
-     * loop through the real UI, inside one store.
+     * An organization owner uploads a file, renames it, and deletes it — the whole library
+     * loop through the real UI, inside one organization.
      */
-    public function test_a_store_user_uploads_renames_and_deletes_a_file(): void
+    public function test_a_organization_user_uploads_renames_and_deletes_a_file(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
 
-        $owner = $this->storeMember($store, ['media-view', 'media-store', 'media-update', 'media-destroy']);
+        $owner = $this->organizationMember($organization, ['media-view', 'media-store', 'media-update', 'media-destroy']);
 
         // The file's name is its title in the library (docs/UPLOADS-SPEC.md).
         $path = $this->fixtureImage('Breakfast Board.png', 30, 120, 200);
 
-        $this->browse(function (Browser $browser) use ($owner, $store, $path) {
+        $this->browse(function (Browser $browser) use ($owner, $organization, $path) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             // -- Empty library -------------------------------------------------
             $browser->visit('/media');
@@ -55,7 +55,7 @@ class MediaLibraryTest extends DuskTestCase
             // Its row in the list, not its row in the drop box above it ("Breakfast Board.png"), which is on the page too.
             $media = Media::where('title', 'Breakfast Board')->firstOrFail();
             $browser->waitFor('@edit-media-'.$media->id, 15);
-            $this->assertSame($store->id, $media->store_id);
+            $this->assertSame($organization->id, $media->organization_id);
             $this->assertSame($owner->id, $media->created_by);
             $this->assertSame('landscape', $media->orientation);
             $this->assertNotNull($media->thumbnail_path);
@@ -90,31 +90,31 @@ class MediaLibraryTest extends DuskTestCase
         });
     }
 
-    /** The library is walled per store: a file uploaded in one store is not listed
-     *  in another store the same person also works in. */
-    public function test_the_library_is_scoped_to_the_store_being_worked_in(): void
+    /** The library is walled per organization: a file uploaded in one organization is not listed
+     *  in another organization the same person also works in. */
+    public function test_the_library_is_scoped_to_the_organization_being_worked_in(): void
     {
         $this->seedSuperAdmin();
-        $alpha = Store::factory()->create(['name' => 'Alpha Mart']);
-        $beta = Store::factory()->create(['name' => 'Beta Store']);
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $beta = Organization::factory()->create(['name' => 'Beta Organization']);
 
-        $owner = $this->storeMember($alpha, Role::OWNER);
-        $owner->stores()->attach($beta->id, ['role_id' => Role::starter(Role::OWNER)->id]);
+        $owner = $this->organizationMember($alpha, Role::OWNER);
+        $owner->organizations()->attach($beta->id, ['role_id' => Role::starter(Role::OWNER)->id]);
 
-        Media::factory()->create(['store_id' => $alpha->id, 'title' => 'Alpha Only Poster']);
+        Media::factory()->create(['organization_id' => $alpha->id, 'title' => 'Alpha Only Poster']);
 
         $this->browse(function (Browser $browser) use ($owner, $alpha, $beta) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
 
             // -- Inside Alpha the file is listed -------------------------------
-            $this->switchToStore($browser, $alpha);
+            $this->switchToOrganization($browser, $alpha);
             $browser->visit('/media');
             $this->waitForAlpine($browser);
             $browser->waitForText('Alpha Only Poster');
 
             // -- Inside Beta the same person sees an empty library -------------
-            $this->switchToStore($browser, $beta);
+            $this->switchToOrganization($browser, $beta);
             $browser->visit('/media');
             $this->waitForAlpine($browser);
             $browser->waitForText('No files yet.')
@@ -123,15 +123,15 @@ class MediaLibraryTest extends DuskTestCase
     }
 
     /**
-     * Above the stores the page reads one library at a time — the platform's own first, or a shop's — and an
+     * Above the organizations the page reads one library at a time — the platform's own first, or an organization's — and an
      * upload joins the one chosen (docs/CHANNEL-CONTENT-SPEC.md). A file a channel shows is refused at once,
      * before any confirmation.
      */
     public function test_the_platform_reads_one_library_at_a_time_and_uploads_into_the_one_chosen(): void
     {
         $admin = $this->seedSuperAdmin();
-        $alpha = Store::factory()->create(['name' => 'Alpha Mart']);
-        Media::factory()->create(['store_id' => $alpha->id, 'title' => 'Alpha poster', 'thumbnail_path' => null]);
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
+        Media::factory()->create(['organization_id' => $alpha->id, 'title' => 'Alpha poster', 'thumbnail_path' => null]);
         $promo = Media::factory()->platformOwned()->create(['title' => 'Platform promo', 'thumbnail_path' => null]);
         ChannelAd::factory()->create(['channel_id' => Channel::factory()->create(['name' => 'GAMA'])->id, 'media_id' => $promo->id]);
 
@@ -151,7 +151,7 @@ class MediaLibraryTest extends DuskTestCase
                 ->assertMissing('@confirm-media-deletion-confirm');
             $this->assertNotNull(Media::find($promo->id));
 
-            // -- A shop's library, and an upload that joins it ---------------------
+            // -- An organization's library, and an upload that joins it ---------------------
             $browser->select('@media-filter-library', (string) $alpha->id)
                 ->waitForText('Alpha poster')
                 ->assertDontSee('Platform promo');
@@ -159,7 +159,7 @@ class MediaLibraryTest extends DuskTestCase
             $this->uploadThrough($browser, 'media', $path);
 
             $browser->waitForText('Alpha menu', 15);
-            $this->assertSame($alpha->id, Media::where('title', 'Alpha menu')->firstOrFail()->store_id);
+            $this->assertSame($alpha->id, Media::where('title', 'Alpha menu')->firstOrFail()->organization_id);
         });
     }
 }

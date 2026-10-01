@@ -1,7 +1,7 @@
-{{-- The activity log: above the stores every store's history; inside a store ($store) that store's own
-     entries. Yearly maintenance drops a year for every store at once, so its panel is the platform's alone
+{{-- The activity log: above the organizations every organization's history; inside an organization ($organization) that organization's own
+     entries. Yearly maintenance drops a year for every organization at once, so its panel is the platform's alone
      (global-tier + activity-destroy, the same pair as its routes). --}}
-@php($canMaintain = ! $store && auth()->user()->can('global-tier') && auth()->user()->can('activity-destroy'))
+@php($canMaintain = ! $organization && auth()->user()->can('global-tier') && auth()->user()->can('activity-destroy'))
 
 <x-app-layout>
     <x-slot name="header">
@@ -11,7 +11,7 @@
     <div x-data="activityTable({ canMaintain: @json($canMaintain) })" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
 
-        {{-- Yearly storage panel (activity-destroy, above the stores): partition status + one-click maintenance --}}
+        {{-- Yearly storage panel (activity-destroy, above the organizations): partition status + one-click maintenance --}}
         @if ($canMaintain)
         <div class="card p-5">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -84,8 +84,8 @@
         </div>
 
         {{-- Activity Data Table (read-only audit trail). A bound :title — the wrapper echoes it itself, and an
-             echo here as well escaped a store's name twice. --}}
-        <x-crud.table-wrapper :title="$store ? 'Activity in '.$store->name : 'All Activity'" searchPlaceholder="Search activity..." :columns="4">
+             echo here as well escaped an organization's name twice. --}}
+        <x-crud.table-wrapper :title="$organization ? 'Activity in '.$organization->name : 'All Activity'" searchPlaceholder="Search activity..." :columns="4">
             <x-slot name="head">
                 <th class="px-5 py-3 text-left font-semibold">When</th>
                 <th class="px-5 py-3 text-left font-semibold">Who</th>

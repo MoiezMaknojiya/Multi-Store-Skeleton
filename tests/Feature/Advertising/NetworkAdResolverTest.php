@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Campaign;
+use App\Models\Organization;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Services\NetworkAdResolver;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -14,13 +14,13 @@ use Illuminate\Support\Collection;
 |
 | Four separate things must all be true, and each one is somebody's decision:
 |
-|   1. the SHOP agreed to carry advertising          stores.accepts_network_ads
+|   1. the ORGANIZATION agreed to carry advertising          organizations.accepts_network_ads
 |   2. and THIS television does                      screens.accepts_network_ads
 |   3. and this campaign chose this screen           campaign_screen
 |   4. and the campaign is live at this moment       dates, and its own window
 |
-| Consent is a standing fact about the shop; targeting is a decision about one
-| campaign. Both start off, so a shop that was never asked never carries an advert.
+| Consent is a standing fact about the organization; targeting is a decision about one
+| campaign. Both start off, so an organization that was never asked never carries an advert.
 |
 | Every moment below is read on the screen's own clock (America/Chicago unless a
 | test says otherwise). Nothing here looks at the day of the week — a campaign
@@ -28,11 +28,11 @@ use Illuminate\Support\Collection;
 |
 */
 
-/** A screen that has been cleared for advertising, in a shop that agreed. */
-function consentingScreen(Store $store, array $overrides = []): Screen
+/** A screen that has been cleared for advertising, in an organization that agreed. */
+function consentingScreen(Organization $organization, array $overrides = []): Screen
 {
     return Screen::factory()->create([
-        'store_id' => $store->id,
+        'organization_id' => $organization->id,
         'timezone' => 'America/Chicago',
         'accepts_network_ads' => true,
         ...$overrides,
@@ -49,8 +49,8 @@ function adsAt(Screen $screen, string $localMoment)
 }
 
 beforeEach(function () {
-    $this->store = Store::factory()->create(['accepts_network_ads' => true]);
-    $this->screen = consentingScreen($this->store);
+    $this->organization = Organization::factory()->create(['accepts_network_ads' => true]);
+    $this->screen = consentingScreen($this->organization);
 });
 
 /*
@@ -59,23 +59,23 @@ beforeEach(function () {
 |--------------------------------------------------------------------------
 */
 
-test('an advert reaches a screen when the shop agreed, the screen agreed, and it was targeted', function () {
+test('an advert reaches a screen when the organization agreed, the screen agreed, and it was targeted', function () {
     $campaign = Campaign::factory()->create(['name' => 'Coca-Cola Ramadan']);
     $campaign->screens()->attach($this->screen);
 
     expect(adsAt($this->screen, '2026-03-20 12:00')->pluck('name')->all())->toBe(['Coca-Cola Ramadan']);
 });
 
-test('a shop that never agreed carries nothing, however it was targeted', function () {
-    $this->store->update(['accepts_network_ads' => false]);
+test('an organization that never agreed carries nothing, however it was targeted', function () {
+    $this->organization->update(['accepts_network_ads' => false]);
     Campaign::factory()->create()->screens()->attach($this->screen);
 
     expect(adsAt($this->screen, '2026-03-20 12:00'))->toBeEmpty();
 });
 
-test('one television can be kept clean in a shop that otherwise carries adverts', function () {
-    // The set over the children's tables, in a shop that agreed in principle.
-    $quiet = consentingScreen($this->store, ['accepts_network_ads' => false, 'name' => 'Kids corner']);
+test('one television can be kept clean in an organization that otherwise carries adverts', function () {
+    // The set over the children's tables, in an organization that agreed in principle.
+    $quiet = consentingScreen($this->organization, ['accepts_network_ads' => false, 'name' => 'Kids corner']);
     $campaign = Campaign::factory()->create();
     $campaign->screens()->attach([$this->screen->id, $quiet->id]);
 
@@ -83,13 +83,13 @@ test('one television can be kept clean in a shop that otherwise carries adverts'
     expect(adsAt($quiet, '2026-03-20 12:00'))->toBeEmpty();
 });
 
-test('both flags start off, so a shop nobody asked carries nothing', function () {
-    $store = Store::factory()->create();
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
+test('both flags start off, so an organization nobody asked carries nothing', function () {
+    $organization = Organization::factory()->create();
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
 
     // Read back from the database, because it is the COLUMN default being tested —
     // a model straight from a factory has never been told what the column decided.
-    expect($store->fresh()->accepts_network_ads)->toBeFalse();
+    expect($organization->fresh()->accepts_network_ads)->toBeFalse();
     expect($screen->fresh()->accepts_network_ads)->toBeFalse();
 
     Campaign::factory()->create()->screens()->attach($screen);
@@ -98,7 +98,7 @@ test('both flags start off, so a shop nobody asked carries nothing', function ()
 });
 
 test('a campaign that did not choose this screen does not reach it', function () {
-    $other = consentingScreen($this->store, ['name' => 'Window TV']);
+    $other = consentingScreen($this->organization, ['name' => 'Window TV']);
     Campaign::factory()->create()->screens()->attach($other);
 
     expect(adsAt($this->screen, '2026-03-20 12:00'))->toBeEmpty();
@@ -149,8 +149,8 @@ test('a window that runs past midnight stays open through it', function () {
     expect(adsAt($this->screen, '2026-03-20 12:00'))->toBeEmpty();
 });
 
-test('the window is read on the screen own clock, so two shops disagree', function () {
-    $london = consentingScreen($this->store, ['timezone' => 'Europe/London']);
+test('the window is read on the screen own clock, so two organizations disagree', function () {
+    $london = consentingScreen($this->organization, ['timezone' => 'Europe/London']);
     $campaign = Campaign::factory()->between('11:00', '15:00')->create();
     $campaign->screens()->attach([$this->screen->id, $london->id]);
 

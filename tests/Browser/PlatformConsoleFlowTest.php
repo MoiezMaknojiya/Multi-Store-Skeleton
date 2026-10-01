@@ -2,49 +2,49 @@
 
 namespace Tests\Browser;
 
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
 
 /**
- * The platform's side through the real pages: a store created for a customer whose owner
+ * The platform's side through the real pages: an organization created for a customer whose owner
  * then accepts from the email, and a platform role built on the Roles page.
  */
 class PlatformConsoleFlowTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    public function test_the_platform_creates_a_store_and_its_owner_accepts_from_the_email(): void
+    public function test_the_platform_creates_a_organization_and_its_owner_accepts_from_the_email(): void
     {
         $admin = $this->seedSuperAdmin();
 
         $this->browse(function (Browser $browser) use ($admin) {
-            /* ── 1. The super admin creates the store ───────────────────── */
+            /* ── 1. The super admin creates the organization ───────────────────── */
             $this->freshSession($browser);
-            $browser->loginAs($admin)->visit('/stores');
+            $browser->loginAs($admin)->visit('/organizations');
             $this->waitForAlpine($browser);
 
             $logSizeBefore = $this->mailLogSize();
 
-            $this->clickAndAwait($browser, '@add-store', fn (Browser $b) => $b->waitFor('@store-form', 3));
-            $this->jsType($browser, '@store-name', 'Gamma Grocers');
-            $this->jsType($browser, '@store-street', '9 Elm St');
-            $this->jsType($browser, '@store-city', 'Houston');
-            $browser->select('@store-state', 'TX');
-            $this->jsType($browser, '@store-zip', '77001');
-            $this->jsType($browser, '@store-owner-email', 'gina@example.com');
-            $this->jsClick($browser, '@store-save');
+            $this->clickAndAwait($browser, '@add-organization', fn (Browser $b) => $b->waitFor('@organization-form', 3));
+            $this->jsType($browser, '@organization-name', 'Gamma Grocers');
+            $this->jsType($browser, '@organization-street', '9 Elm St');
+            $this->jsType($browser, '@organization-city', 'Houston');
+            $browser->select('@organization-state', 'TX');
+            $this->jsType($browser, '@organization-zip', '77001');
+            $this->jsType($browser, '@organization-owner-email', 'gina@example.com');
+            $this->jsClick($browser, '@organization-save');
 
             $browser->waitForText('Organization created. An invitation to own it was sent to gina@example.com.');
 
-            // Nobody is in the store until the invitation is accepted, so it is still offered an owner.
-            $store = Store::where('name', 'Gamma Grocers')->firstOrFail();
-            $browser->waitForTextIn('@store-members-'.$store->id, '0')
-                ->assertVisible('@invite-owner-'.$store->id);
+            // Nobody is in the organization until the invitation is accepted, so it is still offered an owner.
+            $organization = Organization::where('name', 'Gamma Grocers')->firstOrFail();
+            $browser->waitForTextIn('@organization-members-'.$organization->id, '0')
+                ->assertVisible('@invite-owner-'.$organization->id);
 
             /* ── 2. The owner accepts from the emailed link ─────────────── */
             $token = $this->tokenFromMailLog($logSizeBefore, 'invitations');
@@ -62,37 +62,37 @@ class PlatformConsoleFlowTest extends DuskTestCase
             $this->jsType($browser, '#password_confirmation', 'Str0ng-Password!');
             $this->jsClick($browser, '@invitation-register');
 
-            // In as the Owner: the platform's pages are not theirs, and the store is the Stores tab of their
+            // In as the Owner: the platform's pages are not theirs, and the organization is the Organizations tab of their
             // Settings — the name at the foot of the sidebar.
             $browser->waitForLocation('/dashboard')
                 ->waitForText('Welcome to Gamma Grocers!')
-                ->assertMissing('#main-sidebar a[href$="/stores"]')
-                ->assertMissing('#main-sidebar a[href$="/settings/store"]');
+                ->assertMissing('#main-sidebar a[href$="/organizations"]')
+                ->assertMissing('#main-sidebar a[href$="/settings/organization"]');
 
             $this->jsClick($browser, '@sidebar-settings');
-            $browser->waitForLocation('/profile')->waitFor('@settings-tab-store')
-                ->assertSeeIn('@settings-tab-store', 'Organizations');
-            $this->jsClick($browser, '@settings-tab-store');
-            // A store changes hands on its Members page: Settings has no handover of its own.
-            $browser->waitForLocation('/settings/store')
+            $browser->waitForLocation('/profile')->waitFor('@settings-tab-organization')
+                ->assertSeeIn('@settings-tab-organization', 'Organizations');
+            $this->jsClick($browser, '@settings-tab-organization');
+            // An organization changes hands on its Members page: Settings has no handover of its own.
+            $browser->waitForLocation('/settings/organization')
                 ->waitForText('Organization Details')
                 ->assertSee('Delete Organization')
                 ->assertDontSee('Transfer Ownership')
-                ->assertSeeIn('@your-stores', 'Gamma Grocers');
+                ->assertSeeIn('@your-organizations', 'Gamma Grocers');
 
-            /* ── 3. The stores list counts the new member ───────────────── */
+            /* ── 3. The organizations list counts the new member ───────────────── */
             $this->freshSession($browser);
-            $browser->loginAs($admin)->visit('/stores');
+            $browser->loginAs($admin)->visit('/organizations');
             $this->waitForAlpine($browser);
-            $browser->waitForTextIn('@store-members-'.$store->id, '1')
-                ->assertMissing('@invite-owner-'.$store->id);   // it has an Owner now
+            $browser->waitForTextIn('@organization-members-'.$organization->id, '1')
+                ->assertMissing('@invite-owner-'.$organization->id);   // it has an Owner now
         });
     }
 
-    public function test_a_super_admin_makes_roles_for_the_platform_and_for_every_store(): void
+    public function test_a_super_admin_makes_roles_for_the_platform_and_for_every_organization(): void
     {
         $admin = $this->seedSuperAdmin();
-        $this->storeMember(Store::factory()->create(), Role::STAFF, 'held@example.com');   // somebody holds Staff
+        $this->organizationMember(Organization::factory()->create(), Role::STAFF, 'held@example.com');   // somebody holds Staff
 
         $this->browse(function (Browser $browser) use ($admin) {
             $this->freshSession($browser);
@@ -100,7 +100,7 @@ class PlatformConsoleFlowTest extends DuskTestCase
             $this->waitForAlpine($browser);
 
             // One list: Super-Admin (never edited), the Owner role (marked, renamable, never deleted), the other
-            // store roles (ordinary roles now: deleted while nobody holds them), then the platform team's roles.
+            // organization roles (ordinary roles now: deleted while nobody holds them), then the platform team's roles.
             $superAdminId = Role::superAdminId();
             $ownerId = Role::owner()->id;
             $staff = Role::starter(Role::STAFF);
@@ -127,20 +127,20 @@ class PlatformConsoleFlowTest extends DuskTestCase
 
             $this->jsType($browser, '@role-name', 'Support');
             $this->jsClick($browser, '@permission-user-view');
-            $this->jsClick($browser, '@permission-store-view');
+            $this->jsClick($browser, '@permission-organization-view');
             $this->jsClick($browser, '@role-save');
 
             $browser->waitForText('Role Support created.');
 
             $role = Role::where('name', 'Support')->firstOrFail();
             $this->assertTrue($role->is_global);
-            $this->assertNull($role->store_id);
-            $this->assertEqualsCanonicalizing(['store-view', 'user-view'], $role->permissions->pluck('name')->all());
+            $this->assertNull($role->organization_id);
+            $this->assertEqualsCanonicalizing(['organization-view', 'user-view'], $role->permissions->pluck('name')->all());
 
-            // -- A store role, offered in every store: only what works inside a store is listed ----
+            // -- An organization role, offered in every organization: only what works inside an organization is listed ----
             $this->waitForModalClosed($browser, '@role-form');
             $this->clickAndAwait($browser, '@create-role', fn (Browser $b) => $b->waitFor('@permission-screen-view', 5));
-            $browser->assertScript("document.querySelector('[dusk=\"role-type-store\"]').checked", true)
+            $browser->assertScript("document.querySelector('[dusk=\"role-type-organization\"]').checked", true)
                 ->assertMissing('@permission-activity-destroy')
                 ->assertMissing('@permission-permission-view')
                 ->assertSeeIn('@permission-group-channel', 'This organization only');
@@ -154,15 +154,15 @@ class PlatformConsoleFlowTest extends DuskTestCase
 
             $lead = Role::where('name', 'Shift Lead')->firstOrFail();
             $this->assertFalse($lead->is_global);
-            $this->assertNull($lead->store_id);
+            $this->assertNull($lead->organization_id);
             $this->assertEqualsCanonicalizing(['channel-view', 'screen-view'], $lead->permissions->pluck('name')->all());
 
-            // -- The super admin renames Staff and lets it pair screens — in every store at once ----
+            // -- The super admin renames Staff and lets it pair screens — in every organization at once ----
             $this->waitForModalClosed($browser, '@role-form');
             $this->clickAndAwait($browser, '@edit-role-'.$staff->id, fn (Browser $b) => $b->waitFor('@permission-screen-store', 5));
             $browser->assertEnabled('@role-name')
                 ->assertInputValue('@role-name', 'Staff')
-                ->assertMissing('@role-type-store')
+                ->assertMissing('@role-type-organization')
                 ->assertMissing('@permission-activity-destroy');
 
             $this->jsType($browser, '@role-name', 'Crew');
@@ -177,39 +177,39 @@ class PlatformConsoleFlowTest extends DuskTestCase
     }
 
     /**
-     * From the Users page the super admin puts anybody in any store with a role — straight in, nobody invited —
-     * and the store's only Owner is never taken out.
+     * From the Users page the super admin puts anybody in any organization with a role — straight in, nobody invited —
+     * and the organization's only Owner is never taken out.
      */
-    public function test_the_super_admin_puts_a_person_in_a_store_with_a_role(): void
+    public function test_the_super_admin_puts_a_person_in_a_organization_with_a_role(): void
     {
         $admin = $this->seedSuperAdmin(); // SEED_ADMIN_PASSWORD is "test" (phpunit.dusk.xml)
-        $beta = Store::factory()->create(['name' => 'Beta Deli']);
+        $beta = Organization::factory()->create(['name' => 'Beta Deli']);
         $casey = User::factory()->create(['first_name' => 'Casey', 'last_name' => 'Keeper', 'email' => 'casey@example.com']);
 
         $this->browse(function (Browser $browser) use ($admin, $beta, $casey) {
             $this->freshSession($browser);
-            $browser->loginAs($admin)->visit('/stores');
+            $browser->loginAs($admin)->visit('/organizations');
             $this->waitForAlpine($browser);
-            $browser->waitForTextIn('@store-members-'.$beta->id, '0')
+            $browser->waitForTextIn('@organization-members-'.$beta->id, '0')
                 ->assertVisible('@invite-owner-'.$beta->id);
 
-            /* ── 1. Users → Stores: Casey goes into Beta Deli as its Owner ─ */
+            /* ── 1. Users → Organizations: Casey goes into Beta Deli as its Owner ─ */
             $browser->visit('/users');
             $this->waitForAlpine($browser);
-            $browser->waitFor('@manage-stores-'.$casey->id);
-            $this->clickAndAwait($browser, '@manage-stores-'.$casey->id, fn (Browser $b) => $b->waitFor('@assign-store', 5));
-            $browser->assertSeeIn('@manage-stores', 'Not in any organization yet.');
+            $browser->waitFor('@manage-organizations-'.$casey->id);
+            $this->clickAndAwait($browser, '@manage-organizations-'.$casey->id, fn (Browser $b) => $b->waitFor('@assign-organization', 5));
+            $browser->assertSeeIn('@manage-organizations', 'Not in any organization yet.');
 
             $ownerId = Role::owner()->id;
-            $browser->select('@assign-store', (string) $beta->id)
+            $browser->select('@assign-organization', (string) $beta->id)
                 ->waitUntil("!document.querySelector('[dusk=\"assign-role\"]').disabled && !!document.querySelector('[dusk=\"assign-role\"] option[value=\"{$ownerId}\"]')")
                 ->select('@assign-role', (string) $ownerId);
-            $this->jsClick($browser, '@assign-store-save');
+            $this->jsClick($browser, '@assign-organization-save');
 
             $browser->waitForText('Casey Keeper is now Owner in Beta Deli.')
                 ->waitFor('@membership-'.$beta->id)
                 ->assertSelected('@membership-role-'.$beta->id, (string) $ownerId);
-            $this->assertSame($ownerId, $casey->stores()->whereKey($beta->id)->first()->pivot->role_id);
+            $this->assertSame($ownerId, $casey->organizations()->whereKey($beta->id)->first()->pivot->role_id);
 
             /* ── 2. The only Owner stays: taking Casey out is refused ────── */
             $this->jsClick($browser, '@membership-remove-'.$beta->id);
@@ -217,28 +217,28 @@ class PlatformConsoleFlowTest extends DuskTestCase
             $this->jsType($browser, '@remove-membership-password', 'test');
             $this->jsClick($browser, '@remove-membership-confirm');
             $browser->waitForText('Casey Keeper is the only Owner of Beta Deli. Make someone else an Owner first.');
-            $this->assertNotNull($casey->stores()->whereKey($beta->id)->first());
+            $this->assertNotNull($casey->organizations()->whereKey($beta->id)->first());
 
-            /* ── 3. The Stores list counts the member — and offers no owner to a store that has one ── */
-            $browser->visit('/stores');
+            /* ── 3. The Organizations list counts the member — and offers no owner to an organization that has one ── */
+            $browser->visit('/organizations');
             $this->waitForAlpine($browser);
-            $browser->waitForTextIn('@store-members-'.$beta->id, '1')
+            $browser->waitForTextIn('@organization-members-'.$beta->id, '1')
                 ->assertMissing('@invite-owner-'.$beta->id);
         });
     }
 
     /**
-     * A platform team member, invited from the Users page, works above every store — with exactly
+     * A platform team member, invited from the Users page, works above every organization — with exactly
      * what their platform role gives and not a step further.
      */
-    public function test_a_platform_team_member_joins_from_the_email_and_works_above_the_stores(): void
+    public function test_a_platform_team_member_joins_from_the_email_and_works_above_the_organizations(): void
     {
         $admin = $this->seedSuperAdmin();
-        Store::factory()->create(['name' => 'Alpha Mart']);
-        Store::factory()->create(['name' => 'Beta Deli']);
+        Organization::factory()->create(['name' => 'Alpha Mart']);
+        Organization::factory()->create(['name' => 'Beta Deli']);
 
         $support = Role::create(['name' => 'Support', 'is_global' => true]);
-        $support->permissions()->sync(Permission::whereIn('name', ['store-view', 'user-view'])->pluck('id'));
+        $support->permissions()->sync(Permission::whereIn('name', ['organization-view', 'user-view'])->pluck('id'));
 
         $this->browse(function (Browser $browser) use ($admin, $support) {
             /* ── 1. The super admin invites them ────────────────────────── */
@@ -274,64 +274,64 @@ class PlatformConsoleFlowTest extends DuskTestCase
             $browser->waitForLocation('/dashboard')
                 ->waitForText('Welcome to the '.config('app.name').' team!');
 
-            /* ── 3. Every store, and nothing their role does not give ───── */
-            $browser->assertPresent('#main-sidebar a[href$="/stores"]')
+            /* ── 3. Every organization, and nothing their role does not give ───── */
+            $browser->assertPresent('#main-sidebar a[href$="/organizations"]')
                 ->assertMissing('#main-sidebar a[href$="/permissions"]');
 
-            // Their Settings is their profile alone: a platform account has no store of its own to set up.
+            // Their Settings is their profile alone: a platform account has no organization of its own to set up.
             $browser->visit('/profile')
                 ->waitFor('@settings-tab-profile')
-                ->assertMissing('@settings-tab-store');
+                ->assertMissing('@settings-tab-organization');
 
-            $browser->visit('/stores');
+            $browser->visit('/organizations');
             $this->waitForAlpine($browser);
             $browser->waitForText('Alpha Mart')
                 ->assertSee('Beta Deli')
-                ->assertMissing('@add-store');   // store-view only: looking, not creating
+                ->assertMissing('@add-organization');   // organization-view only: looking, not creating
 
             $browser->visit('/roles')->assertSee('403');
         });
     }
 
     /**
-     * A store, an account and a role are big deletes: each modal asks for the super admin's password
-     * and deletes once it is right — and the store's, taken first, says so when the password is
+     * An organization, an account and a role are big deletes: each modal asks for the super admin's password
+     * and deletes once it is right — and the organization's, taken first, says so when the password is
      * missing or wrong and deletes nothing until it is right.
      */
     public function test_big_deletes_on_the_platform_ask_for_the_password(): void
     {
         $admin = $this->seedSuperAdmin(); // SEED_ADMIN_PASSWORD is "test" (phpunit.dusk.xml)
-        $store = Store::factory()->create(['name' => 'Doomed Deli']);
+        $organization = Organization::factory()->create(['name' => 'Doomed Deli']);
         $customer = User::factory()->create(['first_name' => 'Casey', 'last_name' => 'Customer']);
         $support = Role::create(['name' => 'Support', 'is_global' => true]);
-        $support->permissions()->sync(Permission::whereIn('name', ['store-view'])->pluck('id'));
+        $support->permissions()->sync(Permission::whereIn('name', ['organization-view'])->pluck('id'));
 
-        $this->browse(function (Browser $browser) use ($admin, $store, $customer, $support) {
+        $this->browse(function (Browser $browser) use ($admin, $organization, $customer, $support) {
             $this->freshSession($browser);
 
-            /* ── A store: the name typed, then the password ─────────────── */
-            $browser->loginAs($admin)->visit('/stores');
+            /* ── An organization: the name typed, then the password ─────────────── */
+            $browser->loginAs($admin)->visit('/organizations');
             $this->waitForAlpine($browser);
-            $browser->waitFor('@delete-store-'.$store->id);
-            $this->clickAndAwait($browser, '@delete-store-'.$store->id, fn (Browser $b) => $b->waitFor('@delete-store-password', 3));
+            $browser->waitFor('@delete-organization-'.$organization->id);
+            $this->clickAndAwait($browser, '@delete-organization-'.$organization->id, fn (Browser $b) => $b->waitFor('@delete-organization-password', 3));
 
             // The name to type stands out in the sentence that asks for it (owner, 2026-10-01).
-            $browser->assertSeeIn('@delete-store-typed-name', 'Doomed Deli');
-            $this->assertSame('600', (string) $browser->script('return getComputedStyle(document.querySelector(\'[dusk="delete-store-typed-name"]\')).fontWeight;')[0]);
+            $browser->assertSeeIn('@delete-organization-typed-name', 'Doomed Deli');
+            $this->assertSame('600', (string) $browser->script('return getComputedStyle(document.querySelector(\'[dusk="delete-organization-typed-name"]\')).fontWeight;')[0]);
 
-            $this->jsType($browser, '@delete-store-name', 'Doomed Deli');
-            $this->jsClick($browser, '@delete-store-confirm');
+            $this->jsType($browser, '@delete-organization-name', 'Doomed Deli');
+            $this->jsClick($browser, '@delete-organization-confirm');
             $browser->waitForText('Password is required.');
 
-            $this->jsType($browser, '@delete-store-password', 'not-the-password');
-            $this->jsClick($browser, '@delete-store-confirm');
+            $this->jsType($browser, '@delete-organization-password', 'not-the-password');
+            $this->jsClick($browser, '@delete-organization-confirm');
             $browser->waitForText('The password is incorrect.');
-            $this->assertNotNull(Store::find($store->id));
+            $this->assertNotNull(Organization::find($organization->id));
 
-            $this->jsType($browser, '@delete-store-password', 'test');
-            $this->jsClick($browser, '@delete-store-confirm');
+            $this->jsType($browser, '@delete-organization-password', 'test');
+            $this->jsClick($browser, '@delete-organization-confirm');
             $browser->waitForText('Doomed Deli was deleted.');
-            $this->assertDatabaseMissing('stores', ['id' => $store->id]);
+            $this->assertDatabaseMissing('organizations', ['id' => $organization->id]);
 
             /* ── An account ─────────────────────────────────────────────── */
             $browser->visit('/users');
@@ -355,8 +355,8 @@ class PlatformConsoleFlowTest extends DuskTestCase
         });
     }
 
-    /** Somebody in no store yet is told how to get in — and offered nothing else. */
-    public function test_an_account_without_a_store_sees_how_to_join(): void
+    /** Somebody in no organization yet is told how to get in — and offered nothing else. */
+    public function test_an_account_without_a_organization_sees_how_to_join(): void
     {
         $this->seedSuperAdmin();
         $loner = User::factory()->create(['email' => 'loner@example.com']);
@@ -368,7 +368,7 @@ class PlatformConsoleFlowTest extends DuskTestCase
                 ->assertSeeIn('@dashboard-empty', 'loner@example.com')
                 ->assertMissing('#main-sidebar a[href$="/screens"]')
                 ->assertMissing('#main-sidebar a[href$="/members"]')
-                ->assertMissing('#main-sidebar a[href$="/stores"]');
+                ->assertMissing('#main-sidebar a[href$="/organizations"]');
         });
     }
 }

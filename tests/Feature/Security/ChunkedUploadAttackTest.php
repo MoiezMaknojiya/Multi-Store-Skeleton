@@ -2,7 +2,7 @@
 
 use App\Models\Channel;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Models\Upload;
 use App\Services\ChunkedUploads;
 use Illuminate\Http\UploadedFile;
@@ -27,9 +27,9 @@ beforeEach(function () {
     Storage::fake('local');
     Storage::fake('uploads');
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->manager = createStoreUser($this->store, ['media-view', 'media-store', 'channel-view', 'channel-update', 'ad-store'], 'Manager');
-    $this->actingAs($this->manager)->withSession(['current_store_id' => $this->store->id]);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->manager = createOrganizationUser($this->organization, ['media-view', 'media-store', 'channel-view', 'channel-update', 'ad-store'], 'Manager');
+    $this->actingAs($this->manager)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 /** A small real JPEG. */
@@ -46,8 +46,8 @@ function smallJpeg(): string
 test("somebody else's upload is not found, whatever is done to it", function () {
     $id = Tus::upload($this, smallJpeg(), ['name' => 'mine.jpg', 'purpose' => 'media']);
 
-    $colleague = createStoreUser($this->store, ['media-view', 'media-store'], 'Colleague');
-    $this->actingAs($colleague)->withSession(['current_store_id' => $this->store->id]);
+    $colleague = createOrganizationUser($this->organization, ['media-view', 'media-store'], 'Colleague');
+    $this->actingAs($colleague)->withSession(['current_organization_id' => $this->organization->id]);
 
     Tus::ask($this, $id)->assertNotFound();
     Tus::send($this, $id, 0, 'x')->assertNotFound();
@@ -135,7 +135,7 @@ test('the description is small and readable', function () {
     Tus::open($this, 10, [], ['Upload-Metadata' => 'name '.base64_encode(str_repeat('a', 5000).'.jpg')])->assertStatus(400);
 
     // A key it does not know is kept but never read.
-    Tus::open($this, 10, ['name' => 'a.jpg', 'purpose' => 'media', 'role' => 'Super-Admin', 'store_id' => 999])->assertCreated();
+    Tus::open($this, 10, ['name' => 'a.jpg', 'purpose' => 'media', 'role' => 'Super-Admin', 'organization_id' => 999])->assertCreated();
 });
 
 test('nobody opens more than twenty at once', function () {
@@ -147,17 +147,17 @@ test('nobody opens more than twenty at once', function () {
         ->assertStatus(429)->assertJsonPath('message', 'Too many uploads at once: wait for some to finish, or cancel some.');
 });
 
-test("a store's person uploads into the store they stand in, whatever the upload says", function () {
-    $other = Store::factory()->create();
+test("an organization's person uploads into the organization they stand in, whatever the upload says", function () {
+    $other = Organization::factory()->create();
 
     $id = Tus::idOf(Tus::open($this, 10, ['name' => 'a.jpg', 'purpose' => 'media', 'library' => $other->id]));
-    expect(Upload::find($id)->store_id)->toBe($this->store->id);
+    expect(Upload::find($id)->organization_id)->toBe($this->organization->id);
 
-    $id = Tus::idOf(Tus::open($this, 10, ['name' => 'a.jpg', 'purpose' => 'asset', 'store' => $other->id]));
-    expect(Upload::find($id)->store_id)->toBe($this->store->id);
+    $id = Tus::idOf(Tus::open($this, 10, ['name' => 'a.jpg', 'purpose' => 'asset', 'organization' => $other->id]));
+    expect(Upload::find($id)->organization_id)->toBe($this->organization->id);
 
-    // And a channel of another store is not found at all.
-    $theirs = Channel::factory()->create(['store_id' => $other->id]);
+    // And a channel of another organization is not found at all.
+    $theirs = Channel::factory()->create(['organization_id' => $other->id]);
     Tus::open($this, 10, ['name' => 'a.jpg', 'purpose' => 'channel', 'channel' => $theirs->id])->assertNotFound();
 });
 

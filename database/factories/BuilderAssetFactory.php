@@ -3,7 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\BuilderAsset;
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -18,7 +18,7 @@ class BuilderAssetFactory extends Factory
         $name = fake()->unique()->lexify('????????');
 
         return [
-            'store_id' => Store::factory(),
+            'organization_id' => Organization::factory(),
             'title' => fake()->words(2, true),
             'kind' => BuilderAsset::KIND_IMAGE,
             'mime_type' => 'image/jpeg',

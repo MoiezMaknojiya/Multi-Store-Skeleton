@@ -3,8 +3,8 @@
 use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\VideoFiles;
@@ -24,17 +24,17 @@ use Tests\Support\VideoFiles;
 beforeEach(function () {
     Storage::fake('public');
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->keeper = createStoreUser($this->store, [
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->keeper = createOrganizationUser($this->organization, [
         'screen-view', 'screen-playlist', 'media-view', 'media-store', 'channel-view', 'channel-store', 'channel-update',
         'ad-view', 'ad-store', 'ad-update', 'daypart-view', 'daypart-store',
     ], 'Keeper');
-    $this->actingAs($this->keeper)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->keeper)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 test('a line of the playlist is refused in the words its box shows, with its place', function (mixed $seconds, string $said) {
-    $screen = Screen::factory()->create(['store_id' => $this->store->id]);
-    $picture = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Menu']);
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
+    $picture = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Menu']);
     $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
 
     $this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => [
@@ -47,8 +47,8 @@ test('a line of the playlist is refused in the words its box shows, with its pla
 ]);
 
 test('a schedule is refused in the words its window shows — on the save and in the preview alike', function () {
-    $screen = Screen::factory()->create(['store_id' => $this->store->id]);
-    $picture = Media::factory()->create(['store_id' => $this->store->id]);
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
+    $picture = Media::factory()->create(['organization_id' => $this->organization->id]);
     $rule = ['recurrence_type' => 'weekly', 'recurrence_interval' => 60, 'recurrence_weekdays' => [1]];
     $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
 
@@ -66,8 +66,8 @@ test('a schedule is refused in the words its window shows — on the save and in
 });
 
 test("a channel ad's seconds are refused in the form's words", function (mixed $seconds, string $said) {
-    $channel = Channel::factory()->create(['store_id' => $this->store->id]);
-    $picture = Media::factory()->create(['store_id' => $this->store->id]);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id]);
+    $picture = Media::factory()->create(['organization_id' => $this->organization->id]);
 
     $this->postJson("/channels/{$channel->id}/ads", ['media_id' => $picture->id, 'seconds' => $seconds])
         ->assertStatus(422)
@@ -108,7 +108,7 @@ test("an advert's fields are refused in the form's words, and a video's own meas
 });
 
 test("an ad's length is refused in the editor's words", function (mixed $seconds, string $said) {
-    $ad = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id]);
+    $ad = BuilderAd::factory()->withText()->create(['organization_id' => $this->organization->id]);
 
     $this->putJson("/builder/{$ad->id}", ['name' => $ad->name, 'document' => [...$ad->document, 'duration' => $seconds]])
         ->assertStatus(422)

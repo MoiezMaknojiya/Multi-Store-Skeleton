@@ -1,6 +1,6 @@
-{{-- A signed-in person who is not a member of any store yet. Deliberately no list of pending
+{{-- A signed-in person who is not a member of any organization yet. Deliberately no list of pending
      invitations with Accept buttons: public signup does not verify the email, so only the emailed
-     link — which proves the inbox — may accept (docs/STORE-ORGANIZATION-SPEC.md §8). --}}
+     link — which proves the inbox — may accept (docs/ORGANIZATION-SPEC.md §8). --}}
 <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
 <div class="card p-10 text-center" dusk="dashboard-empty">
     <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-900/30 mb-5">

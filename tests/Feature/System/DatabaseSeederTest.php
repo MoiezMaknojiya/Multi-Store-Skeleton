@@ -10,20 +10,20 @@ beforeEach(function () {
 });
 
 test('the catalogue lists cover every labelled permission exactly once', function () {
-    $listed = collect([...Permission::STORE, ...Permission::PLATFORM, ...Permission::SUPER_ADMIN_ONLY]);
+    $listed = collect([...Permission::ORGANIZATION, ...Permission::PLATFORM, ...Permission::SUPER_ADMIN_ONLY]);
 
     expect($listed->duplicates())->toBeEmpty();
     expect($listed->sort()->values()->all())->toBe(collect(array_keys(Permission::LABELS))->sort()->values()->all());
 
-    // What a store's role may carry beyond its own permissions is a part of the platform list — all of it but
-    // the accounts (a store's people are its Members page) and the yearly maintenance that drops every store's
+    // What an organization's role may carry beyond its own permissions is a part of the platform list — all of it but
+    // the accounts (an organization's people are its Members page) and the yearly maintenance that drops every organization's
     // history at once.
-    expect(collect(Permission::STORE_SCOPED)->diff(Permission::PLATFORM))->toBeEmpty()
-        ->and(collect(Permission::PLATFORM)->diff(Permission::STORE_SCOPED)->values()->all())->toBe(['user-view', 'user-destroy', 'activity-destroy']);
+    expect(collect(Permission::ORGANIZATION_SCOPED)->diff(Permission::PLATFORM))->toBeEmpty()
+        ->and(collect(Permission::PLATFORM)->diff(Permission::ORGANIZATION_SCOPED)->values()->all())->toBe(['user-view', 'user-destroy', 'activity-destroy']);
 });
 
 test('the seeder adds the Super-Admin role, holding the whole catalogue, and its account — over what the migrations installed', function () {
-    // The migrations install the catalogue and the four starter store roles (DatabaseSchemaTest checks
+    // The migrations install the catalogue and the four starter organization roles (DatabaseSchemaTest checks
     // them before any seeder); the seeder repairs the labels, adds Super-Admin and the admin account, and
     // touches no starter role.
     $this->seed();
@@ -35,13 +35,13 @@ test('the seeder adds the Super-Admin role, holding the whole catalogue, and its
     expect($superAdminRole->is_global)->toBeTrue()
         ->and($superAdminRole->permissions()->count())->toBe(count(Permission::LABELS));
 
-    // Owner and Admin still start with every store permission and the Stores tab; the Owner alone also deletes
-    // the store (owner's rules, 2026-09-17).
+    // Owner and Admin still start with every organization permission and the Organizations tab; the Owner alone also deletes
+    // the organization (owner's rules, 2026-09-17).
     expect(Role::whereNotNull('key')->count())->toBe(count(Role::STARTERS));
     expect(Role::starter(Role::OWNER)->permissions()->pluck('name')->sort()->values()->all())
-        ->toBe(collect([...Permission::STORE, 'store-view', 'store-destroy'])->sort()->values()->all())
+        ->toBe(collect([...Permission::ORGANIZATION, 'organization-view', 'organization-destroy'])->sort()->values()->all())
         ->and(Role::starter(Role::ADMIN)->permissions()->pluck('name')->sort()->values()->all())
-        ->toBe(collect([...Permission::STORE, 'store-view'])->sort()->values()->all());
+        ->toBe(collect([...Permission::ORGANIZATION, 'organization-view'])->sort()->values()->all());
 
     $admin = User::where('email', 'admin@gmail.com')->firstOrFail();
     expect($admin->isSuperAdmin())->toBeTrue();
@@ -86,7 +86,7 @@ test('an empty SEED_ADMIN_EMAIL is no email at all: the development one stands',
         ->and($configuredWith(''))->toBe('admin@gmail.com');
 });
 
-test('re-seeding keeps what the super admin changed on a starter store role', function () {
+test('re-seeding keeps what the super admin changed on a starter organization role', function () {
     $this->seed();
 
     $staff = Role::starter(Role::STAFF);

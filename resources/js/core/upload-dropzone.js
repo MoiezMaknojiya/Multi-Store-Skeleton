@@ -14,8 +14,8 @@
  *    with its upload id and what the browser measured once every byte is in, `upload-cleared` when it is taken away,
  *    and `upload-busy` while bytes are still going, so the form can hold its Save.
  *
- * `context` is kept up to date by the page (the component's x-effect): where the file goes (library, store, channel),
- * the fields its door needs besides, and the shop's storage ({used, limit}) for the check before a byte is sent.
+ * `context` is kept up to date by the page (the component's x-effect): where the file goes (library, organization, channel),
+ * the fields its door needs besides, and the organization's storage ({used, limit}) for the check before a byte is sent.
  */
 import axios from 'axios';
 import { bytesInWords, clock, fileError, MAX_VIDEO_SECONDS, readVideoMeta, storageError, videoLengthError } from './media-file.js';
@@ -39,7 +39,7 @@ const QUIET_SAYS_MS = 6000;
 const QUIET_RESTARTS_MS = 30000;
 
 /* What an upload tells the server about itself (Upload-Metadata). */
-const META_FIELDS = ['name', 'type', 'purpose', 'library', 'store', 'channel'];
+const META_FIELDS = ['name', 'type', 'purpose', 'library', 'organization', 'channel'];
 
 /* How long an "Added" row stays (`add`) before it fades away by itself, as a notification does (owner, 2026-09-30);
  * a refused or failed row stays, for its reason and its Try again. */
@@ -51,7 +51,7 @@ const FADE_MS = 300;
 /* Rows still doing something: the page asks before it is left while any is. */
 const BUSY = ['checking', 'waiting', 'uploading', 'paused', 'adding'];
 
-/* Rows whose bytes are not counted in the shop's storage yet. */
+/* Rows whose bytes are not counted in the organization's storage yet. */
 const PENDING = [...BUSY, 'ready'];
 
 let engine = null;
@@ -94,7 +94,7 @@ export function registerUploadDropzone(Alpine) {
             maxVideoSeconds: config.maxVideoSeconds ?? MAX_VIDEO_SECONDS,
             videoNoun: config.videoNoun ?? 'A video',
 
-            /* Set by the page: {library|store|channel, fields, storage}. */
+            /* Set by the page: {library|organization|channel, fields, storage}. */
             context: {},
 
             // The rows. Not `items`: a page calling its own methods from inside the box would write its list here.
@@ -224,7 +224,7 @@ export function registerUploadDropzone(Alpine) {
                 }
             },
 
-            /** The shop's storage as it will be once the rows before this one are in. */
+            /** The organization's storage as it will be once the rows before this one are in. */
             roomLeft(item) {
                 const storage = this.context.storage;
 
@@ -242,9 +242,9 @@ export function registerUploadDropzone(Alpine) {
                 const meta = { purpose: this.purpose };
 
                 // Every key, empty when there is none: the engine sends each allowed field whatever the file holds, and
-                // one the file lacked reached the server as the word "undefined" — a shop nobody has (a shared upload
-                // on the Ad Builder's shelf was refused with "That shop no longer exists").
-                ['library', 'store', 'channel'].forEach((key) => {
+                // one the file lacked reached the server as the word "undefined" — an organization nobody has (a shared upload
+                // on the Ad Builder's shelf was refused with "That organization no longer exists").
+                ['library', 'organization', 'channel'].forEach((key) => {
                     const value = this.context[key];
                     meta[key] = value === null || value === undefined ? '' : String(value);
                 });

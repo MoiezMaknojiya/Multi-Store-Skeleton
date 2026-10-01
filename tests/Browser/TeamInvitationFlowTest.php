@@ -3,8 +3,8 @@
 namespace Tests\Browser;
 
 use App\Models\Invitation;
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
@@ -12,7 +12,7 @@ use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
 
 /**
- * The whole life of a team member through the real pages (docs/STORE-ORGANIZATION-SPEC.md):
+ * The whole life of a team member through the real pages (docs/ORGANIZATION-SPEC.md):
  * invited from Members, joined from the link in the email that was actually sent, given
  * another role, removed.
  */
@@ -23,14 +23,14 @@ class TeamInvitationFlowTest extends DuskTestCase
     public function test_an_owner_invites_a_person_who_joins_from_the_email_and_is_then_managed(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store, Role::OWNER, 'owner@example.com');
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization, Role::OWNER, 'owner@example.com');
 
-        $this->browse(function (Browser $browser) use ($owner, $store) {
+        $this->browse(function (Browser $browser) use ($owner, $organization) {
             /* ── 1. The Owner invites someone ───────────────────────────── */
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
             $browser->visit('/members');
             $this->waitForAlpine($browser);
             $browser->waitForText('owner@example.com');
@@ -71,7 +71,7 @@ class TeamInvitationFlowTest extends DuskTestCase
             /* ── 3. The Owner changes their role, then removes them ──────── */
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
             $browser->visit('/members');
             $this->waitForAlpine($browser);
             $browser->waitForText('new.hire@example.com')
@@ -95,7 +95,7 @@ class TeamInvitationFlowTest extends DuskTestCase
             $browser->waitForText('New Hire was removed from Alpha Mart.')
                 ->waitUntilMissing('@member-row-'.$hire->id);
 
-            $this->assertFalse(DB::table('store_user')->where(['user_id' => $hire->id, 'store_id' => $store->id])->exists());
+            $this->assertFalse(DB::table('organization_user')->where(['user_id' => $hire->id, 'organization_id' => $organization->id])->exists());
             $this->assertNotNull($hire->fresh(), 'removing a member never deletes their account');
         });
     }

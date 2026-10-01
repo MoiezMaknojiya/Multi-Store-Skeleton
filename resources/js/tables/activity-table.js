@@ -50,10 +50,9 @@ export function registerActivityTable(Alpine) {
                 return value ? new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—';
             },
 
-            /** "member.role_changed" → "Member role changed"; "store.created" → "Organization created", the word people
-             *  read (owner, 2026-10-01), while the code name stays the badge's tooltip. */
+            /** "member.role_changed" → "Member role changed". */
             actionLabel(action) {
-                const words = String(action ?? '').replace(/[._]+/g, ' ').trim().replace(/^store\b/, 'organization');
+                const words = String(action ?? '').replace(/[._]+/g, ' ').trim();
 
                 return words ? words.charAt(0).toUpperCase() + words.slice(1) : '—';
             },

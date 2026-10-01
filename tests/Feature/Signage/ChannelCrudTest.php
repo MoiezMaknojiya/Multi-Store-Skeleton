@@ -3,10 +3,10 @@
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\ScheduleRule;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Models\User;
 use Illuminate\Support\Facades\Storage;
 
@@ -15,9 +15,9 @@ use Illuminate\Support\Facades\Storage;
 | Channels: who may manage them, and what deleting one does
 |--------------------------------------------------------------------------
 |
-| A channel made above the stores is offered to every shop; one made inside a store belongs
-| to that store (owner's rules). Above the stores the channel permissions reach every
-| channel; inside a store, only that store's own (Channel::visibleTo) — anything else is not
+| A channel made above the organizations is offered to every organization; one made inside an organization belongs
+| to that organization (owner's rules). Above the organizations the channel permissions reach every
+| channel; inside an organization, only that organization's own (Channel::visibleTo) — anything else is not
 | found. Whoever holds a permission may use it on any channel within reach, not only the
 | ones they made (owner's decision).
 |
@@ -76,25 +76,25 @@ test('a global user without the permission is refused', function () {
     expect(Channel::count())->toBe(0);
 });
 
-test('during "Log in as" the channel pages answer to the shop person\'s permissions, never the super admin\'s', function () {
-    // This is how the owner actually reaches a shop: impersonation makes them a STORE user, so
-    // what opens is what that person's role allows in that store. The super admin behind the
+test('during "Log in as" the channel pages answer to the organization person\'s permissions, never the super admin\'s', function () {
+    // This is how the owner actually reaches an organization: impersonation makes them an ORGANIZATION user, so
+    // what opens is what that person's role allows in that organization. The super admin behind the
     // session holds every channel permission, and none of it comes along: a cashier without
-    // channel-view is refused the channel pages, while the shop's own side — where a channel is
+    // channel-view is refused the channel pages, while the organization's own side — where a channel is
     // added to a screen — works as it should; and somebody whose role does carry channel-view
-    // sees their store's own channels and the platform's, to look at — never another store's,
+    // sees their organization's own channels and the platform's, to look at — never another organization's,
     // which the super admin behind the session would see.
-    $store = Store::factory()->create();
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
     Channel::factory()->create(['name' => 'GAMA']);
-    Channel::factory()->create(['name' => 'Deli Specials', 'store_id' => $store->id]);
-    Channel::factory()->create(['name' => 'Next Door Deals', 'store_id' => Store::factory()->create()->id]);
+    Channel::factory()->create(['name' => 'Deli Specials', 'organization_id' => $organization->id]);
+    Channel::factory()->create(['name' => 'Next Door Deals', 'organization_id' => Organization::factory()->create()->id]);
 
-    $cashier = createStoreUser($store, ['screen-view', 'screen-playlist'], 'Cashier');
-    $keeper = createStoreUser($store, ['channel-view'], 'Channel Keeper');
+    $cashier = createOrganizationUser($organization, ['screen-view', 'screen-playlist'], 'Cashier');
+    $keeper = createOrganizationUser($organization, ['channel-view'], 'Channel Keeper');
 
     $loggedInAs = fn (User $person) => $this->actingAs($person)->withSession([
-        'current_store_id' => $store->id,
+        'current_organization_id' => $organization->id,
         'impersonating_original_id' => $this->admin->id,
         'impersonating_user_id' => $person->id,
     ]);
@@ -109,18 +109,18 @@ test('during "Log in as" the channel pages answer to the shop person\'s permissi
     expect($rows->pluck('read_only', 'name')->all())->toBe(['Deli Specials' => false, 'GAMA' => true]);
 });
 
-test('the Channels link follows channel-view — above the stores and inside one', function () {
+test('the Channels link follows channel-view — above the organizations and inside one', function () {
     $link = 'href="'.route('channels.view').'"';
 
     $this->actingAs($this->admin)->get('/dashboard')->assertOk()->assertSee($link, false);
 
-    $store = Store::factory()->create();
-    $keeper = createStoreUser($store, ['channel-view']);
-    $cashier = createStoreUser($store, ['screen-view'], 'Cashier');
+    $organization = Organization::factory()->create();
+    $keeper = createOrganizationUser($organization, ['channel-view']);
+    $cashier = createOrganizationUser($organization, ['screen-view'], 'Cashier');
 
-    $this->actingAs($keeper)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($keeper)->withSession(['current_organization_id' => $organization->id])
         ->get('/dashboard')->assertOk()->assertSee($link, false);
-    $this->actingAs($cashier)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($cashier)->withSession(['current_organization_id' => $organization->id])
         ->get('/dashboard')->assertOk()->assertDontSee($link, false);
 });
 
@@ -191,24 +191,24 @@ test('and whoever holds channel-destroy may delete any channel', function () {
 |--------------------------------------------------------------------------
 */
 
-test('the listing counts the ads, the ones running today, and the screens and shops carrying it', function () {
+test('the listing counts the ads, the ones running today, and the screens and organizations carrying it', function () {
     $this->travelTo('2026-10-10 12:00:00');
 
     $channel = Channel::factory()->create(['name' => 'GAMA', 'created_by' => $this->admin->id]);
     ChannelAd::factory()->count(2)->create(['channel_id' => $channel->id]);
     ChannelAd::factory()->running('2026-10-01', '2026-10-09')->create(['channel_id' => $channel->id]);
 
-    [$alpha, $beta, $gone] = Store::factory()->count(3)->create();
-    $counter = Screen::factory()->create(['store_id' => $alpha->id]);
-    $window = Screen::factory()->create(['store_id' => $alpha->id]);
-    $deli = Screen::factory()->create(['store_id' => $beta->id]);
-    $closed = Screen::factory()->create(['store_id' => $gone->id]);
+    [$alpha, $beta, $gone] = Organization::factory()->count(3)->create();
+    $counter = Screen::factory()->create(['organization_id' => $alpha->id]);
+    $window = Screen::factory()->create(['organization_id' => $alpha->id]);
+    $deli = Screen::factory()->create(['organization_id' => $beta->id]);
+    $closed = Screen::factory()->create(['organization_id' => $gone->id]);
 
     foreach ([$counter, $counter, $window, $deli, $closed] as $position => $screen) {
         PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $channel->id, 'position' => $position]);
     }
 
-    // A shop that has been deleted carries nothing any more.
+    // An organization that has been deleted carries nothing any more.
     $gone->delete();
 
     $row = collect($this->actingAs($this->admin)->getJson('/channels/data')->assertOk()->json('channels'))
@@ -218,7 +218,7 @@ test('the listing counts the ads, the ones running today, and the screens and sh
     expect($row['running_ads_count'])->toBe(2);
     // The counter TV carries it twice and still counts once.
     expect($row['screens_count'])->toBe(3);
-    expect($row['stores_count'])->toBe(2);
+    expect($row['organizations_count'])->toBe(2);
     expect($row['created_by_name'])->toBe($this->admin->name);
     // Only the name travels — the relation must not be serialised over the column.
     expect($row['created_by'])->toBe($this->admin->id);
@@ -238,9 +238,9 @@ test('deleting a channel removes its ads and its line from every playlist, and l
         Storage::disk('public')->put($ad->media->thumbnail_path, 'thumb');
     });
 
-    $store = Store::factory()->create();
-    $poster = Media::factory()->create(['store_id' => $store->id]);
-    [$counter, $window] = Screen::factory()->count(2)->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $poster = Media::factory()->create(['organization_id' => $organization->id]);
+    [$counter, $window] = Screen::factory()->count(2)->create(['organization_id' => $organization->id]);
 
     foreach ([$counter, $window] as $screen) {
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $poster->id, 'position' => 0, 'duration_seconds' => 10]);
@@ -262,12 +262,12 @@ test('deleting a channel removes its ads and its line from every playlist, and l
     $ads->each(function (ChannelAd $ad) {
         $file = Media::find($ad->media_id);
         expect($file)->not->toBeNull();
-        expect($file->store_id)->toBeNull();
+        expect($file->organization_id)->toBeNull();
         Storage::disk('public')->assertExists($ad->media->path);
         Storage::disk('public')->assertExists($ad->media->thumbnail_path);
     });
 
-    // The shops' own files stay exactly where they were.
+    // The organizations' own files stay exactly where they were.
     expect(PlaylistItem::whereNotNull('media_id')->count())->toBe(2);
 
     $this->assertDatabaseHas('activity_logs', [
@@ -279,7 +279,7 @@ test('a channel on one screen is counted once in the table, and its deletion is 
     // The table, the confirmation and the log count screens the same way, so they can never disagree by
     // one — and one screen reads in the singular.
     $channel = Channel::factory()->create(['name' => 'GAMA']);
-    $screen = Screen::factory()->create(['store_id' => Store::factory()->create()->id]);
+    $screen = Screen::factory()->create(['organization_id' => Organization::factory()->create()->id]);
     PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $channel->id, 'position' => 0]);
 
     $row = collect($this->actingAs($this->admin)->getJson('/channels/data')->assertOk()->json('channels'))
@@ -295,7 +295,7 @@ test('a channel on one screen is counted once in the table, and its deletion is 
 
 test('pausing takes a channel off the air but keeps every line where it was', function () {
     $channel = Channel::factory()->create(['name' => 'GAMA']);
-    $screen = Screen::factory()->create(['store_id' => Store::factory()->create()->id]);
+    $screen = Screen::factory()->create(['organization_id' => Organization::factory()->create()->id]);
     PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $channel->id, 'position' => 0]);
 
     $this->actingAs($this->admin)->putJson("/channels/{$channel->id}", ['name' => 'GAMA', 'is_active' => false])->assertOk();
@@ -305,8 +305,8 @@ test('pausing takes a channel off the air but keeps every line where it was', fu
 });
 
 test('deleting the person who made a channel leaves the channel on the air', function () {
-    // Owner's decision: a channel belongs to the platform or its store, not to whoever typed it in, so
-    // deleting that account never takes it along — the same as a shop's media.
+    // Owner's decision: a channel belongs to the platform or its organization, not to whoever typed it in, so
+    // deleting that account never takes it along — the same as an organization's media.
     $admin = createSuperAdmin(['user-destroy']);
     $staff = createPlatformUser(['channel-view', 'channel-store', 'channel-update'], 'Content Manager');
 

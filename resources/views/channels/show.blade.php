@@ -21,14 +21,14 @@
             'channelId' => $channel->id,
             'maxImageSeconds' => $maxImageSeconds,
             'adsPerPass' => $channel->ads_per_pass,
-            // Above the stores, the platform's channel may take any shop's files: the pickers ask which library.
+            // Above the organizations, the platform's channel may take any organization's files: the pickers ask which library.
             'libraries' => $libraries,
             'uploadsJoin' => $channel->isPlatformChannel() ? "the platform's media library" : 'your media library',
          ]) }})"
          x-on:modal-closing.window="onModalClosing($event)"
          class="max-w-5xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        {{-- The platform's channel seen from inside a shop: there to look at (owner, 2026-09-19). --}}
+        {{-- The platform's channel seen from inside an organization: there to look at (owner, 2026-09-19). --}}
         @if ($readOnly)
             <p class="alert-info" dusk="channel-read-only-note">
                 From the platform. Put it on a screen from that screen's Channels box.
@@ -177,7 +177,7 @@
                     {{-- The library, or the Ad Builder's published ads (its pages live in the same library). --}}
                     <div x-show="source === 'library' || source === 'ads'" x-cloak class="space-y-3">
                         <div class="flex flex-wrap gap-2">
-                            {{-- Above the stores the platform's channel may show any shop's file: which library.
+                            {{-- Above the organizations the platform's channel may show any organization's file: which library.
                                  The width sits on a wrapper — .form-select's own width outranks a utility. --}}
                             <template x-if="libraries.length > 0">
                                 <div class="w-full sm:w-52">

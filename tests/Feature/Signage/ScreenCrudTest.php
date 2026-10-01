@@ -1,7 +1,7 @@
 <?php
 
+use App\Models\Organization;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Services\DevicePairing;
 
 /** Register a waiting device and return its pairing code. */
@@ -22,43 +22,43 @@ test('guests cannot access any screen endpoint', function () {
     }
 });
 
-test('a store user only sees the screens of the store they are working in', function () {
-    $storeA = Store::factory()->create();
-    $storeB = Store::factory()->create();
-    $actor = createStoreUser($storeA, ['screen-view']);
+test('an organization user only sees the screens of the organization they are working in', function () {
+    $organizationA = Organization::factory()->create();
+    $organizationB = Organization::factory()->create();
+    $actor = createOrganizationUser($organizationA, ['screen-view']);
 
-    $mine = Screen::factory()->create(['store_id' => $storeA->id, 'name' => 'Alpha Counter']);
-    $theirs = Screen::factory()->create(['store_id' => $storeB->id, 'name' => 'Beta Counter']);
+    $mine = Screen::factory()->create(['organization_id' => $organizationA->id, 'name' => 'Alpha Counter']);
+    $theirs = Screen::factory()->create(['organization_id' => $organizationB->id, 'name' => 'Beta Counter']);
 
-    $ids = collect($this->actingAs($actor)->withSession(['current_store_id' => $storeA->id])
+    $ids = collect($this->actingAs($actor)->withSession(['current_organization_id' => $organizationA->id])
         ->getJson('/screens/data')->assertOk()->json('screens'))->pluck('id');
 
     expect($ids)->toContain($mine->id);
     expect($ids)->not->toContain($theirs->id);
 });
 
-test('another store\'s screen is unreachable, not just hidden', function () {
-    $storeA = Store::factory()->create();
-    $storeB = Store::factory()->create();
-    $actor = createStoreUser($storeA, ['screen-view', 'screen-update', 'screen-destroy']);
-    $theirs = Screen::factory()->create(['store_id' => $storeB->id, 'name' => 'Beta Counter']);
+test('another organization\'s screen is unreachable, not just hidden', function () {
+    $organizationA = Organization::factory()->create();
+    $organizationB = Organization::factory()->create();
+    $actor = createOrganizationUser($organizationA, ['screen-view', 'screen-update', 'screen-destroy']);
+    $theirs = Screen::factory()->create(['organization_id' => $organizationB->id, 'name' => 'Beta Counter']);
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $storeA->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organizationA->id])
         ->putJson("/screens/{$theirs->id}", ['name' => 'Hacked', 'orientation' => 'landscape'])
         ->assertNotFound();
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $storeA->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organizationA->id])
         ->deleteJson("/screens/{$theirs->id}")->assertNotFound();
 
     $this->assertDatabaseHas('screens', ['id' => $theirs->id, 'name' => 'Beta Counter']);
 });
 
 test('the token hash never leaves the server', function () {
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-view']);
-    Screen::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-view']);
+    Screen::factory()->create(['organization_id' => $organization->id]);
 
-    $payload = $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $payload = $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->getJson('/screens/data')->assertOk()->json('screens.0');
 
     expect($payload)->not->toHaveKey('token_hash');
@@ -67,12 +67,12 @@ test('the token hash never leaves the server', function () {
 
 /* ── Pairing from the owner's own panel ────────────────────────────────── */
 
-test('a store owner pairs their own TV without any admin help', function () {
-    $store = Store::factory()->create();
-    $owner = createStoreUser($store, ['screen-store'], 'Store Owner');
+test('an organization owner pairs their own TV without any admin help', function () {
+    $organization = Organization::factory()->create();
+    $owner = createOrganizationUser($organization, ['screen-store'], 'Organization Owner');
     $code = waitingDeviceCode();
 
-    $this->actingAs($owner)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($owner)->withSession(['current_organization_id' => $organization->id])
         ->postJson('/screens/pair', [
             'code' => $code,
             'mode' => 'new',
@@ -81,7 +81,7 @@ test('a store owner pairs their own TV without any admin help', function () {
         ])->assertOk();
 
     $screen = Screen::firstOrFail();
-    expect($screen->store_id)->toBe($store->id);
+    expect($screen->organization_id)->toBe($organization->id);
     expect($screen->name)->toBe('Counter TV');
     expect($screen->orientation)->toBe('portrait');
     expect($screen->isPaired())->toBeTrue();
@@ -89,11 +89,11 @@ test('a store owner pairs their own TV without any admin help', function () {
 });
 
 test('the pairing code is accepted in lower case, the way it is typed', function () {
-    $store = Store::factory()->create();
-    $owner = createStoreUser($store, ['screen-store']);
+    $organization = Organization::factory()->create();
+    $owner = createOrganizationUser($organization, ['screen-store']);
     $code = waitingDeviceCode();
 
-    $this->actingAs($owner)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($owner)->withSession(['current_organization_id' => $organization->id])
         ->postJson('/screens/pair', [
             'code' => strtolower($code),
             'mode' => 'new',
@@ -105,10 +105,10 @@ test('the pairing code is accepted in lower case, the way it is typed', function
 });
 
 test('a dead code creates no screen at all', function () {
-    $store = Store::factory()->create();
-    $owner = createStoreUser($store, ['screen-store']);
+    $organization = Organization::factory()->create();
+    $owner = createOrganizationUser($organization, ['screen-store']);
 
-    $this->actingAs($owner)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($owner)->withSession(['current_organization_id' => $organization->id])
         ->postJson('/screens/pair', [
             'code' => 'ZZZZZZ',
             'mode' => 'new',
@@ -123,24 +123,24 @@ test('a dead code creates no screen at all', function () {
 });
 
 test('the same code cannot be used twice', function () {
-    $store = Store::factory()->create();
-    $owner = createStoreUser($store, ['screen-store']);
+    $organization = Organization::factory()->create();
+    $owner = createOrganizationUser($organization, ['screen-store']);
     $code = waitingDeviceCode();
 
     $payload = ['code' => $code, 'mode' => 'new', 'name' => 'First', 'orientation' => 'landscape'];
 
-    $this->actingAs($owner)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($owner)->withSession(['current_organization_id' => $organization->id])
         ->postJson('/screens/pair', $payload)->assertOk();
 
     $this->flushSession();
-    $this->actingAs($owner)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($owner)->withSession(['current_organization_id' => $organization->id])
         ->postJson('/screens/pair', [...$payload, 'name' => 'Second'])
         ->assertStatus(422);
 
     expect(Screen::count())->toBe(1);
 });
 
-test('pairing without a store selected is refused with a helpful message', function () {
+test('pairing without an organization selected is refused with a helpful message', function () {
     $admin = createSuperAdmin(['screen-store']);
     $code = waitingDeviceCode();
 
@@ -155,10 +155,10 @@ test('pairing without a store selected is refused with a helpful message', funct
 });
 
 test('a user without screen-store cannot pair anything', function () {
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-view']);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-view']);
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->postJson('/screens/pair', [
             'code' => waitingDeviceCode(),
             'mode' => 'new',
@@ -168,10 +168,10 @@ test('a user without screen-store cannot pair anything', function () {
 });
 
 test('an unknown orientation is rejected', function () {
-    $store = Store::factory()->create();
-    $owner = createStoreUser($store, ['screen-store']);
+    $organization = Organization::factory()->create();
+    $owner = createOrganizationUser($organization, ['screen-store']);
 
-    $this->actingAs($owner)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($owner)->withSession(['current_organization_id' => $organization->id])
         ->postJson('/screens/pair', [
             'code' => waitingDeviceCode(),
             'mode' => 'new',
@@ -183,15 +183,15 @@ test('an unknown orientation is rejected', function () {
 /* ── Replacing the device behind a screen ──────────────────────────────── */
 
 test('replacing a device keeps the screen and its settings', function () {
-    $store = Store::factory()->create();
-    $owner = createStoreUser($store, ['screen-store']);
+    $organization = Organization::factory()->create();
+    $owner = createOrganizationUser($organization, ['screen-store']);
     $screen = Screen::factory()->withToken('old-token')->create([
-        'store_id' => $store->id,
+        'organization_id' => $organization->id,
         'name' => 'Counter TV',
         'orientation' => 'portrait',
     ]);
 
-    $this->actingAs($owner)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($owner)->withSession(['current_organization_id' => $organization->id])
         ->postJson('/screens/pair', [
             'code' => waitingDeviceCode(),
             'mode' => 'replace',
@@ -205,13 +205,13 @@ test('replacing a device keeps the screen and its settings', function () {
     expect($screen->token_hash)->not->toBe(hash('sha256', 'old-token'));  // token rotated
 });
 
-test('a screen from another store cannot be re-paired', function () {
-    $storeA = Store::factory()->create();
-    $storeB = Store::factory()->create();
-    $owner = createStoreUser($storeA, ['screen-store']);
-    $theirs = Screen::factory()->create(['store_id' => $storeB->id]);
+test('a screen from another organization cannot be re-paired', function () {
+    $organizationA = Organization::factory()->create();
+    $organizationB = Organization::factory()->create();
+    $owner = createOrganizationUser($organizationA, ['screen-store']);
+    $theirs = Screen::factory()->create(['organization_id' => $organizationB->id]);
 
-    $this->actingAs($owner)->withSession(['current_store_id' => $storeA->id])
+    $this->actingAs($owner)->withSession(['current_organization_id' => $organizationA->id])
         ->postJson('/screens/pair', [
             'code' => waitingDeviceCode(),
             'mode' => 'replace',
@@ -222,11 +222,11 @@ test('a screen from another store cannot be re-paired', function () {
 /* ── Edit and delete ───────────────────────────────────────────────────── */
 
 test('a user with screen-update can rename a screen and re-orient it', function () {
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-update']);
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-update']);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}", [
             'name' => 'Window Board',
             'orientation' => 'portrait_flipped',
@@ -238,54 +238,54 @@ test('a user with screen-update can rename a screen and re-orient it', function 
 });
 
 test('a user with screen-destroy can delete a screen', function () {
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-destroy']);
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-destroy']);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->deleteJson("/screens/{$screen->id}")->assertOk();
 
     $this->assertDatabaseMissing('screens', ['id' => $screen->id]);
 });
 
 test('a user without screen-destroy cannot delete a screen', function () {
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-view']);
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-view']);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->deleteJson("/screens/{$screen->id}")->assertForbidden();
 
     $this->assertDatabaseHas('screens', ['id' => $screen->id]);
 });
 
 test('the online chip follows the last heartbeat', function () {
-    $store = Store::factory()->create();
+    $organization = Organization::factory()->create();
 
-    $fresh = Screen::factory()->create(['store_id' => $store->id, 'last_seen_at' => now()->subMinute()]);
-    $stale = Screen::factory()->offline()->create(['store_id' => $store->id]);
-    $never = Screen::factory()->unpaired()->create(['store_id' => $store->id]);
+    $fresh = Screen::factory()->create(['organization_id' => $organization->id, 'last_seen_at' => now()->subMinute()]);
+    $stale = Screen::factory()->offline()->create(['organization_id' => $organization->id]);
+    $never = Screen::factory()->unpaired()->create(['organization_id' => $organization->id]);
 
     expect($fresh->is_online)->toBeTrue();
     expect($stale->is_online)->toBeFalse();
     expect($never->is_online)->toBeFalse();
 });
 
-test('deleting a store takes its screens with it', function () {
-    $store = Store::factory()->create();
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
+test('deleting an organization takes its screens with it', function () {
+    $organization = Organization::factory()->create();
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
 
-    $store->delete();
+    $organization->delete();
 
     $this->assertDatabaseMissing('screens', ['id' => $screen->id]);
 });
 
 test('the pairing form asks for the screen\'s time zone, and the screen keeps it', function () {
-    $store = Store::factory()->create();
-    $owner = createStoreUser($store, ['screen-store']);
+    $organization = Organization::factory()->create();
+    $owner = createOrganizationUser($organization, ['screen-store']);
 
     // Said on the form: the zone chosen is the one the screen keeps.
-    $this->actingAs($owner)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($owner)->withSession(['current_organization_id' => $organization->id])
         ->postJson('/screens/pair', [
             'code' => waitingDeviceCode(), 'mode' => 'new', 'name' => 'Deli TV', 'orientation' => 'landscape',
             'timezone' => 'America/New_York',
@@ -294,7 +294,7 @@ test('the pairing form asks for the screen\'s time zone, and the screen keeps it
     expect(Screen::where('name', 'Deli TV')->sole()->timezone)->toBe('America/New_York');
 
     // Left out (an older page), the usual one.
-    $this->actingAs($owner)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($owner)->withSession(['current_organization_id' => $organization->id])
         ->postJson('/screens/pair', [
             'code' => waitingDeviceCode(), 'mode' => 'new', 'name' => 'Window TV', 'orientation' => 'landscape',
         ])->assertOk();
@@ -302,7 +302,7 @@ test('the pairing form asks for the screen\'s time zone, and the screen keeps it
     expect(Screen::where('name', 'Window TV')->sole()->timezone)->toBe(Screen::DEFAULT_TIMEZONE);
 
     // A zone the server does not know is refused under its field, and no screen is made.
-    $this->actingAs($owner)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($owner)->withSession(['current_organization_id' => $organization->id])
         ->postJson('/screens/pair', [
             'code' => waitingDeviceCode(), 'mode' => 'new', 'name' => 'Nowhere TV', 'orientation' => 'landscape',
             'timezone' => 'Mars/Olympus_Mons',

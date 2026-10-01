@@ -1,6 +1,6 @@
 /**
- * Users table — accounts (docs/STORE-ORGANIZATION-SPEC.md rules 13, 19, 21, 24): every account, from the
- * platform's side alone — a store's own people are its Members page (owner's rule, 2026-09-17). Nobody is
+ * Users table — accounts (docs/ORGANIZATION-SPEC.md rules 13, 19, 21, 24): every account, from the
+ * platform's side alone — an organization's own people are its Members page (owner's rule, 2026-09-17). Nobody is
  * created or edited here: people join by invitation and keep their own details. What each row allows comes
  * from the server (`can`), so no button can mislead.
  */
@@ -18,11 +18,11 @@ export function registerUsersTable(Alpine) {
             isSuperAdmin: config.isSuperAdmin ?? false,
             impersonating: false,
 
-            /* Manage stores, from the platform (super admins): a person's stores, roles, and adding them to more. */
+            /* Manage organizations, from the platform (super admins): a person's organizations, roles, and adding them to more. */
             accessTarget: null,
-            access: { memberships: [], stores: [], store_roles: [], custom_roles: {} },
+            access: { memberships: [], organizations: [], organization_roles: [], custom_roles: {} },
             loadingAccess: false,
-            assignForm: { store_id: '', role_id: '' },
+            assignForm: { organization_id: '', role_id: '' },
             assignErrors: {},
             assigning: false,
             removing: null,
@@ -65,21 +65,21 @@ export function registerUsersTable(Alpine) {
             },
 
             membershipLabel(membership) {
-                return `${membership.role_name} · ${membership.store_name}`;
+                return `${membership.role_name} · ${membership.organization_name}`;
             },
 
-            /* ── Manage stores, from the platform ──────────────────────── */
+            /* ── Manage organizations, from the platform ──────────────────────── */
 
-            async openManageStores(user) {
+            async openManageOrganizations(user) {
                 if (this.loadingAccess) return;
                 this.loadingAccess = true;
                 try {
                     this.accessTarget = user;
                     this.removing = null;
-                    this.assignForm = { store_id: '', role_id: '' };
+                    this.assignForm = { organization_id: '', role_id: '' };
                     this.assignErrors = {};
                     await this.loadAccess();
-                    this.$dispatch('open-modal', 'manage-stores');
+                    this.$dispatch('open-modal', 'manage-organizations');
                 } catch (error) {
                     window.toast(error.response?.data?.message ?? 'Could not load their organizations.');
                 } finally {
@@ -88,7 +88,7 @@ export function registerUsersTable(Alpine) {
             },
 
             async loadAccess() {
-                const { data } = await axios.get(`/users/${this.accessTarget.id}/stores`);
+                const { data } = await axios.get(`/users/${this.accessTarget.id}/organizations`);
                 this.access = {
                     ...data,
                     // Each row keeps the role picked on screen apart from the one saved, until Save.
@@ -96,15 +96,15 @@ export function registerUsersTable(Alpine) {
                 };
             },
 
-            /** The roles a store offers: every store role, then that store's own custom roles. */
-            rolesFor(storeId) {
-                if (!storeId) return [];
+            /** The roles an organization offers: every organization role, then that organization's own custom roles. */
+            rolesFor(organizationId) {
+                if (!organizationId) return [];
 
-                return [...this.access.store_roles, ...(this.access.custom_roles?.[storeId] ?? [])];
+                return [...this.access.organization_roles, ...(this.access.custom_roles?.[organizationId] ?? [])];
             },
 
-            roleDescription(storeId, roleId) {
-                return this.rolesFor(storeId).find((role) => Number(role.id) === Number(roleId))?.description ?? '';
+            roleDescription(organizationId, roleId) {
+                return this.rolesFor(organizationId).find((role) => Number(role.id) === Number(roleId))?.description ?? '';
             },
 
             /* After any change: this modal's lists, and the row's badges in the table behind it. */
@@ -119,7 +119,7 @@ export function registerUsersTable(Alpine) {
                 membership.error = '';
                 try {
                     const { data } = await axios.put(
-                        `/users/${this.accessTarget.id}/stores/${membership.store_id}/role`,
+                        `/users/${this.accessTarget.id}/organizations/${membership.organization_id}/role`,
                         { role_id: membership.selected_role_id },
                     );
                     await this.afterAccessChange(data.message);
@@ -136,7 +136,7 @@ export function registerUsersTable(Alpine) {
                 this.removePasswordError = '';
             },
 
-            /* Taking someone out of a store is a big delete: it asks for the password. */
+            /* Taking someone out of an organization is a big delete: it asks for the password. */
             async removeMembership() {
                 if (!this.removing || this.removingBusy) return;
                 if (!this.removePassword) {
@@ -147,7 +147,7 @@ export function registerUsersTable(Alpine) {
                 this.removePasswordError = '';
                 try {
                     const { data } = await axios.delete(
-                        `/users/${this.accessTarget.id}/stores/${this.removing.store_id}`,
+                        `/users/${this.accessTarget.id}/organizations/${this.removing.organization_id}`,
                         { data: { password: this.removePassword } },
                     );
                     this.removing = null;
@@ -164,10 +164,10 @@ export function registerUsersTable(Alpine) {
                 }
             },
 
-            async assignToStore() {
+            async assignToOrganization() {
                 if (this.assigning) return;
 
-                const errors = validate(this.assignForm, { store_id: [required('Organization')], role_id: [required('Role')] });
+                const errors = validate(this.assignForm, { organization_id: [required('Organization')], role_id: [required('Role')] });
                 if (Object.keys(errors).length) {
                     this.assignErrors = errors;
                     return;
@@ -176,11 +176,11 @@ export function registerUsersTable(Alpine) {
                 this.assigning = true;
                 this.assignErrors = {};
                 try {
-                    const { data } = await axios.post(`/users/${this.accessTarget.id}/stores`, {
-                        store_id: Number(this.assignForm.store_id),
+                    const { data } = await axios.post(`/users/${this.accessTarget.id}/organizations`, {
+                        organization_id: Number(this.assignForm.organization_id),
                         role_id: Number(this.assignForm.role_id),
                     });
-                    this.assignForm = { store_id: '', role_id: '' };
+                    this.assignForm = { organization_id: '', role_id: '' };
                     await this.afterAccessChange(data.message);
                 } catch (error) {
                     if (error.response?.status === 422 && error.response.data.errors) {
@@ -223,8 +223,8 @@ export function registerUsersTable(Alpine) {
                     const { data } = await axios.delete(`/users/${this.selectedItem.id}`, { data: { password: this.deletePassword } });
                     this.$dispatch('close-modal', 'confirm-account-deletion');
                     this.selectedItem = null;
-                    window.toast(data.ownerless_stores?.length
-                        ? `${data.message} Now without an owner: ${data.ownerless_stores.join(', ')}.`
+                    window.toast(data.ownerless_organizations?.length
+                        ? `${data.message} Now without an owner: ${data.ownerless_organizations.join(', ')}.`
                         : data.message, 'success');
                     await this.fetchItems();
                     if (this.items.length === 0 && this.currentPage > 1) {

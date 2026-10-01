@@ -63,7 +63,7 @@ return [
          *
          * Dusk gets a root and a URL prefix OF ITS OWN. Browser tests run on the
          * same machine as the real application and upload real files with ULID
-         * names, so before this they landed in the very same media/{store} folder
+         * names, so before this they landed in the very same media/{organization} folder
          * as the owner's own uploads and were indistinguishable from them — which
          * is how test litter once ended up beside real videos, and how a cleanup
          * aimed at that litter once destroyed three real ones.
@@ -74,8 +74,8 @@ return [
          *
          * The backend tests get a throwaway root as well, so a test that forgets
          * Storage::fake('public') can never reach a real file. One did: its fresh
-         * database numbered its store and ads from 1, just like the real one, and
-         * deleting that store took the owner's own published ads 1 and 2 with it.
+         * database numbered its organization and ads from 1, just like the real one, and
+         * deleting that organization took the owner's own published ads 1 and 2 with it.
          */
         'public' => [
             'driver' => 'local',

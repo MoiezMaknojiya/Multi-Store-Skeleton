@@ -2,10 +2,10 @@
 
 use App\Models\Channel;
 use App\Models\Invitation;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Store;
 use Tests\TestCase;
 
 /*
@@ -75,9 +75,9 @@ function assertEveryFieldSaysItsLimit(TestCase $test, array $pages): void
 }
 
 test('the pages a guest sees say how much each field takes', function () {
-    $store = Store::factory()->create();
-    $owner = createStoreMember($store);
-    [, $token] = Invitation::open($store, 'new.person@example.com', Role::owner(), $owner);
+    $organization = Organization::factory()->create();
+    $owner = createOrganizationMember($organization);
+    [, $token] = Invitation::open($organization, 'new.person@example.com', Role::owner(), $owner);
 
     assertEveryFieldSaysItsLimit($this, [
         '/login',
@@ -88,38 +88,38 @@ test('the pages a guest sees say how much each field takes', function () {
     ]);
 });
 
-test('the pages above the stores say how much each field takes', function () {
-    Store::factory()->create(['name' => 'Alpha Mart']);
+test('the pages above the organizations say how much each field takes', function () {
+    Organization::factory()->create(['name' => 'Alpha Mart']);
     $channel = Channel::factory()->create(['name' => 'GAMA Wholesale']);
 
     $this->actingAs(createSuperAdmin());
 
     assertEveryFieldSaysItsLimit($this, [
-        '/dashboard', '/users', '/stores', '/permissions', '/roles', '/activity', '/channels', '/channels/'.$channel->id,
+        '/dashboard', '/users', '/organizations', '/permissions', '/roles', '/activity', '/channels', '/channels/'.$channel->id,
         '/campaigns', '/media', '/builder', '/builder/assets', '/builder/create?orientation=portrait', '/profile',
     ]);
 });
 
-test('the pages inside a store say how much each field takes', function () {
-    $store = Store::factory()->create(['name' => 'Alpha Mart']);
-    // A role of this store holding everything a store's role may hold, so no page or form is hidden for want of one.
-    $owner = createStoreUser($store, [...Permission::STORE, ...Permission::STORE_SCOPED], 'Everything');
-    $screen = Screen::factory()->create(['store_id' => $store->id, 'name' => 'Deli TV']);
-    $channel = Channel::factory()->create(['store_id' => $store->id, 'name' => 'Alpha Promos']);
+test('the pages inside an organization say how much each field takes', function () {
+    $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    // A role of this organization holding everything an organization's role may hold, so no page or form is hidden for want of one.
+    $owner = createOrganizationUser($organization, [...Permission::ORGANIZATION, ...Permission::ORGANIZATION_SCOPED], 'Everything');
+    $screen = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Deli TV']);
+    $channel = Channel::factory()->create(['organization_id' => $organization->id, 'name' => 'Alpha Promos']);
 
-    $this->actingAs($owner)->withSession(['current_store_id' => $store->id]);
+    $this->actingAs($owner)->withSession(['current_organization_id' => $organization->id]);
 
     assertEveryFieldSaysItsLimit($this, [
         '/dashboard', '/screens', '/screens/'.$screen->id, '/media', '/dayparts', '/channels', '/channels/'.$channel->id,
         '/builder', '/builder/assets', '/builder/create?orientation=landscape', '/members', '/roles', '/activity',
-        '/settings/store', '/profile',
+        '/settings/organization', '/profile',
     ]);
 });
 
 test('a phone and a ZIP code are digits only, ten at most, wherever they are asked', function () {
-    $store = Store::factory()->create();
-    $owner = createStoreMember($store);
-    [, $token] = Invitation::open($store, 'new.person@example.com', Role::owner(), $owner);
+    $organization = Organization::factory()->create();
+    $owner = createOrganizationMember($organization);
+    [, $token] = Invitation::open($organization, 'new.person@example.com', Role::owner(), $owner);
 
     $digits = function (string $html, string $name): ?string {
         $page = new DOMDocument;
@@ -142,11 +142,11 @@ test('a phone and a ZIP code are digits only, ten at most, wherever they are ask
         ->and($digits((string) $this->get('/register')->getContent(), 'zip_code'))->toBe('10|numeric')
         ->and($digits((string) $this->get('/invitations/'.$token)->getContent(), 'phone'))->toBe('10|numeric');
 
-    // Create store is on the Stores tab for somebody who may open one.
-    $this->actingAs(createStoreUser($store, [...Permission::STORE, ...Permission::STORE_SCOPED], 'Everything'))
-        ->withSession(['current_store_id' => $store->id]);
+    // Create organization is on the Organizations tab for somebody who may open one.
+    $this->actingAs(createOrganizationUser($organization, [...Permission::ORGANIZATION, ...Permission::ORGANIZATION_SCOPED], 'Everything'))
+        ->withSession(['current_organization_id' => $organization->id]);
 
     expect($digits((string) $this->get('/profile')->getContent(), 'phone'))->toBe('10|numeric')
-        ->and($digits((string) $this->get('/settings/store')->getContent(), 'zip_code'))->toBe('10|numeric')
-        ->and($digits((string) $this->get('/settings/store')->getContent(), 'store_zip_code'))->toBe('10|numeric');
+        ->and($digits((string) $this->get('/settings/organization')->getContent(), 'zip_code'))->toBe('10|numeric')
+        ->and($digits((string) $this->get('/settings/organization')->getContent(), 'organization_zip_code'))->toBe('10|numeric');
 });

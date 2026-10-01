@@ -3,16 +3,16 @@
 namespace App\Console\Commands;
 
 use App\Models\ActivityLog;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * An account never confirmed is removed after User::UNVERIFIED_DAYS days, with the empty store it made at signup
+ * An account never confirmed is removed after User::UNVERIFIED_DAYS days, with the empty organization it made at signup
  * (owner's rule, 2026-09-29: "delete after 7 days") — scheduled daily in routes/console.php. An unconfirmed account
- * can do nothing that uses the server's space, so its store is empty — unless somebody above the stores put
+ * can do nothing that uses the server's space, so its organization is empty — unless somebody above the organizations put
  * somebody or something in it (a member, a file in its library): then the account is left alone, for a person to
  * decide, and the run says so.
  */
@@ -22,8 +22,8 @@ class PruneUnverifiedAccounts extends Command
 
     protected $description = 'Remove accounts never confirmed within '.User::UNVERIFIED_DAYS.' days, with the empty organizations they made';
 
-    /** What a store may hold, table by table (each with a store_id): a store holding any of it is not empty. */
-    private const WHAT_A_STORE_HOLDS = ['media', 'screens', 'dayparts', 'channels', 'builder_ads', 'builder_assets', 'invitations', 'roles'];
+    /** What an organization may hold, table by table (each with an organization_id): an organization holding any of it is not empty. */
+    private const WHAT_A_ORGANIZATION_HOLDS = ['media', 'screens', 'dayparts', 'channels', 'builder_ads', 'builder_assets', 'invitations', 'roles'];
 
     public function handle(): int
     {
@@ -36,18 +36,18 @@ class PruneUnverifiedAccounts extends Command
             ->lazyById()
             ->each(function (User $candidate) use (&$removed, &$kept) {
                 DB::transaction(function () use ($candidate, &$removed, &$kept) {
-                    // The store rows first, as every change to a team or a library takes them (StoreTeam::changeTeam,
-                    // StoreStorage::withRoom), then the person's own row: nobody is put in, nothing is uploaded and
+                    // The organization rows first, as every change to a team or a library takes them (OrganizationTeam::changeTeam,
+                    // OrganizationStorage::withRoom), then the person's own row: nobody is put in, nothing is uploaded and
                     // the link is not opened between the look and the delete.
-                    $storeIds = DB::table('store_user')->where('user_id', $candidate->id)->pluck('store_id');
-                    $stores = Store::whereIn('id', $storeIds)->orderBy('id')->lockForUpdate()->get();
+                    $organizationIds = DB::table('organization_user')->where('user_id', $candidate->id)->pluck('organization_id');
+                    $organizations = Organization::whereIn('id', $organizationIds)->orderBy('id')->lockForUpdate()->get();
                     $user = User::whereKey($candidate->id)->lockForUpdate()->first();
 
                     if ($user === null || $user->hasVerifiedEmail()) {
                         return;   // gone meanwhile, or confirmed a moment ago
                     }
 
-                    $why = $this->whyKept($user->id, $storeIds);
+                    $why = $this->whyKept($user->id, $organizationIds);
 
                     if ($why !== null) {
                         $kept++;
@@ -58,14 +58,14 @@ class PruneUnverifiedAccounts extends Command
 
                     $email = $user->email;
 
-                    // The store first — its purge (Store::booted) runs while the person is still its member.
-                    $stores->each(fn (Store $store) => $store->delete());
+                    // The organization first — its purge (Organization::booted) runs while the person is still its member.
+                    $organizations->each(fn (Organization $organization) => $organization->delete());
                     $user->delete();
 
                     ActivityLog::record('account.pruned', null,
                         "Removed {$email}, never confirmed within ".User::UNVERIFIED_DAYS.' days'
-                        .($stores->isEmpty() ? '' : ', with the organization '.$stores->pluck('name')->implode(', ')),
-                        storeId: $stores->first()?->id);
+                        .($organizations->isEmpty() ? '' : ', with the organization '.$organizations->pluck('name')->implode(', ')),
+                        organizationId: $organizations->first()?->id);
 
                     $removed++;
                 });
@@ -76,19 +76,19 @@ class PruneUnverifiedAccounts extends Command
         return self::SUCCESS;
     }
 
-    /** Why this account stays, or null when every store of theirs is theirs alone and empty. */
-    private function whyKept(int $userId, Collection $storeIds): ?string
+    /** Why this account stays, or null when every organization of theirs is theirs alone and empty. */
+    private function whyKept(int $userId, Collection $organizationIds): ?string
     {
-        if ($storeIds->contains(0)) {
+        if ($organizationIds->contains(0)) {
             return 'they are on the platform team';
         }
 
-        if (DB::table('store_user')->whereIn('store_id', $storeIds)->where('user_id', '!=', $userId)->exists()) {
+        if (DB::table('organization_user')->whereIn('organization_id', $organizationIds)->where('user_id', '!=', $userId)->exists()) {
             return 'an organization of theirs has other people in it';
         }
 
-        $holding = collect(self::WHAT_A_STORE_HOLDS)
-            ->first(fn (string $table) => DB::table($table)->whereIn('store_id', $storeIds)->exists());
+        $holding = collect(self::WHAT_A_ORGANIZATION_HOLDS)
+            ->first(fn (string $table) => DB::table($table)->whereIn('organization_id', $organizationIds)->exists());
 
         return $holding !== null ? "an organization of theirs is not empty ({$holding})" : null;
     }

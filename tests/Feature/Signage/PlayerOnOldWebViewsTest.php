@@ -5,7 +5,7 @@
 | The player on an old WebView
 |--------------------------------------------------------------------------
 |
-| A shop's television is whatever it put behind the screen: a Fire TV, a cheap Android box, the Android
+| An organization's television is whatever it put behind the screen: a Fire TV, a cheap Android box, the Android
 | player app on either (com.digitallifts.player) — and their WebViews can be as old as Chrome 80. So the
 | player is built for that floor: no stylesheet but its own (the panel's Tailwind v4 needs Chrome 111), no
 | CSS the floor lacks (inset is Chrome 87), and no browser API newer than it in anything the television

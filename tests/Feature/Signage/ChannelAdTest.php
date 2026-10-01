@@ -3,7 +3,7 @@
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\VideoFiles;
@@ -26,7 +26,7 @@ beforeEach(function () {
     Storage::fake('public');
 
     $this->admin = createSuperAdmin(['channel-view', 'channel-update']);
-    // The platform's channel (no store): its uploads join the platform's own library.
+    // The platform's channel (no organization): its uploads join the platform's own library.
     $this->channel = Channel::factory()->create(['name' => 'GAMA']);
 });
 
@@ -62,7 +62,7 @@ test('an image uploaded inside a channel joins the library, and the ad shows it 
     $media = $ad->media;
 
     // The platform's channel: the file is a row of the platform's own library, in its folder.
-    expect($media->store_id)->toBeNull()
+    expect($media->organization_id)->toBeNull()
         ->and($media->title)->toBe('coke-2l')
         ->and($media->path)->toStartWith('media/platform/')
         ->and($ad->type)->toBe('image')
@@ -73,26 +73,26 @@ test('an image uploaded inside a channel joins the library, and the ad shows it 
     Storage::disk('public')->assertExists($media->path);
     Storage::disk('public')->assertExists($media->thumbnail_path);
     $this->assertDatabaseHas('activity_logs', ['action' => 'channel.ad_added']);
-    $this->assertDatabaseHas('activity_logs', ['action' => 'media.uploaded', 'store_id' => null]);
+    $this->assertDatabaseHas('activity_logs', ['action' => 'media.uploaded', 'organization_id' => null]);
 });
 
-test("an upload inside a shop's own channel joins that shop's library", function () {
-    $store = Store::factory()->create();
-    $keeper = createStoreUser($store, ['channel-view', 'channel-update']);
-    $own = Channel::factory()->create(['store_id' => $store->id]);
+test("an upload inside an organization's own channel joins that organization's library", function () {
+    $organization = Organization::factory()->create();
+    $keeper = createOrganizationUser($organization, ['channel-view', 'channel-update']);
+    $own = Channel::factory()->create(['organization_id' => $organization->id]);
 
-    $this->actingAs($keeper)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($keeper)->withSession(['current_organization_id' => $organization->id])
         ->post("/channels/{$own->id}/ads", ['file' => UploadedFile::fake()->image('deal.jpg'), 'seconds' => 7], ['Accept' => 'application/json'])
         ->assertOk();
 
     $media = ChannelAd::where('channel_id', $own->id)->sole()->media;
 
-    expect($media->store_id)->toBe($store->id)
-        ->and($media->path)->toStartWith("media/{$store->id}/");
+    expect($media->organization_id)->toBe($organization->id)
+        ->and($media->path)->toStartWith("media/{$organization->id}/");
 
-    // …and the shop sees it in its Media library afterwards.
-    $keeper2 = createStoreUser($store, ['media-view'], 'Librarian');
-    $titles = collect($this->actingAs($keeper2)->withSession(['current_store_id' => $store->id])
+    // …and the organization sees it in its Media library afterwards.
+    $keeper2 = createOrganizationUser($organization, ['media-view'], 'Librarian');
+    $titles = collect($this->actingAs($keeper2)->withSession(['current_organization_id' => $organization->id])
         ->getJson('/media/data')->assertOk()->json('media'))->pluck('title');
 
     expect($titles->all())->toBe(['deal']);
@@ -220,17 +220,17 @@ test('a file and a choice together, or neither, are refused', function () {
     expect(ChannelAd::count())->toBe(0);
 });
 
-test("a shop's channel takes that shop's files only; the platform's channel takes its own or any shop's", function () {
-    $store = Store::factory()->create();
-    $rival = Store::factory()->create();
-    $ours = Media::factory()->create(['store_id' => $store->id]);
-    $theirs = Media::factory()->create(['store_id' => $rival->id]);
+test("an organization's channel takes that organization's files only; the platform's channel takes its own or any organization's", function () {
+    $organization = Organization::factory()->create();
+    $rival = Organization::factory()->create();
+    $ours = Media::factory()->create(['organization_id' => $organization->id]);
+    $theirs = Media::factory()->create(['organization_id' => $rival->id]);
     $platform = Media::factory()->platformOwned()->create();
 
-    $keeper = createStoreUser($store, ['channel-view', 'channel-update']);
-    $own = Channel::factory()->create(['store_id' => $store->id]);
+    $keeper = createOrganizationUser($organization, ['channel-view', 'channel-update']);
+    $own = Channel::factory()->create(['organization_id' => $organization->id]);
 
-    $this->actingAs($keeper)->withSession(['current_store_id' => $store->id]);
+    $this->actingAs($keeper)->withSession(['current_organization_id' => $organization->id]);
 
     foreach ([$theirs, $platform] as $foreign) {
         $this->postJson("/channels/{$own->id}/ads", ['media_id' => $foreign->id, 'seconds' => 8])
@@ -239,7 +239,7 @@ test("a shop's channel takes that shop's files only; the platform's channel take
 
     $this->postJson("/channels/{$own->id}/ads", ['media_id' => $ours->id, 'seconds' => 8])->assertOk();
 
-    // The platform's channel, from above the stores: its own library and any shop's.
+    // The platform's channel, from above the organizations: its own library and any organization's.
     foreach ([$platform, $theirs] as $allowed) {
         uploadChannelAd($this, ['media_id' => $allowed->id, 'seconds' => 8])->assertOk();
     }
@@ -261,17 +261,17 @@ test('an id that is not an id is refused, never a 500', function () {
 |--------------------------------------------------------------------------
 */
 
-test("a shop's channel lists that shop's library to choose from, and nothing else", function () {
-    $store = Store::factory()->create();
-    $keeper = createStoreUser($store, ['channel-view', 'channel-update']);
-    $own = Channel::factory()->create(['store_id' => $store->id]);
+test("an organization's channel lists that organization's library to choose from, and nothing else", function () {
+    $organization = Organization::factory()->create();
+    $keeper = createOrganizationUser($organization, ['channel-view', 'channel-update']);
+    $own = Channel::factory()->create(['organization_id' => $organization->id]);
 
-    Media::factory()->create(['store_id' => $store->id, 'title' => 'Ours']);
-    Media::factory()->adPage()->create(['store_id' => $store->id, 'title' => 'Our ad']);
-    Media::factory()->create(['store_id' => Store::factory()->create()->id, 'title' => 'Theirs']);
+    Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Ours']);
+    Media::factory()->adPage()->create(['organization_id' => $organization->id, 'title' => 'Our ad']);
+    Media::factory()->create(['organization_id' => Organization::factory()->create()->id, 'title' => 'Theirs']);
     Media::factory()->platformOwned()->create(['title' => 'Platform']);
 
-    $this->actingAs($keeper)->withSession(['current_store_id' => $store->id]);
+    $this->actingAs($keeper)->withSession(['current_organization_id' => $organization->id]);
 
     $all = collect($this->getJson("/channels/{$own->id}/library")->assertOk()->json('media'))->pluck('title')->sort()->values();
     $ads = collect($this->getJson("/channels/{$own->id}/library?type=html")->assertOk()->json('media'))->pluck('title');
@@ -279,7 +279,7 @@ test("a shop's channel lists that shop's library to choose from, and nothing els
     expect($all->all())->toBe(['Our ad', 'Ours'])
         ->and($ads->all())->toBe(['Our ad']);
 
-    // Asking for another library changes nothing for a shop's channel.
+    // Asking for another library changes nothing for an organization's channel.
     $asked = collect($this->getJson("/channels/{$own->id}/library?library=platform")->assertOk()->json('media'))->pluck('title');
     expect($asked->sort()->values()->all())->toBe(['Our ad', 'Ours']);
 
@@ -288,18 +288,18 @@ test("a shop's channel lists that shop's library to choose from, and nothing els
         ->toBe(['id', 'title', 'type', 'orientation', 'duration_seconds', 'thumbnail_url']);
 });
 
-test("the platform's channel lists its own library by default, or the shop it is asked for", function () {
-    $store = Store::factory()->create();
-    Media::factory()->create(['store_id' => $store->id, 'title' => 'Shop file']);
+test("the platform's channel lists its own library by default, or the organization it is asked for", function () {
+    $organization = Organization::factory()->create();
+    Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Organization file']);
     Media::factory()->platformOwned()->create(['title' => 'Platform file']);
 
     $this->actingAs($this->admin);
 
     $default = collect($this->getJson("/channels/{$this->channel->id}/library")->assertOk()->json('media'))->pluck('title');
-    $shop = collect($this->getJson("/channels/{$this->channel->id}/library?library={$store->id}")->assertOk()->json('media'))->pluck('title');
+    $organizationFiles = collect($this->getJson("/channels/{$this->channel->id}/library?library={$organization->id}")->assertOk()->json('media'))->pluck('title');
 
     expect($default->all())->toBe(['Platform file'])
-        ->and($shop->all())->toBe(['Shop file']);
+        ->and($organizationFiles->all())->toBe(['Organization file']);
 
     $this->getJson("/channels/{$this->channel->id}/library?library[]=1")->assertStatus(422);
 });
@@ -458,14 +458,14 @@ test('seeing the ads needs channel-view; changing them needs channel-update', fu
     $this->getJson("/channels/{$this->channel->id}/library")->assertForbidden();
 });
 
-test("inside a store the platform's channel is read, never changed", function () {
-    // Inside a store the channel permissions CHANGE the store's own channels alone; the platform's may be
+test("inside an organization the platform's channel is read, never changed", function () {
+    // Inside an organization the channel permissions CHANGE the organization's own channels alone; the platform's may be
     // looked at (owner, 2026-09-19) and nothing more.
-    $store = Store::factory()->create();
-    $keeper = createStoreUser($store, ['channel-view', 'channel-update']);
+    $organization = Organization::factory()->create();
+    $keeper = createOrganizationUser($organization, ['channel-view', 'channel-update']);
     $ad = ChannelAd::factory()->create(['channel_id' => $this->channel->id, 'title' => 'Platform promo']);
 
-    $this->actingAs($keeper)->withSession(['current_store_id' => $store->id]);
+    $this->actingAs($keeper)->withSession(['current_organization_id' => $organization->id]);
 
     $this->getJson("/channels/{$this->channel->id}/ads")->assertOk()->assertJsonPath('ads.0.title', 'Platform promo');
     $this->get("/channels/{$this->channel->id}")->assertOk()->assertDontSee('dusk="add-channel-ad"', false);
@@ -481,20 +481,20 @@ test("inside a store the platform's channel is read, never changed", function ()
         ->and(Media::count())->toBe(1);
 });
 
-test("a store's own channel takes its ads from inside that store — and from no other store", function () {
-    $store = Store::factory()->create();
-    $keeper = createStoreUser($store, ['channel-view', 'channel-update']);
-    $own = Channel::factory()->create(['name' => 'Our Specials', 'store_id' => $store->id]);
+test("an organization's own channel takes its ads from inside that organization — and from no other organization", function () {
+    $organization = Organization::factory()->create();
+    $keeper = createOrganizationUser($organization, ['channel-view', 'channel-update']);
+    $own = Channel::factory()->create(['name' => 'Our Specials', 'organization_id' => $organization->id]);
 
-    $this->actingAs($keeper)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($keeper)->withSession(['current_organization_id' => $organization->id])
         ->post("/channels/{$own->id}/ads", ['file' => UploadedFile::fake()->image('deal.jpg'), 'seconds' => 7], ['Accept' => 'application/json'])
         ->assertOk();
 
     expect(ChannelAd::where('channel_id', $own->id)->value('title'))->toBe('deal');
 
-    $rival = Store::factory()->create();
-    $stranger = createStoreUser($rival, ['channel-view', 'channel-update'], 'Rival Keeper');
-    $this->actingAs($stranger)->withSession(['current_store_id' => $rival->id])
+    $rival = Organization::factory()->create();
+    $stranger = createOrganizationUser($rival, ['channel-view', 'channel-update'], 'Rival Keeper');
+    $this->actingAs($stranger)->withSession(['current_organization_id' => $rival->id])
         ->getJson("/channels/{$own->id}/ads")->assertNotFound();
     $this->getJson("/channels/{$own->id}/library")->assertNotFound();
 });

@@ -5,7 +5,7 @@
  * API, and inside the `<input type="time">` elements, which accept nothing else. That
  * never changes. This is only the last step before a person sees it.
  *
- * Formatted explicitly rather than through Intl, because the shop asked for AM/PM and
+ * Formatted explicitly rather than through Intl, because the organization asked for AM/PM and
  * a locale-driven format would quietly show 24-hour time to somebody in another
  * country — a reading, not a preference to be guessed at.
  */

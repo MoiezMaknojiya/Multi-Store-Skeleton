@@ -8,11 +8,11 @@ use App\Models\ChannelAd;
 use App\Models\Daypart;
 use App\Models\Invitation;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Models\Upload;
 use App\Models\User;
 use Illuminate\Routing\Route as RouteDefinition;
@@ -55,31 +55,31 @@ function sweepPeople(): array
 /** Real rows, so an id in a URL resolves to something — one of each thing a route can point at. */
 function sweepFixtures(): array
 {
-    $store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $owner = createStoreMember($store, Role::OWNER);
-    $staff = createStoreMember($store, Role::STAFF);
-    $support = createPlatformUser(['user-view', 'store-view', 'channel-view', 'activity-view'], 'Support');
+    $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $owner = createOrganizationMember($organization, Role::OWNER);
+    $staff = createOrganizationMember($organization, Role::STAFF);
+    $support = createPlatformUser(['user-view', 'organization-view', 'channel-view', 'activity-view'], 'Support');
     $superAdmin = createSuperAdmin();
-    // A customer who signed up and has not opened the link yet: the Owner of a store of their own.
-    $unconfirmed = createStoreMember(Store::factory()->create(['name' => 'Unconfirmed Mart']), Role::OWNER);
+    // A customer who signed up and has not opened the link yet: the Owner of an organization of their own.
+    $unconfirmed = createOrganizationMember(Organization::factory()->create(['name' => 'Unconfirmed Mart']), Role::OWNER);
     $unconfirmed->forceFill(['email_verified_at' => null])->save();
 
-    $screen = Screen::factory()->withToken('sweep-token-'.$store->id)->create(['store_id' => $store->id]);
-    $media = Media::factory()->create(['store_id' => $store->id]);
+    $screen = Screen::factory()->withToken('sweep-token-'.$organization->id)->create(['organization_id' => $organization->id]);
+    $media = Media::factory()->create(['organization_id' => $organization->id]);
     // A line on the playlist, so the playlist routes have something to read, copy and preview.
     PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $media->id, 'position' => 0, 'duration_seconds' => 10]);
-    $daypart = Daypart::factory()->create(['store_id' => $store->id]);
-    $channel = Channel::factory()->create(['store_id' => $store->id]);
+    $daypart = Daypart::factory()->create(['organization_id' => $organization->id]);
+    $channel = Channel::factory()->create(['organization_id' => $organization->id]);
     $channelAd = ChannelAd::factory()->create(['channel_id' => $channel->id]);
-    $design = BuilderAd::factory()->withText()->create(['store_id' => $store->id]);
-    $asset = BuilderAsset::factory()->create(['store_id' => $store->id]);
+    $design = BuilderAd::factory()->withText()->create(['organization_id' => $organization->id]);
+    $asset = BuilderAsset::factory()->create(['organization_id' => $organization->id]);
     $campaign = Campaign::factory()->create();
-    $invitation = Invitation::factory()->create(['store_id' => $store->id]);
-    $role = Role::create(['name' => 'Sweep Role', 'store_id' => $store->id]);
+    $invitation = Invitation::factory()->create(['organization_id' => $organization->id]);
+    $role = Role::create(['name' => 'Sweep Role', 'organization_id' => $organization->id]);
     $permission = Permission::firstWhere('name', 'screen-view');
     // A file on its way in (docs/UPLOADS-SPEC.md): the Owner's, so everybody else is told it is not found.
     $upload = Upload::create([
-        'user_id' => $owner->id, 'store_id' => $store->id, 'purpose' => 'media', 'filename' => 'sweep.jpg',
+        'user_id' => $owner->id, 'organization_id' => $organization->id, 'purpose' => 'media', 'filename' => 'sweep.jpg',
         'size' => 10, 'received' => 0, 'expires_at' => now()->addDay(),
     ]);
 
@@ -92,11 +92,11 @@ function sweepFixtures(): array
             'super admin' => $superAdmin,
             'unconfirmed' => $unconfirmed,
         ],
-        'store' => $store,
+        'organization' => $organization,
         // Keyed by route parameter name. A name two sections use for different things is given per
         // section — the URI's first segment.
         'parameters' => [
-            'store' => $store->id,
+            'organization' => $organization->id,
             'user' => $staff->id,
             'role' => $role->id,
             'permission' => $permission->id,
@@ -134,7 +134,7 @@ function sweepRouteTable(): Collection
 
 /**
  * Every route the app answers, with its parameters filled in. What takes something away — a DELETE, or
- * leaving the store — comes after everything else, so every route before it still finds the rows and the
+ * leaving the organization — comes after everything else, so every route before it still finds the rows and the
  * membership it is about. (PHP's sort is stable: the rest keep the order of the route files.)
  */
 function sweepRoutes(array $parameters): array
@@ -182,7 +182,7 @@ function sweepRoutes(array $parameters): array
  * Stand as this person, afresh, for the next request of a pass — whatever the request before did: signed
  * out, "logged in as" somebody else, or spent a rate limit.
  */
-function sweepAs(object $test, ?User $person, Store $store): void
+function sweepAs(object $test, ?User $person, Organization $organization): void
 {
     // The limiters still run on every request (a key built from a misshapen value is one of the things
     // that can 500), but their counters are forgotten: otherwise `throttle:admin` — 240 a minute per
@@ -198,14 +198,14 @@ function sweepAs(object $test, ?User $person, Store $store): void
     }
 
     // Read afresh: a person memoises their permissions, and a request before may have changed their role.
-    $test->actingAs($person->fresh())->withSession(['current_store_id' => $store->id]);
+    $test->actingAs($person->fresh())->withSession(['current_organization_id' => $organization->id]);
 }
 
 /** How many rows each table a write could touch holds. */
 function sweepCounts(): array
 {
     return collect([
-        'stores', 'users', 'store_user', 'roles', 'role_has_permissions', 'permissions', 'invitations',
+        'organizations', 'users', 'organization_user', 'roles', 'role_has_permissions', 'permissions', 'invitations',
         'screens', 'playlist_items', 'media', 'dayparts', 'channels', 'channel_ads', 'campaigns',
         'builder_ads', 'builder_assets', 'builder_fonts', 'uploads',
     ])->mapWithKeys(fn (string $table) => [$table => DB::table($table)->count()])->all();
@@ -241,7 +241,7 @@ test('no route anywhere answers with a server error, whoever asks and whatever t
         expect(count($routes))->toBeGreaterThan(50);
 
         foreach ($routes as $route) {
-            sweepAs($this, $fixtures['people'][$label], $fixtures['store']);
+            sweepAs($this, $fixtures['people'][$label], $fixtures['organization']);
 
             try {
                 $response = $route['method'] === 'GET'
@@ -307,7 +307,7 @@ test('an account that has not confirmed its email is offered its profile and the
         && ! in_array('verified', $route->gatherMiddleware(), true)));
 
     expect($open)->toBe([
-        'DELETE profile', 'DELETE profile/email', 'DELETE profile/stores/{store}',
+        'DELETE profile', 'DELETE profile/email', 'DELETE profile/organizations/{organization}',
         'GET confirm-email/{id}/{hash}', 'GET profile', 'GET verify-email', 'GET verify-email/{id}/{hash}',
         'PATCH profile', 'POST impersonate/stop', 'POST invitations/{token}/accept', 'POST logout',
         'POST profile/email/resend', 'POST verify-email/resend', 'PUT password',
@@ -327,7 +327,7 @@ test('an account that has not confirmed its email is offered its profile and the
             continue;
         }
 
-        sweepAs($this, $fixtures['people']['unconfirmed'], $fixtures['store']);
+        sweepAs($this, $fixtures['people']['unconfirmed'], $fixtures['organization']);
 
         if ($route['method'] === 'GET') {
             $response = $this->get($route['uri']);
@@ -355,15 +355,15 @@ test('no write endpoint answers with a server error, however misshapen the body'
     // let a closure that expects a word receive an array.
     $fields = [
         'name', 'title', 'label', 'description', 'email', 'search', 'password', 'password_confirmation',
-        'current_password', 'confirm_name', 'first_name', 'last_name', 'phone', 'role_id', 'store_id',
-        'store_ids', 'media_id', 'channel_id', 'screen_id', 'screen_ids', 'target_screen_ids', 'default_media_id',
+        'current_password', 'confirm_name', 'first_name', 'last_name', 'phone', 'role_id', 'organization_id',
+        'organization_ids', 'media_id', 'channel_id', 'screen_id', 'screen_ids', 'target_screen_ids', 'default_media_id',
         'daypart_id', 'ad_ids', 'permissions', 'items', 'rules', 'exceptions', 'version', 'code', 'mode',
         'device_uuid', 'poll_secret', 'per_page', 'page', 'sort', 'from', 'to', 'type', 'is_active', 'is_retired',
         'accepts', 'accepts_network_ads', 'timezone', 'orientation', 'start_time', 'end_time', 'duration_seconds',
         'expires_at', 'starts_at', 'starts_on', 'ends_on', 'days', 'ads_per_pass', 'seconds', 'advertiser_name',
         'street', 'suite', 'city', 'state', 'zip_code', 'country', 'owner_email',
-        // Settings → Stores' Create store form, whose fields carry a prefix of their own
-        'store_name', 'store_street', 'store_suite', 'store_city', 'store_state', 'store_zip_code', 'store_country',
+        // Settings → Organizations' Create organization form, whose fields carry a prefix of their own
+        'organization_name', 'organization_street', 'organization_suite', 'organization_city', 'organization_state', 'organization_zip_code', 'organization_country',
         // The uploads, and the Ad Builder: a design, its poster, a font
         'file', 'poster', 'width', 'height', 'document', 'thumbnail', 'family',
     ];
@@ -388,7 +388,7 @@ test('no write endpoint answers with a server error, however misshapen the body'
                     continue;
                 }
 
-                sweepAs($this, $fixtures['people'][$label], $fixtures['store']);
+                sweepAs($this, $fixtures['people'][$label], $fixtures['organization']);
 
                 $response = $this->json($route['method'], $route['uri'], $body);
 

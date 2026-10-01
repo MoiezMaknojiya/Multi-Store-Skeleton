@@ -93,7 +93,7 @@ const el = (id) => document.getElementById(id);
  */
 function setPairingInstruction(knownDevice) {
     // Which television is this? Only the last block of the uuid — twelve
-    // characters are plenty to tell a shop's handful of sets apart, and the whole
+    // characters are plenty to tell an organization's handful of sets apart, and the whole
     // thirty-six is a wall of noise nobody reads. The panel prints the same block
     // beside each screen, so the two can be matched at a glance.
     // Safe to print either way: a uuid is an identity, never a way in.
@@ -144,8 +144,8 @@ const state = {
     clockOffset: Number(store.get(CLOCK_KEY)) || 0,
     lastLive: null,
 
-    // Network advertising. The shop's content pauses, the advert plays over it, and
-    // the shop's content carries on from where it stopped.
+    // Network advertising. The organization's content pauses, the advert plays over it, and
+    // the organization's content carries on from where it stopped.
     ad: {
         items: [],
         everyMs: 0,
@@ -156,7 +156,7 @@ const state = {
         playTimer: null,  // backstop for one advert that stalls or never ends
         deferred: false,  // this break already waited out an item's last seconds, once
         resumeMs: 0,      // what was left of the interrupted item
-        contentPaused: false, // an advert has appeared and the shop's content is paused under it
+        contentPaused: false, // an advert has appeared and the organization's content is paused under it
         pendingData: null, // a manifest that arrived mid-break, applied afterwards
     },
 };
@@ -616,7 +616,7 @@ function applyOrientation(orientation) {
 function render(data) {
     // Never tear the screen down mid-advert. A poll landing during a break would
     // otherwise restart the playlist underneath, and the brand's advert would be cut
-    // off by the shop's own content reappearing behind it. Hold the manifest and
+    // off by the organization's own content reappearing behind it. Hold the manifest and
     // apply it the moment the break ends.
     if (state.ad.active) {
         state.ad.pendingData = data;
@@ -933,8 +933,8 @@ function skipBroken() {
 
 /* ── Network advertising ───────────────────────────────────────────────────
  *
- * Every so often the shop's content PAUSES, the brand's advert plays over it, and
- * the shop's content carries on from exactly where it stopped — a two-hour video
+ * Every so often the organization's content PAUSES, the brand's advert plays over it, and
+ * the organization's content carries on from exactly where it stopped — a two-hour video
  * resumes at 1:00:00, not at the beginning.
  *
  * The clock is kept here rather than on the server because the server has no way to
@@ -942,7 +942,7 @@ function skipBroken() {
  * adverts, how often, and whether at all. The player only counts — the same as it
  * already counts an image's ten seconds.
  *
- * Three things this is careful about, because a shop's wall must not misbehave:
+ * Three things this is careful about, because an organization's wall must not misbehave:
  *   · the countdown is NOT restarted by a poll, or an hourly break would never fire
  *   · only one video ever decodes at a time — the content is paused before the
  *     advert plays, and the advert's element is destroyed after
@@ -974,8 +974,8 @@ function armAdBreak(config) {
 
     // Warm the still adverts NOW rather than when the break starts. An advert that
     // has not arrived by its moment lets the whole break pass in silence — the
-    // backstop timer ends it and the shop's content simply carries on — which on a
-    // slow shop connection is a brand paying for nothing. Videos are left to stream.
+    // backstop timer ends it and the organization's content simply carries on — which on a
+    // slow organization connection is a brand paying for nothing. Videos are left to stream.
     items.filter((item) => item.type !== 'video').forEach((item) => {
         const warm = new Image();
         warm.src = assetUrl(item);
@@ -1041,7 +1041,7 @@ function startAdBreak() {
 }
 
 /**
- * Build the advert first, pause the shop's content only once it is ready to show.
+ * Build the advert first, pause the organization's content only once it is ready to show.
  *
  * The other order — pause, then load — leaves a frozen frame on the wall for as long
  * as the file takes to arrive.
@@ -1074,7 +1074,7 @@ function playAd() {
 
     const reveal = () => {
         // An advert that finishes loading after its time was up, or after the break ended,
-        // must not show itself: un-hiding the emptied layer is a black screen over the shop's
+        // must not show itself: un-hiding the emptied layer is a black screen over the organization's
         // content, and pausing that content would freeze it with nothing to resume it.
         if (done || ! node.isConnected) return;
 
@@ -1097,7 +1097,7 @@ function playAd() {
     }
 }
 
-/** Stop the shop's content where it stands, remembering what it had left — once per break. */
+/** Stop the organization's content where it stands, remembering what it had left — once per break. */
 function pauseContent() {
     // Every advert in a break comes here as it appears, but only the first may measure. An
     // image's time left is counted from when it STARTED, so measured again at the second
@@ -1126,7 +1126,7 @@ function pauseContent() {
     }
 }
 
-/** Put the shop's content back exactly where it was. */
+/** Put the organization's content back exactly where it was. */
 function resumeContent() {
     const node = frontNode();
 
@@ -1225,7 +1225,7 @@ window.addEventListener('online', () => {
     if (state.token) fetchPlaylist();
 });
 
-// Best effort on TVs that honour it; the shop also disables sleep on the set.
+// Best effort on TVs that honour it; the organization also disables sleep on the set.
 if ('wakeLock' in navigator) {
     navigator.wakeLock.request('screen').catch(() => {});
 }

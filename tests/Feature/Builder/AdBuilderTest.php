@@ -4,8 +4,8 @@ use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use Illuminate\Support\Facades\Storage;
 
 /*
@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Storage;
 | The Ad Builder — saving, listing and deleting a design
 |--------------------------------------------------------------------------
 |
-| docs/AD-BUILDER-SPEC.md. An ad belongs to a store like everything else a shop makes, the platform
+| docs/AD-BUILDER-SPEC.md. An ad belongs to an organization like everything else an organization makes, the platform
 | works above them all, and the design itself is checked on the way in — it becomes HTML on a
 | television later, so a document of the wrong shape never reaches the database.
 |
@@ -22,10 +22,10 @@ use Illuminate\Support\Facades\Storage;
 beforeEach(function () {
     Storage::fake('public');
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->other = Store::factory()->create(['name' => 'Beta Deli']);
-    $this->designer = createStoreUser($this->store, ['ad-view', 'ad-store', 'ad-update', 'ad-destroy'], 'Designer');
-    $this->actingAs($this->designer)->withSession(['current_store_id' => $this->store->id]);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->other = Organization::factory()->create(['name' => 'Beta Deli']);
+    $this->designer = createOrganizationUser($this->organization, ['ad-view', 'ad-store', 'ad-update', 'ad-destroy'], 'Designer');
+    $this->actingAs($this->designer)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 /** A minimal, valid design: one line of text on the stage. */
@@ -53,9 +53,9 @@ test('the two pages and a new ad open for somebody who may see ads, and are shut
     $this->get('/builder/create?orientation=landscape')->assertOk();
     $this->get('/builder/assets')->assertOk();
 
-    // A member of the same store without the permission gets nothing.
-    $outsider = createStoreUser($this->store, ['screen-view'], 'Screens only');
-    $this->actingAs($outsider)->withSession(['current_store_id' => $this->store->id]);
+    // A member of the same organization without the permission gets nothing.
+    $outsider = createOrganizationUser($this->organization, ['screen-view'], 'Screens only');
+    $this->actingAs($outsider)->withSession(['current_organization_id' => $this->organization->id]);
 
     $this->get('/builder')->assertForbidden();
     $this->get('/builder/create')->assertForbidden();
@@ -71,7 +71,7 @@ test('an ad is saved, listed and opened again with its design intact', function 
     $id = $response->json('ad.id');
     $ad = BuilderAd::findOrFail($id);
 
-    expect($ad->store_id)->toBe($this->store->id)
+    expect($ad->organization_id)->toBe($this->organization->id)
         ->and($ad->created_by)->toBe($this->designer->id)
         ->and($ad->document['elements'][0]['text'])->toBe('Winter sale')
         ->and($ad->isPublished())->toBeFalse();      // nothing is on a television until it is published
@@ -123,12 +123,12 @@ test('a design of the wrong shape is refused before it can ever become a page', 
 });
 
 test('a copy is a draft of its own, named so nobody loses track', function () {
-    $ad = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id, 'name' => 'Winter sale']);
+    $ad = BuilderAd::factory()->withText()->create(['organization_id' => $this->organization->id, 'name' => 'Winter sale']);
 
     $this->postJson("/builder/{$ad->id}/duplicate")->assertOk();
     $this->postJson("/builder/{$ad->id}/duplicate")->assertOk();
 
-    $names = BuilderAd::where('store_id', $this->store->id)->pluck('name')->all();
+    $names = BuilderAd::where('organization_id', $this->organization->id)->pluck('name')->all();
 
     expect($names)->toHaveCount(3)
         ->and($names)->toContain('Winter sale', 'Winter sale (copy)', 'Winter sale (copy 2)')
@@ -136,7 +136,7 @@ test('a copy is a draft of its own, named so nobody loses track', function () {
 });
 
 test('deleting an ad asks for the password, and takes its poster with it', function () {
-    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'thumbnail_path' => 'builder/1/ads/1/poster.jpg']);
+    $ad = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'thumbnail_path' => 'builder/1/ads/1/poster.jpg']);
     Storage::disk('public')->put($ad->thumbnail_path, 'bytes');
 
     // No password, wrong password: nothing happens.
@@ -153,10 +153,10 @@ test('deleting an ad asks for the password, and takes its poster with it', funct
 test('an ad a channel shows is not deleted until it is taken out of the channel — refused before any password', function () {
     // docs/CHANNEL-CONTENT-SPEC.md: a published ad is a library row, and a channel holds it by id; deleting
     // the design would take the channel's ad with it without anybody deciding so.
-    $page = Media::factory()->adPage()->create(['store_id' => $this->store->id, 'title' => 'Winter sale']);
-    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'name' => 'Winter sale', 'media_id' => $page->id]);
+    $page = Media::factory()->adPage()->create(['organization_id' => $this->organization->id, 'title' => 'Winter sale']);
+    $ad = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Winter sale', 'media_id' => $page->id]);
     foreach (['Weekly Deals', 'Lunch Deals'] as $name) {
-        $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => $name]);
+        $channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => $name]);
         ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $page->id]);
     }
 
@@ -181,9 +181,9 @@ test('an ad a channel shows is not deleted until it is taken out of the channel 
 });
 
 test('a design no channel shows carries no refusal in the gallery', function () {
-    $page = Media::factory()->adPage()->create(['store_id' => $this->store->id]);
-    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'media_id' => $page->id]);
-    $draft = BuilderAd::factory()->create(['store_id' => $this->store->id]);
+    $page = Media::factory()->adPage()->create(['organization_id' => $this->organization->id]);
+    $ad = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'media_id' => $page->id]);
+    $draft = BuilderAd::factory()->create(['organization_id' => $this->organization->id]);
 
     $rows = collect($this->getJson('/builder/data')->assertOk()->json('ads'));
 
@@ -191,8 +191,8 @@ test('a design no channel shows carries no refusal in the gallery', function () 
         ->and($rows->firstWhere('id', $draft->id)['in_channels_message'])->toBeNull();
 });
 
-test('another store’s ad is not there at all', function () {
-    $theirs = BuilderAd::factory()->create(['store_id' => $this->other->id, 'name' => 'Beta promo']);
+test('another organization’s ad is not there at all', function () {
+    $theirs = BuilderAd::factory()->create(['organization_id' => $this->other->id, 'name' => 'Beta promo']);
 
     $this->get("/builder/{$theirs->id}")->assertNotFound();
     $this->putJson("/builder/{$theirs->id}", ['name' => 'Mine now', 'document' => adDocument()])->assertNotFound();
@@ -204,78 +204,78 @@ test('another store’s ad is not there at all', function () {
         ->and(BuilderAd::find($theirs->id)->name)->toBe('Beta promo');
 });
 
-test('with no store selected, an ad cannot be made at all', function () {
+test('with no organization selected, an ad cannot be made at all', function () {
     $this->actingAs($this->designer->fresh());
     $this->flushSession();
 
-    // No store in the session means no permissions either, so the door is shut before the question arises.
+    // No organization in the session means no permissions either, so the door is shut before the question arises.
     expect($this->postJson('/builder', ['name' => 'Homeless', 'document' => adDocument()])->status())->toBe(403)
         ->and(BuilderAd::count())->toBe(0);
 });
 
-test('the shop an ad is for is one plain id — never an array, never read as shop 1', function () {
+test('the organization an ad is for is one plain id — never an array, never read as organization 1', function () {
     $admin = createSuperAdmin();
     $this->actingAs($admin);
     $this->flushSession();
 
-    // (int) of an array is 1: before the rule, any of the first two made the ad the first shop's.
-    foreach ([[$this->store->id], ['id' => $this->store->id], 'Alpha Mart', 0, -1] as $storeId) {
-        $this->postJson('/builder', ['name' => 'Odd shop', 'document' => adDocument(), 'store_id' => $storeId])
-            ->assertStatus(422)->assertJsonValidationErrors('store_id');
+    // (int) of an array is 1: before the rule, any of the first two made the ad the first organization's.
+    foreach ([[$this->organization->id], ['id' => $this->organization->id], 'Alpha Mart', 0, -1] as $organizationId) {
+        $this->postJson('/builder', ['name' => 'Odd organization', 'document' => adDocument(), 'organization_id' => $organizationId])
+            ->assertStatus(422)->assertJsonValidationErrors('organization_id');
     }
 
-    expect(BuilderAd::where('name', 'Odd shop')->exists())->toBeFalse();
+    expect(BuilderAd::where('name', 'Odd organization')->exists())->toBeFalse();
 });
 
-test('the platform builds for a shop it names, or for every shop when it names none', function () {
-    // A platform account stands in no store: a shop it names must exist, and no shop at all is All shops — an ad for
-    // every shop (owner, 2026-10-01; SharedAdsTest).
+test('the platform builds for an organization it names, or for every organization when it names none', function () {
+    // A platform account stands in no organization: an organization it names must exist, and no organization at all is All organizations — an ad for
+    // every organization (owner, 2026-10-01; SharedAdsTest).
     $this->actingAs(createPlatformUser(['ad-view', 'ad-store', 'ad-update'], 'Platform designer'));
     $this->flushSession();
 
-    $this->postJson('/builder', ['name' => 'For nobody', 'document' => adDocument(), 'store_id' => 999999])
-        ->assertStatus(422)->assertJsonValidationErrors(['store_id' => 'That organization no longer exists. Reload the page and choose again.']);
+    $this->postJson('/builder', ['name' => 'For nobody', 'document' => adDocument(), 'organization_id' => 999999])
+        ->assertStatus(422)->assertJsonValidationErrors(['organization_id' => 'That organization no longer exists. Reload the page and choose again.']);
     expect(BuilderAd::count())->toBe(0);
 
-    $this->postJson('/builder', ['name' => 'For every shop', 'document' => adDocument()])->assertOk();
-    expect(BuilderAd::firstWhere('name', 'For every shop')->store_id)->toBeNull();
+    $this->postJson('/builder', ['name' => 'For every organization', 'document' => adDocument()])->assertOk();
+    expect(BuilderAd::firstWhere('name', 'For every organization')->organization_id)->toBeNull();
 
-    $this->postJson('/builder', ['name' => 'For Alpha', 'document' => adDocument(), 'store_id' => $this->store->id])
+    $this->postJson('/builder', ['name' => 'For Alpha', 'document' => adDocument(), 'organization_id' => $this->organization->id])
         ->assertOk();
 
-    expect(BuilderAd::firstWhere('name', 'For Alpha')->store_id)->toBe($this->store->id);
+    expect(BuilderAd::firstWhere('name', 'For Alpha')->organization_id)->toBe($this->organization->id);
 
-    // And from above the stores, every shop's ads are visible — each saying whose it is.
-    BuilderAd::factory()->create(['store_id' => $this->other->id, 'name' => 'Beta promo']);
+    // And from above the organizations, every organization's ads are visible — each saying whose it is.
+    BuilderAd::factory()->create(['organization_id' => $this->other->id, 'name' => 'Beta promo']);
 
     $listed = collect($this->getJson('/builder/data')->assertOk()->json('ads'));
     expect($listed->pluck('name'))->toContain('Beta promo')
-        ->and($listed->firstWhere('name', 'Beta promo')['store_name'])->toBe('Beta Deli');
+        ->and($listed->firstWhere('name', 'Beta promo')['organization_name'])->toBe('Beta Deli');
 });
 
-test('deleting a store takes its ads with it', function () {
-    $ads = BuilderAd::factory()->count(2)->create(['store_id' => $this->store->id]);
-    $keep = BuilderAd::factory()->create(['store_id' => $this->other->id]);
+test('deleting an organization takes its ads with it', function () {
+    $ads = BuilderAd::factory()->count(2)->create(['organization_id' => $this->organization->id]);
+    $keep = BuilderAd::factory()->create(['organization_id' => $this->other->id]);
 
     foreach ([...$ads, $keep] as $ad) {
         $ad->forceFill(['thumbnail_path' => $ad->storageDirectory().'/poster.jpg'])->save();
         Storage::disk('public')->put($ad->thumbnail_path, 'bytes');
     }
 
-    $this->store->delete();
+    $this->organization->delete();
 
-    expect(BuilderAd::where('store_id', $this->store->id)->count())->toBe(0)
+    expect(BuilderAd::where('organization_id', $this->organization->id)->count())->toBe(0)
         ->and(BuilderAd::find($keep->id))->not->toBeNull();
 
-    // Its posters go; the other store's stays exactly where it was.
+    // Its posters go; the other organization's stays exactly where it was.
     $ads->each(fn (BuilderAd $ad) => Storage::disk('public')->assertMissing($ad->thumbnail_path));
     Storage::disk('public')->assertExists($keep->thumbnail_path);
 });
 
-test('the Owner role holds the ad permissions from the start, and a store role may carry them', function () {
-    $owner = createStoreMember($this->store, Role::OWNER);
+test('the Owner role holds the ad permissions from the start, and an organization role may carry them', function () {
+    $owner = createOrganizationMember($this->organization, Role::OWNER);
 
-    $this->actingAs($owner)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($owner)->withSession(['current_organization_id' => $this->organization->id]);
     $this->get('/builder')->assertOk();
     $this->postJson('/builder', ['name' => 'Owner made this', 'document' => adDocument()])->assertOk();
 

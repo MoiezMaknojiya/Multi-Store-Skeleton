@@ -1,7 +1,7 @@
-{{-- Roles, from where the person stands (docs/STORE-ORGANIZATION-SPEC.md §2–4 — owner's rules, 2026-09-17).
-     On the platform (super admins): Super-Admin, the store roles (offered in every store — the Owner role among
-     them), the platform roles, and in a card of their own the custom roles stores made for themselves. Inside a
-     store ($store): the store roles to read, and the store's own custom roles. What each row allows comes from
+{{-- Roles, from where the person stands (docs/ORGANIZATION-SPEC.md §2–4 — owner's rules, 2026-09-17).
+     On the platform (super admins): Super-Admin, the organization roles (offered in every organization — the Owner role among
+     them), the platform roles, and in a card of their own the custom roles organizations made for themselves. Inside an
+     organization ($organization): the organization roles to read, and the organization's own custom roles. What each row allows comes from
      the server (can_edit, can_delete); the form's checklist from /roles/assignable. --}}
 <x-app-layout>
     <x-slot name="header">
@@ -9,8 +9,8 @@
     </x-slot>
 
     <div x-data="rolesPage({{ Js::from([
-            'isPlatform' => $store === null,
-            'storeName' => $store?->name,
+            'isPlatform' => $organization === null,
+            'organizationName' => $organization?->name,
          ]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
@@ -18,17 +18,17 @@
         <div class="card" dusk="roles-table">
             <div class="card-header">
                 <div class="min-w-0">
-                    <h2 class="text-subheading">{{ $store ? 'Roles in '.$store->name : 'All roles' }}</h2>
+                    <h2 class="text-subheading">{{ $organization ? 'Roles in '.$organization->name : 'All roles' }}</h2>
                     <p class="mt-1 max-w-3xl text-sm text-gray-500 dark:text-gray-400">
-                        @if ($store)
-                            Organization roles come from the platform. Custom roles are {{ $store->name }}'s own.
+                        @if ($organization)
+                            Organization roles come from the platform. Custom roles are {{ $organization->name }}'s own.
                         @else
                             Organization roles are offered in every organization. Platform roles are for your team.
                         @endif
                     </p>
                 </div>
                 @can('role-store')
-                    <x-crud.add-button :label="$store ? 'Create Custom Role' : 'Create Role'" @click="openForm()" x-bind:disabled="openingForm" dusk="create-role" />
+                    <x-crud.add-button :label="$organization ? 'Create Custom Role' : 'Create Role'" @click="openForm()" x-bind:disabled="openingForm" dusk="create-role" />
                 @endcan
             </div>
             <div class="overflow-x-auto">
@@ -38,7 +38,7 @@
                             <th class="px-5 py-3 text-left font-semibold">Role</th>
                             <th class="px-5 py-3 text-left font-semibold">Type</th>
                             <th class="px-5 py-3 text-left font-semibold">Permissions</th>
-                            <th class="px-5 py-3 text-left font-semibold">{{ $store ? 'Members' : 'Holders' }}</th>
+                            <th class="px-5 py-3 text-left font-semibold">{{ $organization ? 'Members' : 'Holders' }}</th>
                             <th class="px-5 py-3 text-right font-semibold">Actions</th>
                         </tr>
                     </thead>
@@ -91,9 +91,9 @@
             </div>
         </div>
 
-        @unless ($store)
-        {{-- The custom roles stores made for themselves — each store's own, which the super admin looks after too. --}}
-        <div class="card" dusk="store-custom-roles" x-show="!loading && storeCustomRoles().length > 0" x-cloak>
+        @unless ($organization)
+        {{-- The custom roles organizations made for themselves — each organization's own, which the super admin looks after too. --}}
+        <div class="card" dusk="organization-custom-roles" x-show="!loading && organizationCustomRoles().length > 0" x-cloak>
             <div class="card-header">
                 <div>
                     <h2 class="text-subheading">Custom roles made in organizations</h2>
@@ -112,13 +112,13 @@
                         </tr>
                     </thead>
                     <tbody class="table-tbody">
-                        <template x-for="role in storeCustomRoles()" :key="role.id">
+                        <template x-for="role in organizationCustomRoles()" :key="role.id">
                             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50" x-bind:dusk="'role-row-' + role.id">
                                 <td class="cell-prose px-5 py-4">
                                     <p class="font-medium text-gray-800 dark:text-white" x-text="role.name" x-bind:dusk="'role-name-' + role.id"></p>
                                     <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400" x-text="role.description"></p>
                                 </td>
-                                <td class="px-5 py-4 text-gray-600 dark:text-gray-300 whitespace-nowrap" x-text="role.store_name"></td>
+                                <td class="px-5 py-4 text-gray-600 dark:text-gray-300 whitespace-nowrap" x-text="role.organization_name"></td>
                                 <td class="px-5 py-4"><span class="badge-neutral" x-text="role.permissions.length"></span></td>
                                 <td class="px-5 py-4 text-gray-600 dark:text-gray-300" x-text="role.holders_count"></td>
                                 <td class="px-5 py-4">
@@ -143,7 +143,7 @@
             <form @submit.prevent="save()" novalidate class="p-6 space-y-5" dusk="role-form">
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
-                        x-text="editingRole ? 'Edit ' + editingRole.name : {{ Js::from($store ? 'Create Custom Role' : 'Create Role') }}"></h2>
+                        x-text="editingRole ? 'Edit ' + editingRole.name : {{ Js::from($organization ? 'Create Custom Role' : 'Create Role') }}"></h2>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400" x-text="formHint()"></p>
                 </div>
 
@@ -151,14 +151,14 @@
                     <x-text-input x-model="form.name" dusk="role-name" maxlength="255" autocomplete="off" placeholder="e.g. Shift supervisor" />
                 </x-crud.form-field>
 
-                @unless ($store)
+                @unless ($organization)
                 {{-- What a new role is for. Fixed once it exists: its holders are already on one side or the other. Two
                      radios, named as one question by their legend. --}}
                 <fieldset x-show="!editingRole" class="min-w-0">
                     <legend class="form-label">What is this role for? <span class="text-red-600 dark:text-red-400" aria-hidden="true">*</span></legend>
                     <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <label class="role-choice">
-                            <input type="radio" name="role-type" value="store" class="mt-0.5 accent-blue-600" x-model="form.type" @change="changeType('store')" dusk="role-type-store">
+                            <input type="radio" name="role-type" value="organization" class="mt-0.5 accent-blue-600" x-model="form.type" @change="changeType('organization')" dusk="role-type-organization">
                             <span>
                                 <span class="block text-sm font-medium text-gray-800 dark:text-gray-100">Organization role</span>
                                 <span class="block text-xs text-gray-500 dark:text-gray-400">Offered in every organization. Its permissions reach the member's own organization.</span>
@@ -224,7 +224,7 @@
         <x-modal name="role-permissions" :show="false" maxWidth="lg" focusable>
             <div class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100" x-text="viewedRole?.name"></h2>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400" x-text="viewedRole ? kindLabel(viewedRole) + (viewedRole.store_name ? ' · ' + viewedRole.store_name : '') : ''"></p>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400" x-text="viewedRole ? kindLabel(viewedRole) + (viewedRole.organization_name ? ' · ' + viewedRole.organization_name : '') : ''"></p>
                 <p x-show="viewedRole?.kind === 'super_admin'" class="alert-info mt-3">
                     A super admin passes every permission check, whatever this list says — a permission added later included.
                 </p>

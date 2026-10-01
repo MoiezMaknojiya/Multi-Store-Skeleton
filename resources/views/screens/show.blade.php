@@ -31,7 +31,7 @@
     <div x-data="screenPlaylist({{ Js::from([
             'screenId' => $screen->id,
             // Which way the panel is mounted, so a line or a picker row the other way round can say it
-            // will play with bars (docs/AD-BUILDER-SPEC.md §12) — the shop's to notice, not a refusal.
+            // will play with bars (docs/AD-BUILDER-SPEC.md §12) — the organization's to notice, not a refusal.
             'screenOrientation' => str_starts_with($screen->orientation, 'portrait') ? 'portrait' : 'landscape',
             'canEdit' => auth()->user()->can('screen-playlist'),
             'dayparts' => $dayparts,
@@ -190,7 +190,7 @@
                 </div>
             </div>
 
-            {{-- The right-hand column: the shop's own files, and below them the channels it
+            {{-- The right-hand column: the organization's own files, and below them the channels it
                  may carry — the same kind of box, so adding either one reads the same. Both are
                  for adding to the playlist, and their lists answer screen-playlist alone, so
                  somebody who may only look at the playlist is not shown two boxes that stay empty. --}}
@@ -264,8 +264,8 @@
             </div>
 
             {{-- ── Channels ─────────────────────────────────────────────────
-                 Ads the platform offers every shop, plus this store's own channels — a wholesaler's
-                 promotions, a season — that this shop may choose to carry. Adding one puts ONE line on the
+                 Ads the platform offers every organization, plus this organization's own channels — a wholesaler's
+                 promotions, a season — that this organization may choose to carry. Adding one puts ONE line on the
                  playlist, and that line plays whatever the channel is running that day,
                  exactly where it stands. Not shown at all while there are no channels. --}}
             <div class="card" x-show="channels.length > 0" x-cloak dusk="channel-picker">
@@ -293,9 +293,9 @@
                                 <div class="flex-1 min-w-0">
                                     <p class="flex items-center gap-1.5 min-w-0 text-sm font-medium text-gray-800 dark:text-white">
                                         <span class="truncate" x-text="channel.title"></span>
-                                        {{-- A channel the store made for itself, told apart from the platform's; kept out of
+                                        {{-- A channel the organization made for itself, told apart from the platform's; kept out of
                                              the truncated name so a long name never hides it. --}}
-                                        <span x-show="channel.is_store_channel" class="badge-neutral shrink-0"
+                                        <span x-show="channel.is_organization_channel" class="badge-neutral shrink-0"
                                               x-bind:dusk="'channel-picker-own-' + channel.id">This organization</span>
                                     </p>
                                     <p class="text-xs"
@@ -397,7 +397,7 @@
                             </div>
 
                             {{-- The full repeat builder, kept behind "Repeat..." so the
-                                 nine shops out of ten that only want a date range never
+                                 nine organizations out of ten that only want a date range never
                                  have to look at it. --}}
                             <template x-if="rule.day_mode === 'repeat'">
                                 <div class="sm:pl-16 space-y-3">
@@ -478,7 +478,7 @@
                                 </div>
                             </template>
 
-                            {{-- WHAT TIME, on a day the rule covers. The store's live dayparts, and a
+                            {{-- WHAT TIME, on a day the rule covers. The organization's live dayparts, and a
                                  retired one only on the rule that already uses it (daypartsFor). --}}
                             <div class="flex flex-wrap items-center gap-2">
                                 <label class="form-label w-16" x-bind:for="'rule-daypart-' + ruleIndex">Time</label>

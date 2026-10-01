@@ -3,9 +3,9 @@
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Database\Events\TransactionBeginning;
 use Illuminate\Support\Facades\Event;
 
@@ -29,13 +29,13 @@ use Illuminate\Support\Facades\Event;
 test('a file or a channel deleted while a save is on its way is refused with a reason, never a 500', function () {
     // The brute-force round, 2026-09-29: deleted between the checks and the write, a file ended the save on the
     // foreign key. Under the lock the save now sees it gone and says so.
-    $store = Store::factory()->create();
-    $keeper = createStoreUser($store, ['screen-view', 'screen-playlist'], 'Keeper');
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
-    $poster = Media::factory()->create(['store_id' => $store->id, 'title' => 'Poster']);
-    $channel = Channel::factory()->create(['store_id' => $store->id, 'name' => 'Deals']);
+    $organization = Organization::factory()->create();
+    $keeper = createOrganizationUser($organization, ['screen-view', 'screen-playlist'], 'Keeper');
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
+    $poster = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Poster']);
+    $channel = Channel::factory()->create(['organization_id' => $organization->id, 'name' => 'Deals']);
     ChannelAd::factory()->create(['channel_id' => $channel->id]);
-    $this->actingAs($keeper)->withSession(['current_store_id' => $store->id]);
+    $this->actingAs($keeper)->withSession(['current_organization_id' => $organization->id]);
 
     foreach ([
         'file' => [['media_id' => $poster->id, 'duration_seconds' => 8]],
@@ -59,14 +59,14 @@ test('a file or a channel deleted while a save is on its way is refused with a r
 });
 
 test('a save built on a stale copy is refused instead of wiping the other person\'s work', function () {
-    $store = Store::factory()->create();
-    $ali = createStoreUser($store, ['screen-view', 'screen-playlist'], 'Ali Role');
-    $sana = createStoreUser($store, ['screen-view', 'screen-playlist'], 'Sana Role');
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $ali = createOrganizationUser($organization, ['screen-view', 'screen-playlist'], 'Ali Role');
+    $sana = createOrganizationUser($organization, ['screen-view', 'screen-playlist'], 'Sana Role');
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
 
-    $poster = Media::factory()->create(['store_id' => $store->id, 'title' => 'Poster']);
-    $menu = Media::factory()->create(['store_id' => $store->id, 'title' => 'Menu']);
-    $eid = Media::factory()->create(['store_id' => $store->id, 'title' => 'Eid Offer']);
+    $poster = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Poster']);
+    $menu = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Menu']);
+    $eid = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Eid Offer']);
 
     foreach ([[$poster, 0], [$menu, 1]] as [$media, $position]) {
         PlaylistItem::create([
@@ -79,7 +79,7 @@ test('a save built on a stale copy is refused instead of wiping the other person
     $versionBothSaw = $screen->playlistFingerprint();
 
     // Ali adds a third file and saves.
-    $this->actingAs($ali)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($ali)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => $versionBothSaw,
             'items' => [
@@ -93,7 +93,7 @@ test('a save built on a stale copy is refused instead of wiping the other person
 
     // Sana's page still shows the old two. She only retimes one — but her save
     // carries the whole list as she knows it, which is how Ali's file would go.
-    $response = $this->actingAs($sana)->withSession(['current_store_id' => $store->id])
+    $response = $this->actingAs($sana)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => $versionBothSaw,
             'items' => [
@@ -111,17 +111,17 @@ test('a save built on a stale copy is refused instead of wiping the other person
 });
 
 test('reloading after a conflict lets the same person save for real', function () {
-    $store = Store::factory()->create();
-    $sana = createStoreUser($store, ['screen-view', 'screen-playlist']);
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
-    $media = Media::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $sana = createOrganizationUser($organization, ['screen-view', 'screen-playlist']);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
+    $media = Media::factory()->create(['organization_id' => $organization->id]);
 
     PlaylistItem::create([
         'screen_id' => $screen->id, 'media_id' => $media->id,
         'position' => 0, 'duration_seconds' => 10,
     ]);
 
-    $this->actingAs($sana)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($sana)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => 'stale-and-wrong',
             'items' => [['media_id' => $media->id, 'duration_seconds' => 25]],
@@ -130,12 +130,12 @@ test('reloading after a conflict lets the same person save for real', function (
     $this->flushSession();
 
     // Reload — the GET hands over the current version — and the same edit lands.
-    $current = $this->actingAs($sana)->withSession(['current_store_id' => $store->id])
+    $current = $this->actingAs($sana)->withSession(['current_organization_id' => $organization->id])
         ->getJson("/screens/{$screen->id}/playlist")->assertOk()->json('version');
 
     $this->flushSession();
 
-    $this->actingAs($sana)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($sana)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => $current,
             'items' => [['media_id' => $media->id, 'duration_seconds' => 25]],
@@ -145,16 +145,16 @@ test('reloading after a conflict lets the same person save for real', function (
 });
 
 test('saving twice from one page works — the save hands back a fresh version', function () {
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-view', 'screen-playlist']);
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
-    $media = Media::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-view', 'screen-playlist']);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
+    $media = Media::factory()->create(['organization_id' => $organization->id]);
 
     // Without the new version travelling back in the response, a page would
     // collide with its OWN previous save the second time Save was pressed.
     $version = $screen->playlistFingerprint();
 
-    $next = $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $next = $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => $version,
             'items' => [['media_id' => $media->id, 'duration_seconds' => 10]],
@@ -164,7 +164,7 @@ test('saving twice from one page works — the save hands back a fresh version',
 
     $this->flushSession();
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => $next,
             'items' => [['media_id' => $media->id, 'duration_seconds' => 30]],
@@ -174,11 +174,11 @@ test('saving twice from one page works — the save hands back a fresh version',
 });
 
 test('an identical save is not a conflict — nothing was lost', function () {
-    $store = Store::factory()->create();
-    $ali = createStoreUser($store, ['screen-view', 'screen-playlist'], 'Ali Role');
-    $sana = createStoreUser($store, ['screen-view', 'screen-playlist'], 'Sana Role');
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
-    $media = Media::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $ali = createOrganizationUser($organization, ['screen-view', 'screen-playlist'], 'Ali Role');
+    $sana = createOrganizationUser($organization, ['screen-view', 'screen-playlist'], 'Sana Role');
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
+    $media = Media::factory()->create(['organization_id' => $organization->id]);
 
     PlaylistItem::create([
         'screen_id' => $screen->id, 'media_id' => $media->id,
@@ -191,7 +191,7 @@ test('an identical save is not a conflict — nothing was lost', function () {
 
     // Ali saves it without changing anything. The content is what it was, so the
     // version is too…
-    $this->actingAs($ali)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($ali)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", ['version' => $versionBothSaw, 'items' => $sameList])
         ->assertOk()
         ->assertJsonPath('version', $versionBothSaw);
@@ -200,7 +200,7 @@ test('an identical save is not a conflict — nothing was lost', function () {
 
     // …so Sana, saving the very same list from the version she was handed before
     // Ali's save, has lost nothing and is told nothing.
-    $this->actingAs($sana)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($sana)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", ['version' => $versionBothSaw, 'items' => $sameList])
         ->assertOk();
 
@@ -211,31 +211,31 @@ test('the version the API reports is the one the model computes', function () {
     // Pins the two together: the panel reads the version from the API and the
     // tests read it from the model. If the formula ever moves, this fails loudly
     // instead of both sides quietly agreeing with a different answer.
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-view']);
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
-    $media = Media::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-view']);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
+    $media = Media::factory()->create(['organization_id' => $organization->id]);
 
     PlaylistItem::create([
         'screen_id' => $screen->id, 'media_id' => $media->id,
         'position' => 0, 'duration_seconds' => 15,
     ]);
 
-    $fromApi = $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $fromApi = $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->getJson("/screens/{$screen->id}/playlist")->assertOk()->json('version');
 
     expect($fromApi)->toBe($screen->playlistFingerprint());
 });
 
 test('a version is required — a client cannot opt out of the check', function () {
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-view', 'screen-playlist']);
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
-    $media = Media::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-view', 'screen-playlist']);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
+    $media = Media::factory()->create(['organization_id' => $organization->id]);
 
     // Otherwise the protection is decoration: anyone could omit the field and go
     // back to overwriting whatever was there.
-    $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", [
             'items' => [['media_id' => $media->id, 'duration_seconds' => 10]],
         ])

@@ -1,20 +1,20 @@
 <?php
 
 use App\Models\Channel;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
-use App\Models\Store;
 
 /*
 |--------------------------------------------------------------------------
-| The channel permissions: every channel on a platform role, the store's own on a store's
+| The channel permissions: every channel on a platform role, the organization's own on an organization's
 |--------------------------------------------------------------------------
 |
 | The owner's rules (2026-09-16). On a platform role the channel permissions reach every
-| channel, and a channel made there is offered to every shop. On a store's role they reach
-| that store's own channels alone (see StoreChannelsTest), so one shop can never publish onto
-| another shop's screens. Who puts them on a role: the super admin anywhere; a member inside a
-| store only when they hold them there themselves.
+| channel, and a channel made there is offered to every organization. On an organization's role they reach
+| that organization's own channels alone (see OrganizationChannelsTest), so one organization can never publish onto
+| another organization's screens. Who puts them on a role: the super admin anywhere; a member inside an
+| organization only when they hold them there themselves.
 |
 */
 
@@ -35,30 +35,30 @@ test('a super admin gives the channel permissions to a platform role', function 
         ->and($role->permissions->pluck('name')->all())->toBe(['channel-view']);
 });
 
-test('on a store\'s role they come only from somebody who holds them — the super admin, or a member holding them there', function () {
-    $store = Store::factory()->create();
-    $owner = createStoreMember($store, Role::OWNER);
+test('on an organization\'s role they come only from somebody who holds them — the super admin, or a member holding them there', function () {
+    $organization = Organization::factory()->create();
+    $owner = createOrganizationMember($organization, Role::OWNER);
     $screenView = Permission::firstWhere('name', 'screen-view');
 
     // The Owner does not hold channel-view out of the box, so cannot hand it on.
-    $this->actingAs($owner)->withSession(['current_store_id' => $store->id])->postJson('/roles', [
+    $this->actingAs($owner)->withSession(['current_organization_id' => $organization->id])->postJson('/roles', [
         'name' => 'Publisher',
         'permissions' => [$screenView->id, $this->channelView->id],
     ])->assertStatus(422)->assertJsonValidationErrors(['permissions' => 'You can only give a role permissions you hold yourself.']);
 
-    // The super admin gives it to every Owner; now an Owner may pass it on inside their store.
+    // The super admin gives it to every Owner; now an Owner may pass it on inside their organization.
     $ownerRole = Role::owner();
     $this->actingAs($this->admin)->putJson("/roles/{$ownerRole->id}", [
         'name' => $ownerRole->name,
         'permissions' => [...$ownerRole->permissions()->pluck('permissions.id')->all(), $this->channelView->id],
     ])->assertOk();
 
-    $this->actingAs($owner->fresh())->withSession(['current_store_id' => $store->id])->postJson('/roles', [
+    $this->actingAs($owner->fresh())->withSession(['current_organization_id' => $organization->id])->postJson('/roles', [
         'name' => 'Publisher',
         'permissions' => [$screenView->id, $this->channelView->id],
     ])->assertCreated();
 
-    expect(Role::firstWhere('name', 'Publisher'))->store_id->toBe($store->id)->is_global->toBeFalse();
+    expect(Role::firstWhere('name', 'Publisher'))->organization_id->toBe($organization->id)->is_global->toBeFalse();
 });
 
 test('a platform user who is not a super admin cannot make roles at all', function () {

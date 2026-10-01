@@ -3,10 +3,10 @@
 namespace Tests\Browser;
 
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Models\User;
 use App\Services\MediaStorage;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -18,11 +18,11 @@ use Tests\DuskTestCase;
 /**
  * Zero to hero — the product exactly as a paying customer meets it.
  *
- * Most browser tests put their member into a store straight through the
+ * Most browser tests put their member into an organization straight through the
  * database. That proves each feature, but never the road a real customer takes:
  * the public signup form, and the starter Owner role it hands out. Break that
  * assignment, or drop a permission from the Owner, and all of those tests still
- * pass while every new shop owner is stuck on day one.
+ * pass while every new organization owner is stuck on day one.
  *
  * So this test hand-builds nothing and grants nothing. It signs up on the public
  * form and then does the whole job with whatever the Owner role gives: upload files,
@@ -38,7 +38,7 @@ class ZeroToHeroTest extends DuskTestCase
     {
         $this->assertSame($title, pathinfo($path, PATHINFO_FILENAME), 'A file is titled by its name.');
 
-        // The box is on the page itself (owner, 2026-09-30). A fresh owner has exactly one store and is already
+        // The box is on the page itself (owner, 2026-09-30). A fresh owner has exactly one organization and is already
         // inside it, so nothing asks them to choose one first.
         $panel->waitFor('@media-upload');
         $panel->assertDontSeeIn('@media-upload', 'Select an organization first');
@@ -96,7 +96,7 @@ class ZeroToHeroTest extends DuskTestCase
             $this->jsType($panel, '#email', 'bilal@example.com');
             $this->jsType($panel, '#password', 'password123');
             $this->jsType($panel, '#password_confirmation', 'password123');
-            $this->jsType($panel, '#store_name', 'Bilal Mart');
+            $this->jsType($panel, '#organization_name', 'Bilal Mart');
             $this->jsType($panel, '#street', '12 Tariq Road');
             $this->jsType($panel, '#city', 'Austin');
             $panel->select('#state', 'TX');
@@ -113,23 +113,23 @@ class ZeroToHeroTest extends DuskTestCase
                 ->waitForText('Bilal Mart');
 
             $owner = User::where('email', 'bilal@example.com')->firstOrFail();
-            $store = Store::where('name', 'Bilal Mart')->firstOrFail();
+            $organization = Organization::where('name', 'Bilal Mart')->firstOrFail();
 
             /* ── 2. The navigation an Owner earns, and what it does not ─── */
-            $this->assertSame(Role::starter(Role::OWNER)->id, (int) DB::table('store_user')
-                ->where(['user_id' => $owner->id, 'store_id' => $store->id])->value('role_id'));
+            $this->assertSame(Role::starter(Role::OWNER)->id, (int) DB::table('organization_user')
+                ->where(['user_id' => $owner->id, 'organization_id' => $organization->id])->value('role_id'));
 
             $panel->assertPresent('#main-sidebar a[href$="/screens"]')
                 ->assertPresent('#main-sidebar a[href$="/media"]')
                 ->assertPresent('#main-sidebar a[href$="/members"]')
-                // The store's own settings are a tab of Settings — the name at the foot of the sidebar.
+                // The organization's own settings are a tab of Settings — the name at the foot of the sidebar.
                 ->assertPresent('@sidebar-settings')
-                // The platform's pages: an Owner runs a store, never the platform.
-                ->assertMissing('#main-sidebar a[href$="/stores"]')
+                // The platform's pages: an Owner runs an organization, never the platform.
+                ->assertMissing('#main-sidebar a[href$="/organizations"]')
                 ->assertMissing('#main-sidebar a[href$="/permissions"]')
                 ->assertMissing('#main-sidebar a[href$="/activity"]');
 
-            /* ── 3. Straight to work: one store means no store to pick ──── */
+            /* ── 3. Straight to work: one organization means no organization to pick ──── */
             $panel->visit('/media');
             $this->waitForAlpine($panel);
             $panel->waitForText('No files yet.');
@@ -137,7 +137,7 @@ class ZeroToHeroTest extends DuskTestCase
             $poster = $this->upload($panel, $posterPath, 'Opening Poster');
             $second = $this->upload($panel, $secondPath, 'Second Board');
 
-            $this->assertSame($store->id, $poster->store_id);
+            $this->assertSame($organization->id, $poster->organization_id);
             $this->assertSame($owner->id, $poster->created_by);
             $this->assertNotNull($poster->thumbnail_path);
 
@@ -159,7 +159,7 @@ class ZeroToHeroTest extends DuskTestCase
             $panel->waitForText('Counter TV', 15);
 
             $screen = Screen::where('name', 'Counter TV')->firstOrFail();
-            $this->assertSame($store->id, $screen->store_id);
+            $this->assertSame($organization->id, $screen->organization_id);
             $this->assertNotNull($screen->paired_at);
 
             /* ── 6. Adopted, but nothing to show yet ─────────────────────── */

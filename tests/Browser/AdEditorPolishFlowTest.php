@@ -4,7 +4,7 @@ namespace Tests\Browser;
 
 use App\Models\BuilderAd;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Models\User;
 use Facebook\WebDriver\Exception\TimeoutException;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -16,7 +16,7 @@ use Tests\DuskTestCase;
  * Stage 5 through the real editor (docs/AD-BUILDER-SPEC.md §10a): selecting many and moving them as one,
  * align and distribute, the clipboard and "paste style", the right-click menu, the Layers panel's drag and
  * rename, rulers and guides, the History panel, autosave, the shortcuts, zoom and pan, the poster and the
- * sandboxed draft preview — and the platform's shop filter.
+ * sandboxed draft preview — and the platform's organization filter.
  *
  * Every gesture is a real pointer or keyboard event dispatched in the page, and every result is read from
  * the document the editor holds or, once saved, from the database.
@@ -30,14 +30,14 @@ class AdEditorPolishFlowTest extends DuskTestCase
 
     public function test_many_are_selected_moved_aligned_spaced_and_deleted_together(): void
     {
-        [$designer, $store, $ad] = $this->adWith([
+        [$designer, $organization, $ad] = $this->adWith([
             $this->shape('a', 100, 100, 200, 100),
             $this->shape('b', 500, 300, 200, 100),
             $this->shape('c', 1200, 600, 300, 100),
         ]);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad) {
-            $this->openEditor($browser, $designer, $store, $ad);
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad) {
+            $this->openEditor($browser, $designer, $organization, $ad);
 
             // A plain click selects one; Shift+click adds another.
             $this->jsClick($browser, '@layer-a');
@@ -85,14 +85,14 @@ class AdEditorPolishFlowTest extends DuskTestCase
             'in' => ['effect' => 'fade', 'direction' => 'up', 'distance' => 80, 'scale' => 0.6, 'degrees' => -90, 'blur' => 20, 'duration' => 0.8, 'delay' => 0, 'ease' => 'power2.out'],
         ]);
 
-        [$designer, $store, $ad] = $this->adWith([
+        [$designer, $organization, $ad] = $this->adWith([
             $headline,
             $this->text('small', 100, 500, 'Small green', ['fontSize' => 40, 'color' => '#00ff00']),
             $this->shape('box', 900, 300, 300, 200, ['border' => ['width' => 12, 'style' => 'dashed', 'color' => '#ffffff']]),
         ]);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad) {
-            $this->openEditor($browser, $designer, $store, $ad);
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad) {
+            $this->openEditor($browser, $designer, $organization, $ad);
 
             // Copy the big red headline; paste its style — and then its animation — onto the small one.
             $this->jsClick($browser, '@layer-headline');
@@ -154,14 +154,14 @@ class AdEditorPolishFlowTest extends DuskTestCase
 
     public function test_layers_are_dragged_into_order_and_renamed_where_they_are(): void
     {
-        [$designer, $store, $ad] = $this->adWith([
+        [$designer, $organization, $ad] = $this->adWith([
             $this->shape('a', 100, 100, 200, 100),
             $this->shape('b', 400, 100, 200, 100),
             $this->shape('c', 700, 100, 200, 100),
         ]);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad) {
-            $this->openEditor($browser, $designer, $store, $ad);
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad) {
+            $this->openEditor($browser, $designer, $organization, $ad);
 
             // The panel lists front first (c, b, a); a is dragged above c — to the very front.
             $browser->script(<<<'JS'
@@ -196,10 +196,10 @@ class AdEditorPolishFlowTest extends DuskTestCase
 
     public function test_guides_come_out_of_the_rulers_and_things_snap_to_them(): void
     {
-        [$designer, $store, $ad] = $this->adWith([$this->shape('box', 100, 100, 200, 100)]);
+        [$designer, $organization, $ad] = $this->adWith([$this->shape('box', 100, 100, 200, 100)]);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad) {
-            $this->openEditor($browser, $designer, $store, $ad);
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad) {
+            $this->openEditor($browser, $designer, $organization, $ad);
             $browser->waitFor('@ruler-top');
 
             // Out of the top ruler, down to 400: a guide across the stage.
@@ -245,11 +245,11 @@ class AdEditorPolishFlowTest extends DuskTestCase
 
     public function test_the_history_panel_autosave_the_shortcuts_zoom_and_pan(): void
     {
-        [$designer, $store, $ad] = $this->adWith([$this->shape('box', 100, 100, 200, 100)]);
+        [$designer, $organization, $ad] = $this->adWith([$this->shape('box', 100, 100, 200, 100)]);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad) {
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad) {
             // Autosave starts ON here because openEditor cleared the setting before the editor read it.
-            $this->openEditor($browser, $designer, $store, $ad);
+            $this->openEditor($browser, $designer, $organization, $ad);
             $this->jsClick($browser, '@layer-box');
             $browser->waitFor('@element-x');
 
@@ -310,13 +310,13 @@ class AdEditorPolishFlowTest extends DuskTestCase
     public function test_a_poster_is_taken_on_save_and_the_draft_preview_opens_sandboxed(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember($store, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($organization, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
 
-        $this->browse(function (Browser $browser) use ($designer, $store) {
+        $this->browse(function (Browser $browser) use ($designer, $organization) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
@@ -381,13 +381,13 @@ class AdEditorPolishFlowTest extends DuskTestCase
         });
     }
 
-    public function test_above_the_stores_the_ads_are_filtered_by_shop(): void
+    public function test_above_the_organizations_the_ads_are_filtered_by_organization(): void
     {
         $admin = $this->seedSuperAdmin();
-        $alpha = Store::factory()->create(['name' => 'Alpha Mart']);
-        $beta = Store::factory()->create(['name' => 'Beta Deli']);
-        $mine = BuilderAd::factory()->withText()->create(['store_id' => $alpha->id, 'name' => 'Alpha sale']);
-        $theirs = BuilderAd::factory()->withText()->create(['store_id' => $beta->id, 'name' => 'Beta sale']);
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $beta = Organization::factory()->create(['name' => 'Beta Deli']);
+        $mine = BuilderAd::factory()->withText()->create(['organization_id' => $alpha->id, 'name' => 'Alpha sale']);
+        $theirs = BuilderAd::factory()->withText()->create(['organization_id' => $beta->id, 'name' => 'Beta sale']);
 
         $this->browse(function (Browser $browser) use ($admin, $beta, $mine, $theirs) {
             $this->freshSession($browser);
@@ -397,14 +397,14 @@ class AdEditorPolishFlowTest extends DuskTestCase
             $this->waitForAlpine($browser);
             $browser->waitFor('@ad-card-'.$mine->id)->assertVisible('@ad-card-'.$theirs->id);
 
-            $browser->script('const f = document.querySelector(\'[dusk="ads-filter-store"]\'); f.value = "'.$beta->id.'"; f.dispatchEvent(new Event("change", { bubbles: true }));');
+            $browser->script('const f = document.querySelector(\'[dusk="ads-filter-organization"]\'); f.value = "'.$beta->id.'"; f.dispatchEvent(new Event("change", { bubbles: true }));');
             $browser->waitFor('@ad-card-'.$theirs->id, 10)->waitUntilMissing('@ad-card-'.$mine->id, 5);
         });
     }
 
     public function test_every_panel_button_does_what_its_shortcut_does(): void
     {
-        [$designer, $store, $ad] = $this->adWith([
+        [$designer, $organization, $ad] = $this->adWith([
             [...$this->shape('a', 100, 100, 200, 100, ['fill' => '#ff0000']), 'animations' => ['loop' => [
                 'effect' => 'pulse', 'axis' => 'y', 'amount' => 6, 'amountX' => 0, 'amountY' => 0, 'duration' => 1, 'delay' => 0, 'yoyo' => true, 'ease' => 'sine.inOut',
             ]]],
@@ -412,8 +412,8 @@ class AdEditorPolishFlowTest extends DuskTestCase
             $this->shape('c', 1200, 600, 300, 100),
         ]);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad) {
-            $this->openEditor($browser, $designer, $store, $ad);
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad) {
+            $this->openEditor($browser, $designer, $organization, $ad);
             $z = fn () => (int) $this->element($browser, 'a')['z'];
 
             // One element: the four order buttons.
@@ -483,10 +483,10 @@ class AdEditorPolishFlowTest extends DuskTestCase
      */
     public function test_esc_closes_an_open_picker_and_keeps_the_selection(): void
     {
-        [$designer, $store, $ad] = $this->adWith([$this->text('headline', 100, 100, 'Big sale')]);
+        [$designer, $organization, $ad] = $this->adWith([$this->text('headline', 100, 100, 'Big sale')]);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad) {
-            $this->openEditor($browser, $designer, $store, $ad);
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad) {
+            $this->openEditor($browser, $designer, $organization, $ad);
 
             $this->jsClick($browser, '@layer-headline');
             $browser->waitFor('@text-font');
@@ -520,10 +520,10 @@ class AdEditorPolishFlowTest extends DuskTestCase
      */
     public function test_ctrl_s_while_typing_in_a_field_saves_what_was_typed(): void
     {
-        [$designer, $store, $ad] = $this->adWith([$this->shape('box', 100, 100, 200, 100)]);
+        [$designer, $organization, $ad] = $this->adWith([$this->shape('box', 100, 100, 200, 100)]);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad) {
-            $this->openEditor($browser, $designer, $store, $ad);
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad) {
+            $this->openEditor($browser, $designer, $organization, $ad);
             $this->jsClick($browser, '@layer-box');
             $browser->waitFor('@element-name');
 
@@ -557,12 +557,12 @@ class AdEditorPolishFlowTest extends DuskTestCase
      */
     public function test_words_shown_in_capitals_are_edited_as_typed_and_in_capitals_again_after(): void
     {
-        [$designer, $store, $ad] = $this->adWith([
+        [$designer, $organization, $ad] = $this->adWith([
             $this->text('headline', 100, 100, 'Big sale', ['textTransform' => 'uppercase']),
         ]);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad) {
-            $this->openEditor($browser, $designer, $store, $ad);
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad) {
+            $this->openEditor($browser, $designer, $organization, $ad);
 
             // The words themselves: inside the element's box, inside what its animations move.
             $words = '[data-anim-id="headline"] .ad-anim > div';
@@ -605,10 +605,10 @@ class AdEditorPolishFlowTest extends DuskTestCase
      */
     public function test_a_still_click_on_a_guide_leaves_it_where_it_was(): void
     {
-        [$designer, $store, $ad] = $this->adWith([$this->shape('box', 100, 100, 200, 100)], ['y' => [400]]);
+        [$designer, $organization, $ad] = $this->adWith([$this->shape('box', 100, 100, 200, 100)], ['y' => [400]]);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad) {
-            $this->openEditor($browser, $designer, $store, $ad);
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad) {
+            $this->openEditor($browser, $designer, $organization, $ad);
             $browser->waitFor('@guide-y-0');
 
             // Pressed and let go on the same spot, near the top of the hit area — three screen pixels
@@ -631,13 +631,13 @@ class AdEditorPolishFlowTest extends DuskTestCase
 
     /**
      * @param  array{x?: list<int>, y?: list<int>}  $guides
-     * @return array{0: User, 1: Store, 2: BuilderAd}
+     * @return array{0: User, 1: Organization, 2: BuilderAd}
      */
     private function adWith(array $elements, array $guides = []): array
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember($store, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($organization, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
 
         $document = BuilderAd::blankDocument();
         $document['elements'] = array_map(fn (array $element, int $z) => [...$element, 'z' => $z], $elements, array_keys($elements));
@@ -646,7 +646,7 @@ class AdEditorPolishFlowTest extends DuskTestCase
             $document['guides'] = ['x' => [], 'y' => [], ...$guides];
         }
 
-        return [$designer, $store, BuilderAd::factory()->create(['store_id' => $store->id, 'name' => 'Polish', 'document' => $document])];
+        return [$designer, $organization, BuilderAd::factory()->create(['organization_id' => $organization->id, 'name' => 'Polish', 'document' => $document])];
     }
 
     private function shape(string $id, int $x, int $y, int $w, int $h, array $style = []): array
@@ -668,11 +668,11 @@ class AdEditorPolishFlowTest extends DuskTestCase
         ];
     }
 
-    private function openEditor(Browser $browser, User $designer, Store $store, BuilderAd $ad): void
+    private function openEditor(Browser $browser, User $designer, Organization $organization, BuilderAd $ad): void
     {
         $this->freshSession($browser);
         $browser->loginAs($designer);
-        $this->switchToStore($browser, $store);
+        $this->switchToOrganization($browser, $organization);
 
         // The editor reads its per-browser settings (autosave, rulers) and its clipboard from
         // localStorage once, as it starts — and Dusk keeps this browser, localStorage and all, from

@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\BuilderAd;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Services\AdCompiler;
 
 /*
@@ -17,9 +17,9 @@ use App\Services\AdCompiler;
 */
 
 beforeEach(function () {
-    $this->store = Store::factory()->create();
-    $this->designer = createStoreUser($this->store, ['ad-view', 'ad-store', 'ad-update'], 'Designer');
-    $this->actingAs($this->designer)->withSession(['current_store_id' => $this->store->id]);
+    $this->organization = Organization::factory()->create();
+    $this->designer = createOrganizationUser($this->organization, ['ad-view', 'ad-store', 'ad-update'], 'Designer');
+    $this->actingAs($this->designer)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 /** A document with every key the editor can write, each set to something other than its default. */

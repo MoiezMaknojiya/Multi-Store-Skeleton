@@ -14,8 +14,8 @@ use Illuminate\Http\Request;
  *
  * Two answers: what is on offer, and "install this one". The list is `config/fonts.php` — ours, curated,
  * and the only thing that can be installed — so a font name typed by hand can never make the server
- * fetch an arbitrary URL. A font is not store content: once installed it belongs to the installation,
- * like a colour, and every shop may use it.
+ * fetch an arbitrary URL. A font is not organization content: once installed it belongs to the installation,
+ * like a colour, and every organization may use it.
  */
 class BuilderFontController extends Controller
 {

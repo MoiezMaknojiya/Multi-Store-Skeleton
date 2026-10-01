@@ -115,7 +115,7 @@
                         </x-crud.form-field>
 
                         {{-- Who the advert is FOR, kept apart from what this campaign is
-                             called — so "never run this brand in that shop" can be added
+                             called — so "never run this brand in that organization" can be added
                              later without moving anything. --}}
                         <x-crud.form-field label="Advertiser" field="advertiser_name">
                             <x-text-input x-model="form.advertiser_name" dusk="campaign-advertiser"
@@ -214,17 +214,17 @@
                         </template>
 
                         <div class="space-y-3 max-h-72 overflow-y-auto">
-                            <template x-for="group in screensByStore()" :key="group.id">
+                            <template x-for="group in screensByOrganization()" :key="group.id">
                                 <div class="rounded-md border border-gray-200 dark:border-gray-700 p-3">
-                                    {{-- One press chooses every screen of the shop that can carry adverts, and the same
+                                    {{-- One press chooses every screen of the organization that can carry adverts, and the same
                                          press, once they all are, clears them — the words say which it will do. --}}
                                     <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
                                         <p class="text-sm font-medium text-gray-800 dark:text-white" x-text="group.name"></p>
-                                        <button type="button" @click="toggleStore(group)"
-                                                x-bind:dusk="'campaign-store-all-' + group.id"
+                                        <button type="button" @click="toggleOrganization(group)"
+                                                x-bind:dusk="'campaign-organization-all-' + group.id"
                                                 x-show="group.screens.some(s => s.carries_ads)"
-                                                x-bind:aria-label="(storeAllChosen(group) ? 'Clear every screen of ' : 'Choose every screen of ') + group.name"
-                                                class="btn-row-neutral" x-text="storeAllChosen(group) ? 'Clear All' : 'Select All'"></button>
+                                                x-bind:aria-label="(organizationAllChosen(group) ? 'Clear every screen of ' : 'Choose every screen of ') + group.name"
+                                                class="btn-row-neutral" x-text="organizationAllChosen(group) ? 'Clear All' : 'Select All'"></button>
                                     </div>
 
                                     {{-- A screen that cannot carry adverts says why beside it, in words that stay readable:

@@ -3,8 +3,8 @@
 namespace Database\Factories;
 
 use App\Models\Invitation;
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -16,7 +16,7 @@ class InvitationFactory extends Factory
     public function definition(): array
     {
         return [
-            'store_id' => Store::factory(),
+            'organization_id' => Organization::factory(),
             'email' => Str::lower(fake()->unique()->safeEmail()),
             'role_id' => fn () => Role::starter(Role::STAFF)->id,
             'token_hash' => Invitation::hashToken(Str::random(64)),
@@ -38,6 +38,6 @@ class InvitationFactory extends Factory
 
     public function forPlatform(): static
     {
-        return $this->state(fn () => ['store_id' => null]);
+        return $this->state(fn () => ['organization_id' => null]);
     }
 }

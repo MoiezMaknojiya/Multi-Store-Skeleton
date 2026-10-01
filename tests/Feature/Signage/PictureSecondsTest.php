@@ -5,9 +5,9 @@ use App\Models\Campaign;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Services\MediaStorage;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -30,13 +30,13 @@ use Tests\Support\VideoFiles;
 beforeEach(function () {
     Storage::fake('public');
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->keeper = createStoreUser($this->store, [
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->keeper = createOrganizationUser($this->organization, [
         'screen-view', 'screen-playlist', 'media-view', 'channel-view', 'channel-update',
     ], 'Keeper');
-    $this->actingAs($this->keeper)->withSession(['current_store_id' => $this->store->id]);
-    $this->screen = Screen::factory()->withToken('six-token')->create(['store_id' => $this->store->id, 'name' => 'Counter TV']);
-    $this->picture = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Menu']);
+    $this->actingAs($this->keeper)->withSession(['current_organization_id' => $this->organization->id]);
+    $this->screen = Screen::factory()->withToken('six-token')->create(['organization_id' => $this->organization->id, 'name' => 'Counter TV']);
+    $this->picture = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Menu']);
 });
 
 /** Save the screen's whole playlist, as the page does. */
@@ -79,7 +79,7 @@ test('a picture on a playlist stays up six seconds at least, and the panel says 
 
 test('a video is not held to it: a three-second clip plays its three seconds', function () {
     $clip = Media::create([
-        ...app(MediaStorage::class)->store(VideoFiles::upload(VideoFiles::mp4(3), 'clip.mp4'), $this->store->id, []),
+        ...app(MediaStorage::class)->store(VideoFiles::upload(VideoFiles::mp4(3), 'clip.mp4'), $this->organization->id, []),
         'title' => 'Clip',
     ]);
 
@@ -92,8 +92,8 @@ test('a video is not held to it: a three-second clip plays its three seconds', f
 });
 
 test('an ad page with a length of its own is not asked; one published before lengths is timed like a picture', function () {
-    $ad = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id, 'name' => 'Sale']);
-    $earlier = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id, 'name' => 'Old sale']);
+    $ad = BuilderAd::factory()->withText()->published()->create(['organization_id' => $this->organization->id, 'name' => 'Sale']);
+    $earlier = BuilderAd::factory()->withText()->published()->create(['organization_id' => $this->organization->id, 'name' => 'Old sale']);
     $earlier->media->update(['duration_seconds' => null]);
 
     putLines([['media_id' => $ad->media_id, 'duration_seconds' => 3]])->assertOk();
@@ -106,7 +106,7 @@ test('an ad page with a length of its own is not asked; one published before len
 test('a line saved before the rule keeps its place and plays for six: on the television, in the panel and when copied', function () {
     // As a playlist saved before 2026-09-28 holds it.
     PlaylistItem::create(['screen_id' => $this->screen->id, 'media_id' => $this->picture->id, 'position' => 0, 'duration_seconds' => 3]);
-    $other = Screen::factory()->withToken('other-token')->create(['store_id' => $this->store->id, 'name' => 'Window TV']);
+    $other = Screen::factory()->withToken('other-token')->create(['organization_id' => $this->organization->id, 'name' => 'Window TV']);
 
     expect(secondsSent())->toBe([6])
         ->and($this->getJson("/screens/{$this->screen->id}/playlist")->json('items.0.duration_seconds'))->toBe(6);
@@ -120,7 +120,7 @@ test('a line saved before the rule keeps its place and plays for six: on the tel
 });
 
 test('a picture in a channel stays up six seconds at least; one saved before the rule plays for six', function () {
-    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Our Deals']);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Our Deals']);
 
     $this->postJson("/channels/{$channel->id}/ads", ['media_id' => $this->picture->id, 'seconds' => 5])
         ->assertStatus(422)

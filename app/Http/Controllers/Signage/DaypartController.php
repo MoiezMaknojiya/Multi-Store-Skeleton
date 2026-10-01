@@ -24,7 +24,7 @@ class DaypartController extends Controller
         return view('dayparts.index', ['weekdays' => Daypart::WEEKDAYS]);
     }
 
-    /** Return paginated, searchable dayparts as JSON, scoped to the current store. */
+    /** Return paginated, searchable dayparts as JSON, scoped to the current organization. */
     public function data(Request $request): JsonResponse
     {
         // The exceptions ride along: every row shows how many it has, and the edit
@@ -39,13 +39,13 @@ class DaypartController extends Controller
     public function store(DaypartRequest $request): JsonResponse
     {
         $validated = $request->validated();
-        $storeId = $this->currentStoreId();
+        $organizationId = $this->currentOrganizationId();
 
         // One transaction: a daypart whose exceptions failed to save would claim hours
         // it does not keep, which is worse than not saving at all.
-        $daypart = DB::transaction(function () use ($validated, $storeId) {
+        $daypart = DB::transaction(function () use ($validated, $organizationId) {
             $daypart = Daypart::create([
-                'store_id' => $storeId,
+                'organization_id' => $organizationId,
                 'name' => $validated['name'],
                 'start_time' => $validated['start_time'],
                 'end_time' => $validated['end_time'],
@@ -69,7 +69,7 @@ class DaypartController extends Controller
     /** Rename a daypart, move its hours, retire it, or rewrite its exceptions. */
     public function update(DaypartRequest $request, Daypart $daypart): JsonResponse
     {
-        // Route middleware is not enough: the target has to be inside the store the
+        // Route middleware is not enough: the target has to be inside the organization the
         // actor is working in, or it does not exist for them (404, never 403).
         $daypart = Daypart::visibleTo(auth()->user())->findOrFail($daypart->id);
 
@@ -115,22 +115,22 @@ class DaypartController extends Controller
 
         $daypart->delete();
 
-        ActivityLog::record('daypart.deleted', null, "Deleted daypart {$name}", storeId: $daypart->store_id);
+        ActivityLog::record('daypart.deleted', null, "Deleted daypart {$name}", organizationId: $daypart->organization_id);
 
         return response()->json(['message' => 'Daypart deleted successfully']);
     }
 
-    /** A daypart belongs to a store, so creating one needs a store context. */
-    private function currentStoreId(): int
+    /** A daypart belongs to an organization, so creating one needs an organization context. */
+    private function currentOrganizationId(): int
     {
-        $storeId = (int) session('current_store_id');
+        $organizationId = (int) session('current_organization_id');
 
-        if (! $storeId) {
+        if (! $organizationId) {
             throw ValidationException::withMessages([
                 'name' => 'Select an organization before creating a daypart — opening hours belong to the organization they were set for.',
             ]);
         }
 
-        return $storeId;
+        return $organizationId;
     }
 }

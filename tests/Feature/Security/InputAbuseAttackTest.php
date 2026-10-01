@@ -6,11 +6,11 @@ use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Daypart;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\DB;
@@ -28,95 +28,95 @@ use Illuminate\Support\Facades\Storage;
 */
 
 beforeEach(function () {
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart', 'is_active' => true]);
-    $this->other = Store::factory()->create(['name' => 'Beta Deli']);
-    $this->owner = createStoreUser($this->store, [
-        ...Permission::STORE, 'store-view', 'store-store', 'channel-view', 'channel-store', 'channel-update',
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart', 'is_active' => true]);
+    $this->other = Organization::factory()->create(['name' => 'Beta Deli']);
+    $this->owner = createOrganizationUser($this->organization, [
+        ...Permission::ORGANIZATION, 'organization-view', 'organization-store', 'channel-view', 'channel-store', 'channel-update',
     ], 'Everything');
 
-    $this->actingAs($this->owner)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->owner)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
-test('the store details form changes only what it shows', function () {
-    $this->put('/settings/store', [
+test('the organization details form changes only what it shows', function () {
+    $this->put('/settings/organization', [
         'name' => 'Alpha Mart Downtown', 'street' => '1 Main St', 'suite' => '', 'city' => 'Dallas',
         'state' => 'TX', 'zip_code' => '75001', 'country' => 'USA',
         // None of these belong to the form.
         'is_active' => false, 'accepts_network_ads' => true, 'created_by' => $this->owner->id,
         'slug' => 999, 'id' => $this->other->id, 'deleted_at' => now()->toDateTimeString(),
-    ])->assertRedirect(route('store-settings.edit'));
+    ])->assertRedirect(route('organization-settings.edit'));
 
-    $store = $this->store->fresh();
-    expect($store->name)->toBe('Alpha Mart Downtown')
-        ->and($store->is_active)->toBeTrue()
-        ->and($store->accepts_network_ads)->toBeFalse()
-        ->and($store->created_by)->toBeNull()
-        ->and((int) $store->slug)->not->toBe(999)
+    $organization = $this->organization->fresh();
+    expect($organization->name)->toBe('Alpha Mart Downtown')
+        ->and($organization->is_active)->toBeTrue()
+        ->and($organization->accepts_network_ads)->toBeFalse()
+        ->and($organization->created_by)->toBeNull()
+        ->and((int) $organization->slug)->not->toBe(999)
         ->and($this->other->fresh()->name)->toBe('Beta Deli');
 });
 
-test('a screen keeps its store, its device token and its advertising flag whatever the payload says', function () {
-    $screen = Screen::factory()->withToken('real-token')->create(['store_id' => $this->store->id, 'name' => 'Front TV']);
+test('a screen keeps its organization, its device token and its advertising flag whatever the payload says', function () {
+    $screen = Screen::factory()->withToken('real-token')->create(['organization_id' => $this->organization->id, 'name' => 'Front TV']);
     $hash = $screen->token_hash;
 
     $this->putJson("/screens/{$screen->id}", [
         'name' => 'Front TV', 'orientation' => 'portrait',
-        'store_id' => $this->other->id, 'token_hash' => 'hijacked', 'device_uuid' => 'mine',
+        'organization_id' => $this->other->id, 'token_hash' => 'hijacked', 'device_uuid' => 'mine',
         'accepts_network_ads' => true, 'paired_by' => $this->owner->id, 'id' => 999,
     ])->assertOk();
 
     $screen = $screen->fresh();
-    expect($screen->store_id)->toBe($this->store->id)
+    expect($screen->organization_id)->toBe($this->organization->id)
         ->and($screen->token_hash)->toBe($hash)
         ->and($screen->accepts_network_ads)->toBeFalse()
         ->and($screen->orientation)->toBe('portrait');
 });
 
-test('a media row keeps its store and its file whatever the payload says', function () {
-    $media = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Poster', 'path' => 'media/1/real.jpg']);
+test('a media row keeps its organization and its file whatever the payload says', function () {
+    $media = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Poster', 'path' => 'media/1/real.jpg']);
 
     $this->putJson("/media/{$media->id}", [
-        'title' => 'Poster two', 'store_id' => $this->other->id, 'path' => '../../.env',
+        'title' => 'Poster two', 'organization_id' => $this->other->id, 'path' => '../../.env',
         'disk' => 'local', 'size' => 1, 'created_by' => null, 'mime_type' => 'text/html',
     ])->assertOk();
 
     $media = $media->fresh();
-    expect($media->store_id)->toBe($this->store->id)
+    expect($media->organization_id)->toBe($this->organization->id)
         ->and($media->path)->toBe('media/1/real.jpg')
         ->and($media->disk)->toBe('public')
         ->and($media->title)->toBe('Poster two');
 });
 
-test('a daypart and a channel made inside a store belong to that store, never to the one posted', function () {
+test('a daypart and a channel made inside an organization belong to that organization, never to the one posted', function () {
     $this->postJson('/dayparts', [
         'name' => 'Deli hours', 'start_time' => '07:00', 'end_time' => '20:00',
-        'store_id' => $this->other->id, 'created_by' => null,
+        'organization_id' => $this->other->id, 'created_by' => null,
     ])->assertOk();
 
     $this->postJson('/channels', [
-        'name' => 'Our Deals', 'store_id' => $this->other->id, 'is_active' => true,
+        'name' => 'Our Deals', 'organization_id' => $this->other->id, 'is_active' => true,
     ])->assertOk();
 
-    expect(Daypart::firstWhere('name', 'Deli hours')->store_id)->toBe($this->store->id)
-        ->and(Channel::firstWhere('name', 'Our Deals')->store_id)->toBe($this->store->id);
+    expect(Daypart::firstWhere('name', 'Deli hours')->organization_id)->toBe($this->organization->id)
+        ->and(Channel::firstWhere('name', 'Our Deals')->organization_id)->toBe($this->organization->id);
 });
 
-test('an upload joins the library of the store it is made in, whatever library the payload names', function () {
-    // Above the stores `store_id` picks the library an upload joins; inside a store it is never read.
+test('an upload joins the library of the organization it is made in, whatever library the payload names', function () {
+    // Above the organizations `organization_id` picks the library an upload joins; inside an organization it is never read.
     Storage::fake('public');
-    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Our Deals']);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Our Deals']);
 
-    $this->postJson('/media', ['file' => UploadedFile::fake()->image('menu.jpg'), 'store_id' => $this->other->id])->assertOk();
+    $this->postJson('/media', ['file' => UploadedFile::fake()->image('menu.jpg'), 'organization_id' => $this->other->id])->assertOk();
     $this->postJson("/channels/{$channel->id}/ads", [
-        'file' => UploadedFile::fake()->image('deal.jpg'), 'seconds' => 10, 'store_id' => $this->other->id,
+        'file' => UploadedFile::fake()->image('deal.jpg'), 'seconds' => 10, 'organization_id' => $this->other->id,
     ])->assertOk();
 
     expect(Media::count())->toBe(2)
-        ->and(Media::pluck('store_id')->unique()->all())->toBe([$this->store->id]);
+        ->and(Media::pluck('organization_id')->unique()->all())->toBe([$this->organization->id]);
 });
 
 test('the library pickers and a channel ad\'s file take one shape only — never a 500', function () {
-    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Our Deals']);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Our Deals']);
 
     // A listing forgives what it can (a page that is not a number is page 1) and refuses the rest.
     foreach (['library[]=1', 'library=0', 'library=-1', 'library=1%20OR%201=1', 'type[]=image', 'type=pdf', 'search[]=x', 'page[]=1', 'per_page=999999'] as $query) {
@@ -141,12 +141,12 @@ test('an unpublished Ad Builder page never reaches a television, however its lin
     // waiting for its page — but nothing of it goes to a screen until the ad is published again (docs/AD-BUILDER-SPEC.md §9).
     // Two of them: a file plays from a playlist or from a channel, never both (2026-09-26), so the line and the
     // channel's ad each take their own.
-    $design = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id]);
-    $forChannel = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id]);
+    $design = BuilderAd::factory()->withText()->published()->create(['organization_id' => $this->organization->id]);
+    $forChannel = BuilderAd::factory()->withText()->published()->create(['organization_id' => $this->organization->id]);
     $this->postJson("/builder/{$design->id}/unpublish")->assertOk();
     $this->postJson("/builder/{$forChannel->id}/unpublish")->assertOk();
-    $screen = Screen::factory()->withToken('smuggled-token')->create(['store_id' => $this->store->id]);
-    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Our Deals']);
+    $screen = Screen::factory()->withToken('smuggled-token')->create(['organization_id' => $this->organization->id]);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Our Deals']);
     $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
 
     $this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => [
@@ -165,10 +165,10 @@ test('a file one picker leaves out cannot be forced past it by id, either way ro
     // Owner, 2026-09-26: a file plays from playlists or from channels, never both — in a channel AND on the
     // playlist carrying that channel it would play twice. Each side's picker leaves out the other's files; this
     // is the wall behind them, whoever posts the id.
-    $screen = Screen::factory()->create(['store_id' => $this->store->id, 'name' => 'Counter TV']);
-    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Our Deals']);
-    $inChannel = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Deal poster']);
-    $onPlaylist = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Menu board']);
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Counter TV']);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Our Deals']);
+    $inChannel = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Deal poster']);
+    $onPlaylist = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Menu board']);
     $ad = ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $inChannel->id]);
 
     $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
@@ -205,8 +205,8 @@ test("an ad is on screen for its design's length alone: no document, line or cha
     // Owner, 2026-09-28: the design owns its length — a whole number of seconds from six to BuilderAd::MAX_SECONDS —
     // and every screen and channel plays the ad that long. Text, a truth value or a fraction is no length the editor
     // would show, so the server takes none either; and the seconds a line or a channel ad posts are not the ad's.
-    $ad = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id, 'name' => 'Short one']);
-    $forChannel = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id, 'name' => 'Channel one']);
+    $ad = BuilderAd::factory()->withText()->create(['organization_id' => $this->organization->id, 'name' => 'Short one']);
+    $forChannel = BuilderAd::factory()->withText()->create(['organization_id' => $this->organization->id, 'name' => 'Channel one']);
 
     foreach (['8', '8 seconds', true, 8.5, -8, 0, 5, 301, PHP_INT_MAX, ['8'], ['seconds' => 8]] as $duration) {
         $this->putJson("/builder/{$ad->id}", ['name' => $ad->name, 'document' => [...$ad->document, 'duration' => $duration]])
@@ -220,14 +220,14 @@ test("an ad is on screen for its design's length alone: no document, line or cha
     }
 
     // A playlist line posted with a day's worth of seconds keeps the design's eight.
-    $screen = Screen::factory()->withToken('stretch-token')->create(['store_id' => $this->store->id]);
+    $screen = Screen::factory()->withToken('stretch-token')->create(['organization_id' => $this->organization->id]);
     $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
     $this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => [
         ['media_id' => $ad->fresh()->media_id, 'duration_seconds' => 86400],
     ]])->assertOk();
 
     // A channel ad's seconds are left out for an ad page, whatever shape they are sent in.
-    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Our Deals']);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Our Deals']);
     $this->postJson("/channels/{$channel->id}/ads", ['media_id' => $forChannel->fresh()->media_id, 'seconds' => ['9999']])
         ->assertOk()
         ->assertJsonPath('ads.0.play_seconds', 8);
@@ -241,10 +241,10 @@ test('a picture cannot be flashed by for less than six seconds, whatever shape t
     // Owner's rule, 2026-09-28: six seconds at least on a playlist, in a channel and as an advert. The forms say
     // so before anything is sent; this is the wall behind them, for a request made by hand.
     Storage::fake('public');
-    $screen = Screen::factory()->create(['store_id' => $this->store->id]);
-    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Our Deals']);
-    $poster = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Poster']);
-    $flyer = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Flyer']);
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Our Deals']);
+    $poster = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Poster']);
+    $flyer = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Flyer']);
 
     foreach ([5, '5', 0, -6, 5.9, ['6'], true] as $seconds) {
         $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
@@ -274,11 +274,11 @@ test('seconds of every shape, hundreds of times, at every door that takes them: 
     // (throttle:admin) would turn most of these into 429s long before the rules saw them; it has tests of its own.
     mt_srand(20260929);
     $this->withoutMiddleware(ThrottleRequests::class);
-    $screen = Screen::factory()->create(['store_id' => $this->store->id]);
-    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Our Deals']);
-    $poster = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Poster']);
-    $flyer = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Flyer']);
-    $design = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id, 'name' => 'Fuzz']);
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Our Deals']);
+    $poster = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Poster']);
+    $flyer = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Flyer']);
+    $design = BuilderAd::factory()->withText()->create(['organization_id' => $this->organization->id, 'name' => 'Fuzz']);
 
     $shapes = [
         fn () => mt_rand(-1_000_000, 1_000_000),
@@ -332,8 +332,8 @@ test('seconds of every shape, hundreds of times, at every door that takes them: 
 });
 
 test('ids that are not ids answer 422 or 404 — never a 500', function () {
-    $media = Media::factory()->create(['store_id' => $this->store->id]);
-    $screen = Screen::factory()->create(['store_id' => $this->store->id]);
+    $media = Media::factory()->create(['organization_id' => $this->organization->id]);
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
     $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
 
     $payloads = [
@@ -361,8 +361,8 @@ test('ids that are not ids answer 422 or 404 — never a 500', function () {
 });
 
 test('a search that carries quotes, wildcards or SQL is treated as text', function () {
-    Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Burger deal']);
-    Media::factory()->create(['store_id' => $this->other->id, 'title' => 'Beta poster']);
+    Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Burger deal']);
+    Media::factory()->create(['organization_id' => $this->other->id, 'title' => 'Beta poster']);
 
     // Words no title here contains. Read as SQL, the first would match every row; read as text, nothing.
     foreach (["' OR '1'='1", "'; DROP TABLE media; --", '"', '\\', '100%%', 'ünïcödé', str_repeat('a', 500)] as $search) {
@@ -371,11 +371,11 @@ test('a search that carries quotes, wildcards or SQL is treated as text', functi
         expect($titles->all())->toBe([], "search [{$search}] matched a title that does not contain it");
     }
 
-    // A LIKE wildcard still matches everything it can — but only ever inside this store.
+    // A LIKE wildcard still matches everything it can — but only ever inside this organization.
     foreach (['%', '_'] as $search) {
         $titles = collect($this->getJson('/media/data?search='.urlencode($search))->assertOk()->json('media'))->pluck('title');
 
-        expect($titles->contains('Beta poster'))->toBeFalse("search [{$search}] leaked another store's row")
+        expect($titles->contains('Beta poster'))->toBeFalse("search [{$search}] leaked another organization's row")
             ->and($titles->all())->toBe(['Burger deal']);
     }
 
@@ -384,7 +384,7 @@ test('a search that carries quotes, wildcards or SQL is treated as text', functi
 });
 
 test('pagination cannot be used to dump a table or to break the page', function () {
-    Media::factory()->count(3)->create(['store_id' => $this->store->id]);
+    Media::factory()->count(3)->create(['organization_id' => $this->organization->id]);
 
     // The listing answers with perPage, clamped between 1 and 100 in HandlesCrudData::paginatedResponse.
     $huge = $this->getJson('/media/data?per_page=999999')->assertOk()->json();
@@ -407,12 +407,12 @@ test('a name the length of a book, or full of control characters, is refused rat
     $this->postJson('/dayparts', ['name' => $long, 'start_time' => '07:00', 'end_time' => '08:00'])
         ->assertStatus(422);
     $this->postJson('/channels', ['name' => $long])->assertStatus(422);
-    $this->put('/settings/store', [
+    $this->put('/settings/organization', [
         'name' => $long, 'street' => '1 Main St', 'city' => 'Dallas', 'state' => 'TX',
         'zip_code' => '75001', 'country' => 'USA',
-    ])->assertSessionHasErrorsIn('storeDetails', 'name');
+    ])->assertSessionHasErrorsIn('organizationDetails', 'name');
 
-    expect($this->store->fresh()->name)->toBe('Alpha Mart')
+    expect($this->organization->fresh()->name)->toBe('Alpha Mart')
         ->and(Daypart::count())->toBe(0)
         ->and(Channel::count())->toBe(0);
 });
@@ -423,25 +423,25 @@ test('a script tag in a name is stored as text and printed as text', function ()
 
     // Kept exactly as typed — never stripped, never refused for looking like code.
     $this->postJson('/dayparts', ['name' => $daypartName, 'start_time' => '07:00', 'end_time' => '08:00'])->assertOk();
-    $this->put('/settings/store', [
+    $this->put('/settings/organization', [
         'name' => $payload, 'street' => '1 Main St', 'city' => 'Dallas', 'state' => 'TX',
         'zip_code' => '75001', 'country' => 'USA',
-    ])->assertRedirect(route('store-settings.edit'));
+    ])->assertRedirect(route('organization-settings.edit'));
 
     expect(Daypart::sole()->name)->toBe($daypartName)
-        ->and($this->store->fresh()->name)->toBe($payload);
+        ->and($this->organization->fresh()->name)->toBe($payload);
 
-    $page = $this->get('/settings/store')->assertOk();
+    $page = $this->get('/settings/organization')->assertOk();
     $page->assertDontSee($payload, false);
     $page->assertSee('&lt;script&gt;', false);
 
-    // The dashboard and the members page print the store's name too.
+    // The dashboard and the members page print the organization's name too.
     $this->get('/dashboard')->assertOk()->assertDontSee($payload, false);
     $this->get('/members')->assertOk()->assertDontSee($payload, false);
 
-    // A screen's page hands the store's dayparts to its schedule editor inside an attribute, where one raw
+    // A screen's page hands the organization's dayparts to its schedule editor inside an attribute, where one raw
     // quote or tag would break out of it: the daypart's name is on the page, but only ever encoded.
-    $screen = Screen::factory()->create(['store_id' => $this->store->id]);
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
 
     $this->get("/screens/{$screen->id}")->assertOk()
         ->assertSee('daypart-xss', false)
@@ -469,7 +469,7 @@ test('an email field takes an address, not a header injection or a list', functi
 /* ── Text that is not UTF-8 ─────────────────────────────────────────────── */
 
 test('text that is not UTF-8 is refused at the door — a 400, never a 500 and never stored', function (string $method, string $uri, array $data, array $server) {
-    $screen = Screen::factory()->create(['store_id' => $this->store->id, 'name' => 'Front TV']);
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Front TV']);
 
     $response = $this->call($method, str_replace('{screen}', (string) $screen->id, $uri), $data, [], [], ['HTTP_ACCEPT' => 'application/json', ...$server]);
 
@@ -513,8 +513,8 @@ test('every language is welcome: Urdu, accents and emoji are UTF-8 and pass', fu
 
 test('a search for "0" is a search, not "no search"', function () {
     // PHP reads "0" as false; the listings once did too, and showed everything.
-    Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Menu 2020']);
-    Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Burger deal']);
+    Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Menu 2020']);
+    Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Burger deal']);
 
     $titles = collect($this->getJson('/media/data?search=0')->assertOk()->json('media'))->pluck('title')->all();
 

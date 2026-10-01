@@ -6,16 +6,16 @@ use App\Models\BuilderAsset;
 use App\Models\Campaign;
 use App\Models\Channel;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
 
 /**
  * The two upload limits as a person meets them (owner, 2026-09-28): a video over five minutes, an advert over
- * sixty seconds and a file bigger than what is left of the shop's 512 MB are refused the moment they are chosen,
- * before a byte is sent — and the shop sees how full it is. The server decides either way
- * (tests/Feature/Signage/VideoLengthLimitTest, StoreStorageTest, tests/Feature/Security/UploadLimitsAttackTest);
+ * sixty seconds and a file bigger than what is left of the organization's 512 MB are refused the moment they are chosen,
+ * before a byte is sent — and the organization sees how full it is. The server decides either way
+ * (tests/Feature/Signage/VideoLengthLimitTest, OrganizationStorageTest, tests/Feature/Security/UploadLimitsAttackTest);
  * these prove what the page says.
  *
  * The long videos are real ones, made in the page: WebCodecs VP8 at a frame a second, in a small WebM writer —
@@ -25,16 +25,16 @@ class UploadLimitsTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    public function test_the_media_page_says_how_full_the_shop_is_and_refuses_what_will_not_fit(): void
+    public function test_the_media_page_says_how_full_the_organization_is_and_refuses_what_will_not_fit(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store);
-        Media::factory()->create(['store_id' => $store->id, 'title' => 'Everything else', 'thumbnail_path' => null, 'size' => 510 * 1024 * 1024]);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization);
+        Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Everything else', 'thumbnail_path' => null, 'size' => 510 * 1024 * 1024]);
 
-        $this->browse(function (Browser $browser) use ($owner, $store) {
+        $this->browse(function (Browser $browser) use ($owner, $organization) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
             $browser->visit('/media');
             $this->waitForAlpine($browser);
 
@@ -63,15 +63,15 @@ class UploadLimitsTest extends DuskTestCase
 
     public function test_a_channel_upload_refuses_a_video_over_five_minutes_and_the_ad_builder_shelf_one_over_thirty_seconds(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        // Channels are the platform's permissions a store's role may carry: given here, as a shop would give them.
-        $owner = $this->storeMember($store, ['channel-view', 'channel-update', 'ad-view', 'ad-store', 'media-view', 'media-store']);
-        $channel = Channel::factory()->create(['store_id' => $store->id, 'name' => 'GHRA Ware House']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        // Channels are the platform's permissions an organization's role may carry: given here, as an organization would give them.
+        $owner = $this->organizationMember($organization, ['channel-view', 'channel-update', 'ad-view', 'ad-store', 'media-view', 'media-store']);
+        $channel = Channel::factory()->create(['organization_id' => $organization->id, 'name' => 'GHRA Ware House']);
 
-        $this->browse(function (Browser $browser) use ($owner, $store, $channel) {
+        $this->browse(function (Browser $browser) use ($owner, $organization, $channel) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit("/channels/{$channel->id}");
             $this->waitForAlpine($browser);

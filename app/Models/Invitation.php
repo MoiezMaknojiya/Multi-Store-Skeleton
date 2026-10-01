@@ -12,7 +12,7 @@ use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * An open invitation to join a store — or, with no store, the platform team.
+ * An open invitation to join an organization — or, with no organization, the platform team.
  *
  * The token is shown exactly once, in the email link; only its SHA-256 is stored, so a
  * leaked database row cannot be turned into an accepted invitation. A row exists only while
@@ -25,7 +25,7 @@ class Invitation extends Model
     /** How long a link works. Resending starts the week again with a new link. */
     public const LIFETIME_DAYS = 7;
 
-    protected $fillable = ['store_id', 'email', 'role_id', 'token_hash', 'invited_by', 'expires_at'];
+    protected $fillable = ['organization_id', 'email', 'role_id', 'token_hash', 'invited_by', 'expires_at'];
 
     protected function casts(): array
     {
@@ -39,12 +39,12 @@ class Invitation extends Model
      *
      * @return array{0: self, 1: string}
      */
-    public static function open(?Store $store, string $email, Role $role, User $inviter): array
+    public static function open(?Organization $organization, string $email, Role $role, User $inviter): array
     {
         $token = Str::random(64);
 
         $invitation = self::create([
-            'store_id' => $store?->id,
+            'organization_id' => $organization?->id,
             'email' => self::normalizeEmail($email),
             'role_id' => $role->id,
             'token_hash' => self::hashToken($token),
@@ -109,7 +109,7 @@ class Invitation extends Model
 
     public function isForPlatform(): bool
     {
-        return $this->store_id === null;
+        return $this->organization_id === null;
     }
 
     /** Whether the invitation is for this person's email address. */
@@ -118,19 +118,19 @@ class Invitation extends Model
         return self::normalizeEmail($user->email) === $this->email;
     }
 
-    public function scopeForStore(Builder $query, Store $store): Builder
+    public function scopeForOrganization(Builder $query, Organization $organization): Builder
     {
-        return $query->where('store_id', $store->id);
+        return $query->where('organization_id', $organization->id);
     }
 
     public function scopeForPlatform(Builder $query): Builder
     {
-        return $query->whereNull('store_id');
+        return $query->whereNull('organization_id');
     }
 
-    public function store(): BelongsTo
+    public function organization(): BelongsTo
     {
-        return $this->belongsTo(Store::class);
+        return $this->belongsTo(Organization::class);
     }
 
     public function role(): BelongsTo

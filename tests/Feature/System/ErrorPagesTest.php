@@ -1,6 +1,6 @@
 <?php
 
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -47,15 +47,15 @@ test('a page that is not there says so, and nothing of how the app is built', fu
 });
 
 test('a refusal says why in plain words: Laravel\'s own are replaced, ours are kept', function () {
-    $store = Store::factory()->create();
-    $viewer = createStoreUser($store, ['media-view'], 'Looks At Files');
+    $organization = Organization::factory()->create();
+    $viewer = createOrganizationUser($organization, ['media-view'], 'Looks At Files');
 
-    $html = $this->actingAs($viewer)->withSession(['current_store_id' => $store->id])->get('/screens')->assertForbidden()->getContent();
+    $html = $this->actingAs($viewer)->withSession(['current_organization_id' => $organization->id])->get('/screens')->assertForbidden()->getContent();
     expect($html)->toContain('You cannot open this')->toContain('Your role does not allow it.')
         ->not->toContain('This action is unauthorized.');
 
     // A refusal of our own keeps its reason.
-    $html = $this->actingAs(createSuperAdmin())->post('/stores/switch', ['store_id' => $store->id])->assertForbidden()->getContent();
+    $html = $this->actingAs(createSuperAdmin())->post('/organizations/switch', ['organization_id' => $organization->id])->assertForbidden()->getContent();
     expect($html)->toContain('The platform team works above the organizations. Use &quot;Log In As&quot; to see an organization as one of its members.');
 });
 

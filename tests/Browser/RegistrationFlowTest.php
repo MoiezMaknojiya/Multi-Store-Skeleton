@@ -2,8 +2,8 @@
 
 namespace Tests\Browser;
 
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
@@ -35,11 +35,11 @@ class RegistrationFlowTest extends DuskTestCase
     }
 
     /**
-     * A brand-new customer signs themselves up: their details + their store in one
-     * public form, and becomes that store's Owner. The panel waits for their email
+     * A brand-new customer signs themselves up: their details + their organization in one
+     * public form, and becomes that organization's Owner. The panel waits for their email
      * (owner's rule, 2026-09-29): "Check your inbox" says where the link went, the
      * dashboard sends them back there, and the link from the email opens their
-     * dashboard with the store showing.
+     * dashboard with the organization showing.
      */
     public function test_a_customer_signs_up_confirms_their_email_and_lands_on_their_dashboard(): void
     {
@@ -59,7 +59,7 @@ class RegistrationFlowTest extends DuskTestCase
             $this->jsType($browser, '#email', 'zara@example.com');
             $this->jsType($browser, '#password', 'password123');
             $this->jsType($browser, '#password_confirmation', 'password123');
-            $this->jsType($browser, '#store_name', 'Zara Mart');
+            $this->jsType($browser, '#organization_name', 'Zara Mart');
             $this->jsType($browser, '#street', '9 Mall Road');
             $this->jsType($browser, '#city', 'Austin');
             $browser->select('#state', 'TX');
@@ -75,7 +75,7 @@ class RegistrationFlowTest extends DuskTestCase
             $browser->visit('/dashboard')->waitForLocation('/verify-email');
 
             // The link from the email: the new owner lands on their dashboard, told so; their
-            // single store shows in the header switcher (the role assignment itself is checked
+            // single organization shows in the header switcher (the role assignment itself is checked
             // in the DB below).
             $browser->visit($this->linkFromMailLog($logSizeBefore, 'verify-email'))
                 ->waitForLocation('/dashboard')
@@ -84,12 +84,12 @@ class RegistrationFlowTest extends DuskTestCase
 
             $owner = User::where('email', 'zara@example.com')->firstOrFail();
             $this->assertTrue($owner->hasVerifiedEmail());
-            $store = Store::where('name', 'Zara Mart')->firstOrFail();
+            $organization = Organization::where('name', 'Zara Mart')->firstOrFail();
             $roleId = Role::starter(Role::OWNER)->id;
 
-            $this->assertTrue(DB::table('store_user')->where([
+            $this->assertTrue(DB::table('organization_user')->where([
                 'user_id' => $owner->id,
-                'store_id' => $store->id,
+                'organization_id' => $organization->id,
                 'role_id' => $roleId,
             ])->exists());
         });

@@ -100,8 +100,8 @@ class ChannelAdRequest extends FormRequest
     }
 
     /**
-     * The library row `media_id` names — only a row this channel may show: a shop's channel takes that shop's
-     * library alone; the platform's channel takes its own library or any shop's (owner, 2026-09-19). Anything
+     * The library row `media_id` names — only a row this channel may show: an organization's channel takes that organization's
+     * library alone; the platform's channel takes its own library or any organization's (owner, 2026-09-19). Anything
      * else is null, which the rule above turns into a 422 rather than a hint that the id exists.
      */
     public function chosenMedia(): ?Media
@@ -119,7 +119,7 @@ class ChannelAdRequest extends FormRequest
 
         return $this->chosen = Media::query()
             ->whereKey((int) $id)
-            ->when(! $channel->isPlatformChannel(), fn (Builder $query) => $query->where('store_id', $channel->store_id))
+            ->when(! $channel->isPlatformChannel(), fn (Builder $query) => $query->where('organization_id', $channel->organization_id))
             ->first();
     }
 

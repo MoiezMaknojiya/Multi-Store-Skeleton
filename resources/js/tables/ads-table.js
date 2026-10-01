@@ -20,8 +20,8 @@ export function registerAdsTable(Alpine) {
         extraState: {
             /* The card whose Copy is in flight, so only that button goes quiet. */
             busyId: null,
-            /* Above the stores: one shop, or every shop (empty). */
-            filterStore: '',
+            /* Above the organizations: one organization, or every organization (empty). */
+            filterOrganization: '',
         },
 
         extraMethods: {
@@ -33,7 +33,7 @@ export function registerAdsTable(Alpine) {
 
             /* ── Listing filters ───────────────────────────────────────── */
             extraParams() {
-                return this.filterStore ? { store_id: this.filterStore } : {};
+                return this.filterOrganization ? { organization_id: this.filterOrganization } : {};
             },
 
             applyFilters() {

@@ -5,7 +5,7 @@
  * That is the whole point of it being here rather than in the panel's bundle — what a person previews is
  * exactly what the screen runs, with the same Anime.js (MIT), from the same fixed address.
  *
- * Written in plain ES5 on purpose: the box behind a shop's television may run an old Chromium, and an
+ * Written in plain ES5 on purpose: the box behind an organization's television may run an old Chromium, and an
  * advert that dies on an arrow function is a black screen.
  *
  * Everything it reads is DATA. An effect is a name looked up in a table this file owns, a number is

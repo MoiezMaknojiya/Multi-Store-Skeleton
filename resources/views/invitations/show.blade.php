@@ -1,6 +1,6 @@
-{{-- The page an invitation link opens. Four states (docs/STORE-ORGANIZATION-SPEC.md rule 16):
+{{-- The page an invitation link opens. Four states (docs/ORGANIZATION-SPEC.md rule 16):
      register (no account yet), login (an account exists), accept (signed in as the invitee),
-     mismatch (signed in as somebody else). $place — the store, or the platform team — comes from
+     mismatch (signed in as somebody else). $place — the organization, or the platform team — comes from
      InvitationResponseController::placeName, the same words its log lines and welcome use. --}}
 <x-guest-layout :title="'Join '.$place">
     <div dusk="invitation-page" data-state="{{ $state }}">

@@ -15,7 +15,7 @@ class ChannelAdFactory extends Factory
     protected $model = ChannelAd::class;
 
     /**
-     * A running image ad with no dates. Its file is a row of the channel's own library — the shop's for a shop's
+     * A running image ad with no dates. Its file is a row of the channel's own library — the organization's for an organization's
      * channel, the platform's for the platform's — the way an upload inside the channel would have made it.
      *
      * @return array<string, mixed>
@@ -25,7 +25,7 @@ class ChannelAdFactory extends Factory
         return [
             'channel_id' => Channel::factory(),
             'media_id' => fn (array $attributes) => Media::factory()->create([
-                'store_id' => Channel::find($attributes['channel_id'])?->store_id,
+                'organization_id' => Channel::find($attributes['channel_id'])?->organization_id,
             ])->id,
             'title' => fake()->words(3, true),
             'duration_seconds' => 10,
@@ -40,7 +40,7 @@ class ChannelAdFactory extends Factory
     {
         return $this->state(fn () => [
             'media_id' => fn (array $attributes) => Media::factory()->video()->create([
-                'store_id' => Channel::find($attributes['channel_id'])?->store_id,
+                'organization_id' => Channel::find($attributes['channel_id'])?->organization_id,
                 'duration_seconds' => $seconds,
             ])->id,
             'duration_seconds' => null,
@@ -57,7 +57,7 @@ class ChannelAdFactory extends Factory
     {
         return $this->state(fn () => [
             'media_id' => fn (array $attributes) => Media::factory()->create([
-                'store_id' => Channel::find($attributes['channel_id'])?->store_id,
+                'organization_id' => Channel::find($attributes['channel_id'])?->organization_id,
                 ...$file,
             ])->id,
         ]);
@@ -68,7 +68,7 @@ class ChannelAdFactory extends Factory
     {
         return $this->state(fn () => [
             'media_id' => fn (array $attributes) => Media::factory()->adPage()->create([
-                'store_id' => Channel::find($attributes['channel_id'])?->store_id,
+                'organization_id' => Channel::find($attributes['channel_id'])?->organization_id,
             ])->id,
         ]);
     }

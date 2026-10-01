@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\Daypart;
-use App\Models\Store;
+use App\Models\Organization;
 use Carbon\CarbonImmutable;
 
 /*
@@ -27,11 +27,11 @@ function at(string $when): CarbonImmutable
 }
 
 beforeEach(function () {
-    $this->store = Store::factory()->create();
+    $this->organization = Organization::factory()->create();
 });
 
 test('an ordinary window is open between its ends and shut outside them', function () {
-    $daypart = Daypart::factory()->between('09:00', '17:00')->create(['store_id' => $this->store->id]);
+    $daypart = Daypart::factory()->between('09:00', '17:00')->create(['organization_id' => $this->organization->id]);
 
     expect($daypart->coversAt(at('2026-09-10 12:00')))->toBeTrue();
     expect($daypart->coversAt(at('2026-09-10 08:59')))->toBeFalse();
@@ -39,7 +39,7 @@ test('an ordinary window is open between its ends and shut outside them', functi
 });
 
 test('the window opens ON the start minute and shuts ON the end minute', function () {
-    $daypart = Daypart::factory()->between('09:00', '17:00')->create(['store_id' => $this->store->id]);
+    $daypart = Daypart::factory()->between('09:00', '17:00')->create(['organization_id' => $this->organization->id]);
 
     // Half-open, like every other range in the app: the start counts, the end does not.
     expect($daypart->coversAt(at('2026-09-10 09:00')))->toBeTrue();
@@ -48,7 +48,7 @@ test('the window opens ON the start minute and shuts ON the end minute', functio
 });
 
 test('a window that crosses midnight stays open through it', function () {
-    $daypart = Daypart::factory()->overnight()->create(['store_id' => $this->store->id]);  // 22:00 – 02:00
+    $daypart = Daypart::factory()->overnight()->create(['organization_id' => $this->organization->id]);  // 22:00 – 02:00
 
     expect($daypart->coversAt(at('2026-09-10 22:00')))->toBeTrue();   // opens
     expect($daypart->coversAt(at('2026-09-10 23:59')))->toBeTrue();   // still the same evening
@@ -60,7 +60,7 @@ test('a window that crosses midnight stays open through it', function () {
 });
 
 test('an exception replaces that weekday\'s hours and leaves every other day alone', function () {
-    $daypart = Daypart::factory()->between('09:00', '17:00')->create(['store_id' => $this->store->id]);
+    $daypart = Daypart::factory()->between('09:00', '17:00')->create(['organization_id' => $this->organization->id]);
     // 2026-09-13 is a Sunday.
     $daypart->syncExceptions([['weekday' => 7, 'start_time' => '11:00', 'end_time' => '16:00']]);
 
@@ -72,7 +72,7 @@ test('an exception replaces that weekday\'s hours and leaves every other day alo
 });
 
 test('an exception with no times closes that weekday completely', function () {
-    $daypart = Daypart::factory()->between('09:00', '17:00')->create(['store_id' => $this->store->id]);
+    $daypart = Daypart::factory()->between('09:00', '17:00')->create(['organization_id' => $this->organization->id]);
     $daypart->syncExceptions([['weekday' => 7, 'start_time' => null, 'end_time' => null]]);
 
     // Sunday: shut at every hour, not merely shifted.
@@ -84,7 +84,7 @@ test('an exception with no times closes that weekday completely', function () {
 });
 
 test('a window that opens on Saturday night and closes Sunday morning ignores Sunday\'s own exception', function () {
-    $daypart = Daypart::factory()->overnight()->create(['store_id' => $this->store->id]);  // 22:00 – 02:00
+    $daypart = Daypart::factory()->overnight()->create(['organization_id' => $this->organization->id]);  // 22:00 – 02:00
     // Sunday closed. 2026-09-12 is a Saturday, 2026-09-13 a Sunday.
     $daypart->syncExceptions([['weekday' => 7, 'start_time' => null, 'end_time' => null]]);
 
@@ -97,7 +97,7 @@ test('a window that opens on Saturday night and closes Sunday morning ignores Su
 });
 
 test('a closed weekday does not leak into the small hours of the next day', function () {
-    $daypart = Daypart::factory()->overnight()->create(['store_id' => $this->store->id]);  // 22:00 – 02:00
+    $daypart = Daypart::factory()->overnight()->create(['organization_id' => $this->organization->id]);  // 22:00 – 02:00
     // Saturday closed, so nothing should be running in Sunday's small hours.
     $daypart->syncExceptions([['weekday' => 6, 'start_time' => null, 'end_time' => null]]);
 
@@ -107,7 +107,7 @@ test('a closed weekday does not leak into the small hours of the next day', func
 });
 
 test('the moment is read as given, so two screens in different timezones disagree', function () {
-    $daypart = Daypart::factory()->between('09:00', '17:00')->create(['store_id' => $this->store->id]);
+    $daypart = Daypart::factory()->between('09:00', '17:00')->create(['organization_id' => $this->organization->id]);
 
     // One instant in time, two clock faces. Noon in Chicago is 17:00 in London.
     $instant = CarbonImmutable::parse('2026-09-10 17:00', 'Europe/London');
@@ -117,7 +117,7 @@ test('the moment is read as given, so two screens in different timezones disagre
 });
 
 test('daylight saving needs no handling, because the times are wall clock', function () {
-    $daypart = Daypart::factory()->between('09:00', '17:00')->create(['store_id' => $this->store->id]);
+    $daypart = Daypart::factory()->between('09:00', '17:00')->create(['organization_id' => $this->organization->id]);
 
     // 2026-03-08 is the US spring-forward Sunday; 2026-11-01 the fall-back one.
     // "Ten in the morning" is inside the window on both, with nothing to configure.
@@ -126,7 +126,7 @@ test('daylight saving needs no handling, because the times are wall clock', func
 });
 
 test('the times read back as H:i whichever database wrote them', function () {
-    $daypart = Daypart::factory()->between('07:00', '20:00')->create(['store_id' => $this->store->id]);
+    $daypart = Daypart::factory()->between('07:00', '20:00')->create(['organization_id' => $this->organization->id]);
     $daypart->syncExceptions([['weekday' => 7, 'start_time' => '09:00', 'end_time' => '16:00']]);
 
     // MySQL returns "07:00:00" from a TIME column and SQLite returns what it was

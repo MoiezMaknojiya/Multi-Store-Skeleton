@@ -4,10 +4,10 @@ namespace Tests\Browser;
 
 use App\Models\Daypart;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\ScheduleRule;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -17,7 +17,7 @@ use Tests\DuskTestCase;
 /**
  * Building a schedule through the real pages.
  *
- * The backend tests prove the rules; this proves a shop owner can reach them. It
+ * The backend tests prove the rules; this proves an organization owner can reach them. It
  * guards the class of failure a status code never shows: an Alpine method the view
  * calls but the component never defined, a nested row whose model does not bind, a
  * preview that silently reads undefined. All of those render a perfectly valid
@@ -27,12 +27,12 @@ class ScheduleUiTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    /** A shop owner who runs their own screens, hours and playlists. */
-    private function owner(Store $store): User
+    /** An organization owner who runs their own screens, hours and playlists. */
+    private function owner(Organization $organization): User
     {
         $this->seedSuperAdmin();
 
-        return $this->storeMember($store, [
+        return $this->organizationMember($organization, [
             'screen-view', 'screen-update', 'screen-playlist',
             'daypart-view', 'daypart-store', 'media-view',
         ]);
@@ -44,16 +44,16 @@ class ScheduleUiTest extends DuskTestCase
      */
     public function test_an_owner_sets_a_screens_timezone_and_holding_picture(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->owner($store);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->owner($organization);
 
-        $screen = Screen::factory()->create(['store_id' => $store->id, 'name' => 'Deli TV']);
-        $welcome = Media::factory()->create(['store_id' => $store->id, 'title' => 'Welcome board']);
+        $screen = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Deli TV']);
+        $welcome = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Welcome board']);
 
-        $this->browse(function (Browser $browser) use ($owner, $store, $screen, $welcome) {
+        $this->browse(function (Browser $browser) use ($owner, $organization, $screen, $welcome) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/screens');
             $this->waitForAlpine($browser);
@@ -91,24 +91,24 @@ class ScheduleUiTest extends DuskTestCase
      */
     public function test_an_owner_schedules_one_item_for_friday_lunchtimes(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->owner($store);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->owner($organization);
 
-        $screen = Screen::factory()->create(['store_id' => $store->id, 'name' => 'Deli TV']);
+        $screen = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Deli TV']);
         $lunch = Daypart::factory()->between('11:00', '15:00')->create([
-            'store_id' => $store->id, 'name' => 'Lunch',
+            'organization_id' => $organization->id, 'name' => 'Lunch',
         ]);
-        $poster = Media::factory()->create(['store_id' => $store->id, 'title' => 'Eid offer']);
+        $poster = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Eid offer']);
 
         PlaylistItem::create([
             'screen_id' => $screen->id, 'media_id' => $poster->id,
             'position' => 0, 'duration_seconds' => 10,
         ]);
 
-        $this->browse(function (Browser $browser) use ($owner, $store, $screen, $lunch) {
+        $this->browse(function (Browser $browser) use ($owner, $organization, $screen, $lunch) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/screens/'.$screen->id);
             $this->waitForAlpine($browser);
@@ -192,7 +192,7 @@ class ScheduleUiTest extends DuskTestCase
     /**
      * The payoff, on an actual television: an hour nothing is scheduled for goes dark.
      *
-     * Not "No content" — a message written across a shop's screen at three in the
+     * Not "No content" — a message written across an organization's screen at three in the
      * morning looks broken, and a black one looks switched off, which is what it
      * should look like. Real time rather than a mocked clock, because the server is a
      * separate process here and would not see the test's idea of "now"; the window is
@@ -200,15 +200,15 @@ class ScheduleUiTest extends DuskTestCase
      */
     public function test_a_television_goes_dark_when_nothing_is_scheduled_and_comes_back_when_something_is(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
         $screen = Screen::factory()->withToken('hours-token')->create([
-            'store_id' => $store->id, 'name' => 'Deli TV', 'timezone' => 'America/Chicago',
+            'organization_id' => $organization->id, 'name' => 'Deli TV', 'timezone' => 'America/Chicago',
         ]);
         // A real picture on the Dusk disk: coming back is proved by the poster being on
         // screen, and a factory row's file does not exist.
         $poster = Media::factory()->create([
-            'store_id' => $store->id, 'title' => 'Poster', 'mime_type' => 'image/png',
-            'path' => $this->putImage("media/{$store->id}/hours-poster.png", 40, 160, 90),
+            'organization_id' => $organization->id, 'title' => 'Poster', 'mime_type' => 'image/png',
+            'path' => $this->putImage("media/{$organization->id}/hours-poster.png", 40, 160, 90),
             'thumbnail_path' => null,
         ]);
         $item = PlaylistItem::create([
@@ -221,11 +221,11 @@ class ScheduleUiTest extends DuskTestCase
         // A window a couple of hours from now: this poster is not due at this moment.
         $later = Daypart::factory()->between(
             $there->addHours(2)->format('H:i'), $there->addHours(3)->format('H:i')
-        )->create(['store_id' => $store->id, 'name' => 'Later today']);
+        )->create(['organization_id' => $organization->id, 'name' => 'Later today']);
 
         $rule = $item->scheduleRules()->create(['daypart_id' => $later->id]);
 
-        $this->browse(function (Browser $tv) use ($rule, $store, $there) {
+        $this->browse(function (Browser $tv) use ($rule, $organization, $there) {
             $tv->visit('/login');
             $tv->script("localStorage.clear(); localStorage.setItem('signage.device.token', 'hours-token');");
 
@@ -235,7 +235,7 @@ class ScheduleUiTest extends DuskTestCase
 
             // Black, and silent about it: no message, nothing playing.
             $this->assertTrue($tv->script("return document.getElementById('no-content').hidden;")[0],
-                'a screen with nothing due should not be telling the shop it has no content');
+                'a screen with nothing due should not be telling the organization it has no content');
             $this->assertSame('hidden', $tv->script(
                 "return getComputedStyle(document.querySelector('.media-layer')).visibility;"
             )[0]);
@@ -245,7 +245,7 @@ class ScheduleUiTest extends DuskTestCase
             // switched on again.
             $now = Daypart::factory()->between(
                 $there->subHours(2)->format('H:i'), $there->addHours(2)->format('H:i')
-            )->create(['store_id' => $store->id, 'name' => 'Right now']);
+            )->create(['organization_id' => $organization->id, 'name' => 'Right now']);
 
             $rule->update(['daypart_id' => $now->id]);
 
@@ -276,22 +276,22 @@ class ScheduleUiTest extends DuskTestCase
      */
     public function test_copying_a_playlist_says_what_it_will_replace_first(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->owner($store);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->owner($organization);
 
-        $source = Screen::factory()->create(['store_id' => $store->id, 'name' => 'Deli TV']);
-        $target = Screen::factory()->create(['store_id' => $store->id, 'name' => 'Window TV']);
+        $source = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Deli TV']);
+        $target = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Window TV']);
 
-        $poster = Media::factory()->create(['store_id' => $store->id, 'title' => 'Eid offer']);
-        $old = Media::factory()->create(['store_id' => $store->id, 'title' => 'Old notice']);
+        $poster = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Eid offer']);
+        $old = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Old notice']);
 
         PlaylistItem::create(['screen_id' => $source->id, 'media_id' => $poster->id, 'position' => 0, 'duration_seconds' => 10]);
         PlaylistItem::create(['screen_id' => $target->id, 'media_id' => $old->id, 'position' => 0, 'duration_seconds' => 10]);
 
-        $this->browse(function (Browser $browser) use ($owner, $store, $source, $target, $poster) {
+        $this->browse(function (Browser $browser) use ($owner, $organization, $source, $target, $poster) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/screens/'.$source->id);
             $this->waitForAlpine($browser);

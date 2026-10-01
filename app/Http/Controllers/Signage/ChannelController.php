@@ -4,13 +4,13 @@ namespace App\Http\Controllers\Signage;
 
 use App\Http\Controllers\Concerns\ConfirmsPassword;
 use App\Http\Controllers\Concerns\HandlesCrudData;
-use App\Http\Controllers\Concerns\ResolvesCurrentStore;
+use App\Http\Controllers\Concerns\ResolvesCurrentOrganization;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Signage\ChannelRequest;
 use App\Models\ActivityLog;
 use App\Models\Channel;
 use App\Models\ChannelAd;
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\JsonResponse;
@@ -22,31 +22,31 @@ use Illuminate\View\View;
 /**
  * Channels, from where the person stands (owner's rules, 2026-09-16):
  *
- *  - Above the stores (the super admin, or a global role holding the channel permissions): every
- *    channel. One made here is the platform's, offered to every shop's screens.
- *  - Inside a store (a store's role carrying the channel permissions): that store's own channels. One
- *    made here belongs to the store and is offered to its own screens alone. The platform's channels are
- *    listed and opened there to READ only (owner, 2026-09-19); other stores' are not found (404).
+ *  - Above the organizations (the super admin, or a global role holding the channel permissions): every
+ *    channel. One made here is the platform's, offered to every organization's screens.
+ *  - Inside an organization (an organization's role carrying the channel permissions): that organization's own channels. One
+ *    made here belongs to the organization and is offered to its own screens alone. The platform's channels are
+ *    listed and opened there to READ only (owner, 2026-09-19); other organizations' are not found (404).
  *
  * Every change goes through Channel::visibleTo, every look through Channel::listableIn. Whoever holds a
  * permission may use it on any channel within reach, not only the ones they made — a channel is shared
- * work, like a shop's media library.
+ * work, like an organization's media library.
  */
 class ChannelController extends Controller
 {
-    use ConfirmsPassword, HandlesCrudData, ResolvesCurrentStore;
+    use ConfirmsPassword, HandlesCrudData, ResolvesCurrentOrganization;
 
     public function index(Request $request): View
     {
         return view('channels.index', [
             'maxAdsPerPass' => Channel::MAX_ADS_PER_PASS,
-            // The store whose own channels these are; null above the stores.
-            'store' => $request->user()->globalRole() !== null ? null : $this->currentStore(),
+            // The organization whose own channels these are; null above the organizations.
+            'organization' => $request->user()->globalRole() !== null ? null : $this->currentOrganization(),
         ]);
     }
 
     /**
-     * Paginated channels, each with how many ads it holds and how far it has spread. Inside a store the list
+     * Paginated channels, each with how many ads it holds and how far it has spread. Inside an organization the list
      * also carries the platform's channels, marked read-only (owner, 2026-09-19): nothing on them may be changed
      * from there, and the server refuses it anyway.
      */
@@ -56,7 +56,7 @@ class ChannelController extends Controller
 
         $query = Channel::query()
             ->listableIn($request->user())
-            ->with(['createdBy', 'store:id,name'])
+            ->with(['createdBy', 'organization:id,name'])
             ->withCount([
                 'ads',
                 'ads as running_ads_count' => fn (Builder $q) => $q
@@ -74,7 +74,7 @@ class ChannelController extends Controller
     }
 
     /**
-     * The page where one channel's ads are managed — or, for the platform's channel seen from inside a shop,
+     * The page where one channel's ads are managed — or, for the platform's channel seen from inside an organization,
      * only looked at.
      */
     public function show(Request $request, Channel $channel): View
@@ -85,19 +85,19 @@ class ChannelController extends Controller
             'channel' => $channel,
             'readOnly' => ! Channel::visibleTo($request->user())->whereKey($channel->id)->exists(),
             'maxImageSeconds' => ChannelAd::MAX_IMAGE_SECONDS,
-            // Above the stores, the platform's channel may take any shop's files: the pickers ask which library.
+            // Above the organizations, the platform's channel may take any organization's files: the pickers ask which library.
             'libraries' => $channel->isPlatformChannel() && $request->user()->globalRole() !== null
-                ? Store::orderBy('name')->get(['id', 'name'])->toArray()
+                ? Organization::orderBy('name')->get(['id', 'name'])->toArray()
                 : [],
         ]);
     }
 
     public function store(ChannelRequest $request): JsonResponse
     {
-        // Made above the stores it is the platform's; made inside a store it is that store's own.
-        $storeId = $request->user()->globalRole() !== null ? null : $this->currentStore()->id;
+        // Made above the organizations it is the platform's; made inside an organization it is that organization's own.
+        $organizationId = $request->user()->globalRole() !== null ? null : $this->currentOrganization()->id;
 
-        $channel = Channel::create([...$request->validated(), 'store_id' => $storeId, 'created_by' => auth()->id()]);
+        $channel = Channel::create([...$request->validated(), 'organization_id' => $organizationId, 'created_by' => auth()->id()]);
 
         ActivityLog::record('channel.created', $channel, "Created channel {$channel->name}");
 
@@ -136,7 +136,7 @@ class ChannelController extends Controller
 
         ActivityLog::record('channel.deleted', null,
             "Deleted channel {$name} — it was on {$screens} screen".($screens === 1 ? '' : 's'),
-            storeId: $channel->store_id);
+            organizationId: $channel->organization_id);
 
         return response()->json(['message' => 'Channel deleted']);
     }
@@ -155,41 +155,41 @@ class ChannelController extends Controller
     }
 
     /**
-     * How many screens, in how many shops, carry each channel on this page — and whether the reader may change
-     * it. Inside a shop only the shop's own screens are counted: how far the platform's channel has spread in
-     * other shops is not this shop's business.
+     * How many screens, in how many organizations, carry each channel on this page — and whether the reader may change
+     * it. Inside an organization only the organization's own screens are counted: how far the platform's channel has spread in
+     * other organizations is not this organization's business.
      *
-     * One query for the whole page rather than one per row. A deleted shop's screens
+     * One query for the whole page rather than one per row. A deleted organization's screens
      * went with it, so they never count.
      *
      * @param  Collection<int, Channel>  $channels
      */
-    private function attachUsage(Collection $channels, bool $aboveTheStores): void
+    private function attachUsage(Collection $channels, bool $aboveTheOrganizations): void
     {
         $usage = DB::table('playlist_items')
             ->join('screens', 'screens.id', '=', 'playlist_items.screen_id')
             ->whereIn('playlist_items.channel_id', $channels->pluck('id'))
-            ->when(! $aboveTheStores, fn (QueryBuilder $query) => $query->where('screens.store_id', (int) session('current_store_id')))
+            ->when(! $aboveTheOrganizations, fn (QueryBuilder $query) => $query->where('screens.organization_id', (int) session('current_organization_id')))
             ->groupBy('playlist_items.channel_id')
             ->selectRaw('playlist_items.channel_id as channel_id')
             ->selectRaw('COUNT(DISTINCT playlist_items.screen_id) as screens')
-            ->selectRaw('COUNT(DISTINCT screens.store_id) as stores')
+            ->selectRaw('COUNT(DISTINCT screens.organization_id) as organizations')
             ->get()
             ->keyBy('channel_id');
 
-        $channels->each(function (Channel $channel) use ($usage, $aboveTheStores) {
-            // The platform's channel, seen from inside a shop: listed to read, never to change.
-            $readOnly = ! $aboveTheStores && $channel->isPlatformChannel();
+        $channels->each(function (Channel $channel) use ($usage, $aboveTheOrganizations) {
+            // The platform's channel, seen from inside an organization: listed to read, never to change.
+            $readOnly = ! $aboveTheOrganizations && $channel->isPlatformChannel();
 
             $channel->setAttribute('screens_count', (int) ($usage[$channel->id]->screens ?? 0));
-            $channel->setAttribute('stores_count', (int) ($usage[$channel->id]->stores ?? 0));
+            $channel->setAttribute('organizations_count', (int) ($usage[$channel->id]->organizations ?? 0));
             $channel->setAttribute('read_only', $readOnly);
-            // The names only: the whole user and store rows have no business in this response — and a shop
+            // The names only: the whole user and organization rows have no business in this response — and an organization
             // is not told who on the platform's team made the platform's channel.
             $channel->setAttribute('created_by_name', $readOnly ? null : $channel->createdBy?->name);
-            $channel->setAttribute('store_name', $channel->store?->name);
+            $channel->setAttribute('organization_name', $channel->organization?->name);
             $channel->unsetRelation('createdBy');
-            $channel->unsetRelation('store');
+            $channel->unsetRelation('organization');
         });
     }
 }

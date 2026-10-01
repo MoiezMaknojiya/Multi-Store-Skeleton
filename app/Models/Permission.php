@@ -8,12 +8,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 class Permission extends Model
 {
     /**
-     * Store permissions: a store's own work. On a store role or a custom role they are read
-     * against the member's role in the store they are working in; on a platform role they reach every
-     * store (support holding media-view reads every store's library).
+     * Organization permissions: an organization's own work. On an organization role or a custom role they are read
+     * against the member's role in the organization they are working in; on a platform role they reach every
+     * organization (support holding media-view reads every organization's library).
      */
-    public const STORE = [
-        'store-update',
+    public const ORGANIZATION = [
+        'organization-update',
         'member-view', 'member-invite', 'member-update', 'member-remove',
         'role-view', 'role-store', 'role-update', 'role-destroy',
         'screen-view', 'screen-store', 'screen-update', 'screen-destroy', 'screen-playlist',
@@ -23,36 +23,36 @@ class Permission extends Model
     ];
 
     /**
-     * Platform permissions: accounts, stores, channels and the activity log. On a platform role they
-     * reach every store. A store's role may carry the ones in STORE_SCOPED too, and there they reach
-     * that one store and nothing past it. Accounts are the platform's alone (owner's rule, 2026-09-17:
-     * a store's people are its Members page).
+     * Platform permissions: accounts, organizations, channels and the activity log. On a platform role they
+     * reach every organization. An organization's role may carry the ones in ORGANIZATION_SCOPED too, and there they reach
+     * that one organization and nothing past it. Accounts are the platform's alone (owner's rule, 2026-09-17:
+     * an organization's people are its Members page).
      */
     public const PLATFORM = [
         'user-view', 'user-destroy',
-        'store-view', 'store-store', 'store-destroy',
+        'organization-view', 'organization-store', 'organization-destroy',
         'channel-view', 'channel-store', 'channel-update', 'channel-destroy',
         'activity-view', 'activity-destroy',
     ];
 
     /**
-     * The platform permissions that also work inside a store, for that store alone (owner's rule,
-     * 2026-09-16: the super admin decides who holds what, and a store's people work within their store):
+     * The platform permissions that also work inside an organization, for that organization alone (owner's rule,
+     * 2026-09-16: the super admin decides who holds what, and an organization's people work within their organization):
      *
-     *  - store-view, store-store, store-destroy — the Stores tab of Settings for the store they work in
-     *    (owner's rule, 2026-09-17: turning View Stores off hides it), a new store they open there and own,
-     *    and deleting that store;
-     *  - channel-* — the store's own channels, for its own screens;
-     *  - activity-view — this store's history.
+     *  - organization-view, organization-store, organization-destroy — the Organizations tab of Settings for the organization they work in
+     *    (owner's rule, 2026-09-17: turning View Organizations off hides it), a new organization they open there and own,
+     *    and deleting that organization;
+     *  - channel-* — the organization's own channels, for its own screens;
+     *  - activity-view — this organization's history.
      *
-     * Not among them: user-view and user-destroy (accounts are the platform's; a store's people are its Members
-     * page), and activity-destroy (yearly maintenance drops a whole year of every store's history). Nor is there any
-     * permission to change or delete what the platform shares with every shop's Ad Builder — its ads and its files:
-     * a shop sees them, uses them and copies the ads, and only above the stores are they changed or deleted (owner,
+     * Not among them: user-view and user-destroy (accounts are the platform's; an organization's people are its Members
+     * page), and activity-destroy (yearly maintenance drops a whole year of every organization's history). Nor is there any
+     * permission to change or delete what the platform shares with every organization's Ad Builder — its ads and its files:
+     * an organization sees them, uses them and copies the ads, and only above the organizations are they changed or deleted (owner,
      * 2026-10-01: "srif delete nahi kar sakta ha ... permission hata do").
      */
-    public const STORE_SCOPED = [
-        'store-view', 'store-store', 'store-destroy',
+    public const ORGANIZATION_SCOPED = [
+        'organization-view', 'organization-store', 'organization-destroy',
         'channel-view', 'channel-store', 'channel-update', 'channel-destroy',
         'activity-view',
     ];
@@ -68,7 +68,7 @@ class Permission extends Model
 
     /** The label of every permission the application ships with. */
     public const LABELS = [
-        'store-update' => 'Update Organization Details',
+        'organization-update' => 'Update Organization Details',
         'member-view' => 'View Members',
         'member-invite' => 'Invite Members',
         'member-update' => 'Change Member Roles',
@@ -96,9 +96,9 @@ class Permission extends Model
         'ad-destroy' => 'Delete Ads',
         'user-view' => 'View Accounts',
         'user-destroy' => 'Delete Accounts',
-        'store-view' => 'View Organizations',
-        'store-store' => 'Create Organizations',
-        'store-destroy' => 'Delete Organizations',
+        'organization-view' => 'View Organizations',
+        'organization-store' => 'Create Organizations',
+        'organization-destroy' => 'Delete Organizations',
         'channel-view' => 'View Channels',
         'channel-store' => 'Create Channels',
         'channel-update' => 'Update Channels',
@@ -121,10 +121,10 @@ class Permission extends Model
             ->withTimestamps();
     }
 
-    /** Whether a store's role may carry the named permission. One made on the Permissions page may not. */
-    public static function belongsToStores(string $name): bool
+    /** Whether an organization's role may carry the named permission. One made on the Permissions page may not. */
+    public static function belongsToOrganizations(string $name): bool
     {
-        return in_array($name, self::STORE, true) || in_array($name, self::STORE_SCOPED, true);
+        return in_array($name, self::ORGANIZATION, true) || in_array($name, self::ORGANIZATION_SCOPED, true);
     }
 
     /** Human-readable label, falling back to the raw permission name when unset. */

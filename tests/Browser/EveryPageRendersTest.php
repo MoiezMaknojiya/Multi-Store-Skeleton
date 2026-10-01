@@ -3,9 +3,9 @@
 namespace Tests\Browser;
 
 use App\Models\Channel;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Str;
 use Laravel\Dusk\Browser;
@@ -26,10 +26,10 @@ class EveryPageRendersTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    public function test_every_page_above_the_stores_renders_with_a_clean_console(): void
+    public function test_every_page_above_the_organizations_renders_with_a_clean_console(): void
     {
         $admin = $this->seedSuperAdmin();
-        Store::factory()->create(['name' => 'Alpha Mart']);
+        Organization::factory()->create(['name' => 'Alpha Mart']);
         // One of the platform's own channels, so the page of the ads it carries has one to open.
         $channel = Channel::factory()->create(['name' => 'GAMA Wholesale']);
 
@@ -40,7 +40,7 @@ class EveryPageRendersTest extends DuskTestCase
             $this->walk($browser, [
                 '/dashboard',
                 '/users',
-                '/stores',
+                '/organizations',
                 '/permissions',
                 '/roles',
                 '/activity',
@@ -55,26 +55,26 @@ class EveryPageRendersTest extends DuskTestCase
         });
     }
 
-    public function test_every_page_inside_a_store_renders_with_a_clean_console(): void
+    public function test_every_page_inside_a_organization_renders_with_a_clean_console(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
 
-        // A custom role of this store holding everything a store's role may hold, so no page is
+        // A custom role of this organization holding everything an organization's role may hold, so no page is
         // skipped for want of a permission — the Owner role itself carries no channel permissions.
-        $owner = $this->storeMember($store, [
-            ...Permission::STORE, 'store-view', 'store-store', 'store-destroy',
+        $owner = $this->organizationMember($organization, [
+            ...Permission::ORGANIZATION, 'organization-view', 'organization-store', 'organization-destroy',
             'channel-view', 'channel-store', 'channel-update', 'channel-destroy', 'activity-view',
         ], 'owner@example.com', 'Everything');
 
-        $screen = Screen::factory()->create(['store_id' => $store->id, 'name' => 'Deli TV']);
-        // The store's own channel: inside a store only those are within reach.
-        $channel = Channel::factory()->create(['store_id' => $store->id, 'name' => 'Alpha Promos']);
+        $screen = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Deli TV']);
+        // The organization's own channel: inside an organization only those are within reach.
+        $channel = Channel::factory()->create(['organization_id' => $organization->id, 'name' => 'Alpha Promos']);
 
-        $this->browse(function (Browser $browser) use ($owner, $store, $screen, $channel) {
+        $this->browse(function (Browser $browser) use ($owner, $organization, $screen, $channel) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $this->walk($browser, [
                 '/dashboard',
@@ -90,21 +90,21 @@ class EveryPageRendersTest extends DuskTestCase
                 '/members',
                 '/roles',
                 '/activity',
-                '/settings/store',
+                '/settings/organization',
                 '/profile',
             ]);
         });
     }
 
     /**
-     * A store the platform has paused, as its own people see it, and the app's own error page (owner, 2026-09-30):
+     * An organization the platform has paused, as its own people see it, and the app's own error page (owner, 2026-09-30):
      * named, one heading, every control with a name — the error page with no Alpine and no built file of its own.
      */
-    public function test_a_paused_store_and_an_error_page_render_named(): void
+    public function test_a_paused_organization_and_an_error_page_render_named(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart', 'is_active' => false]);
-        $owner = $this->storeMember($store);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart', 'is_active' => false]);
+        $owner = $this->organizationMember($organization);
 
         $this->browse(function (Browser $browser) use ($owner) {
             $this->freshSession($browser);

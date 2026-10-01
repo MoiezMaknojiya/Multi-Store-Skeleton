@@ -3,10 +3,10 @@
 use App\Models\BuilderAd;
 use App\Models\Daypart;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\ScheduleRule;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Services\ScheduleResolver;
 use Carbon\CarbonImmutable;
 
@@ -54,12 +54,12 @@ function resolveAt(Screen $screen, string $localMoment): array
 }
 
 beforeEach(function () {
-    $this->store = Store::factory()->create();
+    $this->organization = Organization::factory()->create();
     $this->screen = Screen::factory()->create([
-        'store_id' => $this->store->id,
+        'organization_id' => $this->organization->id,
         'timezone' => 'America/Chicago',
     ]);
-    $this->poster = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Poster']);
+    $this->poster = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Poster']);
 });
 
 test('an unscheduled item plays around the clock', function () {
@@ -75,9 +75,9 @@ test('an unscheduled item plays around the clock', function () {
 
 test('an hour nothing is scheduled for goes black, not to "No content"', function () {
     // The screen has a playlist; it is simply not this item's turn. "No content"
-    // across a shop's television at three in the morning reads as a fault.
+    // across an organization's television at three in the morning reads as a fault.
     place($this->screen, $this->poster, [
-        'daypart_id' => Daypart::factory()->between('11:00', '15:00')->create(['store_id' => $this->store->id])->id,
+        'daypart_id' => Daypart::factory()->between('11:00', '15:00')->create(['organization_id' => $this->organization->id])->id,
     ]);
 
     $quiet = resolveAt($this->screen, '2026-03-20 03:00');
@@ -102,7 +102,7 @@ test('an empty playlist is NOT blank — that screen is waiting to be given some
 });
 
 test('an item plays only on the days and at the times its rule allows', function () {
-    $lunch = Daypart::factory()->between('11:00', '15:00')->create(['store_id' => $this->store->id]);
+    $lunch = Daypart::factory()->between('11:00', '15:00')->create(['organization_id' => $this->organization->id]);
 
     place($this->screen, $this->poster, [
         'recurrence_type' => ScheduleRule::WEEKLY,
@@ -117,8 +117,8 @@ test('an item plays only on the days and at the times its rule allows', function
 });
 
 test('an item plays if ANY of its rules says yes', function () {
-    $lunch = Daypart::factory()->between('11:00', '15:00')->create(['store_id' => $this->store->id]);
-    $evening = Daypart::factory()->between('16:00', '20:00')->create(['store_id' => $this->store->id]);
+    $lunch = Daypart::factory()->between('11:00', '15:00')->create(['organization_id' => $this->organization->id]);
+    $evening = Daypart::factory()->between('16:00', '20:00')->create(['organization_id' => $this->organization->id]);
 
     $item = place($this->screen, $this->poster, [
         'starts_on' => '2026-03-20', 'ends_on' => '2026-03-22', 'daypart_id' => $evening->id,
@@ -139,7 +139,7 @@ test('an item plays if ANY of its rules says yes', function () {
 });
 
 test('an Ad Builder page taken off the screens never plays, however welcoming its rule is', function () {
-    $ad = BuilderAd::factory()->published()->create(['store_id' => $this->store->id, 'name' => 'Eid offer']);
+    $ad = BuilderAd::factory()->published()->create(['organization_id' => $this->organization->id, 'name' => 'Eid offer']);
 
     place($this->screen, $ad->media, [
         'recurrence_type' => ScheduleRule::WEEKLY,
@@ -156,7 +156,7 @@ test('an Ad Builder page taken off the screens never plays, however welcoming it
 });
 
 test('with nothing eligible the screen shows its default media instead of black', function () {
-    $holding = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Welcome']);
+    $holding = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Welcome']);
     $this->screen->update(['default_media_id' => $holding->id]);
 
     place($this->screen, $this->poster, [
@@ -172,7 +172,7 @@ test('with nothing eligible the screen shows its default media instead of black'
 });
 
 test('an empty playlist falls back the same way a schedule gap does', function () {
-    $holding = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Welcome']);
+    $holding = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Welcome']);
     $this->screen->update(['default_media_id' => $holding->id]);
 
     expect(resolveAt($this->screen, '2026-03-20 12:00')['fallback']?->id)->toBe($holding->id);
@@ -180,7 +180,7 @@ test('an empty playlist falls back the same way a schedule gap does', function (
 
 test('an Ad Builder page taken off the screens is not a default', function () {
     // Unpublishing takes an ad off every screen, the holding picture's place included.
-    $ad = BuilderAd::factory()->published()->create(['store_id' => $this->store->id, 'name' => 'Old welcome']);
+    $ad = BuilderAd::factory()->published()->create(['organization_id' => $this->organization->id, 'name' => 'Old welcome']);
     $this->screen->update(['default_media_id' => $ad->media_id]);
 
     expect(resolveAt($this->screen, '2026-03-20 12:00')['fallback']?->id)->toBe($ad->media_id);
@@ -203,16 +203,16 @@ test('with no default set a gap is simply black', function () {
 });
 
 test('two screens in different timezones answer differently at the same instant', function () {
-    $lunch = Daypart::factory()->between('11:00', '15:00')->create(['store_id' => $this->store->id]);
+    $lunch = Daypart::factory()->between('11:00', '15:00')->create(['organization_id' => $this->organization->id]);
 
-    $chicago = Screen::factory()->create(['store_id' => $this->store->id, 'timezone' => 'America/Chicago']);
-    $london = Screen::factory()->create(['store_id' => $this->store->id, 'timezone' => 'Europe/London']);
+    $chicago = Screen::factory()->create(['organization_id' => $this->organization->id, 'timezone' => 'America/Chicago']);
+    $london = Screen::factory()->create(['organization_id' => $this->organization->id, 'timezone' => 'Europe/London']);
 
     place($chicago, $this->poster, ['daypart_id' => $lunch->id]);
     place($london, $this->poster, ['daypart_id' => $lunch->id]);
 
     // One instant: noon in Chicago, five in the evening in London. The rule is wall
-    // clock, so the same "11:00 to 15:00" means different moments in the two shops.
+    // clock, so the same "11:00 to 15:00" means different moments in the two organizations.
     $instant = CarbonImmutable::parse('2026-03-20 12:00', 'America/Chicago');
     $resolver = app(ScheduleResolver::class);
 
@@ -223,7 +223,7 @@ test('two screens in different timezones answer differently at the same instant'
 test('a retired daypart keeps working where it is already in use', function () {
     // Retiring takes a window out of the pickers; it must not stop the rules that
     // already point at it.
-    $lunch = Daypart::factory()->between('11:00', '15:00')->retired()->create(['store_id' => $this->store->id]);
+    $lunch = Daypart::factory()->between('11:00', '15:00')->retired()->create(['organization_id' => $this->organization->id]);
     place($this->screen, $this->poster, ['daypart_id' => $lunch->id]);
 
     expect(resolveAt($this->screen, '2026-03-20 12:00')['items'])->toHaveCount(1);

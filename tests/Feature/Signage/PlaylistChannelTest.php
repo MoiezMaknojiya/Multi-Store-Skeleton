@@ -3,21 +3,21 @@
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\ScheduleRule;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Support\Facades\Storage;
 
 /*
 |--------------------------------------------------------------------------
-| A shop putting a channel on one of its screens
+| An organization putting a channel on one of its screens
 |--------------------------------------------------------------------------
 |
 | One line, which plays whatever the channel is running that day, exactly where it
-| stands. The platform's channels are offered to every shop, and adding one is the
-| shop's own choice (owner's decision). A store's own channels are offered to that
-| store alone — see StoreChannelsTest.
+| stands. The platform's channels are offered to every organization, and adding one is the
+| organization's own choice (owner's decision). An organization's own channels are offered to that
+| organization alone — see OrganizationChannelsTest.
 |
 */
 
@@ -25,20 +25,20 @@ beforeEach(function () {
     // Noon on the screens' default clock (Chicago).
     $this->travelTo('2026-10-10 17:00:00');
 
-    $this->store = Store::factory()->create();
-    $this->owner = createStoreUser($this->store, ['screen-view', 'screen-playlist']);
-    $this->screen = Screen::factory()->create(['store_id' => $this->store->id]);
-    $this->poster = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Burger deal']);
+    $this->organization = Organization::factory()->create();
+    $this->owner = createOrganizationUser($this->organization, ['screen-view', 'screen-playlist']);
+    $this->screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
+    $this->poster = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Burger deal']);
 
     $this->gama = Channel::factory()->create(['name' => 'GAMA']);
     ChannelAd::factory()->create(['channel_id' => $this->gama->id, 'title' => 'Monster', 'duration_seconds' => 10, 'position' => 0]);
     ChannelAd::factory()->create(['channel_id' => $this->gama->id, 'title' => 'Coke', 'duration_seconds' => 15, 'position' => 1]);
 });
 
-/** Save a playlist as the shop owner, from the version the screen holds right now. */
+/** Save a playlist as the organization owner, from the version the screen holds right now. */
 function saveOwnersPlaylist($test, array $items)
 {
-    return $test->actingAs($test->owner)->withSession(['current_store_id' => $test->store->id])
+    return $test->actingAs($test->owner)->withSession(['current_organization_id' => $test->organization->id])
         ->putJson("/screens/{$test->screen->id}/playlist", [
             'items' => $items,
             'version' => $test->screen->fresh()->playlistFingerprint(),
@@ -51,13 +51,13 @@ function saveOwnersPlaylist($test, array $items)
 |--------------------------------------------------------------------------
 */
 
-test("every one of the platform's channels is offered to every shop, described by what runs on the screen today", function () {
+test("every one of the platform's channels is offered to every organization, described by what runs on the screen today", function () {
     ChannelAd::factory()->running(null, '2026-10-09')->create(['channel_id' => $this->gama->id, 'title' => 'Over']);
     $lottery = Channel::factory()->paused()->create(['name' => 'Lottery']);
     ChannelAd::factory()->create(['channel_id' => $lottery->id]);
     Channel::factory()->create(['name' => 'Thanksgiving']);   // no ads yet
 
-    $channels = collect($this->actingAs($this->owner)->withSession(['current_store_id' => $this->store->id])
+    $channels = collect($this->actingAs($this->owner)->withSession(['current_organization_id' => $this->organization->id])
         ->getJson("/screens/{$this->screen->id}/available-channels")->assertOk()->json('channels'));
 
     expect($channels->pluck('title')->all())->toBe(['GAMA', 'Lottery', 'Thanksgiving']);
@@ -73,33 +73,33 @@ test("every one of the platform's channels is offered to every shop, described b
     expect($channels->firstWhere('title', 'Thanksgiving')['ads_count'])->toBe(0);
 });
 
-test('a shop with no channels at all is simply offered an empty list', function () {
-    // The state every existing shop is in the day this ships: the box hides itself
+test('an organization with no channels at all is simply offered an empty list', function () {
+    // The state every existing organization is in the day this ships: the box hides itself
     // (x-show on channels.length), and nothing on the page changes for them.
     Channel::query()->delete();
 
-    $channels = $this->actingAs($this->owner)->withSession(['current_store_id' => $this->store->id])
+    $channels = $this->actingAs($this->owner)->withSession(['current_organization_id' => $this->organization->id])
         ->getJson("/screens/{$this->screen->id}/available-channels")->assertOk()->json('channels');
 
     expect($channels)->toBe([]);
 });
 
 test('the channel list answers to the playlist permission alone', function () {
-    $viewer = createStoreUser($this->store, ['screen-view'], 'Viewer');
+    $viewer = createOrganizationUser($this->organization, ['screen-view'], 'Viewer');
 
-    $this->actingAs($viewer)->withSession(['current_store_id' => $this->store->id])
+    $this->actingAs($viewer)->withSession(['current_organization_id' => $this->organization->id])
         ->getJson("/screens/{$this->screen->id}/available-channels")->assertForbidden();
 });
 
-test('a screen in another shop is still out of reach', function () {
-    $theirs = Screen::factory()->create(['store_id' => Store::factory()->create()->id]);
+test('a screen in another organization is still out of reach', function () {
+    $theirs = Screen::factory()->create(['organization_id' => Organization::factory()->create()->id]);
 
-    $this->actingAs($this->owner)->withSession(['current_store_id' => $this->store->id])
+    $this->actingAs($this->owner)->withSession(['current_organization_id' => $this->organization->id])
         ->getJson("/screens/{$theirs->id}/available-channels")->assertNotFound();
 });
 
 test('the playlist page carries the Channels box', function () {
-    $this->actingAs($this->owner)->withSession(['current_store_id' => $this->store->id])
+    $this->actingAs($this->owner)->withSession(['current_organization_id' => $this->organization->id])
         ->get("/screens/{$this->screen->id}")->assertOk()->assertSee('channel-picker', false);
 });
 
@@ -128,7 +128,7 @@ test('a channel goes on a playlist as one line, with no length of its own', func
     ]);
 });
 
-test('the order the shop arranged is the order that is stored, whichever kind of line comes first', function () {
+test('the order the organization arranged is the order that is stored, whichever kind of line comes first', function () {
     // A channel line carries no media_id, and a validated array is rebuilt rule by rule
     // rather than row by row — so this exact arrangement once came back to the screen
     // the other way round. The saved response has to agree with the request, every time.
@@ -167,7 +167,7 @@ test('a line that claims to be both is refused', function () {
 
 test('an id of zero is refused like any other bad id, not left to the database', function () {
     // Zero is neither a file nor "no file": read as the second, it walked straight past
-    // the store wall and died on a foreign key with an error nobody could read.
+    // the organization wall and died on a foreign key with an error nobody could read.
     saveOwnersPlaylist($this, [['media_id' => 0, 'duration_seconds' => 10]])
         ->assertStatus(422)->assertJsonValidationErrors('items.0.media_id');
 
@@ -197,7 +197,7 @@ test('a paused channel reads as paused on the playlist, not as empty', function 
     $this->gama->update(['is_active' => false]);
     PlaylistItem::create(['screen_id' => $this->screen->id, 'channel_id' => $this->gama->id, 'position' => 0]);
 
-    $line = $this->actingAs($this->owner)->withSession(['current_store_id' => $this->store->id])
+    $line = $this->actingAs($this->owner)->withSession(['current_organization_id' => $this->organization->id])
         ->getJson("/screens/{$this->screen->id}/playlist")->assertOk()->json('items.0');
 
     expect($line['channel_active'])->toBeFalse();
@@ -250,8 +250,8 @@ test('deleting a file takes its own line and leaves the channel line standing', 
         ['channel_id' => $this->gama->id],
     ])->assertOk();
 
-    $keeper = createStoreUser($this->store, ['media-destroy'], 'Media Keeper');
-    $this->actingAs($keeper)->withSession(['current_store_id' => $this->store->id])
+    $keeper = createOrganizationUser($this->organization, ['media-destroy'], 'Media Keeper');
+    $this->actingAs($keeper)->withSession(['current_organization_id' => $this->organization->id])
         ->deleteJson("/media/{$this->poster->id}")->assertOk();
 
     $lines = PlaylistItem::where('screen_id', $this->screen->id)->get();
@@ -262,8 +262,8 @@ test('deleting a file takes its own line and leaves the channel line standing', 
 test('deleting the screen takes every line with it, channels included', function () {
     saveOwnersPlaylist($this, [['channel_id' => $this->gama->id]])->assertOk();
 
-    $keeper = createStoreUser($this->store, ['screen-destroy'], 'Screen Keeper');
-    $this->actingAs($keeper)->withSession(['current_store_id' => $this->store->id])
+    $keeper = createOrganizationUser($this->organization, ['screen-destroy'], 'Screen Keeper');
+    $this->actingAs($keeper)->withSession(['current_organization_id' => $this->organization->id])
         ->deleteJson("/screens/{$this->screen->id}")->assertOk();
 
     expect(PlaylistItem::count())->toBe(0);
@@ -272,7 +272,7 @@ test('deleting the screen takes every line with it, channels included', function
 });
 
 test('copying a playlist carries its channel lines and their schedules', function () {
-    $target = Screen::factory()->create(['store_id' => $this->store->id]);
+    $target = Screen::factory()->create(['organization_id' => $this->organization->id]);
 
     saveOwnersPlaylist($this, [[
         'channel_id' => $this->gama->id,

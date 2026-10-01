@@ -4,7 +4,7 @@ namespace Database\Factories;
 
 use App\Models\BuilderAd;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -17,14 +17,14 @@ class BuilderAdFactory extends Factory
     public function definition(): array
     {
         return [
-            'store_id' => Store::factory(),
+            'organization_id' => Organization::factory(),
             'name' => fake()->words(2, true).' ad',
             'document' => BuilderAd::blankDocument(),
         ];
     }
 
     /**
-     * Published and unchanged since, the way AdPublisher leaves it: its page is an html row of its store's
+     * Published and unchanged since, the way AdPublisher leaves it: its page is an html row of its organization's
      * library, and the version on the screens is kept — this very design and name.
      */
     public function published(): static
@@ -33,7 +33,7 @@ class BuilderAdFactory extends Factory
 
         return $this->state(fn () => [
             'media_id' => fn (array $attributes) => Media::factory()->adPage()->create([
-                'store_id' => $attributes['store_id'],
+                'organization_id' => $attributes['organization_id'],
                 'title' => $attributes['name'],
                 // The length its design says, as AdPublisher writes it (Media::ownLength()) — none for a design
                 // with no length of its own (BuilderAd::hasOwnLength), whose lines keep their seconds.

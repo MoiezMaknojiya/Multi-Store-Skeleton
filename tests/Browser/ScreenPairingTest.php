@@ -2,10 +2,10 @@
 
 namespace Tests\Browser;
 
+use App\Models\Organization;
 use App\Models\PairingRequest;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Models\User;
 use App\Services\DevicePairing;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -17,24 +17,24 @@ class ScreenPairingTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    /** An owner who can do everything with screens inside one store. */
-    private function makeOwner(Store $store): User
+    /** An owner who can do everything with screens inside one organization. */
+    private function makeOwner(Organization $organization): User
     {
         $this->seedSuperAdmin();
 
-        return $this->storeMember($store, ['screen-view', 'screen-store', 'screen-update', 'screen-destroy']);
+        return $this->organizationMember($organization, ['screen-view', 'screen-store', 'screen-update', 'screen-destroy']);
     }
 
     /**
      * The whole handshake with two real browsers: a TV showing a code, and the
-     * shop owner's own panel adopting it. No admin, no typing on the TV.
+     * organization owner's own panel adopting it. No admin, no typing on the TV.
      */
     public function test_a_tv_shows_a_code_and_the_owner_pairs_it_from_their_own_panel(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->makeOwner($store);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->makeOwner($organization);
 
-        $this->browse(function (Browser $tv, Browser $panel) use ($owner, $store) {
+        $this->browse(function (Browser $tv, Browser $panel) use ($owner, $organization) {
             // -- The TV boots with nothing and asks to be adopted ---------------
             // Guarantee the "with nothing" rather than hoping the previous test
             // tidied up: Dusk keeps its first browser — this one — open from one test
@@ -68,7 +68,7 @@ class ScreenPairingTest extends DuskTestCase
             // -- The owner types it into their own dashboard --------------------
             $this->freshSession($panel);
             $panel->loginAs($owner);
-            $this->switchToStore($panel, $store);
+            $this->switchToOrganization($panel, $organization);
 
             $panel->visit('/screens');
             $this->waitForAlpine($panel);
@@ -84,11 +84,11 @@ class ScreenPairingTest extends DuskTestCase
             $this->waitForModalClosed($panel, '@screen-pair-form');
 
             $screen = Screen::where('name', 'Counter TV')->firstOrFail();
-            $this->assertSame($store->id, $screen->store_id);
+            $this->assertSame($organization->id, $screen->organization_id);
             $this->assertSame('portrait', $screen->orientation);
 
-            // The device id shows under the name, so a television standing in a
-            // shop can be matched to its row — the player prints the same value on
+            // The device id shows under the name, so a television standing in an
+            // organization can be matched to its row — the player prints the same value on
             // its own pairing screen. Its value is the point, so assert the value.
             $panel->assertSeeIn('@screen-uuid-'.$screen->id, Str::afterLast($screen->device_uuid, '-'));
             $this->assertSame($owner->id, $screen->paired_by);
@@ -116,19 +116,19 @@ class ScreenPairingTest extends DuskTestCase
      */
     public function test_every_button_on_the_screens_page(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->makeOwner($store);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->makeOwner($organization);
 
-        $screen = Screen::factory()->create(['store_id' => $store->id, 'name' => 'Counter TV']);
-        Screen::factory()->create(['store_id' => $store->id, 'name' => 'Window Board']);
+        $screen = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Counter TV']);
+        Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Window Board']);
 
         // A second TV is already waiting, for the replace-device flow.
         $replacementCode = app(DevicePairing::class)->register()['code'];
 
-        $this->browse(function (Browser $browser) use ($owner, $store, $screen, $replacementCode) {
+        $this->browse(function (Browser $browser) use ($owner, $organization, $screen, $replacementCode) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/screens');
             $this->waitForAlpine($browser);
@@ -205,27 +205,27 @@ class ScreenPairingTest extends DuskTestCase
         });
     }
 
-    /** A screen paired in one store is invisible from another store the same
+    /** A screen paired in one organization is invisible from another organization the same
      *  person also works in — the same wall as media. */
-    public function test_screens_are_walled_per_store(): void
+    public function test_screens_are_walled_per_organization(): void
     {
-        $alpha = Store::factory()->create(['name' => 'Alpha Mart']);
-        $beta = Store::factory()->create(['name' => 'Beta Store']);
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $beta = Organization::factory()->create(['name' => 'Beta Organization']);
         $owner = $this->makeOwner($alpha);
-        $owner->stores()->attach($beta->id, ['role_id' => Role::starter(Role::OWNER)->id]);
+        $owner->organizations()->attach($beta->id, ['role_id' => Role::starter(Role::OWNER)->id]);
 
-        Screen::factory()->create(['store_id' => $alpha->id, 'name' => 'Alpha Only TV']);
+        Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Alpha Only TV']);
 
         $this->browse(function (Browser $browser) use ($owner, $alpha, $beta) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
 
-            $this->switchToStore($browser, $alpha);
+            $this->switchToOrganization($browser, $alpha);
             $browser->visit('/screens');
             $this->waitForAlpine($browser);
             $browser->waitForText('Alpha Only TV');
 
-            $this->switchToStore($browser, $beta);
+            $this->switchToOrganization($browser, $beta);
             $browser->visit('/screens');
             $this->waitForAlpine($browser);
             $browser->waitForText('No screens yet.')

@@ -11,7 +11,7 @@ use App\Models\ChannelAd;
 use App\Models\Media;
 use App\Models\PlaylistItem;
 use App\Services\MediaStorage;
-use App\Services\StoreStorage;
+use App\Services\OrganizationStorage;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -27,7 +27,7 @@ use Illuminate\Validation\ValidationException;
  *
  * An ad is a row of a media library held by id — the channel keeps no files of its own. It comes from the
  * library, from the Ad Builder (a published ad IS a library row), or from a fresh upload, which joins the
- * channel's library first: the shop's for a shop's channel, the platform's for the platform's. Taking an ad
+ * channel's library first: the organization's for an organization's channel, the platform's for the platform's. Taking an ad
  * out leaves its file in the library.
  *
  * Adding, editing, reordering and removing an ad are all EDITS of the channel, so all of them answer to
@@ -37,12 +37,12 @@ class ChannelAdController extends Controller implements HasMiddleware
 {
     use HandlesCrudData;
 
-    public function __construct(private readonly MediaStorage $storage, private readonly StoreStorage $quota) {}
+    public function __construct(private readonly MediaStorage $storage, private readonly OrganizationStorage $quota) {}
 
     /**
      * Every action here reaches one channel, and only a channel within reach — checked before anything else
      * runs, so an upload is not even validated against a channel out of reach. Reading its ads is open to
-     * every channel the person may look at (a shop reads the platform's channels too); every change needs a
+     * every channel the person may look at (an organization reads the platform's channels too); every change needs a
      * channel they may manage (Channel::visibleTo), and anything else is not found.
      *
      * @return array<int, Closure>
@@ -68,12 +68,12 @@ class ChannelAdController extends Controller implements HasMiddleware
     /** The channel's ads, in the order they play — and how full the library an upload here joins is. */
     public function index(Channel $channel): JsonResponse
     {
-        return response()->json(['ads' => $this->adsPayload($channel), 'storage' => $this->quota->summary($channel->store_id)]);
+        return response()->json(['ads' => $this->adsPayload($channel), 'storage' => $this->quota->summary($channel->organization_id)]);
     }
 
     /**
-     * The library rows this channel may show, for the Add-ad pickers: a shop's channel, that shop's library; the
-     * platform's channel, its own library by default or a shop's (`library`). `type=html` is the Ad Builder's
+     * The library rows this channel may show, for the Add-ad pickers: an organization's channel, that organization's library; the
+     * platform's channel, its own library by default or an organization's (`library`). `type=html` is the Ad Builder's
      * published ads, `type=files` the pictures and videos. A permission of its own reach: it does not need
      * `media-view`, so it answers with what a tile shows and nothing more — like the playlist's picker.
      */
@@ -91,8 +91,8 @@ class ChannelAdController extends Controller implements HasMiddleware
             ->when($channel->isPlatformChannel(),
                 fn (Builder $query) => ($filters['library'] ?? 'platform') === 'platform'
                     ? $query->platformOwned()
-                    : $query->where('store_id', (int) $filters['library']),
-                fn (Builder $query) => $query->where('store_id', $channel->store_id))
+                    : $query->where('organization_id', (int) $filters['library']),
+                fn (Builder $query) => $query->where('organization_id', $channel->organization_id))
             ->when($filters['type'] ?? null, fn (Builder $query, string $type) => $type === 'files'
                 ? $query->whereIn('type', [Media::TYPE_IMAGE, Media::TYPE_VIDEO])
                 : $query->where('type', $type));
@@ -122,8 +122,8 @@ class ChannelAdController extends Controller implements HasMiddleware
     {
         $validated = $request->validated();
 
-        // An upload joins the library first, in a transaction of its own under the shop's lock (StoreStorage) —
-        // inside this one, what the shop holds would be read as this transaction first saw it, not as it is now.
+        // An upload joins the library first, in a transaction of its own under the organization's lock (OrganizationStorage) —
+        // inside this one, what the organization holds would be read as this transaction first saw it, not as it is now.
         $uploaded = $request->hasFile('file') ? $this->uploadIntoLibrary($request, $channel) : null;
 
         $ad = DB::transaction(function () use ($request, $validated, $channel, $uploaded) {
@@ -152,7 +152,7 @@ class ChannelAdController extends Controller implements HasMiddleware
 
         $request->forgetFinishedUpload();
 
-        return response()->json(['message' => 'Ad added', 'ads' => $this->adsPayload($channel), 'storage' => $this->quota->summary($channel->store_id)]);
+        return response()->json(['message' => 'Ad added', 'ads' => $this->adsPayload($channel), 'storage' => $this->quota->summary($channel->organization_id)]);
     }
 
     /**
@@ -192,7 +192,7 @@ class ChannelAdController extends Controller implements HasMiddleware
 
         $request->forgetFinishedUpload();
 
-        return response()->json(['message' => 'Ad updated', 'ads' => $this->adsPayload($channel), 'storage' => $this->quota->summary($channel->store_id)]);
+        return response()->json(['message' => 'Ad updated', 'ads' => $this->adsPayload($channel), 'storage' => $this->quota->summary($channel->organization_id)]);
     }
 
     /** Take an ad out of the channel. Its file stays in its library. */
@@ -256,14 +256,14 @@ class ChannelAdController extends Controller implements HasMiddleware
     }
 
     /**
-     * A file uploaded inside a channel joins the channel's library first — the shop's for a shop's channel, the
+     * A file uploaded inside a channel joins the channel's library first — the organization's for an organization's channel, the
      * platform's for the platform's — exactly as an upload on the Media page does, and shows up there after.
      */
     private function uploadIntoLibrary(ChannelAdRequest $request, Channel $channel): Media
     {
         $media = $this->storage->addToLibrary(
             $request->file('file'),
-            $channel->store_id,
+            $channel->organization_id,
             $request->only(['duration_seconds', 'width', 'height', 'poster']),
             $request->validated('title'),
             auth()->id(),
@@ -298,7 +298,7 @@ class ChannelAdController extends Controller implements HasMiddleware
         $today = now();
 
         return ChannelAd::where('channel_id', $channel->id)
-            ->with(['media.store:id,name', 'media.builderAd'])
+            ->with(['media.organization:id,name', 'media.builderAd'])
             ->orderBy('position')
             ->orderBy('id')
             ->get()
@@ -317,8 +317,8 @@ class ChannelAdController extends Controller implements HasMiddleware
                 'own_length' => $ad->media?->ownLength(),
                 'starts_on' => $ad->starts_on?->toDateString(),
                 'ends_on' => $ad->ends_on?->toDateString(),
-                // Whose library the file is in — "Platform", or the shop's name.
-                'library' => $ad->media?->isPlatformOwned() ? 'Platform' : $ad->media?->store?->name,
+                // Whose library the file is in — "Platform", or the organization's name.
+                'library' => $ad->media?->isPlatformOwned() ? 'Platform' : $ad->media?->organization?->name,
                 // Against the server's own date: this list is read by one person at a
                 // desk, not by a screen standing in some other timezone.
                 'status' => $ad->statusOn($today),

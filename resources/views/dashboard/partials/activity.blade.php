@@ -1,4 +1,4 @@
-{{-- The last few entries of the activity log the person may read (the store's own inside a store), and the way to
+{{-- The last few entries of the activity log the person may read (the organization's own inside an organization), and the way to
      the whole log. --}}
 <section class="card" aria-labelledby="dashboard-activity-title" dusk="dashboard-activity">
     <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-gray-700">

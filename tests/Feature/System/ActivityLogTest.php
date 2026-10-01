@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\ActivityLog;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
@@ -20,9 +20,9 @@ function insertLogAt(string $createdAt, string $action = 'user.created'): void
 
 test('mutations write activity log entries with the actor snapshot', function () {
     Notification::fake();
-    $admin = createSuperAdmin(['store-store']);
+    $admin = createSuperAdmin(['organization-store']);
 
-    $this->actingAs($admin)->postJson('/stores', [
+    $this->actingAs($admin)->postJson('/organizations', [
         'name' => 'Logged Mart', 'street' => '1 Main St', 'city' => 'Austin', 'state' => 'TX',
         'zip_code' => '73301', 'country' => 'USA', 'owner_email' => 'owner@example.com',
     ])->assertCreated();
@@ -30,7 +30,7 @@ test('mutations write activity log entries with the actor snapshot', function ()
     $this->assertDatabaseHas('activity_logs', [
         'actor_id' => $admin->id,
         'actor_name' => $admin->name,
-        'action' => 'store.created',
+        'action' => 'organization.created',
     ]);
 });
 
@@ -40,18 +40,18 @@ test('the activity page and data need the activity-view permission', function ()
     $this->actingAs($admin)->get('/activity')->assertOk();
     $this->actingAs($admin)->getJson('/activity/data')->assertOk();
 
-    $store = Store::factory()->create();
-    $unauthorized = createStoreUser($store, ['user-view']);
+    $organization = Organization::factory()->create();
+    $unauthorized = createOrganizationUser($organization, ['user-view']);
 
     $this->actingAs($unauthorized)
-        ->withSession(['current_store_id' => $store->id])
+        ->withSession(['current_organization_id' => $organization->id])
         ->getJson('/activity/data')->assertForbidden();
 });
 
 test('login, permission changes, and self-account-deletion are all logged', function () {
     // Login through the real endpoint writes auth.login.
-    $store = Store::factory()->create();
-    $owner = createStoreUser($store, []);
+    $organization = Organization::factory()->create();
+    $owner = createOrganizationUser($organization, []);
     $this->post('/login', ['email' => $owner->email, 'password' => 'password'])->assertRedirect();
     $this->assertDatabaseHas('activity_logs', ['action' => 'auth.login', 'actor_id' => $owner->id]);
 
@@ -61,16 +61,16 @@ test('login, permission changes, and self-account-deletion are all logged', func
     $this->assertDatabaseHas('activity_logs', ['action' => 'permission.created', 'actor_id' => $admin->id]);
 
     // Self-deletion is logged, and takes the account alone.
-    $colleague = createStoreUser($store, []);
+    $colleague = createOrganizationUser($organization, []);
     $this->actingAs($owner)->delete('/profile', ['password' => 'password'])->assertRedirect('/');
     $this->assertDatabaseHas('activity_logs', ['action' => 'account.deleted']);
     $this->assertDatabaseMissing('users', ['id' => $owner->id]);
     $this->assertDatabaseHas('users', ['id' => $colleague->id]);
 });
 
-test('store switching and password reset via email link are logged', function () {
-    $store = Store::factory()->create();
-    $member = createStoreUser($store, []);
+test('organization switching and password reset via email link are logged', function () {
+    $organization = Organization::factory()->create();
+    $member = createOrganizationUser($organization, []);
 
     // Resetting a password through the email-link flow writes password.reset,
     // attributed to the user even though they are not authenticated yet.
@@ -87,12 +87,12 @@ test('store switching and password reset via email link are logged', function ()
         'actor_name' => $member->name,
     ]);
 
-    // Switching into a store writes store.switched.
-    $this->actingAs($member)->post('/stores/switch', ['store_id' => $store->id])->assertRedirect();
+    // Switching into an organization writes organization.switched.
+    $this->actingAs($member)->post('/organizations/switch', ['organization_id' => $organization->id])->assertRedirect();
     $this->assertDatabaseHas('activity_logs', [
-        'action' => 'store.switched',
+        'action' => 'organization.switched',
         'actor_id' => $member->id,
-        'subject_id' => $store->id,
+        'subject_id' => $organization->id,
     ]);
 });
 
@@ -184,12 +184,12 @@ test('partition status comes with activity-view, but maintenance needs activity-
 
 test('the activity listing returns entries newest first and survives actor deletion', function () {
     $admin = createSuperAdmin(['activity-view', 'user-destroy']);
-    $store = Store::factory()->create();
-    $member = createStoreUser($store, []);
+    $organization = Organization::factory()->create();
+    $member = createOrganizationUser($organization, []);
     $name = $member->name;
 
     // Something the soon-deleted person did…
-    $this->actingAs($member)->post('/stores/switch', ['store_id' => $store->id])->assertRedirect();
+    $this->actingAs($member)->post('/organizations/switch', ['organization_id' => $organization->id])->assertRedirect();
     $this->actingAs($admin)->deleteJson("/users/{$member->id}", ['password' => 'password'])->assertOk();
 
     $logs = collect($this->actingAs($admin)->getJson('/activity/data')->assertOk()->json('logs'));
@@ -197,8 +197,8 @@ test('the activity listing returns entries newest first and survives actor delet
     expect($logs->pluck('action')->first())->toBe('user.deleted');
     // …still names them after they are gone — and no longer points at their id, which a later account
     // could otherwise be mistaken for (on MySQL the partitioned log has no foreign key to empty it).
-    expect($logs->firstWhere('action', 'store.switched')['actor_name'])->toBe($name)
-        ->and(ActivityLog::where('action', 'store.switched')->value('actor_id'))->toBeNull();
+    expect($logs->firstWhere('action', 'organization.switched')['actor_name'])->toBe($name)
+        ->and(ActivityLog::where('action', 'organization.switched')->value('actor_id'))->toBeNull();
 });
 
 test('a long name or description is cut to its column instead of failing the action', function () {

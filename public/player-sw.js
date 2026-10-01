@@ -1,5 +1,5 @@
 /**
- * The player's service worker (docs/AD-BUILDER-SPEC.md §15): a television keeps playing when the shop's
+ * The player's service worker (docs/AD-BUILDER-SPEC.md §15): a television keeps playing when the organization's
  * internet drops.
  *
  * Plain ES5 at a fixed address — never built by Vite — so a set can update it in place. Registered by the

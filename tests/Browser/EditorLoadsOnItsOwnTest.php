@@ -2,7 +2,7 @@
 
 namespace Tests\Browser;
 
-use App\Models\Store;
+use App\Models\Organization;
 use Facebook\WebDriver\Chrome\ChromeDevToolsDriver;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
@@ -20,13 +20,13 @@ class EditorLoadsOnItsOwnTest extends DuskTestCase
     public function test_only_the_editors_page_fetches_the_editor_and_a_lost_chunk_is_said(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember($store, ['ad-view', 'ad-store', 'ad-update', 'media-view', 'screen-view'], 'designer@example.com', 'Designer');
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($organization, ['ad-view', 'ad-store', 'ad-update', 'media-view', 'screen-view'], 'designer@example.com', 'Designer');
 
-        $this->browse(function (Browser $browser) use ($designer, $store) {
+        $this->browse(function (Browser $browser) use ($designer, $organization) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             // Every other page runs without it.
             foreach (['/dashboard', '/media', '/screens', '/builder', '/builder/assets'] as $page) {

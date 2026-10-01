@@ -15,13 +15,13 @@ use Illuminate\Support\Facades\Storage;
 /**
  * A network advertisement — the platform's own content, sold to a brand.
  *
- * Deliberately NOT a `media` row. That table is the store's library: `store_id` is
- * not nullable, every upload is stamped with a store, and `Media::visibleTo` scopes
- * on that store alone. A network ad belongs to no shop, so putting it there would
- * mean a nullable owner or a fake store — a hole in the wall the whole app rests
+ * Deliberately NOT a `media` row. That table is the organization's library: `organization_id` is
+ * not nullable, every upload is stamped with an organization, and `Media::visibleTo` scopes
+ * on that organization alone. A network ad belongs to no organization, so putting it there would
+ * mean a nullable owner or a fake organization — a hole in the wall the whole app rests
  * on, in exchange for saving one table. Only the upload plumbing is shared.
  *
- * A campaign has no store and therefore no `visibleTo`: nobody working inside a shop can see or reach one.
+ * A campaign has no organization and therefore no `visibleTo`: nobody working inside an organization can see or reach one.
  * It sits behind the hand-written `campaign-manage` gate — the super admin's alone, never a permission row
  * (owner's decision).
  */
@@ -32,7 +32,7 @@ class Campaign extends Model
     /**
      * How often a television breaks for advertising, in seconds, counted from the
      * moment the player started — not from the clock. The owner's choice: a set
-     * switched on at 10:40 breaks at 11:40, and two shops that booted at different
+     * switched on at 10:40 breaks at 11:40, and two organizations that booted at different
      * times do not all cut to the same advert at once.
      */
     public static function breakEverySeconds(): int

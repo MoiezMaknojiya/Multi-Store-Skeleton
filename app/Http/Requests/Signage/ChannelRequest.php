@@ -13,8 +13,8 @@ use Illuminate\Foundation\Http\FormRequest;
 class ChannelRequest extends FormRequest
 {
     /**
-     * A channel is changed only from where it can be seen: another store's channel, or the platform's from
-     * inside a store, is not found (404) — before its name is ever checked against anything.
+     * A channel is changed only from where it can be seen: another organization's channel, or the platform's from
+     * inside an organization, is not found (404) — before its name is ever checked against anything.
      */
     public function authorize(): bool
     {
@@ -45,23 +45,23 @@ class ChannelRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // A store's Channels box lists the platform's channels and the store's own, so a name has to
+            // An organization's Channels box lists the platform's channels and the organization's own, so a name has to
             // tell the channel apart from every other one in that list.
             // `bail` because the closure below assumes the rules before it held: a name posted as an
             // array (name[]=x) would otherwise reach the query and bind an array as a string.
             'name' => ['bail', 'required', 'string', 'max:120', function (string $attribute, mixed $value, \Closure $fail) {
-                $storeId = $this->channelStoreId();
+                $organizationId = $this->channelOrganizationId();
 
                 $taken = Channel::query()
                     ->where('name', $value)
                     ->when($this->route('channel'), fn (Builder $query, Channel $channel) => $query->whereKeyNot($channel->id))
-                    ->where(fn (Builder $query) => $storeId === null
-                        ? $query->whereNull('store_id')
-                        : $query->whereNull('store_id')->orWhere('store_id', $storeId))
+                    ->where(fn (Builder $query) => $organizationId === null
+                        ? $query->whereNull('organization_id')
+                        : $query->whereNull('organization_id')->orWhere('organization_id', $organizationId))
                     ->exists();
 
                 if ($taken) {
-                    $fail($storeId === null
+                    $fail($organizationId === null
                         ? 'There is already a channel with this name. Every organization sees the name, so it has to be different.'
                         : 'There is already a channel with this name in this organization\'s list. Choose a different name.');
                 }
@@ -72,18 +72,18 @@ class ChannelRequest extends FormRequest
     }
 
     /**
-     * The store the channel belongs to: an edited channel's own; a new one's is the store it is made in —
-     * none when it is made above the stores.
+     * The organization the channel belongs to: an edited channel's own; a new one's is the organization it is made in —
+     * none when it is made above the organizations.
      */
-    public function channelStoreId(): ?int
+    public function channelOrganizationId(): ?int
     {
         $channel = $this->route('channel');
 
         if ($channel !== null) {
-            return $channel->store_id;
+            return $channel->organization_id;
         }
 
-        return $this->user()->globalRole() !== null ? null : ((int) session('current_store_id') ?: null);
+        return $this->user()->globalRole() !== null ? null : ((int) session('current_organization_id') ?: null);
     }
 
     /**

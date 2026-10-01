@@ -36,7 +36,7 @@ only thing it may do as root is reload PHP.
 
 1. Hetzner Cloud → your project → **Security → SSH keys → Add SSH key**: paste the whole line of
    `~/.ssh/signage_deploy.pub` (Claude made this key on the PC; the private half never leaves it).
-2. **Add server**: the location nearest the stores (the shops are American, so Germany — Falkenstein or
+2. **Add server**: the location nearest the organizations (the organizations are American, so Germany — Falkenstein or
    Nuremberg — over Helsinki, and never Singapore), **Ubuntu 24.04**, the plan, **Public IPv4 on**, the SSH
    key ticked. Hetzner's own Backups (+20%) are optional: the server already dumps its database nightly, but
    only Backups (or a snapshot) also keep the uploads and the server itself.
@@ -140,7 +140,7 @@ works: `ssh -i ~/.ssh/signage_deploy deploy@SERVER_IP "cd /var/www/signage/curre
 A television opens `https://app.yourdomain.com/player` in its browser and shows a pairing code. The player is
 a progressive web app: on a Chromium-based set or Android box it can be installed full screen (the browser's
 "Add to home screen" / "Install app"), and its service worker keeps the page, the last playlist and every
-file on it, so the set keeps playing when the shop's internet drops and picks up the live playlist the
+file on it, so the set keeps playing when the organization's internet drops and picks up the live playlist the
 moment it returns (docs/AD-BUILDER-SPEC.md §15). Nothing on the set says it is offline — the Screens page
 does, from its missed heartbeats. On a browser without service workers the player simply plays online.
 
@@ -219,7 +219,7 @@ ssh -i ~/.ssh/signage_deploy deploy@SERVER_IP "cd /var/www/signage/current && ph
 Ubuntu's and MySQL's security updates install themselves daily. Two things still want a human:
 
 - **A new kernel** needs one restart: if `ls /var/run/reboot-required` prints that file, `reboot` when the
-  shops are quiet.
+  organizations are quiet.
 - **MySQL's repository key expires in October 2027.** When `apt-get update` starts warning about it
   (`EXPKEYSIG`), take the newest `RPM-GPG-KEY-mysql-<year>` from `repo.mysql.com` and replace the keyring:
   `curl -fsS https://repo.mysql.com/RPM-GPG-KEY-mysql-2027 | gpg --batch --yes --dearmor -o /usr/share/keyrings/mysql.gpg`

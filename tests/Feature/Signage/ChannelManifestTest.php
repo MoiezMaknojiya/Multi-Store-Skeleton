@@ -5,9 +5,9 @@ use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Daypart;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
-use App\Models\Store;
 use Carbon\CarbonImmutable;
 
 /*
@@ -20,8 +20,8 @@ use Carbon\CarbonImmutable;
 | rotates through `per_pass`. WHEN the line plays is decided here, like everything else:
 |
 |   · a channel line with a schedule of its own follows it
-|   · one without rides along with the shop's own files, so it never lights up a screen
-|     the shop left dark — unless no file on the playlist is live at all
+|   · one without rides along with the organization's own files, so it never lights up a screen
+|     the organization left dark — unless no file on the playlist is live at all
 |
 */
 
@@ -53,11 +53,11 @@ beforeEach(function () {
     // Noon in Chicago (October there is UTC-5).
     $this->travelTo(CarbonImmutable::parse('2026-10-10 17:00:00', 'UTC'));
 
-    $this->store = Store::factory()->create();
+    $this->organization = Organization::factory()->create();
     $this->screen = Screen::factory()->withToken('tok')->create([
-        'store_id' => $this->store->id, 'timezone' => 'America/Chicago',
+        'organization_id' => $this->organization->id, 'timezone' => 'America/Chicago',
     ]);
-    $this->poster = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Burger deal']);
+    $this->poster = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Burger deal']);
 
     $this->gama = Channel::factory()->create(['name' => 'GAMA']);
     $this->monster = ChannelAd::factory()->lasting(10)->create(['channel_id' => $this->gama->id, 'title' => 'Monster', 'position' => 0]);
@@ -189,7 +189,7 @@ test('two channels on one screen keep their places, and a paused one is simply m
 
     $items = manifestNow($this)['items'];
 
-    // Two entries, in the order the shop arranged them — the paused one leaves no gap.
+    // Two entries, in the order the organization arranged them — the paused one leaves no gap.
     expect(collect($items)->pluck('type')->all())->toBe(['channel', 'channel']);
     expect($items[0]['ads'])->toHaveCount(2);
     expect($items[1]['ads'][0]['duration'])->toBe(8);
@@ -209,17 +209,17 @@ test('a channel with no ads running today is skipped rather than sent empty', fu
 |--------------------------------------------------------------------------
 */
 
-test("an unscheduled channel rides along while the shop's own files are on", function () {
-    $hours = Daypart::factory()->between('07:00', '20:00')->create(['store_id' => $this->store->id]);
+test("an unscheduled channel rides along while the organization's own files are on", function () {
+    $hours = Daypart::factory()->between('07:00', '20:00')->create(['organization_id' => $this->organization->id]);
     lineOnScreen($this->screen, $this->poster, 0, ['daypart_id' => $hours->id]);
     lineOnScreen($this->screen, $this->gama, 1);
 
-    // Noon: the shop's poster is on, and the channel with it.
+    // Noon: the organization's poster is on, and the channel with it.
     expect(collect(manifestNow($this)['items'])->pluck('type')->all())->toBe(['image', 'channel']);
 });
 
-test('and goes dark with them, so it never lights up a screen the shop left dark', function () {
-    $hours = Daypart::factory()->between('07:00', '20:00')->create(['store_id' => $this->store->id]);
+test('and goes dark with them, so it never lights up a screen the organization left dark', function () {
+    $hours = Daypart::factory()->between('07:00', '20:00')->create(['organization_id' => $this->organization->id]);
     lineOnScreen($this->screen, $this->poster, 0, ['daypart_id' => $hours->id]);
     lineOnScreen($this->screen, $this->gama, 1);
 
@@ -232,12 +232,12 @@ test('and goes dark with them, so it never lights up a screen the shop left dark
 });
 
 test('a channel line with a schedule of its own follows that instead', function () {
-    $day = Daypart::factory()->between('07:00', '20:00')->create(['store_id' => $this->store->id]);
-    $late = Daypart::factory()->between('21:00', '23:59')->create(['store_id' => $this->store->id]);
+    $day = Daypart::factory()->between('07:00', '20:00')->create(['organization_id' => $this->organization->id]);
+    $late = Daypart::factory()->between('21:00', '23:59')->create(['organization_id' => $this->organization->id]);
     lineOnScreen($this->screen, $this->poster, 0, ['daypart_id' => $day->id]);
     lineOnScreen($this->screen, $this->gama, 1, ['daypart_id' => $late->id]);
 
-    // 23:00: the shop's poster is off, but the channel was scheduled for exactly now.
+    // 23:00: the organization's poster is off, but the channel was scheduled for exactly now.
     $this->travelTo(CarbonImmutable::parse('2026-10-11 04:00:00', 'UTC'));
     expect(collect(manifestNow($this)['items'])->pluck('type')->all())->toBe(['channel']);
 
@@ -253,7 +253,7 @@ test('with no live file on the playlist, an unscheduled channel plays on its own
 
     // ...and neither is one whose own files are all Ad Builder pages taken off the screens: a
     // draft left on the list is not a request for a black screen.
-    $draft = BuilderAd::factory()->published()->create(['store_id' => $this->store->id]);
+    $draft = BuilderAd::factory()->published()->create(['organization_id' => $this->organization->id]);
     $draft->update(['published_at' => null]);
     lineOnScreen($this->screen, $draft->media, 1);
 

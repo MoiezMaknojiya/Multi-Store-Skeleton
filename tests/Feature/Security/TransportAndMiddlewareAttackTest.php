@@ -1,9 +1,9 @@
 <?php
 
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
-use App\Models\Store;
 use Illuminate\Foundation\Http\Kernel;
 use Illuminate\Support\Facades\Route;
 
@@ -19,10 +19,10 @@ use Illuminate\Support\Facades\Route;
 */
 
 beforeEach(function () {
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->owner = createStoreUser($this->store, [...Permission::STORE], 'Everything');
-    $this->staff = createStoreMember($this->store, Role::STAFF);
-    $this->actingAs($this->owner)->withSession(['current_store_id' => $this->store->id]);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->owner = createOrganizationUser($this->organization, [...Permission::ORGANIZATION], 'Everything');
+    $this->staff = createOrganizationMember($this->organization, Role::STAFF);
+    $this->actingAs($this->owner)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 /** Every middleware a route really runs, as one string to search (a closure middleware is named as such). */
@@ -67,7 +67,7 @@ test('claiming to be another method is not a way past a rule', function () {
     // that route has, the password included — or is refused. What it must never do is succeed.
     $status = $this->post("/members/{$this->staff->id}", ['_method' => 'DELETE'])->status();
     expect($status)->toBeIn([302, 404, 405, 422], "spoofed DELETE answered {$status}")
-        ->and(roleKeyIn($this->staff, $this->store))->toBe(Role::STAFF);
+        ->and(roleKeyIn($this->staff, $this->organization))->toBe(Role::STAFF);
 
     // The override HEADER, which Symfony does honour on a POST, reaches the same route the same way:
     // the DELETE route's own rules run, so the member is still there afterwards. (It is not a CSRF
@@ -75,7 +75,7 @@ test('claiming to be another method is not a way past a rule', function () {
     // cannot set a header in the first place.)
     $status = $this->postJson("/members/{$this->staff->id}", [], ['X-HTTP-Method-Override' => 'DELETE'])->status();
     expect($status)->toBeIn([302, 404, 405, 422], "the override header answered {$status}")
-        ->and(roleKeyIn($this->staff, $this->store))->toBe(Role::STAFF);
+        ->and(roleKeyIn($this->staff, $this->organization))->toBe(Role::STAFF);
 
     // And a spoofed method cannot conjure up a route that does not exist.
     expect($this->post('/members', ['_method' => 'PATCH'])->status())->toBeIn([404, 405]);
@@ -88,10 +88,10 @@ test('arrays in a write body are refused, never crashed into', function () {
 
     foreach ([
         ['/roles', ['name' => 'Odd', 'type' => ['platform'], 'permissions' => []]],
-        ['/roles', ['name' => ['a' => 'b'], 'type' => 'store', 'permissions' => []]],
-        ['/roles', ['name' => 'Odd', 'type' => 'store', 'permissions' => ['x' => ['y']]]],
+        ['/roles', ['name' => ['a' => 'b'], 'type' => 'organization', 'permissions' => []]],
+        ['/roles', ['name' => 'Odd', 'type' => 'organization', 'permissions' => ['x' => ['y']]]],
         ['/permissions', ['name' => ['mine-view'], 'label' => ['Mine']]],
-        ['/stores', ['name' => ['Mine'], 'owner_email' => ['a@b.c']]],
+        ['/organizations', ['name' => ['Mine'], 'owner_email' => ['a@b.c']]],
         ['/users/invitations', ['email' => ['a@b.c'], 'role_id' => ['1']]],
         ['/dayparts', ['name' => ['D'], 'start_time' => ['07:00'], 'end_time' => '08:00']],
         ['/channels', ['name' => ['Ours'], 'is_active' => ['yes']]],
@@ -102,7 +102,7 @@ test('arrays in a write body are refused, never crashed into', function () {
     }
 
     expect(Role::where('name', 'Odd')->exists())->toBeFalse()
-        ->and(Store::where('name', 'Mine')->exists())->toBeFalse();
+        ->and(Organization::where('name', 'Mine')->exists())->toBeFalse();
 });
 
 test('a forged X-Forwarded-For does not hand out a fresh rate limit', function () {
@@ -118,7 +118,7 @@ test('a forged X-Forwarded-For does not hand out a fresh rate limit', function (
 });
 
 test('an array where the code expects a word is answered, not exploded', function () {
-    Media::factory()->count(2)->create(['store_id' => $this->store->id]);
+    Media::factory()->count(2)->create(['organization_id' => $this->organization->id]);
 
     // A listing reads anything that is not one plain value as "not sent" (HandlesCrudData::plainValue),
     // so each of these is an ordinary page of results.
@@ -140,11 +140,11 @@ test('an array where the code expects a word is answered, not exploded', functio
         $answer($url);
     }
 
-    // The owner here holds no channel or log permission, and the accounts and stores listings are the
+    // The owner here holds no channel or log permission, and the accounts and organizations listings are the
     // platform's: a 403 at the door would never let the array reach the code, so these go as a super admin.
     $this->actingAs(createSuperAdmin());
 
-    foreach (['/channels/data?search[]=x', '/activity/data?search[]=x', '/users/data?search[]=x', '/stores/data?search[]=x'] as $url) {
+    foreach (['/channels/data?search[]=x', '/activity/data?search[]=x', '/users/data?search[]=x', '/organizations/data?search[]=x'] as $url) {
         $answer($url);
     }
 });

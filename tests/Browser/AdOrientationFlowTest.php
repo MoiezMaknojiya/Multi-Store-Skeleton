@@ -4,10 +4,10 @@ namespace Tests\Browser;
 
 use App\Models\BuilderAd;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Dusk\Browser;
@@ -29,10 +29,10 @@ class AdOrientationFlowTest extends DuskTestCase
     public function test_a_portrait_ad_is_chosen_up_front_designed_upright_and_fills_a_portrait_television(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store, Role::OWNER, 'owner@example.com');
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization, Role::OWNER, 'owner@example.com');
 
-        $this->browse(function (Browser $tv, Browser $panel) use ($owner, $store) {
+        $this->browse(function (Browser $tv, Browser $panel) use ($owner, $organization) {
             /* ── 1. A television mounted upright asks to be adopted ─────── */
             $this->makeTelevision($tv);
             $tv->visit('/player');
@@ -42,7 +42,7 @@ class AdOrientationFlowTest extends DuskTestCase
 
             $this->freshSession($panel);
             $panel->loginAs($owner);
-            $this->switchToStore($panel, $store);
+            $this->switchToOrganization($panel, $organization);
 
             $panel->visit('/screens');
             $this->waitForAlpine($panel);
@@ -52,8 +52,8 @@ class AdOrientationFlowTest extends DuskTestCase
             $panel->select('@screen-orientation', 'portrait');
             $this->jsClick($panel, '@screen-pair-save');
 
-            $panel->waitUsing(20, 250, fn () => Screen::where('store_id', $store->id)->exists());
-            $screen = Screen::where('store_id', $store->id)->sole();
+            $panel->waitUsing(20, 250, fn () => Screen::where('organization_id', $organization->id)->exists());
+            $screen = Screen::where('organization_id', $organization->id)->sole();
             $this->assertSame('portrait', $screen->orientation);
 
             /* ── 2. An address for a new ad asks which way the screen is, before any editor opens… ── */
@@ -128,7 +128,7 @@ class AdOrientationFlowTest extends DuskTestCase
             $this->waitForAlpine($panel);
             $panel->waitFor('@ad-publish')->assertSeeIn('@ad-orientation', 'Portrait');
             $this->jsClick($panel, '@ad-publish');
-            $panel->waitUsing(25, 250, fn () => Media::where('store_id', $store->id)->where('type', Media::TYPE_HTML)->exists());
+            $panel->waitUsing(25, 250, fn () => Media::where('organization_id', $organization->id)->where('type', Media::TYPE_HTML)->exists());
             $media = Media::where('type', Media::TYPE_HTML)->sole();
             $this->assertSame('portrait', $media->orientation, 'the library row says which way the page is');
             $this->assertSame([1080, 1920], [$media->width, $media->height]);

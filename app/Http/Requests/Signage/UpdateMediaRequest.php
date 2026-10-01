@@ -9,7 +9,7 @@ use Illuminate\Foundation\Http\FormRequest;
 class UpdateMediaRequest extends FormRequest
 {
     /**
-     * A file is changed only from where it can be seen: another store's is not found (404), before
+     * A file is changed only from where it can be seen: another organization's is not found (404), before
      * anything sent is checked — a 422 would say the id exists.
      */
     public function authorize(): bool

@@ -52,7 +52,7 @@ class UploadController extends Controller
         return response('', 200, [
             'Upload-Offset' => (string) $upload->received,
             'Upload-Length' => (string) $upload->size,
-            'Cache-Control' => 'no-store',
+            'Cache-Control' => 'no-organization',
         ]);
     }
 

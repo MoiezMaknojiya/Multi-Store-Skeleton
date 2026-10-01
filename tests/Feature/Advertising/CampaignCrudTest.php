@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Campaign;
+use App\Models\Organization;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -11,8 +11,8 @@ use Illuminate\Support\Facades\Storage;
 | Managing network advertising
 |--------------------------------------------------------------------------
 |
-| A campaign belongs to the PLATFORM, not to any shop — so it has no store, no
-| visibleTo, and its gate is not a grantable permission row. A store user holding
+| A campaign belongs to the PLATFORM, not to any organization — so it has no organization, no
+| visibleTo, and its gate is not a grantable permission row. An organization user holding
 | one would see every brand's contract across the whole network, which is the one
 | wall this app does not break.
 |
@@ -34,9 +34,9 @@ beforeEach(function () {
     Storage::fake('public');
 
     $this->admin = createSuperAdmin();
-    $this->store = Store::factory()->create(['accepts_network_ads' => true]);
+    $this->organization = Organization::factory()->create(['accepts_network_ads' => true]);
     $this->screen = Screen::factory()->create([
-        'store_id' => $this->store->id, 'accepts_network_ads' => true,
+        'organization_id' => $this->organization->id, 'accepts_network_ads' => true,
     ]);
 });
 
@@ -50,19 +50,19 @@ test('guests cannot reach any campaign endpoint', function () {
     $this->getJson('/campaigns/data')->assertUnauthorized();
 });
 
-test('a store user cannot see or touch campaigns, whatever they hold', function () {
+test('an organization user cannot see or touch campaigns, whatever they hold', function () {
     // Deliberately given a broad hand-picked set — every screen and media permission,
-    // dayparts, the Stores tab, even the accounts and roles views — and none of it
+    // dayparts, the Organizations tab, even the accounts and roles views — and none of it
     // opens this door, because campaign-manage is not a permission row at all.
-    $actor = createStoreUser($this->store, [
+    $actor = createOrganizationUser($this->organization, [
         'screen-view', 'screen-store', 'screen-update', 'screen-destroy', 'screen-playlist',
         'media-view', 'media-store', 'media-update', 'media-destroy',
-        'daypart-view', 'daypart-store', 'store-view', 'user-view', 'role-view',
+        'daypart-view', 'daypart-store', 'organization-view', 'user-view', 'role-view',
     ]);
 
     $campaign = Campaign::factory()->create();
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($actor)->withSession(['current_organization_id' => $this->organization->id]);
 
     $this->get('/campaigns')->assertForbidden();
     $this->getJson('/campaigns/data')->assertForbidden();
@@ -154,7 +154,7 @@ test('deleting a campaign takes its file and its targets with it', function () {
 });
 
 test('targets are replaced, not added to', function () {
-    $second = Screen::factory()->create(['store_id' => $this->store->id]);
+    $second = Screen::factory()->create(['organization_id' => $this->organization->id]);
     $campaign = Campaign::factory()->create();
     $campaign->screens()->attach($this->screen);
 
@@ -213,12 +213,12 @@ test('a contract cannot end before it starts', function () {
 
 test('the screen picker says WHY a screen cannot carry adverts', function () {
     // A greyed row that explains itself beats a screen that is silently missing.
-    $shyStore = Store::factory()->create(['name' => 'Beta', 'accepts_network_ads' => false]);
+    $shyOrganization = Organization::factory()->create(['name' => 'Beta', 'accepts_network_ads' => false]);
     $shyScreen = Screen::factory()->create([
-        'store_id' => $shyStore->id, 'name' => 'Beta TV', 'accepts_network_ads' => true,
+        'organization_id' => $shyOrganization->id, 'name' => 'Beta TV', 'accepts_network_ads' => true,
     ]);
     $quiet = Screen::factory()->create([
-        'store_id' => $this->store->id, 'name' => 'Kids corner', 'accepts_network_ads' => false,
+        'organization_id' => $this->organization->id, 'name' => 'Kids corner', 'accepts_network_ads' => false,
     ]);
 
     $rows = collect($this->actingAs($this->admin)->getJson('/campaigns/screens')->assertOk()->json('screens'))
@@ -227,11 +227,11 @@ test('the screen picker says WHY a screen cannot carry adverts', function () {
     expect($rows[$this->screen->id]['carries_ads'])->toBeTrue();
 
     expect($rows[$shyScreen->id]['carries_ads'])->toBeFalse();
-    expect($rows[$shyScreen->id]['store_accepts'])->toBeFalse();   // the shop said no
+    expect($rows[$shyScreen->id]['organization_accepts'])->toBeFalse();   // the organization said no
     expect($rows[$shyScreen->id]['screen_accepts'])->toBeTrue();
 
     expect($rows[$quiet->id]['carries_ads'])->toBeFalse();
-    expect($rows[$quiet->id]['store_accepts'])->toBeTrue();
+    expect($rows[$quiet->id]['organization_accepts'])->toBeTrue();
     expect($rows[$quiet->id]['screen_accepts'])->toBeFalse();      // this set said no
 });
 

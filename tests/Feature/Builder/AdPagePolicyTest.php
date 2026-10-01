@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\BuilderAd;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Services\AdCompiler;
 
 /*
@@ -17,18 +17,18 @@ use App\Services\AdCompiler;
 */
 
 beforeEach(function () {
-    $this->store = Store::factory()->create();
+    $this->organization = Organization::factory()->create();
 });
 
-/** A design compiled for this store: a picture-less text, with the animations given. */
-function policyPage(Store $store, array $animations = []): string
+/** A design compiled for this organization: a picture-less text, with the animations given. */
+function policyPage(Organization $organization, array $animations = []): string
 {
     $document = BuilderAd::blankDocument();
     $document['elements'] = [
         ['id' => 'a', 'type' => 'text', 'text' => 'Sale', 'x' => 0, 'y' => 0, 'w' => 400, 'h' => 100, 'z' => 0, 'style' => [], 'animations' => $animations],
     ];
 
-    return app(AdCompiler::class)->compile(BuilderAd::factory()->create(['store_id' => $store->id, 'document' => $document]));
+    return app(AdCompiler::class)->compile(BuilderAd::factory()->create(['organization_id' => $organization->id, 'document' => $document]));
 }
 
 /** The page's policy, directive by directive: ['script-src' => ['a', 'b'], …]. */
@@ -52,13 +52,13 @@ function inlineScriptsOf(string $html): array
 }
 
 test('the policy is the first thing in the page’s head, right after its character set', function () {
-    foreach ([policyPage($this->store), policyPage($this->store, ['in' => ['effect' => 'fade']])] as $html) {
+    foreach ([policyPage($this->organization), policyPage($this->organization, ['in' => ['effect' => 'fade']])] as $html) {
         expect($html)->toMatch('/<head>\s*<meta charset="utf-8">\s*<meta http-equiv="Content-Security-Policy" content="/');
     }
 });
 
 test('every inline script is allowed by its digest — and nothing inline is allowed wholesale', function () {
-    foreach ([policyPage($this->store), policyPage($this->store, ['in' => ['effect' => 'fade'], 'loop' => ['effect' => 'float']])] as $html) {
+    foreach ([policyPage($this->organization), policyPage($this->organization, ['in' => ['effect' => 'fade'], 'loop' => ['effect' => 'float']])] as $html) {
         $scripts = inlineScriptsOf($html);
         $allowed = policyOf($html)['script-src'];
 
@@ -76,7 +76,7 @@ test('every inline script is allowed by its digest — and nothing inline is all
 });
 
 test('a page that moves may load scripts from the runtime’s own folder alone; a still page from nowhere', function () {
-    $moving = policyPage($this->store, ['in' => ['effect' => 'fade']]);
+    $moving = policyPage($this->organization, ['in' => ['effect' => 'fade']]);
     $folders = collect(policyOf($moving)['script-src'])->reject(fn (string $source) => str_starts_with($source, "'sha256-"));
 
     // One source by address, and it is the runtime's folder — not the origin the panel lives on.
@@ -92,14 +92,14 @@ test('a page that moves may load scripts from the runtime’s own folder alone; 
     }
 
     // A still page loads no script by address, and its policy names no place to load one from.
-    $still = policyPage($this->store);
+    $still = policyPage($this->organization);
 
     expect(collect(policyOf($still)['script-src'])->every(fn (string $source) => str_starts_with($source, "'sha256-")))->toBeTrue()
         ->and($still)->not->toContain('<script src=');
 });
 
 test('the page can reach nothing: no request of its own, no form, no frame, no plugin, no base', function () {
-    $policy = policyOf(policyPage($this->store, ['in' => ['effect' => 'fade']]));
+    $policy = policyOf(policyPage($this->organization, ['in' => ['effect' => 'fade']]));
 
     expect($policy['default-src'])->toBe(["'none'"])
         ->and($policy['connect-src'])->toBe(["'none'"])
@@ -120,7 +120,7 @@ test('the words a person types reach the page as words: the policy is never thei
     ];
 
     $html = app(AdCompiler::class)->compile(BuilderAd::factory()->create([
-        'store_id' => $this->store->id,
+        'organization_id' => $this->organization->id,
         'name' => '</title><script>alert(2)</script>',
         'document' => $document,
     ]));

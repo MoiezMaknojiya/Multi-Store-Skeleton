@@ -19,14 +19,14 @@ use Illuminate\Support\Facades\Storage;
  * self-contained HTML file and writes a `media` row of type `html` into the ad's library, which is the only
  * thing playlists, schedules, the device manifest and the player ever see.
  *
- * An ad belongs to a shop, or — with no shop, `store_id` NULL — to the platform, made for every shop (owner,
+ * An ad belongs to an organization, or — with no organization, `organization_id` NULL — to the platform, made for every organization (owner,
  * 2026-10-01: "all shop k liya ads ... woo ads sub ko dikhe aur woo copy kar sake"). A shared ad uses the files the
  * platform shares (BuilderAsset::onShelfOf), lives under `builder/platform/ads/`, publishes into the platform's own
- * library — so only the platform's channels play it — and every shop sees it once it is published and copies it into
- * its own Ads. Only above the stores is it changed or deleted (owner, 2026-10-01: a shop's people see, use and copy
+ * library — so only the platform's channels play it — and every organization sees it once it is published and copies it into
+ * its own Ads. Only above the organizations is it changed or deleted (owner, 2026-10-01: an organization's people see, use and copy
  * it, "srif delete nahi kar sakta ha"), with Update Ads and Delete Ads there.
  *
- * @property int|null $store_id
+ * @property int|null $organization_id
  */
 class BuilderAd extends Model
 {
@@ -75,7 +75,7 @@ class BuilderAd extends Model
     public const MAX_SECONDS = 300;
 
     protected $fillable = [
-        'store_id', 'name', 'orientation', 'document', 'thumbnail_path', 'media_id', 'published_at',
+        'organization_id', 'name', 'orientation', 'document', 'thumbnail_path', 'media_id', 'published_at',
         'created_by', 'updated_by',
     ];
 
@@ -99,7 +99,7 @@ class BuilderAd extends Model
      * Deleting an ad takes the copy a playlist plays with it — the media row (and with it, through the
      * foreign key, every playlist line carrying it) and the files both name. The rows go inside the
      * transaction; the files only once it has committed, so a rolled-back delete never leaves a media
-     * row pointing at a file that is gone (the rule the store purge follows).
+     * row pointing at a file that is gone (the rule the organization purge follows).
      */
     protected static function booted(): void
     {
@@ -120,11 +120,11 @@ class BuilderAd extends Model
     }
 
     /**
-     * The ads a person sees from where they stand: above the stores, every store's and the shared ones (each row
-     * saying whose it is); inside a store, that store's own and the ones the platform shares with every shop once
-     * they are published (owner, 2026-10-01: an unfinished design stays the platform's). Never another shop's own;
-     * with no store selected, none at all. What may be DONE to one is the controller's to ask: a shared one is only
-     * ever seen, used and copied inside a shop.
+     * The ads a person sees from where they stand: above the organizations, every organization's and the shared ones (each row
+     * saying whose it is); inside an organization, that organization's own and the ones the platform shares with every organization once
+     * they are published (owner, 2026-10-01: an unfinished design stays the platform's). Never another organization's own;
+     * with no organization selected, none at all. What may be DONE to one is the controller's to ask: a shared one is only
+     * ever seen, used and copied inside an organization.
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
@@ -132,25 +132,25 @@ class BuilderAd extends Model
             return $query;
         }
 
-        $storeId = (int) session('current_store_id');
+        $organizationId = (int) session('current_organization_id');
 
-        if ($storeId <= 0) {
+        if ($organizationId <= 0) {
             return $query->whereRaw('0 = 1');
         }
 
-        return $query->where(fn (Builder $query) => $query->where('store_id', $storeId)
-            ->orWhere(fn (Builder $shared) => $shared->whereNull('store_id')->whereNotNull('media_id')->whereNotNull('published_at')));
+        return $query->where(fn (Builder $query) => $query->where('organization_id', $organizationId)
+            ->orWhere(fn (Builder $shared) => $shared->whereNull('organization_id')->whereNotNull('media_id')->whereNotNull('published_at')));
     }
 
-    /** The platform's, made for every shop — no shop's own. */
+    /** The platform's, made for every organization — no organization's own. */
     public function isShared(): bool
     {
-        return $this->store_id === null;
+        return $this->organization_id === null;
     }
 
-    public function store(): BelongsTo
+    public function organization(): BelongsTo
     {
-        return $this->belongsTo(Store::class);
+        return $this->belongsTo(Organization::class);
     }
 
     /** The published copy a playlist points at — NULL while the ad has never been published. */
@@ -272,10 +272,10 @@ class BuilderAd extends Model
         return $value;
     }
 
-    /** Where this ad's published file and poster live: its shop's folder, or the platform's for a shared one. */
+    /** Where this ad's published file and poster live: its organization's folder, or the platform's for a shared one. */
     public function storageDirectory(): string
     {
-        return 'builder/'.($this->store_id ?? 'platform')."/ads/{$this->id}";
+        return 'builder/'.($this->organization_id ?? 'platform')."/ads/{$this->id}";
     }
 
     /** Mounted upright: a 1080 × 1920 stage. */

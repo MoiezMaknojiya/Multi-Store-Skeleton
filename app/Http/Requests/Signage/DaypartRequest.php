@@ -15,9 +15,9 @@ use Illuminate\Validation\Rule;
 class DaypartRequest extends FormRequest
 {
     /**
-     * A daypart is changed only from where it can be seen: another store's is not found (404) — before
-     * its name is checked, so "this store already has a daypart with that name" never answers for a
-     * store the person does not work in.
+     * A daypart is changed only from where it can be seen: another organization's is not found (404) — before
+     * its name is checked, so "this organization already has a daypart with that name" never answers for an
+     * organization the person does not work in.
      */
     public function authorize(): bool
     {
@@ -63,7 +63,7 @@ class DaypartRequest extends FormRequest
             'name' => [
                 'bail', 'required', 'string', 'max:100',
                 Rule::unique('dayparts', 'name')
-                    ->where(fn (QueryBuilder $query) => $query->where('store_id', $this->storeIdForRules()))
+                    ->where(fn (QueryBuilder $query) => $query->where('organization_id', $this->organizationIdForRules()))
                     ->ignore($daypart instanceof Daypart ? $daypart->id : null),
             ],
 
@@ -104,21 +104,21 @@ class DaypartRequest extends FormRequest
     }
 
     /**
-     * Which store the name has to be unique within.
+     * Which organization the name has to be unique within.
      *
-     * On an edit it is the daypart's own store, so a global user with no store context
-     * can still rename one. On a create it is the session's store — and when there is
+     * On an edit it is the daypart's own organization, so a global user with no organization context
+     * can still rename one. On a create it is the session's organization — and when there is
      * none the controller refuses the request outright with a message that explains
      * why, so the null here only has to avoid a false collision.
      */
-    private function storeIdForRules(): ?int
+    private function organizationIdForRules(): ?int
     {
         $daypart = $this->route('daypart');
 
         if ($daypart instanceof Daypart) {
-            return $daypart->store_id;
+            return $daypart->organization_id;
         }
 
-        return ((int) session('current_store_id')) ?: null;
+        return ((int) session('current_organization_id')) ?: null;
     }
 }

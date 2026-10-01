@@ -5,9 +5,9 @@ use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -28,12 +28,12 @@ use Tests\TestCase;
 beforeEach(function () {
     Storage::fake('public');
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->designer = createStoreUser($this->store, [
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->designer = createOrganizationUser($this->organization, [
         'ad-view', 'ad-store', 'ad-update', 'screen-view', 'screen-update', 'screen-playlist', 'media-view',
         'channel-view', 'channel-update',
     ], 'Designer');
-    $this->actingAs($this->designer)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->designer)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 /** Every address a television would be sent right now — its playlist's files and its channels' ads. */
@@ -74,13 +74,13 @@ function changedDesign(BuilderAd $ad, string $text): array
 }
 
 test('a changed published ad keeps its published version on its screens until the changes are published', function (string $from) {
-    $ad = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $this->store->id, 'name' => 'Winter sale']);
+    $ad = BuilderAd::factory()->withText('Winter sale')->create(['organization_id' => $this->organization->id, 'name' => 'Winter sale']);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
     $page = Media::sole();
 
     // It plays from a playlist line or from a channel's ad — never both, or it would play twice (2026-09-26).
-    $screen = Screen::factory()->withToken('live-token')->create(['store_id' => $this->store->id]);
-    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Deals']);
+    $screen = Screen::factory()->withToken('live-token')->create(['organization_id' => $this->organization->id]);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Deals']);
     if ($from === 'a channel') {
         ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $page->id]);
         PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $channel->id, 'position' => 0]);
@@ -124,7 +124,7 @@ test('a changed published ad keeps its published version on its screens until th
 })->with(['from a playlist' => 'a playlist', 'from a channel' => 'a channel']);
 
 test('discarding the changes brings back the published design, name and poster', function () {
-    $ad = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $this->store->id, 'name' => 'Winter sale']);
+    $ad = BuilderAd::factory()->withText('Winter sale')->create(['organization_id' => $this->organization->id, 'name' => 'Winter sale']);
     $this->putJson("/builder/{$ad->id}", ['name' => 'Winter sale', 'document' => $ad->document, 'thumbnail' => posterDataUri(200, 40, 40)])->assertOk();
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
     $published = Storage::disk('public')->get($ad->fresh()->thumbnail_path);
@@ -150,10 +150,10 @@ test('discarding the changes brings back the published design, name and poster',
 });
 
 test('there is nothing to discard on an ad never published, up to date, or published before its version was kept', function () {
-    $never = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id]);
-    $upToDate = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id]);
+    $never = BuilderAd::factory()->withText()->create(['organization_id' => $this->organization->id]);
+    $upToDate = BuilderAd::factory()->withText()->published()->create(['organization_id' => $this->organization->id]);
     $legacy = BuilderAd::factory()->withText()->published()->create([
-        'store_id' => $this->store->id, 'published_document' => null, 'published_name' => null,
+        'organization_id' => $this->organization->id, 'published_document' => null, 'published_name' => null,
     ]);
     DB::table('builder_ads')->where('id', $legacy->id)->update(['updated_at' => now()->addMinute()]);
 
@@ -171,15 +171,15 @@ test('there is nothing to discard on an ad never published, up to date, or publi
 });
 
 test('unpublishing takes the page off its screens, channel, pickers and library — and publishing brings it back', function (string $from) {
-    $ad = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $this->store->id, 'name' => 'Winter sale']);
+    $ad = BuilderAd::factory()->withText('Winter sale')->create(['organization_id' => $this->organization->id, 'name' => 'Winter sale']);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
     $page = Media::sole();
 
     // On a screen from a playlist line, or from a channel the screen carries — never both, or it would play
-    // twice (2026-09-26) — beside a poster of the shop's own and a channel ad of the channel's own.
-    $screen = Screen::factory()->withToken('draft-token')->create(['store_id' => $this->store->id]);
-    $poster = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Poster']);
-    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Deals']);
+    // twice (2026-09-26) — beside a poster of the organization's own and a channel ad of the channel's own.
+    $screen = Screen::factory()->withToken('draft-token')->create(['organization_id' => $this->organization->id]);
+    $poster = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Poster']);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Deals']);
     $pageAd = $from === 'a channel'
         ? ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $page->id, 'title' => 'Winter sale'])
         : null;
@@ -256,10 +256,10 @@ test('unpublishing takes the page off its screens, channel, pickers and library 
 
 test('a page on a line AND in a channel — as a playlist could hold before 2026-09-26 — is counted in both', function () {
     $ad = BuilderAd::factory()->withText('Winter sale')->published()->create([
-        'store_id' => $this->store->id, 'name' => 'Winter sale',
+        'organization_id' => $this->organization->id, 'name' => 'Winter sale',
     ]);
-    $screen = Screen::factory()->create(['store_id' => $this->store->id]);
-    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Deals']);
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Deals']);
     ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $ad->media_id]);
     PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $ad->media_id, 'position' => 0, 'duration_seconds' => 12]);
 
@@ -269,7 +269,7 @@ test('a page on a line AND in a channel — as a playlist could hold before 2026
 });
 
 test('a save that changes nothing leaves the ad up to date, and the history alone', function () {
-    $ad = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $this->store->id, 'name' => 'Winter sale']);
+    $ad = BuilderAd::factory()->withText('Winter sale')->create(['organization_id' => $this->organization->id, 'name' => 'Winter sale']);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
 
     // The design as stored, its keys in another order and a number written another way: the same design.
@@ -290,7 +290,7 @@ test('an ad changed after its publish before versions were kept stays on the scr
     // The owner's own "Example · Burger Deal (Urdu)" was edited after publishing on 2026-09-20: what it published
     // is still what its screens play, and its next Publish keeps a version.
     $ad = BuilderAd::factory()->withText()->published()->create([
-        'store_id' => $this->store->id, 'published_document' => null, 'published_name' => null,
+        'organization_id' => $this->organization->id, 'published_document' => null, 'published_name' => null,
     ]);
     DB::table('builder_ads')->where('id', $ad->id)->update(['updated_at' => now()->addMinute()]);
 
@@ -301,8 +301,8 @@ test('an ad changed after its publish before versions were kept stays on the scr
 });
 
 test("an unpublished ad is nobody's holding picture", function () {
-    $ad = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id]);
-    Screen::factory()->withToken('hold-token')->create(['store_id' => $this->store->id, 'default_media_id' => $ad->media_id]);
+    $ad = BuilderAd::factory()->withText()->published()->create(['organization_id' => $this->organization->id]);
+    Screen::factory()->withToken('hold-token')->create(['organization_id' => $this->organization->id, 'default_media_id' => $ad->media_id]);
 
     expect(addressesOnScreen($this, 'hold-token'))->toHaveCount(1);
 
@@ -316,7 +316,7 @@ test("an unpublished ad is nobody's holding picture", function () {
 
 test('a photograph of the design is not a change to it', function () {
     // A published ad that never had a poster gets one on a save that changes nothing: still up to date.
-    $ad = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id, 'thumbnail_path' => null]);
+    $ad = BuilderAd::factory()->withText()->published()->create(['organization_id' => $this->organization->id, 'thumbnail_path' => null]);
 
     $this->putJson("/builder/{$ad->id}", ['name' => $ad->name, 'document' => $ad->document, 'thumbnail' => posterDataUri(200, 60, 40)])
         ->assertOk()->assertJsonPath('ad.status', 'published');
@@ -324,16 +324,16 @@ test('a photograph of the design is not a change to it', function () {
     expect($ad->fresh()->thumbnail_path)->not->toBeNull();
 });
 
-test('unpublish and discard are Update Ads, inside the store the ad belongs to', function () {
-    $mine = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id]);
-    $theirs = BuilderAd::factory()->withText()->published()->create(['store_id' => Store::factory()->create()->id]);
+test('unpublish and discard are Update Ads, inside the organization the ad belongs to', function () {
+    $mine = BuilderAd::factory()->withText()->published()->create(['organization_id' => $this->organization->id]);
+    $theirs = BuilderAd::factory()->withText()->published()->create(['organization_id' => Organization::factory()->create()->id]);
 
     foreach (['unpublish', 'discard'] as $action) {
         $this->postJson("/builder/{$theirs->id}/{$action}")->assertNotFound();
     }
 
-    $watcher = createStoreUser($this->store, ['ad-view'], 'Ad Watcher');
-    $this->actingAs($watcher)->withSession(['current_store_id' => $this->store->id]);
+    $watcher = createOrganizationUser($this->organization, ['ad-view'], 'Ad Watcher');
+    $this->actingAs($watcher)->withSession(['current_organization_id' => $this->organization->id]);
 
     foreach (['unpublish', 'discard'] as $action) {
         $this->postJson("/builder/{$mine->id}/{$action}")->assertForbidden();

@@ -1,6 +1,6 @@
 @extends('errors.layout')
 
-{{-- A refusal of our own says why ("You are not a member of this store."); Laravel's own words for a permission the
+{{-- A refusal of our own says why ("You are not a member of this organization."); Laravel's own words for a permission the
      person does not hold are said in plainer ones. --}}
 @php($__said = trim((string) (($exception ?? null)?->getMessage() ?? '')))
 

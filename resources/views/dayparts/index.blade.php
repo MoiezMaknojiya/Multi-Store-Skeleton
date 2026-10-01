@@ -6,7 +6,7 @@
     {{-- Js::from, not @json: @json leaves its quotes RAW, so the first string in the
          payload closes the x-data attribute and Alpine is handed half an expression
          (see .claude/rules/02-project-conventions.md). --}}
-    <div x-data="daypartsTable({{ Js::from(['hasStore' => (bool) session('current_store_id'), 'weekdays' => $weekdays]) }})"
+    <div x-data="daypartsTable({{ Js::from(['hasOrganization' => (bool) session('current_organization_id'), 'weekdays' => $weekdays]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
         {{-- What a daypart is for, in one line under the list's title; its Add beside the search. --}}
@@ -82,7 +82,7 @@
 
                 <form @submit.prevent="saveItem" novalidate dusk="daypart-form" class="mt-4 space-y-4">
 
-                    <div x-show="!hasStore && !editingItem" x-cloak class="alert-warning">
+                    <div x-show="!hasOrganization && !editingItem" x-cloak class="alert-warning">
                         Select an organization first.
                     </div>
 

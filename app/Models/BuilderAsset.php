@@ -13,17 +13,17 @@ use Illuminate\Support\Facades\Storage;
 /**
  * A picture or a video uploaded for use INSIDE an ad (docs/AD-BUILDER-SPEC.md §3).
  *
- * The Builder keeps its own shelf rather than borrowing the store's media library (owner's decision,
- * 2026-09-17): the library is what a shop PLAYS, while this is raw material — a logo, a texture, a
- * background loop — that only means anything inside a design. Same store wall, same disk, its own folder
- * (`builder/{store}/assets/…`).
+ * The Builder keeps its own shelf rather than borrowing the organization's media library (owner's decision,
+ * 2026-09-17): the library is what an organization PLAYS, while this is raw material — a logo, a texture, a
+ * background loop — that only means anything inside a design. Same organization wall, same disk, its own folder
+ * (`builder/{organization}/assets/…`).
  *
- * An asset with no shop (`store_id` NULL, `builder/platform/assets/…`) is the platform's, shared with every shop
- * (owner, 2026-09-29): every shop's designs may use it, it counts to no shop's 512 MB, and it is deleted above the
- * stores alone, with Delete Ads (owner, 2026-10-01: a shop sees and uses it, "srif delete nahi kar sakta ha") — from
- * every shop's shelf at once, and never while any shop's ad, or the platform's, uses it.
+ * An asset with no organization (`organization_id` NULL, `builder/platform/assets/…`) is the platform's, shared with every organization
+ * (owner, 2026-09-29): every organization's designs may use it, it counts to no organization's 512 MB, and it is deleted above the
+ * organizations alone, with Delete Ads (owner, 2026-10-01: an organization sees and uses it, "srif delete nahi kar sakta ha") — from
+ * every organization's shelf at once, and never while any organization's ad, or the platform's, uses it.
  *
- * @property int|null $store_id
+ * @property int|null $organization_id
  */
 class BuilderAsset extends Model
 {
@@ -43,7 +43,7 @@ class BuilderAsset extends Model
     public const MAX_VIDEO_SECONDS = 30;
 
     protected $fillable = [
-        'store_id', 'title', 'kind', 'mime_type', 'disk', 'path', 'thumbnail_path',
+        'organization_id', 'title', 'kind', 'mime_type', 'disk', 'path', 'thumbnail_path',
         'size', 'width', 'height', 'duration_seconds', 'created_by',
     ];
 
@@ -75,10 +75,10 @@ class BuilderAsset extends Model
      *
      * @param  array<string, mixed>  $stored  what storeBuilderAsset() returned
      */
-    public static function fromStoredFile(?int $storeId, string $title, array $stored, ?int $createdBy): self
+    public static function fromStoredFile(?int $organizationId, string $title, array $stored, ?int $createdBy): self
     {
         return static::create([
-            'store_id' => $storeId,
+            'organization_id' => $organizationId,
             'title' => $title,
             'kind' => $stored['type'] === Media::TYPE_VIDEO ? self::KIND_VIDEO : self::KIND_IMAGE,
             'mime_type' => $stored['mime_type'],
@@ -94,7 +94,7 @@ class BuilderAsset extends Model
     }
 
     /**
-     * Above the stores every store's and the shared ones; inside a store its own and the shared ones; with no store
+     * Above the organizations every organization's and the shared ones; inside an organization its own and the shared ones; with no organization
      * selected, none. What may be DONE to one is the controller's to ask (a shared one is deleted with its own
      * permission).
      */
@@ -104,31 +104,31 @@ class BuilderAsset extends Model
             return $query;
         }
 
-        $storeId = (int) session('current_store_id');
+        $organizationId = (int) session('current_organization_id');
 
-        return $storeId > 0 ? $query->onShelfOf($storeId) : $query->whereRaw('0 = 1');
+        return $organizationId > 0 ? $query->onShelfOf($organizationId) : $query->whereRaw('0 = 1');
     }
 
     /**
-     * What a shop's designs may use: its own and what the platform shares with every shop. An ad shared with every
-     * shop ($storeId null) uses the shared files alone: a shop's own file would show in no other shop's copy.
+     * What an organization's designs may use: its own and what the platform shares with every organization. An ad shared with every
+     * organization ($organizationId null) uses the shared files alone: an organization's own file would show in no other organization's copy.
      */
-    public function scopeOnShelfOf(Builder $query, ?int $storeId): Builder
+    public function scopeOnShelfOf(Builder $query, ?int $organizationId): Builder
     {
-        return $storeId === null
-            ? $query->whereNull('store_id')
-            : $query->where(fn (Builder $query) => $query->where('store_id', $storeId)->orWhereNull('store_id'));
+        return $organizationId === null
+            ? $query->whereNull('organization_id')
+            : $query->where(fn (Builder $query) => $query->where('organization_id', $organizationId)->orWhereNull('organization_id'));
     }
 
-    /** The platform's, shared with every shop — no shop's own. */
+    /** The platform's, shared with every organization — no organization's own. */
     public function isShared(): bool
     {
-        return $this->store_id === null;
+        return $this->organization_id === null;
     }
 
-    public function store(): BelongsTo
+    public function organization(): BelongsTo
     {
-        return $this->belongsTo(Store::class);
+        return $this->belongsTo(Organization::class);
     }
 
     public function getUrlAttribute(): string

@@ -2,14 +2,14 @@
 
 namespace Tests\Browser;
 
-use App\Models\Store;
+use App\Models\Organization;
 use Facebook\WebDriver\WebDriverKeys;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
 
 /**
- * The dashboard as a person uses it (owner, 2026-09-30: "user friendly banao puri site ko"): a new shop's first
+ * The dashboard as a person uses it (owner, 2026-09-30: "user friendly banao puri site ko"): a new organization's first
  * steps open the very thing they name on the page they lead to — a dialog once, the address forgetting it — the
  * platform's list of what needs a look leads where it is put right, and a keyboard reaches the page's own
  * content first, past the sidebar, while a dialog keeps it inside until it closes.
@@ -18,17 +18,17 @@ class DashboardFlowTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    public function test_a_new_shops_first_steps_open_what_each_one_names(): void
+    public function test_a_new_organizations_first_steps_open_what_each_one_names(): void
     {
         $this->seedSuperAdmin();
-        $shop = Store::factory()->create(['name' => 'Corner Shop']);
-        $owner = $this->storeMember($shop);
+        $organization = Organization::factory()->create(['name' => 'Corner Organization']);
+        $owner = $this->organizationMember($organization);
 
         $this->browse(function (Browser $browser) use ($owner) {
             $this->freshSession($browser);
             $browser->loginAs($owner)->visit('/dashboard')
-                ->waitFor('@dashboard-store')
-                ->assertSeeIn('@dashboard-store-name', 'Corner Shop')
+                ->waitFor('@dashboard-organization')
+                ->assertSeeIn('@dashboard-organization-name', 'Corner Organization')
                 ->assertSeeIn('@dashboard-steps', 'Pair your first screen')
                 ->assertSeeIn('@dashboard-steps-progress', '0 of 2 done')
                 ->assertSeeIn('@dashboard-card-screens', 'None paired yet')
@@ -61,37 +61,37 @@ class DashboardFlowTest extends DuskTestCase
         });
     }
 
-    public function test_the_platform_dashboard_says_which_store_has_no_owner_and_leads_to_it(): void
+    public function test_the_platform_dashboard_says_which_organization_has_no_owner_and_leads_to_it(): void
     {
         $admin = $this->seedSuperAdmin();
-        Store::factory()->create(['name' => 'Orphan Store']);
-        $owned = Store::factory()->create(['name' => 'Owned Store']);
-        $this->storeMember($owned);
+        Organization::factory()->create(['name' => 'Orphan Organization']);
+        $owned = Organization::factory()->create(['name' => 'Owned Organization']);
+        $this->organizationMember($owned);
 
         $this->browse(function (Browser $browser) use ($admin) {
             $this->freshSession($browser);
             $browser->loginAs($admin)->visit('/dashboard')
                 ->waitFor('@dashboard-platform')
-                ->assertSeeIn('@dashboard-card-stores', '2')
-                ->assertSeeIn('@dashboard-attention', 'Orphan Store has no Owner')
-                ->assertDontSeeIn('@dashboard-attention', 'Owned Store');
+                ->assertSeeIn('@dashboard-card-organizations', '2')
+                ->assertSeeIn('@dashboard-attention', 'Orphan Organization has no Owner')
+                ->assertDontSeeIn('@dashboard-attention', 'Owned Organization');
 
-            $browser->click('[dusk^="dashboard-attention-store-ownerless-"]')
-                ->waitForLocation('/stores')
-                ->waitForText('Orphan Store');
+            $browser->click('[dusk^="dashboard-attention-organization-ownerless-"]')
+                ->waitForLocation('/organizations')
+                ->waitForText('Orphan Organization');
         });
     }
 
     public function test_the_keyboard_skips_to_the_page_and_stays_inside_an_open_dialog(): void
     {
         $this->seedSuperAdmin();
-        $shop = Store::factory()->create(['name' => 'Corner Shop']);
-        $owner = $this->storeMember($shop);
+        $organization = Organization::factory()->create(['name' => 'Corner Organization']);
+        $owner = $this->organizationMember($organization);
 
-        $this->browse(function (Browser $browser) use ($owner, $shop) {
+        $this->browse(function (Browser $browser) use ($owner, $organization) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $shop);
+            $this->switchToOrganization($browser, $organization);
             $browser->visit('/screens');
             $this->waitForAlpine($browser);
 

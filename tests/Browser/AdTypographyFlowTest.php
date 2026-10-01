@@ -5,7 +5,7 @@ namespace Tests\Browser;
 use App\Models\BuilderAd;
 use App\Models\BuilderFont;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Dusk\Browser;
@@ -25,9 +25,9 @@ class AdTypographyFlowTest extends DuskTestCase
     public function test_a_designer_chooses_a_font_and_sets_the_type(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember(
-            $store,
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember(
+            $organization,
             ['ad-view', 'ad-store', 'ad-update'],
             'designer@example.com',
             'Designer',
@@ -47,10 +47,10 @@ class AdTypographyFlowTest extends DuskTestCase
             'size' => 1024,
         ]);
 
-        $this->browse(function (Browser $browser) use ($designer, $store) {
+        $this->browse(function (Browser $browser) use ($designer, $organization) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);

@@ -20,10 +20,10 @@ use Illuminate\View\View;
 
 /**
  * Network advertising: the platform's own content, sold to a brand and carried by
- * the shops that agreed to it.
+ * the organizations that agreed to it.
  *
  * Every route here is behind `campaign-manage`, which only a super admin holds and
- * which is NOT a grantable permission row — a campaign has no store, so a store user
+ * which is NOT a grantable permission row — a campaign has no organization, so an organization user
  * holding it would see every brand's contract across the whole network. That is the
  * one wall this app does not break.
  */
@@ -45,7 +45,7 @@ class CampaignController extends Controller
     public function data(Request $request): JsonResponse
     {
         $query = Campaign::query()
-            ->with(['screens:id,name,store_id', 'screens.store:id,name'])
+            ->with(['screens:id,name,organization_id', 'screens.organization:id,name'])
             ->withCount('screens')
             ->orderByDesc('created_at');
 
@@ -53,18 +53,18 @@ class CampaignController extends Controller
     }
 
     /**
-     * Every screen a campaign could be pointed at, grouped by shop.
+     * Every screen a campaign could be pointed at, grouped by organization.
      *
      * Screens that have not been cleared for advertising come back too, flagged —
-     * a greyed row that says "this shop has not agreed" is far more use than a screen
+     * a greyed row that says "this organization has not agreed" is far more use than a screen
      * that silently is not in the list at all.
      */
     public function screens(): JsonResponse
     {
-        $screens = Screen::with('store:id,name,accepts_network_ads')
-            ->orderBy('store_id')
+        $screens = Screen::with('organization:id,name,accepts_network_ads')
+            ->orderBy('organization_id')
             ->orderBy('name')
-            ->get(['id', 'name', 'store_id', 'accepts_network_ads']);
+            ->get(['id', 'name', 'organization_id', 'accepts_network_ads']);
 
         $booked = $this->bookedSecondsPerScreen();
 
@@ -72,13 +72,13 @@ class CampaignController extends Controller
             'screens' => $screens->map(fn (Screen $screen) => [
                 'id' => $screen->id,
                 'name' => $screen->name,
-                'store_id' => $screen->store_id,
-                'store_name' => $screen->store?->name,
-                'store_accepts' => (bool) $screen->store?->accepts_network_ads,
+                'organization_id' => $screen->organization_id,
+                'organization_name' => $screen->organization?->name,
+                'organization_accepts' => (bool) $screen->organization?->accepts_network_ads,
                 'screen_accepts' => $screen->accepts_network_ads,
-                'carries_ads' => $screen->accepts_network_ads && (bool) $screen->store?->accepts_network_ads,
+                'carries_ads' => $screen->accepts_network_ads && (bool) $screen->organization?->accepts_network_ads,
                 // How much of this screen's break is already sold. Shown while
-                // choosing, so overselling is noticed before a shop ends up with a
+                // choosing, so overselling is noticed before an organization ends up with a
                 // three-minute advert break — and so the seconds that would not fit
                 // are visible rather than silently dropped at the television.
                 'booked_seconds' => (int) ($booked[$screen->id] ?? 0),

@@ -8,10 +8,10 @@
     <div x-data="channelsTable({{ Js::from(['maxAdsPerPass' => $maxAdsPerPass]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        {{-- A bound :title — the wrapper echoes it itself, and an echo here as well escaped a store's name twice. The
+        {{-- A bound :title — the wrapper echoes it itself, and an echo here as well escaped an organization's name twice. The
              one fact that governs the page is its line under the title; Add Channel stands beside the search. --}}
-        <x-crud.table-wrapper :title="$store ? 'Channels of '.$store->name : 'All Channels'" searchPlaceholder="Search channels..." :columns="6"
-            :description="$store ? 'Put a channel on a screen from that screen\'s Channels box.' : 'Every organization can put these on its screens.'">
+        <x-crud.table-wrapper :title="$organization ? 'Channels of '.$organization->name : 'All Channels'" searchPlaceholder="Search channels..." :columns="6"
+            :description="$organization ? 'Put a channel on a screen from that screen\'s Channels box.' : 'Every organization can put these on its screens.'">
             @can('channel-store')
                 <x-slot name="actions">
                     <x-crud.add-button label="Add Channel" @click="openFormModal()" dusk="add-channel" />
@@ -34,15 +34,15 @@
                         <td class="px-5 py-4">
                             <a x-bind:href="'/channels/' + item.id" x-bind:dusk="'channel-name-' + item.id"
                                class="font-medium text-gray-800 dark:text-white hover:underline" x-text="item.name"></a>
-                            @unless ($store)
-                            {{-- Above the stores, whose screens a channel reaches: every shop's, or one store's own. --}}
+                            @unless ($organization)
+                            {{-- Above the organizations, whose screens a channel reaches: every organization's, or one organization's own. --}}
                             <div class="mt-1">
-                                <span x-bind:class="item.store_name ? 'badge-neutral' : 'badge-info'"
+                                <span x-bind:class="item.organization_name ? 'badge-neutral' : 'badge-info'"
                                       x-bind:dusk="'channel-reach-' + item.id"
-                                      x-text="item.store_name ? item.store_name + ' only' : 'Every organization'"></span>
+                                      x-text="item.organization_name ? item.organization_name + ' only' : 'Every organization'"></span>
                             </div>
                             @else
-                            {{-- Inside a store, the platform's channels are there to look at, never to change. --}}
+                            {{-- Inside an organization, the platform's channels are there to look at, never to change. --}}
                             <div class="mt-1" x-show="item.read_only" x-cloak>
                                 <span class="badge-info" x-bind:dusk="'channel-from-platform-' + item.id">From the platform</span>
                             </div>
@@ -70,7 +70,7 @@
                             <div class="flex items-center justify-end gap-2">
                                 <a x-bind:href="'/channels/' + item.id" x-bind:dusk="'channel-open-' + item.id"
                                    class="btn-row-primary" x-bind:aria-label="'Ads of ' + item.name">Ads</a>
-                                {{-- A platform channel seen from inside a shop offers nothing to change; the server
+                                {{-- A platform channel seen from inside an organization offers nothing to change; the server
                                      refuses it anyway (404). --}}
                                 @can('channel-update')
                                 <button x-show="!item.read_only" @click="openFormModal(item)" x-bind:dusk="'edit-channel-' + item.id"
@@ -92,7 +92,7 @@
         </x-crud.table-wrapper>
 
         {{-- Delete. Says how far the channel has spread BEFORE the press, because the
-             press takes it off every one of those playlists — which no shop can undo. --}}
+             press takes it off every one of those playlists — which no organization can undo. --}}
         <x-modal name="confirm-channel-deletion" :show="false" maxWidth="md" focusable>
             <form @submit.prevent="deleteItem()" class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Delete Channel</h2>

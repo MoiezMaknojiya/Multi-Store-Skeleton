@@ -3,7 +3,7 @@
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Support\Facades\Storage;
 
 /*
@@ -20,10 +20,10 @@ use Illuminate\Support\Facades\Storage;
 beforeEach(function () {
     Storage::fake('public');
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->other = Store::factory()->create(['name' => 'Beta Deli']);
-    $this->designer = createStoreUser($this->store, ['ad-view', 'ad-store', 'ad-update', 'ad-destroy'], 'Designer');
-    $this->actingAs($this->designer)->withSession(['current_store_id' => $this->store->id]);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->other = Organization::factory()->create(['name' => 'Beta Deli']);
+    $this->designer = createOrganizationUser($this->organization, ['ad-view', 'ad-store', 'ad-update', 'ad-destroy'], 'Designer');
+    $this->actingAs($this->designer)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 /** A real picture as a data URI, the way a canvas hands one over. */
@@ -53,7 +53,7 @@ test('a poster is kept in the ad’s own folder as a JPEG the server drew itself
     $sent = pictureDataUri('png');
     $ad = saveWithPoster($this, $sent);
 
-    expect($ad->thumbnail_path)->toBe("builder/{$this->store->id}/ads/{$ad->id}/poster.jpg");
+    expect($ad->thumbnail_path)->toBe("builder/{$this->organization->id}/ads/{$ad->id}/poster.jpg");
 
     $stored = Storage::disk('public')->get($ad->thumbnail_path);
     $size = getimagesizefromstring($stored);
@@ -71,7 +71,7 @@ test('a poster that is not a picture never reaches the disk', function (string $
     $ad = saveWithPoster($this, $thumbnail);
 
     expect($ad->thumbnail_path)->toBeNull()
-        ->and(Storage::disk('public')->allFiles("builder/{$this->store->id}"))->toBe([]);
+        ->and(Storage::disk('public')->allFiles("builder/{$this->organization->id}"))->toBe([]);
 })->with([
     'PHP wearing a JPEG label' => ['data:image/jpeg;base64,'.base64_encode('<?php system($_GET["c"]); ?>')],
     'a page wearing a PNG label' => ['data:image/png;base64,'.base64_encode('<html><script>alert(1)</script></html>')],
@@ -103,7 +103,7 @@ test('publishing shows the poster in the media library, at an address that chang
         ->and($media->thumbnail_url)->toContain('/published.jpg?v='.$media->updated_at->getTimestamp());
 
     // An ordinary file's thumbnail keeps its plain address.
-    $picture = Media::factory()->create(['store_id' => $this->store->id, 'thumbnail_path' => 'media/1/thumbs/a.jpg']);
+    $picture = Media::factory()->create(['organization_id' => $this->organization->id, 'thumbnail_path' => 'media/1/thumbs/a.jpg']);
 
     expect($picture->thumbnail_url)->toEndWith('/media/1/thumbs/a.jpg');
 });
@@ -113,8 +113,8 @@ test('deleting the published page from the library leaves the design its poster'
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
     $media = Media::sole();
 
-    $librarian = createStoreUser($this->store, ['media-view', 'media-destroy'], 'Librarian');
-    $this->actingAs($librarian)->withSession(['current_store_id' => $this->store->id])
+    $librarian = createOrganizationUser($this->organization, ['media-view', 'media-destroy'], 'Librarian');
+    $this->actingAs($librarian)->withSession(['current_organization_id' => $this->organization->id])
         ->deleteJson("/media/{$media->id}")->assertOk();
 
     Storage::disk('public')->assertMissing($media->path);
@@ -130,8 +130,8 @@ test('a row published before it had a poster of its own still leaves the design 
     $media = Media::sole();
     $media->forceFill(['thumbnail_path' => $ad->thumbnail_path])->save();
 
-    $librarian = createStoreUser($this->store, ['media-view', 'media-destroy'], 'Librarian');
-    $this->actingAs($librarian)->withSession(['current_store_id' => $this->store->id])
+    $librarian = createOrganizationUser($this->organization, ['media-view', 'media-destroy'], 'Librarian');
+    $this->actingAs($librarian)->withSession(['current_organization_id' => $this->organization->id])
         ->deleteJson("/media/{$media->id}")->assertOk();
 
     Storage::disk('public')->assertMissing($media->path);
@@ -157,7 +157,7 @@ test('a copy gets a poster file of its own, so deleting the original leaves the 
     $copyId = $this->postJson("/builder/{$ad->id}/duplicate")->assertOk()->json('ad.id');
     $copy = BuilderAd::find($copyId);
 
-    expect($copy->thumbnail_path)->toBe("builder/{$this->store->id}/ads/{$copy->id}/poster.jpg")
+    expect($copy->thumbnail_path)->toBe("builder/{$this->organization->id}/ads/{$copy->id}/poster.jpg")
         ->and($copy->thumbnail_path)->not->toBe($ad->thumbnail_path);
 
     Storage::disk('public')->assertExists($copy->thumbnail_path);
@@ -171,7 +171,7 @@ test('a copy gets a poster file of its own, so deleting the original leaves the 
 /* ── The draft preview ───────────────────────────────────────────────── */
 
 test('the preview is the saved design as a screen would show it, sandboxed, and nothing is written', function () {
-    $ad = BuilderAd::factory()->withText('Saved words')->create(['store_id' => $this->store->id]);
+    $ad = BuilderAd::factory()->withText('Saved words')->create(['organization_id' => $this->organization->id]);
 
     $response = $this->get("/builder/{$ad->id}/preview")->assertOk();
 
@@ -187,7 +187,7 @@ test('the preview is the saved design as a screen would show it, sandboxed, and 
 test('a preview left open is compiled again only when the draft has changed', function () {
     // The brute-force round, 2026-09-29: the preview reloads itself at the ad's length, and each reload compiled the
     // whole ad again. Now the browser asks with the version it has, and an unchanged draft answers 304, empty.
-    $ad = BuilderAd::factory()->withText('Saved words')->create(['store_id' => $this->store->id]);
+    $ad = BuilderAd::factory()->withText('Saved words')->create(['organization_id' => $this->organization->id]);
 
     $first = $this->get("/builder/{$ad->id}/preview")->assertOk();
     $etag = $first->headers->get('ETag');
@@ -203,59 +203,59 @@ test('a preview left open is compiled again only when the draft has changed', fu
     expect($this->get("/builder/{$ad->id}/preview", ['If-None-Match' => $etag])->assertOk()->getContent())->toContain('New words');
 });
 
-test('the preview keeps the store wall and asks for ad-view or ad-update', function () {
-    $theirs = BuilderAd::factory()->withText()->create(['store_id' => $this->other->id]);
+test('the preview keeps the organization wall and asks for ad-view or ad-update', function () {
+    $theirs = BuilderAd::factory()->withText()->create(['organization_id' => $this->other->id]);
 
     $this->get("/builder/{$theirs->id}/preview")->assertNotFound();
 
-    $mine = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id]);
-    $stranger = createStoreUser($this->store, ['screen-view'], 'No ads');
+    $mine = BuilderAd::factory()->withText()->create(['organization_id' => $this->organization->id]);
+    $stranger = createOrganizationUser($this->organization, ['screen-view'], 'No ads');
 
-    $this->actingAs($stranger)->withSession(['current_store_id' => $this->store->id])
+    $this->actingAs($stranger)->withSession(['current_organization_id' => $this->organization->id])
         ->get("/builder/{$mine->id}/preview")->assertForbidden();
 
     // Previewing is part of designing: whoever may change the ad may preview it, View Ads or not.
-    $editor = createStoreUser($this->store, ['ad-update'], 'Changes ads only');
+    $editor = createOrganizationUser($this->organization, ['ad-update'], 'Changes ads only');
 
-    $this->actingAs($editor)->withSession(['current_store_id' => $this->store->id])
+    $this->actingAs($editor)->withSession(['current_organization_id' => $this->organization->id])
         ->get("/builder/{$mine->id}/preview")->assertOk();
     $this->get("/builder/{$theirs->id}/preview")->assertNotFound();
 });
 
 /* ── The platform's filter ───────────────────────────────────────────── */
 
-test('above the stores, the Ads and Assets pages narrow to one shop', function () {
+test('above the organizations, the Ads and Assets pages narrow to one organization', function () {
     $admin = createSuperAdmin();
-    BuilderAd::factory()->create(['store_id' => $this->store->id, 'name' => 'Alpha ad']);
-    BuilderAd::factory()->create(['store_id' => $this->other->id, 'name' => 'Beta ad']);
-    BuilderAsset::factory()->create(['store_id' => $this->store->id, 'title' => 'Alpha logo']);
-    BuilderAsset::factory()->create(['store_id' => $this->other->id, 'title' => 'Beta logo']);
+    BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Alpha ad']);
+    BuilderAd::factory()->create(['organization_id' => $this->other->id, 'name' => 'Beta ad']);
+    BuilderAsset::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Alpha logo']);
+    BuilderAsset::factory()->create(['organization_id' => $this->other->id, 'title' => 'Beta logo']);
 
     $this->actingAs($admin)->flushSession();
 
     $names = fn (string $url, string $key, string $field) => collect($this->getJson($url)->assertOk()->json($key))->pluck($field)->sort()->values()->all();
 
     expect($names('/builder/data', 'ads', 'name'))->toBe(['Alpha ad', 'Beta ad'])
-        ->and($names("/builder/data?store_id={$this->other->id}", 'ads', 'name'))->toBe(['Beta ad'])
+        ->and($names("/builder/data?organization_id={$this->other->id}", 'ads', 'name'))->toBe(['Beta ad'])
         ->and($names('/builder/assets/data', 'assets', 'title'))->toBe(['Alpha logo', 'Beta logo'])
-        ->and($names("/builder/assets/data?store_id={$this->store->id}", 'assets', 'title'))->toBe(['Alpha logo']);
+        ->and($names("/builder/assets/data?organization_id={$this->organization->id}", 'assets', 'title'))->toBe(['Alpha logo']);
 
-    // The tabs offer the filter above the stores…
-    $this->get('/builder')->assertOk()->assertSee('dusk="ads-filter-store"', false)->assertSee('Beta Deli');
-    $this->get('/builder/assets')->assertOk()->assertSee('dusk="assets-filter-store"', false);
+    // The tabs offer the filter above the organizations…
+    $this->get('/builder')->assertOk()->assertSee('dusk="ads-filter-organization"', false)->assertSee('Beta Deli');
+    $this->get('/builder/assets')->assertOk()->assertSee('dusk="assets-filter-organization"', false);
 });
 
-test('inside a store the filter is not offered, and naming another shop finds nothing', function () {
-    BuilderAd::factory()->create(['store_id' => $this->store->id, 'name' => 'Mine']);
-    BuilderAd::factory()->create(['store_id' => $this->other->id, 'name' => 'Theirs']);
-    BuilderAsset::factory()->create(['store_id' => $this->other->id, 'title' => 'Their logo']);
+test('inside an organization the filter is not offered, and naming another organization finds nothing', function () {
+    BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Mine']);
+    BuilderAd::factory()->create(['organization_id' => $this->other->id, 'name' => 'Theirs']);
+    BuilderAsset::factory()->create(['organization_id' => $this->other->id, 'title' => 'Their logo']);
 
-    $this->get('/builder')->assertOk()->assertDontSee('dusk="ads-filter-store"', false);
+    $this->get('/builder')->assertOk()->assertDontSee('dusk="ads-filter-organization"', false);
 
-    expect($this->getJson("/builder/data?store_id={$this->other->id}")->assertOk()->json('ads'))->toBe([])
-        ->and($this->getJson("/builder/assets/data?store_id={$this->other->id}")->assertOk()->json('assets'))->toBe([]);
+    expect($this->getJson("/builder/data?organization_id={$this->other->id}")->assertOk()->json('ads'))->toBe([])
+        ->and($this->getJson("/builder/assets/data?organization_id={$this->other->id}")->assertOk()->json('assets'))->toBe([]);
 
     // A filter of the wrong shape is refused, never a 500.
-    $this->getJson('/builder/data?store_id[]=1')->assertStatus(422);
-    $this->getJson('/builder/assets/data?store_id=abc')->assertStatus(422);
+    $this->getJson('/builder/data?organization_id[]=1')->assertStatus(422);
+    $this->getJson('/builder/assets/data?organization_id=abc')->assertStatus(422);
 });

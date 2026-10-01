@@ -1,11 +1,11 @@
 <?php
 
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PairingRequest;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -21,14 +21,14 @@ use Illuminate\Support\Facades\DB;
 */
 
 beforeEach(function () {
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->other = Store::factory()->create(['name' => 'Beta Deli']);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->other = Organization::factory()->create(['name' => 'Beta Deli']);
 
-    $this->screen = Screen::factory()->withToken('alpha-token')->create(['store_id' => $this->store->id, 'name' => 'Alpha TV']);
-    $this->theirScreen = Screen::factory()->withToken('beta-token')->create(['store_id' => $this->other->id, 'name' => 'Beta TV']);
+    $this->screen = Screen::factory()->withToken('alpha-token')->create(['organization_id' => $this->organization->id, 'name' => 'Alpha TV']);
+    $this->theirScreen = Screen::factory()->withToken('beta-token')->create(['organization_id' => $this->other->id, 'name' => 'Beta TV']);
 
-    $this->mine = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Alpha poster']);
-    $this->theirs = Media::factory()->create(['store_id' => $this->other->id, 'title' => 'Beta poster']);
+    $this->mine = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Alpha poster']);
+    $this->theirs = Media::factory()->create(['organization_id' => $this->other->id, 'title' => 'Beta poster']);
 
     PlaylistItem::create(['screen_id' => $this->screen->id, 'media_id' => $this->mine->id, 'position' => 0, 'duration_seconds' => 10]);
     PlaylistItem::create(['screen_id' => $this->theirScreen->id, 'media_id' => $this->theirs->id, 'position' => 0, 'duration_seconds' => 10]);
@@ -56,12 +56,12 @@ test('no token, a wrong token, an empty token or a session cookie all answer 401
 
     // A signed-in person is not a screen: the session opens nothing here.
     $this->flushHeaders();
-    $this->actingAs(createStoreMember($this->store, Role::OWNER));
+    $this->actingAs(createOrganizationMember($this->organization, Role::OWNER));
     expect($this->getJson('/device/playlist')->status())->toBe(401)
         ->and($this->postJson('/device/heartbeat')->status())->toBe(401);
 });
 
-test('a screen’s token shows that screen’s playlist and nothing of another store’s', function () {
+test('a screen’s token shows that screen’s playlist and nothing of another organization’s', function () {
     $manifest = $this->withHeader('Authorization', 'Bearer alpha-token')->getJson('/device/playlist')->assertOk()->json();
 
     $body = json_encode($manifest);
@@ -79,8 +79,8 @@ test('deleting a screen locks its device out at once, and re-pairing rotates the
 
     // Re-pair: a new code claimed by the same screen replaces the token.
     $registration = $this->postJson('/device/register', ['device_uuid' => 'device-1'])->assertOk()->json();
-    $owner = createStoreMember($this->store, Role::OWNER);
-    $this->actingAs($owner)->withSession(['current_store_id' => $this->store->id])
+    $owner = createOrganizationMember($this->organization, Role::OWNER);
+    $this->actingAs($owner)->withSession(['current_organization_id' => $this->organization->id])
         ->postJson('/screens/pair', ['code' => $registration['code'], 'mode' => 'replace', 'screen_id' => $this->screen->id])
         ->assertOk();
 
@@ -97,7 +97,7 @@ test('deleting a screen locks its device out at once, and re-pairing rotates the
     expect(PairingRequest::where('device_uuid', 'device-1')->exists())->toBeFalse();
 
     // Deleting the screen revokes the token.
-    $this->actingAs($owner)->withSession(['current_store_id' => $this->store->id])->deleteJson("/screens/{$this->screen->id}")->assertOk();
+    $this->actingAs($owner)->withSession(['current_organization_id' => $this->organization->id])->deleteJson("/screens/{$this->screen->id}")->assertOk();
     expect($this->withHeader('Authorization', 'Bearer '.$token)->getJson('/device/playlist')->status())->toBe(401);
 });
 
@@ -105,8 +105,8 @@ test('a pairing code cannot be collected by a device that does not own it', func
     $mine = $this->postJson('/device/register', ['device_uuid' => 'device-mine'])->assertOk()->json();
     $thief = $this->postJson('/device/register', ['device_uuid' => 'device-thief'])->assertOk()->json();
 
-    $owner = createStoreMember($this->store, Role::OWNER);
-    $this->actingAs($owner)->withSession(['current_store_id' => $this->store->id])
+    $owner = createOrganizationMember($this->organization, Role::OWNER);
+    $this->actingAs($owner)->withSession(['current_organization_id' => $this->organization->id])
         ->postJson('/screens/pair', ['code' => $mine['code'], 'mode' => 'new', 'name' => 'New TV', 'orientation' => 'landscape'])->assertOk();
 
     // The thief knows the uuid but not the secret: without one the poll is not even read.
@@ -128,12 +128,12 @@ test('a pairing code belongs to one screen only: whoever claims it second is ref
     // DevicePairing::claim, which one PHP process cannot race against itself to show.
     $registration = $this->postJson('/device/register', ['device_uuid' => 'device-race'])->assertOk()->json();
 
-    $owner = createStoreMember($this->store, Role::OWNER);
-    $second = createStoreMember($this->store, Role::OWNER);
+    $owner = createOrganizationMember($this->organization, Role::OWNER);
+    $second = createOrganizationMember($this->organization, Role::OWNER);
 
-    $first = $this->actingAs($owner)->withSession(['current_store_id' => $this->store->id])
+    $first = $this->actingAs($owner)->withSession(['current_organization_id' => $this->organization->id])
         ->postJson('/screens/pair', ['code' => $registration['code'], 'mode' => 'new', 'name' => 'First TV', 'orientation' => 'landscape']);
-    $again = $this->actingAs($second)->withSession(['current_store_id' => $this->store->id])
+    $again = $this->actingAs($second)->withSession(['current_organization_id' => $this->organization->id])
         ->postJson('/screens/pair', ['code' => $registration['code'], 'mode' => 'new', 'name' => 'Second TV', 'orientation' => 'landscape']);
 
     expect($first->status())->toBe(200)
@@ -141,16 +141,16 @@ test('a pairing code belongs to one screen only: whoever claims it second is ref
         ->and(Screen::where('name', 'Second TV')->exists())->toBeFalse();
 });
 
-test('a code from another store cannot be claimed, and nonsense codes are refused', function () {
+test('a code from another organization cannot be claimed, and nonsense codes are refused', function () {
     $registration = $this->postJson('/device/register', ['device_uuid' => 'device-2'])->assertOk()->json();
 
-    // Somebody with no store context at all
+    // Somebody with no organization context at all
     $stranger = User::factory()->create();
     expect($this->actingAs($stranger)->postJson('/screens/pair', ['code' => $registration['code'], 'mode' => 'new', 'name' => 'Theirs', 'orientation' => 'landscape'])->status())
         ->toBeIn([403, 404]);
 
-    $owner = createStoreMember($this->store, Role::OWNER);
-    $this->actingAs($owner)->withSession(['current_store_id' => $this->store->id]);
+    $owner = createOrganizationMember($this->organization, Role::OWNER);
+    $this->actingAs($owner)->withSession(['current_organization_id' => $this->organization->id]);
 
     foreach (['', 'ABC', 'ABCDEFG', '../../etc', '<script>', 'IIII11', str_repeat('A', 100)] as $code) {
         $status = $this->postJson('/screens/pair', ['code' => $code, 'mode' => 'new', 'name' => 'Nope', 'orientation' => 'landscape'])->status();
@@ -177,7 +177,7 @@ test('cold registrations are throttled per address, and a refused one files noth
 });
 
 test('the manifest never carries a file outside its line\'s schedule, not even in its timeline', function () {
-    $ended = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Yesterday']);
+    $ended = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Yesterday']);
     PlaylistItem::create(['screen_id' => $this->screen->id, 'media_id' => $ended->id, 'position' => 1, 'duration_seconds' => 10])
         ->scheduleRules()->create(['ends_on' => now()->subDays(2)->toDateString()]);
 

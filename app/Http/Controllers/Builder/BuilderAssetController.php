@@ -8,9 +8,9 @@ use App\Http\Requests\Builder\BuilderAssetRequest;
 use App\Models\ActivityLog;
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Services\MediaStorage;
-use App\Services\StoreStorage;
+use App\Services\OrganizationStorage;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,59 +23,59 @@ use Illuminate\View\View;
 /**
  * The Assets page: everything the Builder's ads are made of (docs/AD-BUILDER-SPEC.md §3).
  *
- * Its own shelf, not the store's media library — the library is what a shop PLAYS, this is raw material
- * that only means something inside a design. Same store wall as everything else — and above it, the shelf the
- * platform shares with every shop (owner, 2026-09-29): an upload with no shop chosen goes there, every shop's
- * designs may use it, and it is deleted above the stores alone (owner, 2026-10-01).
+ * Its own shelf, not the organization's media library — the library is what an organization PLAYS, this is raw material
+ * that only means something inside a design. Same organization wall as everything else — and above it, the shelf the
+ * platform shares with every organization (owner, 2026-09-29): an upload with no organization chosen goes there, every organization's
+ * designs may use it, and it is deleted above the organizations alone (owner, 2026-10-01).
  */
 class BuilderAssetController extends Controller
 {
     use HandlesCrudData;
 
-    public function __construct(private readonly MediaStorage $storage, private readonly StoreStorage $quota) {}
+    public function __construct(private readonly MediaStorage $storage, private readonly OrganizationStorage $quota) {}
 
     public function index(): View
     {
-        // Above the stores the shelf lists every shop's and the shared files, or one shop's and the shared (owner,
-        // 2026-09-29: All shops is where a file for every shop goes, so there is no second option saying the same); a
-        // store's own people see theirs and the shared ones.
-        $stores = $this->aboveTheStores()
-            ? Store::orderBy('name')->get(['id', 'name'])->toArray()
+        // Above the organizations the shelf lists every organization's and the shared files, or one organization's and the shared (owner,
+        // 2026-09-29: All organizations is where a file for every organization goes, so there is no second option saying the same); an
+        // organization's own people see theirs and the shared ones.
+        $organizations = $this->aboveTheOrganizations()
+            ? Organization::orderBy('name')->get(['id', 'name'])->toArray()
             : [];
 
-        // The shelf's storage comes with the page (none for All shops, where the platform's shared files have no wall),
+        // The shelf's storage comes with the page (none for All organizations, where the platform's shared files have no wall),
         // so the meter is there at once instead of pushing the drop box down when the list arrives.
         return view('builder.assets', [
-            'stores' => $stores,
-            'aboveTheStores' => $this->aboveTheStores(),
+            'organizations' => $organizations,
+            'aboveTheOrganizations' => $this->aboveTheOrganizations(),
             'storage' => $this->storageOf(null),
         ]);
     }
 
     /**
-     * The storage of the shop the shelf is showing: inside a store its own; above the stores the shop chosen
-     * in the Shop list, or none while All shops is listed.
+     * The storage of the organization the shelf is showing: inside an organization its own; above the organizations the organization chosen
+     * in the Organization list, or none while All organizations is listed.
      *
      * @return array{used: int, limit: int}|null
      */
-    private function storageOf(?int $chosenStoreId): ?array
+    private function storageOf(?int $chosenOrganizationId): ?array
     {
-        $storeId = $this->aboveTheStores() ? $chosenStoreId : ((int) session('current_store_id') ?: null);
+        $organizationId = $this->aboveTheOrganizations() ? $chosenOrganizationId : ((int) session('current_organization_id') ?: null);
 
-        return $storeId !== null && Store::whereKey($storeId)->exists() ? $this->quota->summary($storeId) : null;
+        return $organizationId !== null && Organization::whereKey($organizationId)->exists() ? $this->quota->summary($organizationId) : null;
     }
 
     /** The shelf, newest first, each row saying whose it is, which ads use it and whether this person may delete it. */
     public function data(Request $request): JsonResponse
     {
-        // A shop's id — that shop's files and the shared ones; nothing lists everything in reach.
-        $filters = $request->validate(['store_id' => ['nullable', 'integer', 'min:1']]);
-        $shelf = isset($filters['store_id']) ? (int) $filters['store_id'] : null;
+        // An organization's id — that organization's files and the shared ones; nothing lists everything in reach.
+        $filters = $request->validate(['organization_id' => ['nullable', 'integer', 'min:1']]);
+        $shelf = isset($filters['organization_id']) ? (int) $filters['organization_id'] : null;
 
         // Only ever narrows what visibleTo allows — see BuilderController::data.
         $query = BuilderAsset::visibleTo(auth()->user())
             ->when($shelf !== null, fn (Builder $query) => $query->onShelfOf($shelf))
-            ->with('store:id,name')
+            ->with('organization:id,name')
             ->latest();
 
         $listing = $this->paginatedResponse(
@@ -95,7 +95,7 @@ class BuilderAssetController extends Controller
                     // Why it may not be deleted yet, in destroy's own words, so the shelf says it before any
                     // confirmation (destroy decides again).
                     $asset->setAttribute('in_use_message', isset($usage[$asset->id]) ? $this->stillUsedMessage($usage[$asset->id]) : null);
-                    $asset->setAttribute('store_name', $asset->store?->name);
+                    $asset->setAttribute('organization_name', $asset->organization?->name);
                     $asset->setAttribute('shared', $asset->isShared());
                     $asset->setAttribute('owner_label', $this->ownerLabel($asset));
                     $asset->setAttribute('can_delete', $this->mayDelete($asset));
@@ -112,37 +112,37 @@ class BuilderAssetController extends Controller
     /** Put a file on the shelf. */
     public function store(BuilderAssetRequest $request): JsonResponse
     {
-        $storeId = $this->targetStoreId($request->validated());
+        $organizationId = $this->targetOrganizationId($request->validated());
 
         $file = $request->file('file');
 
         $asset = $this->storage->addBuilderAsset(
             $file,
-            $storeId,
+            $organizationId,
             $request->validated(),
             $this->titleFor($request->input('title'), $file->getClientOriginalName()),
             auth()->id(),
         );
 
-        ActivityLog::record('ad_asset.uploaded', $asset, $storeId === null
+        ActivityLog::record('ad_asset.uploaded', $asset, $organizationId === null
             ? "Uploaded {$asset->title} to the ad builder, shared with every organization"
-            : "Uploaded {$asset->title} to the ad builder", storeId: $storeId);
+            : "Uploaded {$asset->title} to the ad builder", organizationId: $organizationId);
 
         $request->forgetFinishedUpload();
 
-        return response()->json(['message' => 'Uploaded', 'asset' => $asset, 'storage' => $this->quota->summary($storeId)]);
+        return response()->json(['message' => 'Uploaded', 'asset' => $asset, 'storage' => $this->quota->summary($organizationId)]);
     }
 
     /**
      * Take a file off the shelf — refused while an ad still uses it, and the refusal says which ads, so
      * nobody has to hunt for the one design that breaks (the same courtesy a held role gets). A shared file
-     * goes from every shop's shelf, so only the platform deletes it, and any shop's ad keeps it.
+     * goes from every organization's shelf, so only the platform deletes it, and any organization's ad keeps it.
      */
     public function destroy(BuilderAsset $asset): JsonResponse
     {
         $asset = BuilderAsset::visibleTo(auth()->user())->findOrFail($asset->id);
 
-        abort_unless($this->mayDelete($asset), 403, $asset->isShared() && ! $this->aboveTheStores()
+        abort_unless($this->mayDelete($asset), 403, $asset->isShared() && ! $this->aboveTheOrganizations()
             ? 'A file shared with every organization is the platform\'s: only the platform deletes it.'
             : 'Deleting a file needs the Delete Ads permission.');
 
@@ -154,8 +154,8 @@ class BuilderAssetController extends Controller
 
         $title = $asset->title;
         $shared = $asset->isShared();
-        // A shop's file belongs to its shop's log; a shared one's to where the person deleting it stands.
-        $storeId = $asset->store_id ?? $this->standingStoreId();
+        // An organization's file belongs to its organization's log; a shared one's to where the person deleting it stands.
+        $organizationId = $asset->organization_id ?? $this->standingOrganizationId();
 
         // Inside a transaction, so the model's hook really does unlink the files after the row is gone —
         // outside one, "after commit" means at once, before the DELETE has run.
@@ -163,19 +163,19 @@ class BuilderAssetController extends Controller
 
         ActivityLog::record('ad_asset.deleted', null, $shared
             ? "Deleted {$title}, shared with every organization, from the ad builder"
-            : "Deleted ad asset {$title}", storeId: $storeId);
+            : "Deleted ad asset {$title}", organizationId: $organizationId);
 
-        return response()->json(['message' => 'Deleted', 'storage' => $this->quota->summary($shared ? $this->standingStoreId() : $storeId)]);
+        return response()->json(['message' => 'Deleted', 'storage' => $this->quota->summary($shared ? $this->standingOrganizationId() : $organizationId)]);
     }
 
     /**
      * Which ads name these assets, as {assetId: {names: [ad name, …], elsewhere: n}}.
      *
-     * An id inside the document is what "used" means, so the documents are read and searched: a shop's own file in
-     * its shop's designs only, a shared file in every shop's and the platform's own ads for every shop. A store's
-     * person is told the names of their own shop's ads and only the number of other shops' and of the platform's (one
-     * shop never learns another's designs, nor the platform's unpublished ones); above the stores every ad is named,
-     * with the shop's name or "every shop".
+     * An id inside the document is what "used" means, so the documents are read and searched: an organization's own file in
+     * its organization's designs only, a shared file in every organization's and the platform's own ads for every organization. An organization's
+     * person is told the names of their own organization's ads and only the number of other organizations' and of the platform's (one
+     * organization never learns another's designs, nor the platform's unpublished ones); above the organizations every ad is named,
+     * with the organization's name or "every organization".
      *
      * @param  Collection<int, BuilderAsset>  $assets
      * @return array<int, array{names: array<int, string>, elsewhere: int, platform: int}>
@@ -183,25 +183,25 @@ class BuilderAssetController extends Controller
     private function usageFor(Collection $assets): array
     {
         $shared = $assets->filter(fn (BuilderAsset $asset) => $asset->isShared())->pluck('id')->all();
-        $byStore = $assets->reject(fn (BuilderAsset $asset) => $asset->isShared())
-            ->groupBy(fn (BuilderAsset $asset) => (int) $asset->store_id)
+        $byOrganization = $assets->reject(fn (BuilderAsset $asset) => $asset->isShared())
+            ->groupBy(fn (BuilderAsset $asset) => (int) $asset->organization_id)
             ->map(fn (Collection $group) => $group->pluck('id')->all());
 
-        if ($shared === [] && $byStore->isEmpty()) {
+        if ($shared === [] && $byOrganization->isEmpty()) {
             return [];
         }
 
-        $viewerStore = $this->aboveTheStores() ? null : $this->standingStoreId();
+        $viewerOrganization = $this->aboveTheOrganizations() ? null : $this->standingOrganizationId();
         $usage = [];
 
         BuilderAd::query()
-            // Only a shared file is looked for past its own shop.
-            ->when($shared === [], fn (Builder $query) => $query->whereIn('store_id', $byStore->keys()->all()))
-            ->with('store:id,name')
-            ->select(['id', 'store_id', 'name', 'document', 'published_document'])
+            // Only a shared file is looked for past its own organization.
+            ->when($shared === [], fn (Builder $query) => $query->whereIn('organization_id', $byOrganization->keys()->all()))
+            ->with('organization:id,name')
+            ->select(['id', 'organization_id', 'name', 'document', 'published_document'])
             ->lazyById(200)
-            ->each(function (BuilderAd $ad) use ($shared, $byStore, $viewerStore, &$usage) {
-                $candidates = [...$shared, ...($byStore->get((int) $ad->store_id) ?? [])];
+            ->each(function (BuilderAd $ad) use ($shared, $byOrganization, $viewerOrganization, &$usage) {
+                $candidates = [...$shared, ...($byOrganization->get((int) $ad->organization_id) ?? [])];
 
                 // The draft and the version on the screens alike: a file only the published page still shows is in
                 // use on every television carrying it (the brute-force round, 2026-09-29 — deleting it broke them).
@@ -221,14 +221,14 @@ class BuilderAssetController extends Controller
                     $usage[$assetId] ??= ['names' => [], 'elsewhere' => 0, 'platform' => 0];
                     $sharedFile = in_array($assetId, $shared, true);
 
-                    if ($viewerStore !== null && $ad->isShared()) {
+                    if ($viewerOrganization !== null && $ad->isShared()) {
                         $usage[$assetId]['platform']++;
-                    } elseif ($viewerStore !== null && (int) $ad->store_id !== $viewerStore) {
+                    } elseif ($viewerOrganization !== null && (int) $ad->organization_id !== $viewerOrganization) {
                         $usage[$assetId]['elsewhere']++;
                     } else {
                         $usage[$assetId]['names'][] = match (true) {
-                            $viewerStore !== null || ! $sharedFile => $ad->name,
-                            $ad->store !== null => "{$ad->name} ({$ad->store->name})",
+                            $viewerOrganization !== null || ! $sharedFile => $ad->name,
+                            $ad->organization !== null => "{$ad->name} ({$ad->organization->name})",
                             default => "{$ad->name} (every organization)",
                         };
                     }
@@ -239,7 +239,7 @@ class BuilderAssetController extends Controller
     }
 
     /**
-     * Why a file in use stays: the ads the person may see by name, those of other shops counted — and nobody is told
+     * Why a file in use stays: the ads the person may see by name, those of other organizations counted — and nobody is told
      * to take a file out of ads they cannot open.
      *
      * @param  array{names: array<int, string>, elsewhere: int, platform?: int}  $usage
@@ -273,67 +273,67 @@ class BuilderAssetController extends Controller
             : "Still used by {$named}. Take it out of those ads first, and publish the ones whose screens still show it.";
     }
 
-    /** Delete Ads — and, for a file shared with every shop, standing above the stores. */
+    /** Delete Ads — and, for a file shared with every organization, standing above the organizations. */
     private function mayDelete(BuilderAsset $asset): bool
     {
-        return Gate::allows('ad-destroy') && (! $asset->isShared() || $this->aboveTheStores());
+        return Gate::allows('ad-destroy') && (! $asset->isShared() || $this->aboveTheOrganizations());
     }
 
-    /** Whose file this is, in the words of the person looking: above the stores its shop or "Every shop", inside one the platform's. */
+    /** Whose file this is, in the words of the person looking: above the organizations its organization or "Every organization", inside one the platform's. */
     private function ownerLabel(BuilderAsset $asset): ?string
     {
-        if ($this->aboveTheStores()) {
-            return $asset->isShared() ? 'Every organization' : $asset->store?->name;
+        if ($this->aboveTheOrganizations()) {
+            return $asset->isShared() ? 'Every organization' : $asset->organization?->name;
         }
 
         return $asset->isShared() ? 'From the platform' : null;
     }
 
     /**
-     * Which shelf the file goes on — the same answer BuilderController gives for a new ad. A store's person
-     * uploads to the store they are working in. The platform team stands in no store: the page sends the shop
-     * chosen in its Shop list, which has to exist — or none, and the file is shared with every shop.
+     * Which shelf the file goes on — the same answer BuilderController gives for a new ad. An organization's person
+     * uploads to the organization they are working in. The platform team stands in no organization: the page sends the organization
+     * chosen in its Organization list, which has to exist — or none, and the file is shared with every organization.
      *
      * @param  array<string, mixed>  $validated
      */
-    private function targetStoreId(array $validated): ?int
+    private function targetOrganizationId(array $validated): ?int
     {
-        if ($this->aboveTheStores()) {
-            $storeId = (int) ($validated['store_id'] ?? 0);
+        if ($this->aboveTheOrganizations()) {
+            $organizationId = (int) ($validated['organization_id'] ?? 0);
 
-            if ($storeId === 0) {
+            if ($organizationId === 0) {
                 return null;
             }
 
-            if (! Store::whereKey($storeId)->exists()) {
+            if (! Organization::whereKey($organizationId)->exists()) {
                 throw ValidationException::withMessages([
                     'file' => 'That organization no longer exists. Reload the page and choose again.',
                 ]);
             }
 
-            return $storeId;
+            return $organizationId;
         }
 
-        $storeId = (int) session('current_store_id');
+        $organizationId = (int) session('current_organization_id');
 
-        if (! $storeId) {
+        if (! $organizationId) {
             throw ValidationException::withMessages([
                 'file' => 'Select an organization before uploading — an ad\'s pictures belong to the organization they were uploaded for.',
             ]);
         }
 
-        return $storeId;
+        return $organizationId;
     }
 
-    private function aboveTheStores(): bool
+    private function aboveTheOrganizations(): bool
     {
         return auth()->user()->globalRole() !== null;
     }
 
-    /** The shop a store's person is working in; none above the stores. */
-    private function standingStoreId(): ?int
+    /** The organization an organization's person is working in; none above the organizations. */
+    private function standingOrganizationId(): ?int
     {
-        return $this->aboveTheStores() ? null : ((int) session('current_store_id') ?: null);
+        return $this->aboveTheOrganizations() ? null : ((int) session('current_organization_id') ?: null);
     }
 
     /** The name the person typed, or the file's own name without its extension. */

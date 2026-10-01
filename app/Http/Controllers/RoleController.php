@@ -5,10 +5,10 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\ConfirmsPassword;
 use App\Models\ActivityLog;
 use App\Models\Invitation;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
-use App\Models\Store;
-use App\Services\StoreTeam;
+use App\Services\OrganizationTeam;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\JsonResponse;
@@ -21,21 +21,21 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 /**
- * Roles, seen from where the person stands (docs/STORE-ORGANIZATION-SPEC.md §2–4 — owner's rules, 2026-09-17).
+ * Roles, seen from where the person stands (docs/ORGANIZATION-SPEC.md §2–4 — owner's rules, 2026-09-17).
  *
  *  - On the platform (super admins): every role. The super admin makes a role and says what it is for —
- *    a store role, offered in every store, or a platform role for the team above the stores — and renames,
- *    changes and deletes any role but Super-Admin, including the custom roles stores made for themselves.
- *    The Owner role is a store role like the others, except that it is never deleted.
- *  - Inside a store: the store roles to read, and the store's own custom roles — made and managed by any
+ *    an organization role, offered in every organization, or a platform role for the team above the organizations — and renames,
+ *    changes and deletes any role but Super-Admin, including the custom roles organizations made for themselves.
+ *    The Owner role is an organization role like the others, except that it is never deleted.
+ *  - Inside an organization: the organization roles to read, and the organization's own custom roles — made and managed by any
  *    member holding the role permissions, never beyond that member's own access.
  */
 class RoleController extends Controller
 {
     use ConfirmsPassword;
 
-    /** What a role made on the platform is for: every store, or the platform team. */
-    private const TYPES = ['store', 'platform'];
+    /** What a role made on the platform is for: every organization, or the platform team. */
+    private const TYPES = ['organization', 'platform'];
 
     private const PERMISSION_RULES = [
         'permissions' => ['required', 'array', 'min:1'],
@@ -49,48 +49,48 @@ class RoleController extends Controller
         'type.in' => 'Choose what this role is for.',
     ];
 
-    public function __construct(private StoreTeam $team) {}
+    public function __construct(private OrganizationTeam $team) {}
 
     public function index(): View
     {
-        return view('roles.index', ['store' => $this->context()]);
+        return view('roles.index', ['organization' => $this->context()]);
     }
 
     /** Every role the viewer can see from where they stand, with what the viewer may do to each. */
     public function data(): JsonResponse
     {
-        $store = $this->context();
+        $organization = $this->context();
         $actor = auth()->user();
 
-        // Inside a store only its own open invitations and members are counted — never another store's.
-        $roles = ($store ? Role::availableInStore($store->id) : Role::query())
-            ->with(['permissions:id,name,label', 'store:id,name'])
-            ->withCount(['invitations as invitations_count' => fn (Builder $query) => $query->when($store, fn (Builder $query) => $query->where('store_id', $store->id))])
+        // Inside an organization only its own open invitations and members are counted — never another organization's.
+        $roles = ($organization ? Role::availableInOrganization($organization->id) : Role::query())
+            ->with(['permissions:id,name,label', 'organization:id,name'])
+            ->withCount(['invitations as invitations_count' => fn (Builder $query) => $query->when($organization, fn (Builder $query) => $query->where('organization_id', $organization->id))])
             ->get();
 
-        $holders = DB::table('store_user')
-            ->when($store, fn (QueryBuilder $query) => $query->where('store_id', $store->id))
+        $holders = DB::table('organization_user')
+            ->when($organization, fn (QueryBuilder $query) => $query->where('organization_id', $organization->id))
             ->groupBy('role_id')
             ->selectRaw('role_id, count(*) as holders')
             ->pluck('holders', 'role_id');
 
-        $reach = $store ? $this->team->permissionsOf($actor, $store) : null;
+        $reach = $organization ? $this->team->permissionsOf($actor, $organization) : null;
 
         $rows = $roles
-            ->sortBy(fn (Role $role) => [$this->listPosition($role), strtolower((string) $role->store?->name), strtolower($role->name)])
-            ->map(function (Role $role) use ($store, $actor, $holders, $reach) {
+            ->sortBy(fn (Role $role) => [$this->listPosition($role), strtolower((string) $role->organization?->name), strtolower($role->name)])
+            ->map(function (Role $role) use ($organization, $actor, $holders, $reach) {
                 $held = (int) ($holders[$role->id] ?? 0);
 
-                // Above the stores the super admin manages every role but Super-Admin, and deletes any but Super-Admin
+                // Above the organizations the super admin manages every role but Super-Admin, and deletes any but Super-Admin
                 // and the Owner role. A role still held offers Delete too: deleting it says it must be unassigned first.
-                if ($store === null) {
+                if ($organization === null) {
                     return $this->payload($role, $held,
                         canEdit: ! $role->isSuperAdmin(),
                         canDelete: ! $role->isSuperAdmin() && ! $role->isOwner(),
                     );
                 }
 
-                // Inside a store the store roles are read; the store's own custom roles are managed within reach.
+                // Inside an organization the organization roles are read; the organization's own custom roles are managed within reach.
                 $withinReach = $role->isCustomRole() && $this->team->roleIsWithinReach($reach, $role);
 
                 return $this->payload($role, $held,
@@ -104,17 +104,17 @@ class RoleController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $store = $this->context();
+        $organization = $this->context();
 
-        // Above the stores the super admin says what the role is for; inside a store it is that store's own.
-        $type = $store ? 'custom' : $request->input('type');
-        $validated = $this->validated($request, $store || in_array($type, self::TYPES, true) ? $type : null, $store, askType: $store === null);
-        $permissions = $this->permissionsFor($validated['permissions'], $type, $store);
+        // Above the organizations the super admin says what the role is for; inside an organization it is that organization's own.
+        $type = $organization ? 'custom' : $request->input('type');
+        $validated = $this->validated($request, $organization || in_array($type, self::TYPES, true) ? $type : null, $organization, askType: $organization === null);
+        $permissions = $this->permissionsFor($validated['permissions'], $type, $organization);
 
-        $role = DB::transaction(function () use ($validated, $store, $type, $permissions) {
+        $role = DB::transaction(function () use ($validated, $organization, $type, $permissions) {
             $role = Role::create([
                 'name' => $validated['name'],
-                'store_id' => $store?->id,
+                'organization_id' => $organization?->id,
                 'is_global' => $type === 'platform',
                 'created_by' => auth()->id(),
             ]);
@@ -124,9 +124,9 @@ class RoleController extends Controller
         });
 
         ActivityLog::record('role.created', $role, match ($type) {
-            'store' => "Created organization role {$role->name}, offered in every organization",
+            'organization' => "Created organization role {$role->name}, offered in every organization",
             'platform' => "Created platform role {$role->name}",
-            default => "Created role {$role->name} in {$store->name}",
+            default => "Created role {$role->name} in {$organization->name}",
         });
 
         return response()->json(['message' => "Role {$role->name} created."], 201);
@@ -134,12 +134,12 @@ class RoleController extends Controller
 
     public function update(Request $request, Role $role): JsonResponse
     {
-        $store = $this->context();
-        $type = $this->ensureManageable($role, $store);
-        $roleStore = $role->isCustomRole() ? Store::findOrFail($role->store_id) : null;
+        $organization = $this->context();
+        $type = $this->ensureManageable($role, $organization);
+        $roleOrganization = $role->isCustomRole() ? Organization::findOrFail($role->organization_id) : null;
 
-        $validated = $this->validated($request, $type, $roleStore, editing: $role);
-        $permissions = $this->permissionsFor($validated['permissions'], $type, $store);
+        $validated = $this->validated($request, $type, $roleOrganization, editing: $role);
+        $permissions = $this->permissionsFor($validated['permissions'], $type, $organization);
 
         $before = $role->name;
 
@@ -151,19 +151,19 @@ class RoleController extends Controller
         $renamed = $before !== $role->name ? " (was {$before})" : '';
 
         ActivityLog::record('role.updated', $role, match (true) {
-            $type === 'store' => "Updated organization role {$role->name}{$renamed}, in every organization",
+            $type === 'organization' => "Updated organization role {$role->name}{$renamed}, in every organization",
             $type === 'platform' => "Updated platform role {$role->name}{$renamed}",
-            $store === null => "Updated role {$role->name}{$renamed} in {$roleStore->name}, from the platform",
+            $organization === null => "Updated role {$role->name}{$renamed} in {$roleOrganization->name}, from the platform",
             default => "Updated role {$role->name}{$renamed}",
         });
 
-        return response()->json(['message' => $type === 'store' ? "Role {$role->name} updated in every organization." : "Role {$role->name} updated."]);
+        return response()->json(['message' => $type === 'organization' ? "Role {$role->name} updated in every organization." : "Role {$role->name} updated."]);
     }
 
     public function destroy(Request $request, Role $role): JsonResponse
     {
-        $store = $this->context();
-        $this->ensureManageable($role, $store, deleting: true);
+        $organization = $this->context();
+        $this->ensureManageable($role, $organization, deleting: true);
 
         // Nobody may still hold it (owner's rule, 2026-09-17): the page offers Delete, and this says why not yet.
         $holders = $role->users()->count();
@@ -178,7 +178,7 @@ class RoleController extends Controller
         // Open invitations to the role would go with it (the foreign key cascades): revoke them in the
         // open, so the log and the person deleting both say what happened to them.
         $name = $role->name;
-        $storeId = $role->store_id;
+        $organizationId = $role->organization_id;
         $invitations = DB::transaction(function () use ($role) {
             $revoked = Invitation::where('role_id', $role->id)->delete();
             $role->delete();
@@ -190,7 +190,7 @@ class RoleController extends Controller
             ? " {$invitations} pending ".str('invitation')->plural($invitations).' to it '.($invitations === 1 ? 'was' : 'were').' revoked.'
             : '';
 
-        ActivityLog::record('role.deleted', null, "Deleted role {$name}.{$revokedNote}", storeId: $storeId);
+        ActivityLog::record('role.deleted', null, "Deleted role {$name}.{$revokedNote}", organizationId: $organizationId);
 
         return response()->json(['message' => "Role {$name} deleted.{$revokedNote}"]);
     }
@@ -198,18 +198,18 @@ class RoleController extends Controller
     /**
      * The permissions offered on the role form — only those the role can hold, nothing greyed out
      * (owner's rule, 2026-09-17). `?role=` names the role being edited; on the platform `?type=` says what a
-     * new role is for. A store role or a custom role takes what works inside a store; a platform role
-     * anything but the permission catalogue; and a member inside a store gives only what they hold there.
+     * new role is for. An organization role or a custom role takes what works inside an organization; a platform role
+     * anything but the permission catalogue; and a member inside an organization gives only what they hold there.
      */
     public function assignable(Request $request): JsonResponse
     {
-        $store = $this->context();
+        $organization = $this->context();
         $editing = $request->filled('role') ? Role::find($request->integer('role')) : null;
 
         $type = match (true) {
-            $store !== null => 'custom',
+            $organization !== null => 'custom',
             $editing !== null => $this->typeOf($editing),
-            default => $request->input('type') === 'platform' ? 'platform' : 'store',
+            default => $request->input('type') === 'platform' ? 'platform' : 'organization',
         };
 
         $query = Permission::orderBy('name');
@@ -217,8 +217,8 @@ class RoleController extends Controller
         if ($type === 'platform') {
             $query->whereNotIn('name', Permission::SUPER_ADMIN_ONLY);
         } else {
-            $givable = collect($store ? $this->team->permissionsOf($request->user(), $store) : Permission::pluck('name'))
-                ->filter(fn (string $name) => Permission::belongsToStores($name))
+            $givable = collect($organization ? $this->team->permissionsOf($request->user(), $organization) : Permission::pluck('name'))
+                ->filter(fn (string $name) => Permission::belongsToOrganizations($name))
                 ->values();
 
             $query->whereIn('name', $givable);
@@ -232,16 +232,16 @@ class RoleController extends Controller
     }
 
     /**
-     * Where the viewer stands: their current store — or, for a super admin, the platform (null).
+     * Where the viewer stands: their current organization — or, for a super admin, the platform (null).
      * Anybody else (a platform role that is not Super-Admin) has no roles to manage.
      */
-    private function context(): ?Store
+    private function context(): ?Organization
     {
-        $storeId = (int) session('current_store_id');
-        $store = $storeId > 0 ? Store::find($storeId) : null;
+        $organizationId = (int) session('current_organization_id');
+        $organization = $organizationId > 0 ? Organization::find($organizationId) : null;
 
-        if ($store !== null && $this->team->isMember(auth()->user(), $store)) {
-            return $store;
+        if ($organization !== null && $this->team->isMember(auth()->user(), $organization)) {
+            return $organization;
         }
 
         abort_unless(auth()->user()->isSuperAdmin(), 403, 'Roles are managed inside an organization, or by a super admin.');
@@ -250,26 +250,26 @@ class RoleController extends Controller
     }
 
     /**
-     * What may be changed from here, and what kind of role it is: above the stores, every role but
-     * Super-Admin — the Owner role never deleted; inside a store, its own custom roles within reach.
-     * Inside a store Super-Admin is a platform role like any other, so it is not found there (404) —
+     * What may be changed from here, and what kind of role it is: above the organizations, every role but
+     * Super-Admin — the Owner role never deleted; inside an organization, its own custom roles within reach.
+     * Inside an organization Super-Admin is a platform role like any other, so it is not found there (404) —
      * the same answer every role out of reach gets, rather than a 403 that names it.
      */
-    private function ensureManageable(Role $role, ?Store $store, bool $deleting = false): string
+    private function ensureManageable(Role $role, ?Organization $organization, bool $deleting = false): string
     {
-        if ($store === null) {
+        if ($organization === null) {
             abort_if($role->isSuperAdmin(), 403, 'The Super-Admin role always holds every permission, and is never changed.');
             abort_if($deleting && $role->isOwner(), 403, 'The Owner role is never deleted: it is how an organization has an owner. Rename it or change what it allows instead.');
 
             return $this->typeOf($role);
         }
 
-        abort_if($role->isStoreRole(), 403, 'Organization roles are changed by the super admin, for every organization at once.');
-        abort_unless($role->isCustomRole() && $role->store_id === $store->id, 404);
+        abort_if($role->isOrganizationRole(), 403, 'Organization roles are changed by the super admin, for every organization at once.');
+        abort_unless($role->isCustomRole() && $role->organization_id === $organization->id, 404);
 
         $actor = auth()->user();
         abort_unless(
-            $this->team->roleIsWithinReach($this->team->permissionsOf($actor, $store), $role),
+            $this->team->roleIsWithinReach($this->team->permissionsOf($actor, $organization), $role),
             403, 'You cannot change a role that has access you do not have.'
         );
 
@@ -280,7 +280,7 @@ class RoleController extends Controller
     {
         return match (true) {
             $role->isGlobal() => 'platform',
-            $role->isStoreRole() => 'store',
+            $role->isOrganizationRole() => 'organization',
             default => 'custom',
         };
     }
@@ -288,19 +288,19 @@ class RoleController extends Controller
     /**
      * The name and permissions — and, for a new role made on the platform, what it is for. A name has to be
      * new to every list the role appears in, compared with accents, case, spacing and punctuation folded
-     * away: a store role is listed in every store, so no store's custom role may share its name, and a
-     * custom role shares its store's list with the store roles. Nothing may pose as Super-Admin. A `$type` of
+     * away: an organization role is listed in every organization, so no organization's custom role may share its name, and a
+     * custom role shares its organization's list with the organization roles. Nothing may pose as Super-Admin. A `$type` of
      * null — a new role whose type is missing or unknown — has no list yet: only the type is refused then.
      *
      * @return array{name: string, permissions: array<int, int>, type?: string}
      */
-    private function validated(Request $request, ?string $type, ?Store $roleStore, ?Role $editing = null, bool $askType = false): array
+    private function validated(Request $request, ?string $type, ?Organization $roleOrganization, ?Role $editing = null, bool $askType = false): array
     {
         return $request->validate([
             ...($askType ? ['type' => ['required', Rule::in(self::TYPES)]] : []),
             // `bail` because the closure below assumes the rules before it held: a name posted as an
             // array (name[]=x) would otherwise still reach it, and casting an array to a string is a 500.
-            'name' => ['bail', 'required', 'string', 'max:255', function (string $attribute, mixed $value, \Closure $fail) use ($type, $roleStore, $editing) {
+            'name' => ['bail', 'required', 'string', 'max:255', function (string $attribute, mixed $value, \Closure $fail) use ($type, $roleOrganization, $editing) {
                 $folded = self::foldName((string) $value);
 
                 if ($folded === self::foldName(Role::SUPER_ADMIN)) {
@@ -313,14 +313,14 @@ class RoleController extends Controller
                     return;
                 }
 
-                $clash = $this->rolesListedWith($type, $roleStore)
+                $clash = $this->rolesListedWith($type, $roleOrganization)
                     ->reject(fn (Role $role) => $editing !== null && $role->is($editing))
                     ->first(fn (Role $role) => self::foldName($role->name) === $folded);
 
                 if ($clash !== null) {
                     $fail(match (true) {
-                        $clash->isCustomRole() && $type === 'store' => "{$clash->store?->name} already has a custom role called {$clash->name}. Choose another name.",
-                        $clash->isStoreRole() && $type === 'custom' => "There is already an organization role called {$clash->name}, and every organization has it. Choose another name.",
+                        $clash->isCustomRole() && $type === 'organization' => "{$clash->organization?->name} already has a custom role called {$clash->name}. Choose another name.",
+                        $clash->isOrganizationRole() && $type === 'custom' => "There is already an organization role called {$clash->name}, and every organization has it. Choose another name.",
                         default => "There is already a role called {$clash->name}. Choose another name.",
                     });
                 }
@@ -330,17 +330,17 @@ class RoleController extends Controller
     }
 
     /**
-     * The roles a role of this kind is listed with: a platform role with the platform team's; a store role
-     * with every store role and every store's custom roles; a custom role with its store's list.
+     * The roles a role of this kind is listed with: a platform role with the platform team's; an organization role
+     * with every organization role and every organization's custom roles; a custom role with its organization's list.
      *
      * @return Collection<int, Role>
      */
-    private function rolesListedWith(string $type, ?Store $roleStore): Collection
+    private function rolesListedWith(string $type, ?Organization $roleOrganization): Collection
     {
         return match ($type) {
-            'platform' => Role::platform()->orderBy('id')->get(['id', 'name', 'is_global', 'store_id']),
-            'store' => Role::where('is_global', false)->with('store:id,name')->orderBy('id')->get(['id', 'name', 'is_global', 'store_id']),
-            default => Role::availableInStore($roleStore->id)->orderBy('id')->get(['id', 'name', 'is_global', 'store_id']),
+            'platform' => Role::platform()->orderBy('id')->get(['id', 'name', 'is_global', 'organization_id']),
+            'organization' => Role::where('is_global', false)->with('organization:id,name')->orderBy('id')->get(['id', 'name', 'is_global', 'organization_id']),
+            default => Role::availableInOrganization($roleOrganization->id)->orderBy('id')->get(['id', 'name', 'is_global', 'organization_id']),
         };
     }
 
@@ -354,14 +354,14 @@ class RoleController extends Controller
     }
 
     /**
-     * The permission rows a role may carry (rules 7 and §3): the catalogue on no role but Super-Admin; a
-     * store role or a custom role only what can work inside a store; and a member inside a store gives only
+     * The permission rows a role may carry (rules 7 and §3): the catalogue on no role but Super-Admin; an
+     * organization role or a custom role only what can work inside an organization; and a member inside an organization gives only
      * what they hold there themselves.
      *
      * @param  array<int, int>  $ids
      * @return Collection<int, Permission>
      */
-    private function permissionsFor(array $ids, string $type, ?Store $memberStore): Collection
+    private function permissionsFor(array $ids, string $type, ?Organization $memberOrganization): Collection
     {
         $permissions = Permission::whereIn('id', $ids)->get();
 
@@ -373,30 +373,30 @@ class RoleController extends Controller
             throw ValidationException::withMessages(['permissions' => 'Permission management belongs to the Super-Admin role alone.']);
         }
 
-        $aboveTheStores = $type === 'platform'
+        $aboveTheOrganizations = $type === 'platform'
             ? collect()
-            : $permissions->reject(fn (Permission $permission) => Permission::belongsToStores($permission->name));
+            : $permissions->reject(fn (Permission $permission) => Permission::belongsToOrganizations($permission->name));
 
-        if ($aboveTheStores->isNotEmpty()) {
+        if ($aboveTheOrganizations->isNotEmpty()) {
             throw ValidationException::withMessages([
-                'permissions' => 'An organization role cannot hold '.$aboveTheStores->pluck('display_name')->join(', ', ' or ').': it works above the organizations only.',
+                'permissions' => 'An organization role cannot hold '.$aboveTheOrganizations->pluck('display_name')->join(', ', ' or ').': it works above the organizations only.',
             ]);
         }
 
-        if ($memberStore !== null && $permissions->pluck('name')->diff($this->team->permissionsOf(auth()->user(), $memberStore))->isNotEmpty()) {
+        if ($memberOrganization !== null && $permissions->pluck('name')->diff($this->team->permissionsOf(auth()->user(), $memberOrganization))->isNotEmpty()) {
             throw ValidationException::withMessages(['permissions' => 'You can only give a role permissions you hold yourself.']);
         }
 
         return $permissions;
     }
 
-    /** Where a role sits in the list: Super-Admin, the Owner role, the store roles, the platform roles, then stores' custom roles. */
+    /** Where a role sits in the list: Super-Admin, the Owner role, the organization roles, the platform roles, then organizations' custom roles. */
     private function listPosition(Role $role): int
     {
         return match (true) {
             $role->isSuperAdmin() => 0,
             $role->isOwner() => 1,
-            $role->isStoreRole() => 2,
+            $role->isOrganizationRole() => 2,
             $role->isGlobal() => 3,
             default => 4,
         };
@@ -410,7 +410,7 @@ class RoleController extends Controller
             'name' => $role->name,
             'kind' => $role->isSuperAdmin() ? 'super_admin' : $this->typeOf($role),
             'is_owner_role' => $role->isOwner(),
-            'store_name' => $role->isCustomRole() ? $role->store?->name : null,
+            'organization_name' => $role->isCustomRole() ? $role->organization?->name : null,
             'description' => $role->description(),
             'holders_count' => $holders,
             'invitations_count' => (int) ($role->invitations_count ?? 0),

@@ -3,10 +3,10 @@
 namespace Tests\Browser;
 
 use App\Models\BuilderAd;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -32,15 +32,15 @@ class AdExamplesOnTelevisionTest extends DuskTestCase
     public function test_the_four_example_ads_play_on_a_television_one_after_another(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store, Role::OWNER, 'owner@example.com');
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization, Role::OWNER, 'owner@example.com');
 
-        $this->artisan('builder:examples', ['store' => $store->id, '--no-fonts' => true])->assertSuccessful();
+        $this->artisan('builder:examples', ['organization' => $organization->id, '--no-fonts' => true])->assertSuccessful();
 
-        $ads = BuilderAd::where('store_id', $store->id)->orderBy('id')->get();
+        $ads = BuilderAd::where('organization_id', $organization->id)->orderBy('id')->get();
         $this->assertSame(array_keys(self::HEADLINES), $ads->pluck('name')->all());
 
-        $this->browse(function (Browser $tv, Browser $panel) use ($owner, $store, $ads) {
+        $this->browse(function (Browser $tv, Browser $panel) use ($owner, $organization, $ads) {
             /* ── 1. A television asks to be adopted ─────────────────────── */
             $tv->visit('/player');
             $tv->waitFor('@pairing-code', 15);
@@ -50,7 +50,7 @@ class AdExamplesOnTelevisionTest extends DuskTestCase
             /* ── 2. The owner pairs it and gives it the four, each for its own length ── */
             $this->freshSession($panel);
             $panel->loginAs($owner);
-            $this->switchToStore($panel, $store);
+            $this->switchToOrganization($panel, $organization);
 
             $panel->visit('/screens');
             $this->waitForAlpine($panel);
@@ -59,8 +59,8 @@ class AdExamplesOnTelevisionTest extends DuskTestCase
             $this->jsType($panel, '@screen-name', 'Counter TV');
             $this->jsClick($panel, '@screen-pair-save');
 
-            $panel->waitUsing(20, 250, fn () => Screen::where('store_id', $store->id)->exists());
-            $screen = Screen::where('store_id', $store->id)->sole();
+            $panel->waitUsing(20, 250, fn () => Screen::where('organization_id', $organization->id)->exists());
+            $screen = Screen::where('organization_id', $organization->id)->sole();
 
             $panel->visit('/screens/'.$screen->id);
             $this->waitForAlpine($panel);

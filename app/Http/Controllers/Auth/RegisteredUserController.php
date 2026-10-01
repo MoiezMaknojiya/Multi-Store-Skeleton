@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\User;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\RedirectResponse;
@@ -21,18 +21,18 @@ use Illuminate\View\View;
 
 class RegisteredUserController extends Controller
 {
-    /** Public sign-up page: the new owner's details and their store, together. */
+    /** Public sign-up page: the new owner's details and their organization, together. */
     public function create(): View
     {
         return view('auth.register', [
-            'states' => Store::US_STATES,
+            'states' => Organization::US_STATES,
             'signupOpen' => Role::where('key', Role::OWNER)->exists(),
         ]);
     }
 
     /**
-     * Handle the sign-up: one transaction creates the account, the store, and the person's
-     * membership of it as its Owner (docs/STORE-ORGANIZATION-SPEC.md rule 17). The role is
+     * Handle the sign-up: one transaction creates the account, the organization, and the person's
+     * membership of it as its Owner (docs/ORGANIZATION-SPEC.md rule 17). The role is
      * never taken from the request.
      */
     public function store(Request $request): RedirectResponse
@@ -68,18 +68,18 @@ class RegisteredUserController extends Controller
             // never reaches the unique query.
             'email' => ['bail', 'required', 'email', 'max:255', 'regex:/^\S+$/', 'unique:users'],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
-            'store_name' => 'required|string|max:255',
+            'organization_name' => 'required|string|max:255',
             'street' => 'required|string|max:255',
             'suite' => 'nullable|string|max:100',
             'city' => 'required|string|max:100',
-            'state' => ['required', 'string', 'size:2', Rule::in(array_keys(Store::US_STATES))],
+            'state' => ['required', 'string', 'size:2', Rule::in(array_keys(Organization::US_STATES))],
             'zip_code' => ['required', 'string', 'max:10', 'regex:/^[0-9]+$/'],
         ], [
             'email.regex' => 'Email cannot contain spaces.',
             'zip_code.regex' => 'Zip code can only contain numbers.',
         ]);
 
-        [$user, $store] = DB::transaction(function () use ($validated, $role): array {
+        [$user, $organization] = DB::transaction(function () use ($validated, $role): array {
             $user = User::create([
                 'first_name' => $validated['first_name'],
                 'last_name' => $validated['last_name'],
@@ -88,8 +88,8 @@ class RegisteredUserController extends Controller
                 'password' => Hash::make($validated['password']),
             ]);
 
-            $store = Store::create([
-                'name' => $validated['store_name'],
+            $organization = Organization::create([
+                'name' => $validated['organization_name'],
                 'street' => $validated['street'],
                 'suite' => $validated['suite'] ?? null,
                 'city' => $validated['city'],
@@ -101,16 +101,16 @@ class RegisteredUserController extends Controller
                 'created_by' => $user->id,
             ]);
 
-            $user->stores()->attach($store->id, ['role_id' => $role->id]);
+            $user->organizations()->attach($organization->id, ['role_id' => $role->id]);
 
-            return [$user, $store];
+            return [$user, $organization];
         });
 
         Auth::login($user);
         $request->session()->regenerate();
 
         ActivityLog::record('user.registered', $user,
-            "Self-registered: {$user->name} ({$user->email}) with organization {$store->name}", storeId: $store->id);
+            "Self-registered: {$user->name} ({$user->email}) with organization {$organization->name}", organizationId: $organization->id);
 
         // The address has to be confirmed before anything that uses the server's space (owner's rule, 2026-09-29):
         // the link goes out now, and "Check your inbox" says where. A link that could not go out — a mail server

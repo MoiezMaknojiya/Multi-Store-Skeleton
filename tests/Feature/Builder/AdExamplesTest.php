@@ -4,7 +4,7 @@ use App\Models\ActivityLog;
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Services\ExampleArtwork;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Storage;
 |--------------------------------------------------------------------------
 |
 | docs/AD-BUILDER-SPEC.md §10. The examples are ordinary documents, stored the way a save from the editor
-| stores them, with their pictures on the store's own shelf — and they are safe to make again.
+| stores them, with their pictures on the organization's own shelf — and they are safe to make again.
 |
 */
 
@@ -23,27 +23,27 @@ beforeEach(function () {
     Storage::fake('public');
     Http::preventStrayRequests();
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
 });
 
-test('it puts four finished, published ads and their pictures in the store', function () {
-    $this->artisan('builder:examples', ['store' => $this->store->id, '--no-fonts' => true])->assertSuccessful();
+test('it puts four finished, published ads and their pictures in the organization', function () {
+    $this->artisan('builder:examples', ['organization' => $this->organization->id, '--no-fonts' => true])->assertSuccessful();
 
-    $ads = BuilderAd::where('store_id', $this->store->id)->get();
+    $ads = BuilderAd::where('organization_id', $this->organization->id)->get();
 
     expect($ads)->toHaveCount(4)
         ->and($ads->pluck('name')->all())->toEqualCanonicalizing([
             'Example · Winter Sale', 'Example · Fresh Coffee', 'Example · Grand Opening', 'Example · Burger Deal (Urdu)',
         ])
         ->and($ads->every(fn (BuilderAd $ad) => $ad->isPublished()))->toBeTrue()
-        ->and(Media::where('type', Media::TYPE_HTML)->where('store_id', $this->store->id)->count())->toBe(4);
+        ->and(Media::where('type', Media::TYPE_HTML)->where('organization_id', $this->organization->id)->count())->toBe(4);
 
-    // Every picture is on THIS store's shelf, in its folder, with a thumbnail — the way an upload is.
+    // Every picture is on THIS organization's shelf, in its folder, with a thumbnail — the way an upload is.
     $assets = BuilderAsset::all();
 
     expect($assets)->toHaveCount(count(ExampleArtwork::PIECES))
-        ->and($assets->every(fn (BuilderAsset $asset) => $asset->store_id === $this->store->id))->toBeTrue()
-        ->and($assets->every(fn (BuilderAsset $asset) => str_starts_with($asset->path, "builder/{$this->store->id}/assets/")))->toBeTrue()
+        ->and($assets->every(fn (BuilderAsset $asset) => $asset->organization_id === $this->organization->id))->toBeTrue()
+        ->and($assets->every(fn (BuilderAsset $asset) => str_starts_with($asset->path, "builder/{$this->organization->id}/assets/")))->toBeTrue()
         ->and($assets->every(fn (BuilderAsset $asset) => $asset->kind === BuilderAsset::KIND_IMAGE && $asset->width > 0))->toBeTrue();
 
     $assets->each(function (BuilderAsset $asset) {
@@ -69,13 +69,13 @@ test('it puts four finished, published ads and their pictures in the store', fun
         ->toContain('زبردست ڈیل')
         ->toContain("font-family:'Noto Nastaliq Urdu', sans-serif;");
 
-    // The command's work is in the store's activity log, by the system.
-    expect(ActivityLog::where('store_id', $this->store->id)->where('action', 'ad.published')->count())->toBe(4)
+    // The command's work is in the organization's activity log, by the system.
+    expect(ActivityLog::where('organization_id', $this->organization->id)->where('action', 'ad.published')->count())->toBe(4)
         ->and(ActivityLog::where('action', 'ad.published')->first()->actor_name)->toBe('System');
 });
 
 test('running it again restores the examples instead of duplicating them', function () {
-    $this->artisan('builder:examples', ['store' => $this->store->id, '--no-fonts' => true])->assertSuccessful();
+    $this->artisan('builder:examples', ['organization' => $this->organization->id, '--no-fonts' => true])->assertSuccessful();
 
     $winter = BuilderAd::firstWhere('name', 'Example · Winter Sale');
     $mediaId = $winter->media_id;
@@ -83,7 +83,7 @@ test('running it again restores the examples instead of duplicating them', funct
     $document['elements'] = [];
     $winter->update(['document' => $document]);
 
-    $this->artisan('builder:examples', ['store' => $this->store->id, '--no-fonts' => true])->assertSuccessful();
+    $this->artisan('builder:examples', ['organization' => $this->organization->id, '--no-fonts' => true])->assertSuccessful();
 
     expect(BuilderAd::count())->toBe(4)
         ->and(BuilderAsset::count())->toBe(count(ExampleArtwork::PIECES))
@@ -94,13 +94,13 @@ test('running it again restores the examples instead of duplicating them', funct
 
 test('an ad of an example’s name made upright is left as it is: its shape is fixed once made', function () {
     $mine = BuilderAd::factory()->portrait()->withText('My own menu')->create([
-        'store_id' => $this->store->id,
+        'organization_id' => $this->organization->id,
         'name' => 'Example · Winter Sale',
         'orientation' => BuilderAd::PORTRAIT,
     ]);
     $before = $mine->document;
 
-    $this->artisan('builder:examples', ['store' => $this->store->id, '--no-fonts' => true])
+    $this->artisan('builder:examples', ['organization' => $this->organization->id, '--no-fonts' => true])
         ->expectsOutputToContain('it is a portrait ad, and the example is landscape')
         ->assertSuccessful();
 
@@ -116,24 +116,24 @@ test('an ad of an example’s name made upright is left as it is: its shape is f
 });
 
 test('drafts, when asked', function () {
-    $this->artisan('builder:examples', ['store' => $this->store->id, '--no-fonts' => true, '--no-publish' => true])->assertSuccessful();
+    $this->artisan('builder:examples', ['organization' => $this->organization->id, '--no-fonts' => true, '--no-publish' => true])->assertSuccessful();
 
     expect(BuilderAd::count())->toBe(4)
         ->and(BuilderAd::whereNotNull('media_id')->count())->toBe(0)
         ->and(Media::count())->toBe(0);
 });
 
-test('a store that does not exist is refused, and nothing is made', function () {
-    $this->artisan('builder:examples', ['store' => 999, '--no-fonts' => true])->assertFailed();
+test('an organization that does not exist is refused, and nothing is made', function () {
+    $this->artisan('builder:examples', ['organization' => 999, '--no-fonts' => true])->assertFailed();
 
     expect(BuilderAd::count())->toBe(0)->and(BuilderAsset::count())->toBe(0);
 });
 
 test('every example is a document the editor holds as it is — saved back unchanged', function () {
-    $this->artisan('builder:examples', ['store' => $this->store->id, '--no-fonts' => true, '--no-publish' => true])->assertSuccessful();
+    $this->artisan('builder:examples', ['organization' => $this->organization->id, '--no-fonts' => true, '--no-publish' => true])->assertSuccessful();
 
-    $designer = createStoreUser($this->store, ['ad-view', 'ad-update'], 'Designer');
-    $this->actingAs($designer)->withSession(['current_store_id' => $this->store->id]);
+    $designer = createOrganizationUser($this->organization, ['ad-view', 'ad-update'], 'Designer');
+    $this->actingAs($designer)->withSession(['current_organization_id' => $this->organization->id]);
 
     BuilderAd::all()->each(function (BuilderAd $ad) {
         $this->putJson("/builder/{$ad->id}", ['name' => $ad->name, 'document' => $ad->document])->assertOk();

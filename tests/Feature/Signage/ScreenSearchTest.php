@@ -1,7 +1,7 @@
 <?php
 
+use App\Models\Organization;
 use App\Models\Screen;
-use App\Models\Store;
 
 /*
 |--------------------------------------------------------------------------
@@ -15,17 +15,17 @@ use App\Models\Store;
 */
 
 /** Two screens with distinct names, devices and pairing dates. */
-function twoScreens(Store $store): array
+function twoScreens(Organization $organization): array
 {
     return [
         Screen::factory()->create([
-            'store_id' => $store->id,
+            'organization_id' => $organization->id,
             'name' => 'Counter TV',
             'device_uuid' => '828739f6-8ae4-4099-821c-377b8a3f87bf',
             'paired_at' => '2026-09-07 14:08:48',
         ]),
         Screen::factory()->create([
-            'store_id' => $store->id,
+            'organization_id' => $organization->id,
             'name' => 'Window Board',
             'device_uuid' => 'aa11bb22-cc33-dd44-ee55-158afcaa16d0',
             'paired_at' => '2026-08-15 09:30:00',
@@ -41,11 +41,11 @@ function searchScreens(string $term): array
 }
 
 beforeEach(function () {
-    $this->store = Store::factory()->create();
-    $this->actor = createStoreUser($this->store, ['screen-view']);
-    twoScreens($this->store);
+    $this->organization = Organization::factory()->create();
+    $this->actor = createOrganizationUser($this->organization, ['screen-view']);
+    twoScreens($this->organization);
 
-    $this->actingAs($this->actor)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->actor)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 test('a screen is found by its name, whatever case it is typed in', function () {
@@ -85,12 +85,12 @@ test('a term that means nothing finds nothing', function () {
     expect(searchScreens('99/99/9999'))->toBe([]);
 });
 
-test('search never reaches outside the store being worked in', function () {
+test('search never reaches outside the organization being worked in', function () {
     // The wall comes first: searching is not a way around it, whichever field the
     // term happens to match.
-    $otherStore = Store::factory()->create();
+    $otherOrganization = Organization::factory()->create();
     Screen::factory()->create([
-        'store_id' => $otherStore->id,
+        'organization_id' => $otherOrganization->id,
         'name' => 'Counter TV',
         'device_uuid' => '828739f6-8ae4-4099-821c-377b8a3f87bf',
         'paired_at' => '2026-09-07 14:08:48',
@@ -105,7 +105,7 @@ test('an unpaired screen has no device or date to be found by', function () {
     // Made on a day that is nobody's pairing date, and never paired: no device id, no pairing date.
     $this->travelTo('2026-10-01 12:00:00');
     Screen::factory()->unpaired()->create([
-        'store_id' => $this->store->id,
+        'organization_id' => $this->organization->id,
         'name' => 'Entrance Display',
     ]);
 

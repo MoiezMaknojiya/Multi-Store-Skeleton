@@ -14,10 +14,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * A file in a media library. A library belongs to a shop (`store_id` set) — its inventory, which every
- * colleague may put on the shop's screens — or to the platform (`store_id` NULL, docs/CHANNEL-CONTENT-SPEC.md),
- * whose files reach a television only inside a channel. A shop never sees or plays the platform's rows, and
- * nothing here ever crosses from one shop to another.
+ * A file in a media library. A library belongs to an organization (`organization_id` set) — its inventory, which every
+ * colleague may put on the organization's screens — or to the platform (`organization_id` NULL, docs/CHANNEL-CONTENT-SPEC.md),
+ * whose files reach a television only inside a channel. An organization never sees or plays the platform's rows, and
+ * nothing here ever crosses from one organization to another.
  */
 class Media extends Model
 {
@@ -40,14 +40,14 @@ class Media extends Model
 
     /**
      * The longest video a library or a channel takes (owner's rule, 2026-09-28): five minutes, measured from the
-     * file (App\Rules\VideoLength). A shop's screen is watched for seconds by people walking past, and 250 MB of
+     * file (App\Rules\VideoLength). An organization's screen is watched for seconds by people walking past, and 250 MB of
      * 1080p runs out near seven minutes anyway. The Ad Builder's shelf keeps 30 seconds
      * (BuilderAsset::MAX_VIDEO_SECONDS). Mirrored by MAX_VIDEO_SECONDS in resources/js/core/media-file.js.
      */
     public const MAX_VIDEO_SECONDS = 300;
 
     protected $fillable = [
-        'store_id', 'title', 'type', 'mime_type', 'disk', 'path',
+        'organization_id', 'title', 'type', 'mime_type', 'disk', 'path',
         'thumbnail_path', 'size', 'width', 'height', 'duration_seconds',
         'orientation', 'created_by',
     ];
@@ -65,11 +65,11 @@ class Media extends Model
     }
 
     /**
-     * Media is scoped to the STORE, not to whoever uploaded it: a file is the store's
-     * inventory, so everyone working in the store can put it on a screen, and it stays when
-     * its uploader leaves. The platform team spans every store and its own library. With no
-     * store selected a store member sees nothing — and a store member never matches the
-     * platform's rows, whose `store_id` is NULL.
+     * Media is scoped to the ORGANIZATION, not to whoever uploaded it: a file is the organization's
+     * inventory, so everyone working in the organization can put it on a screen, and it stays when
+     * its uploader leaves. The platform team spans every organization and its own library. With no
+     * organization selected an organization member sees nothing — and an organization member never matches the
+     * platform's rows, whose `organization_id` is NULL.
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
@@ -77,19 +77,19 @@ class Media extends Model
             return $query;
         }
 
-        $currentStoreId = session('current_store_id');
+        $currentOrganizationId = session('current_organization_id');
 
-        if (! $currentStoreId) {
+        if (! $currentOrganizationId) {
             return $query->whereRaw('0 = 1');
         }
 
-        return $query->where('store_id', $currentStoreId);
+        return $query->where('organization_id', $currentOrganizationId);
     }
 
-    /** The platform's own library: files that belong to no shop. */
+    /** The platform's own library: files that belong to no organization. */
     public function scopePlatformOwned(Builder $query): Builder
     {
-        return $query->whereNull('store_id');
+        return $query->whereNull('organization_id');
     }
 
     /**
@@ -155,10 +155,10 @@ class Media extends Model
         return $this->hasOne(BuilderAd::class);
     }
 
-    /** Does this file belong to the platform rather than to a shop? */
+    /** Does this file belong to the platform rather than to an organization? */
     public function isPlatformOwned(): bool
     {
-        return $this->store_id === null;
+        return $this->organization_id === null;
     }
 
     /**
@@ -192,10 +192,10 @@ class Media extends Model
             ?? ($this->type === self::TYPE_VIDEO ? ChannelAd::UNMEASURED_VIDEO_SECONDS : PlaylistItem::secondsForAPicture($given));
     }
 
-    /** The shop whose library this is; null for the platform's. */
-    public function store(): BelongsTo
+    /** The organization whose library this is; null for the platform's. */
+    public function organization(): BelongsTo
     {
-        return $this->belongsTo(Store::class);
+        return $this->belongsTo(Organization::class);
     }
 
     /** The channel ads that show this file. */

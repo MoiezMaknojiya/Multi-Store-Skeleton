@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Storage;
  * keeps (docs/AD-BUILDER-SPEC.md §15). A browser fetches a font with CORS, so from there every font file on our own server
  * counted as another site's and was refused — the advert fell back to a system face on every screen.
  * A `data:` URL is never a CORS request, so the files are embedded instead: nothing to configure on
- * any web server, and nothing to fetch on the day the shop's network is down.
+ * any web server, and nothing to fetch on the day the organization's network is down.
  *
  * Only what the design can show is embedded: for each family, the installed weight a browser would pick
  * for each weight the design asks for (CSS font matching), and of those only the subsets — latin,

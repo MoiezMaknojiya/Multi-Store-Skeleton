@@ -6,9 +6,9 @@ use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Daypart;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
-use App\Models\Store;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
 
@@ -25,10 +25,10 @@ use Illuminate\Support\Carbon;
 */
 
 beforeEach(function () {
-    $this->store = Store::factory()->create();
-    $this->screen = Screen::factory()->withToken('tok')->create(['store_id' => $this->store->id, 'timezone' => 'America/Chicago']);
-    $this->breakfast = Daypart::factory()->between('06:00', '11:00')->create(['store_id' => $this->store->id, 'name' => 'Breakfast']);
-    $this->lunch = Daypart::factory()->between('11:30', '15:00')->create(['store_id' => $this->store->id, 'name' => 'Lunch']);
+    $this->organization = Organization::factory()->create();
+    $this->screen = Screen::factory()->withToken('tok')->create(['organization_id' => $this->organization->id, 'timezone' => 'America/Chicago']);
+    $this->breakfast = Daypart::factory()->between('06:00', '11:00')->create(['organization_id' => $this->organization->id, 'name' => 'Breakfast']);
+    $this->lunch = Daypart::factory()->between('11:30', '15:00')->create(['organization_id' => $this->organization->id, 'name' => 'Lunch']);
 });
 
 afterEach(fn () => Carbon::setTestNow());
@@ -42,9 +42,9 @@ function localNow(string $moment): CarbonImmutable
     return $at;
 }
 
-function scheduledPicture(Store $store, Screen $screen, string $title, int $position, ?Daypart $daypart = null, array $media = []): Media
+function scheduledPicture(Organization $organization, Screen $screen, string $title, int $position, ?Daypart $daypart = null, array $media = []): Media
 {
-    $picture = Media::factory()->create(['store_id' => $store->id, 'title' => $title, 'type' => Media::TYPE_IMAGE, ...$media]);
+    $picture = Media::factory()->create(['organization_id' => $organization->id, 'title' => $title, 'type' => Media::TYPE_IMAGE, ...$media]);
     $line = PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $picture->id, 'position' => $position, 'duration_seconds' => 10]);
 
     if ($daypart) {
@@ -70,8 +70,8 @@ function timelineOf($test, array $titles): array
 test('a menu board follows its dayparts for three days, one entry at each change and none in between', function () {
     localNow('2026-09-24 09:15');   // a Thursday, during breakfast
 
-    $eggs = scheduledPicture($this->store, $this->screen, 'Eggs', 0, $this->breakfast);
-    $curry = scheduledPicture($this->store, $this->screen, 'Curry', 1, $this->lunch);
+    $eggs = scheduledPicture($this->organization, $this->screen, 'Eggs', 0, $this->breakfast);
+    $curry = scheduledPicture($this->organization, $this->screen, 'Curry', 1, $this->lunch);
 
     $entries = timelineOf($this, [$eggs->url => 'Eggs', $curry->url => 'Curry']);
 
@@ -97,7 +97,7 @@ test('a menu board follows its dayparts for three days, one entry at each change
 
 test('the first entry is exactly the answer for now, and the horizon is the controller’s', function () {
     localNow('2026-09-24 12:00');
-    $curry = scheduledPicture($this->store, $this->screen, 'Curry', 0, $this->lunch);
+    $curry = scheduledPicture($this->organization, $this->screen, 'Curry', 0, $this->lunch);
 
     $manifest = $this->withHeader('Authorization', 'Bearer tok')->getJson('/device/playlist')->assertOk()->json();
     $first = $manifest['timeline']['entries'][0];
@@ -110,9 +110,9 @@ test('the first entry is exactly the answer for now, and the horizon is the cont
 
 test('the holding picture is what a dark hour shows, in the timeline as on the glass', function () {
     localNow('2026-09-24 10:00');
-    $holding = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Holding', 'type' => Media::TYPE_IMAGE]);
+    $holding = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Holding', 'type' => Media::TYPE_IMAGE]);
     $this->screen->update(['default_media_id' => $holding->id]);
-    $eggs = scheduledPicture($this->store, $this->screen, 'Eggs', 0, $this->breakfast);
+    $eggs = scheduledPicture($this->organization, $this->screen, 'Eggs', 0, $this->breakfast);
 
     $entries = timelineOf($this, [$eggs->url => 'Eggs', $holding->url => 'Holding']);
 
@@ -126,8 +126,8 @@ test('the holding picture is what a dark hour shows, in the timeline as on the g
 test('a line that ends today, or starts tomorrow, changes the timeline at the screen\'s own midnight', function () {
     localNow('2026-09-24 09:00');
     // A file keeps no dates of its own (owner, 2026-10-01): its line's rule says when, on the screen's wall clock.
-    $sale = scheduledPicture($this->store, $this->screen, 'Sale', 0);
-    $launch = scheduledPicture($this->store, $this->screen, 'Launch', 1);
+    $sale = scheduledPicture($this->organization, $this->screen, 'Sale', 0);
+    $launch = scheduledPicture($this->organization, $this->screen, 'Launch', 1);
     PlaylistItem::where('media_id', $sale->id)->sole()->scheduleRules()->create(['ends_on' => '2026-09-24', 'position' => 0]);
     PlaylistItem::where('media_id', $launch->id)->sole()->scheduleRules()->create(['starts_on' => '2026-09-25', 'position' => 0]);
 
@@ -141,9 +141,9 @@ test('a line that ends today, or starts tomorrow, changes the timeline at the sc
 
 test('a window that runs past midnight closes on the next day, and a closed weekday is simply dark', function () {
     localNow('2026-09-24 21:00');   // Thursday
-    $late = Daypart::factory()->overnight()->create(['store_id' => $this->store->id, 'name' => 'Late']);   // 22:00 – 02:00
+    $late = Daypart::factory()->overnight()->create(['organization_id' => $this->organization->id, 'name' => 'Late']);   // 22:00 – 02:00
     $late->syncExceptions([['weekday' => 5, 'start_time' => null, 'end_time' => null]]);             // closed Fridays
-    $night = scheduledPicture($this->store, $this->screen, 'Night', 0, $late);
+    $night = scheduledPicture($this->organization, $this->screen, 'Night', 0, $late);
 
     $entries = timelineOf($this, [$night->url => 'Night']);
 
@@ -156,10 +156,10 @@ test('a window that runs past midnight closes on the next day, and a closed week
     ]);
 });
 
-test('a channel carries each day’s own ads, and an unscheduled channel rides along with the shop’s files', function () {
+test('a channel carries each day’s own ads, and an unscheduled channel rides along with the organization’s files', function () {
     localNow('2026-09-24 09:00');
-    $eggs = scheduledPicture($this->store, $this->screen, 'Eggs', 0, $this->breakfast);
-    $channel = Channel::factory()->create(['store_id' => $this->store->id]);
+    $eggs = scheduledPicture($this->organization, $this->screen, 'Eggs', 0, $this->breakfast);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id]);
     $today = ChannelAd::factory()->create(['channel_id' => $channel->id, 'ends_on' => '2026-09-24']);
     $tomorrow = ChannelAd::factory()->create(['channel_id' => $channel->id, 'starts_on' => '2026-09-25']);
     PlaylistItem::create(['screen_id' => $this->screen->id, 'channel_id' => $channel->id, 'position' => 1]);
@@ -175,15 +175,15 @@ test('a channel carries each day’s own ads, and an unscheduled channel rides a
         ->last(fn (array $entry) => CarbonImmutable::parse($entry['at'])->lte(CarbonImmutable::parse($local, 'America/Chicago')));
 
     expect($channelAds($at('2026-09-24 09:30')))->toBe([$today->url])
-        ->and($at('2026-09-24 12:00')['blank'])->toBeTrue()                 // the shop's own files are over: so is the channel
+        ->and($at('2026-09-24 12:00')['blank'])->toBeTrue()                 // the organization's own files are over: so is the channel
         ->and($channelAds($at('2026-09-25 07:00')))->toBe([$tomorrow->url]);
 });
 
 test('the network adverts follow their own window in the timeline', function () {
     localNow('2026-09-24 09:00');
-    $this->store->update(['accepts_network_ads' => true]);
+    $this->organization->update(['accepts_network_ads' => true]);
     $this->screen->update(['accepts_network_ads' => true]);
-    scheduledPicture($this->store, $this->screen, 'Menu', 0);
+    scheduledPicture($this->organization, $this->screen, 'Menu', 0);
     $campaign = Campaign::factory()->create(['name' => 'Cola', 'start_time' => '17:00', 'end_time' => '19:00']);
     $campaign->screens()->attach($this->screen);
 
@@ -202,10 +202,10 @@ test('the network adverts follow their own window in the timeline', function () 
 
 test('a busy menu board stays small: every line is sent once, however many entries carry it', function () {
     localNow('2026-09-24 09:00');
-    $dinner = Daypart::factory()->between('17:00', '22:00')->create(['store_id' => $this->store->id, 'name' => 'Dinner']);
+    $dinner = Daypart::factory()->between('17:00', '22:00')->create(['organization_id' => $this->organization->id, 'name' => 'Dinner']);
 
     foreach (range(0, 29) as $position) {
-        scheduledPicture($this->store, $this->screen, "Dish {$position}", $position, [$this->breakfast, $this->lunch, $dinner][$position % 3]);
+        scheduledPicture($this->organization, $this->screen, "Dish {$position}", $position, [$this->breakfast, $this->lunch, $dinner][$position % 3]);
     }
 
     $timeline = $this->withHeader('Authorization', 'Bearer tok')->getJson('/device/playlist')->assertOk()->json('timeline');
@@ -217,12 +217,12 @@ test('a busy menu board stays small: every line is sent once, however many entri
 
 test('the timeline does not move the version: only what plays now does', function () {
     localNow('2026-09-24 09:00');
-    scheduledPicture($this->store, $this->screen, 'Eggs', 0, $this->breakfast);
+    scheduledPicture($this->organization, $this->screen, 'Eggs', 0, $this->breakfast);
 
     $before = $this->withHeader('Authorization', 'Bearer tok')->getJson('/device/playlist')->json('version');
 
     // Tomorrow's lunch changes the timeline, not what is on the glass at nine.
-    scheduledPicture($this->store, $this->screen, 'Curry', 1, $this->lunch);
+    scheduledPicture($this->organization, $this->screen, 'Curry', 1, $this->lunch);
 
     expect($this->withHeader('Authorization', 'Bearer tok')->getJson('/device/playlist')->json('version'))->toBe($before);
 });

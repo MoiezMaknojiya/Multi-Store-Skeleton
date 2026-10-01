@@ -6,7 +6,7 @@ use App\Models\Campaign;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -23,15 +23,15 @@ class HalfTypedDatesTest extends DuskTestCase
     public function test_a_half_typed_end_date_on_a_channel_ad_is_said_under_it_and_nothing_is_saved(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $keeper = $this->storeMember($store, ['channel-view', 'channel-store', 'channel-update'], 'keeper@example.com', 'Keeper');
-        $channel = Channel::factory()->create(['store_id' => $store->id, 'name' => 'Our Deals']);
-        $picture = Media::factory()->create(['store_id' => $store->id, 'title' => 'Deal poster', 'thumbnail_path' => null]);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $keeper = $this->organizationMember($organization, ['channel-view', 'channel-store', 'channel-update'], 'keeper@example.com', 'Keeper');
+        $channel = Channel::factory()->create(['organization_id' => $organization->id, 'name' => 'Our Deals']);
+        $picture = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Deal poster', 'thumbnail_path' => null]);
 
-        $this->browse(function (Browser $browser) use ($keeper, $store, $channel, $picture) {
+        $this->browse(function (Browser $browser) use ($keeper, $organization, $channel, $picture) {
             $this->freshSession($browser);
             $browser->loginAs($keeper);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
             $browser->visit('/channels/'.$channel->id);
             $this->waitForAlpine($browser);
 

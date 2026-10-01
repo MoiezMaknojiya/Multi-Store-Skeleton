@@ -3,14 +3,14 @@
         <h1 class="page-title">{{ __('Media Library') }}</h1>
     </x-slot>
 
-    {{-- Js::from, not @json: @json leaves its quotes raw and the first shop's name would close this
-         attribute (see .claude/rules/02-project-conventions.md). $libraries is null inside a store. --}}
+    {{-- Js::from, not @json: @json leaves its quotes raw and the first organization's name would close this
+         attribute (see .claude/rules/02-project-conventions.md). $libraries is null inside an organization. --}}
     <div x-data="mediaTable({{ Js::from(['libraries' => $libraries, 'storage' => $storage]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        {{-- As on the Ad Builder's Assets page (owner, 2026-09-30): the shop's storage, and the list's filters and its
-             search on one line beside it; then the drop box, on the page itself; then the list. Above the stores the
-             first list is the library: the platform's own (the default) or one shop's — what is listed, where an upload
+        {{-- As on the Ad Builder's Assets page (owner, 2026-09-30): the organization's storage, and the list's filters and its
+             search on one line beside it; then the drop box, on the page itself; then the list. Above the organizations the
+             first list is the library: the platform's own (the default) or one organization's — what is listed, where an upload
              lands and whose storage shows (docs/CHANNEL-CONTENT-SPEC.md §3). The platform's own has no wall, so no
              meter. --}}
         <div class="flex flex-wrap items-center justify-between gap-3">
@@ -23,8 +23,8 @@
                     <select x-model="library" @change="applyFilters()" dusk="media-filter-library" aria-label="Library"
                             class="form-select sm:w-44">
                         <option value="platform">Platform library</option>
-                        @foreach ($libraries as $shop)
-                            <option value="{{ $shop['id'] }}">{{ $shop['name'] }}</option>
+                        @foreach ($libraries as $organization)
+                            <option value="{{ $organization['id'] }}">{{ $organization['name'] }}</option>
                         @endforeach
                     </select>
                 @endif
@@ -58,7 +58,7 @@
                  the box: an expression on the box runs with the box's own `this`. --}}
             <div x-on:upload-added="onUploaded($event.detail)" dusk="media-upload">
                 <x-upload-dropzone purpose="media" mode="add" :multiple="true" add-url="/media" dusk="media"
-                    context="{ library: libraries !== null ? String(library) : null, fields: libraries !== null && library !== 'platform' ? { store_id: library } : {}, storage: storage }"
+                    context="{ library: libraries !== null ? String(library) : null, fields: libraries !== null && library !== 'platform' ? { organization_id: library } : {}, storage: storage }"
                     hint="JPG, PNG, GIF, WEBP, MP4 or WEBM, up to 250 MB each. Videos up to 5 minutes." />
             </div>
         @endcan

@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * A named window of time — "Breakfast 07:00–11:00", "Deli hours 07:00–20:00".
  *
  * Named and reusable on purpose. The alternative, which the competing product uses,
- * is seven start/end rows retyped on every playlist item; here the shop writes "Deli hours" once, points
+ * is seven start/end rows retyped on every playlist item; here the organization writes "Deli hours" once, points
  * the lines that should follow them at it, and changing the hours for Ramadan is one edit in one place.
  *
  * The times are WALL CLOCK, read in the screen's own timezone. "07:00" means seven in
@@ -38,7 +38,7 @@ class Daypart extends Model
         7 => 'Sunday',
     ];
 
-    protected $fillable = ['store_id', 'name', 'start_time', 'end_time', 'is_retired', 'created_by'];
+    protected $fillable = ['organization_id', 'name', 'start_time', 'end_time', 'is_retired', 'created_by'];
 
     protected function casts(): array
     {
@@ -56,7 +56,7 @@ class Daypart extends Model
     }
 
     /**
-     * Scoped to the STORE alone, exactly like media: a daypart is shop furniture — "Deli hours" belongs to
+     * Scoped to the ORGANIZATION alone, exactly like media: a daypart is organization furniture — "Deli hours" belongs to
      * the deli, not to the person who typed it — and every colleague must be able to use it on a playlist.
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
@@ -65,13 +65,13 @@ class Daypart extends Model
             return $query;
         }
 
-        $currentStoreId = session('current_store_id');
+        $currentOrganizationId = session('current_organization_id');
 
-        if (! $currentStoreId) {
+        if (! $currentOrganizationId) {
             return $query->whereRaw('0 = 1');
         }
 
-        return $query->where('store_id', $currentStoreId);
+        return $query->where('organization_id', $currentOrganizationId);
     }
 
     /** The ones still offered in pickers. Retired dayparts keep working where they are
@@ -195,7 +195,7 @@ class Daypart extends Model
      * WHICH DAY the currently-open window belongs to — or null if none is open.
      *
      * Not the same as the calendar date, and the difference matters. With a
-     * 22:00–02:00 window, half past midnight on Saturday belongs to FRIDAY: the shop
+     * 22:00–02:00 window, half past midnight on Saturday belongs to FRIDAY: the organization
      * said "Friday night" and meant it. A schedule rule that repeats on Fridays has
      * to be asked about Friday, not about the Saturday the clock happens to read.
      */

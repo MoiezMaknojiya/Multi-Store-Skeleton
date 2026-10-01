@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Invitation;
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 
 /*
 |--------------------------------------------------------------------------
@@ -15,9 +15,9 @@ test('a guest asking for the app lands on the login page', function () {
 });
 
 test('every people endpoint wants a signed-in person', function () {
-    $store = Store::factory()->create();
-    $member = createStoreMember($store, Role::STAFF);
-    $invitation = Invitation::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $member = createOrganizationMember($organization, Role::STAFF);
+    $invitation = Invitation::factory()->create(['organization_id' => $organization->id]);
 
     $this->getJson('/members/data')->assertUnauthorized();
     $this->putJson("/members/{$member->id}", ['role_id' => 1])->assertUnauthorized();
@@ -27,11 +27,11 @@ test('every people endpoint wants a signed-in person', function () {
     $this->deleteJson("/members/invitations/{$invitation->id}")->assertUnauthorized();
     $this->getJson('/users/data')->assertUnauthorized();
     $this->getJson('/roles/data')->assertUnauthorized();
-    $this->putJson('/settings/store', [])->assertUnauthorized();
-    $this->deleteJson('/settings/store')->assertUnauthorized();
+    $this->putJson('/settings/organization', [])->assertUnauthorized();
+    $this->deleteJson('/settings/organization')->assertUnauthorized();
 
     $this->get('/members')->assertRedirect(route('login'));
-    $this->get('/settings/store')->assertRedirect(route('login'));
+    $this->get('/settings/organization')->assertRedirect(route('login'));
 
     // And every other route of the people pages, read from the route table — so one added later is asked too.
     $routes = collect(['members', 'users', 'roles', 'settings', 'profile'])->flatMap(fn (string $prefix) => routesUnder($prefix));

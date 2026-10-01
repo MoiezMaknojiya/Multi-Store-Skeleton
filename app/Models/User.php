@@ -18,16 +18,16 @@ use Illuminate\Support\Facades\RateLimiter;
 use Throwable;
 
 /**
- * An account: a login and nothing more (docs/STORE-ORGANIZATION-SPEC.md rule 1). Nobody owns it,
- * and it gives no power by itself — power comes from memberships (`store_user`): a role in a
- * store, or a platform role on the store_id = 0 row.
+ * An account: a login and nothing more (docs/ORGANIZATION-SPEC.md rule 1). Nobody owns it,
+ * and it gives no power by itself — power comes from memberships (`organization_user`): a role in an
+ * organization, or a platform role on the organization_id = 0 row.
  */
 class User extends Authenticatable implements MustVerifyEmail
 {
     use ConfirmsItsEmail, HasFactory, Notifiable;
 
     /**
-     * An account never confirmed is removed this many days after it was made, with the store it made alone
+     * An account never confirmed is removed this many days after it was made, with the organization it made alone
      * (owner's rule, 2026-09-29 — PruneUnverifiedAccounts). Until it is confirmed it can do nothing that uses
      * the server's space: the `verified` middleware sends it to "Check your inbox".
      */
@@ -49,7 +49,7 @@ class User extends Authenticatable implements MustVerifyEmail
 
     /**
      * A deleted account leaves nothing pointing at it (owner's rules, 2026-09-17): its memberships go through their
-     * foreign key, what it made stays with its stores (`created_by` empties the same way) — and here its sign-ins on
+     * foreign key, what it made stays with its organizations (`created_by` empties the same way) — and here its sign-ins on
      * every device, its password-reset link and every invitation waiting for its email go too, and the activity
      * log forgets whose id it was: on MySQL that table is partitioned and cannot carry a foreign key, so nothing
      * else would empty `actor_id` (the entry keeps the person's name in `actor_name`).
@@ -73,7 +73,7 @@ class User extends Authenticatable implements MustVerifyEmail
         }
     }
 
-    /** The invitations addressed to this account's email — to any store or to the platform team, expired ones included. */
+    /** The invitations addressed to this account's email — to any organization or to the platform team, expired ones included. */
     public function invitationsToEmail(): Builder
     {
         return Invitation::where('email', Invitation::normalizeEmail($this->email));
@@ -189,7 +189,7 @@ class User extends Authenticatable implements MustVerifyEmail
 
     private ?Role $globalRoleMemo = null;
 
-    /** @var array<string, array<int, string>> permission names keyed by store context */
+    /** @var array<string, array<int, string>> permission names keyed by organization context */
     private array $permissionNamesMemo = [];
 
     /** refresh() also flushes the permission memos, so a refreshed instance
@@ -204,7 +204,7 @@ class User extends Authenticatable implements MustVerifyEmail
         return parent::refresh();
     }
 
-    /** Super-Admin is a platform role, so it is held on the store_id = 0 row (the tiers are exclusive). */
+    /** Super-Admin is a platform role, so it is held on the organization_id = 0 row (the tiers are exclusive). */
     public function isSuperAdmin(): bool
     {
         return $this->isSuperAdminMemo ??= ($this->globalRole()?->isSuperAdmin() ?? false);
@@ -213,13 +213,13 @@ class User extends Authenticatable implements MustVerifyEmail
     /**
      * The primary super admin: the first person ever given the Super-Admin role. Nobody else
      * may delete them or take their role, and only they may do either to another super admin
-     * (docs/STORE-ORGANIZATION-SPEC.md rule 24).
+     * (docs/ORGANIZATION-SPEC.md rule 24).
      */
     public static function primarySuperAdminId(): ?int
     {
         $roleId = Role::superAdminId();
 
-        $userId = $roleId === null ? null : DB::table('store_user')
+        $userId = $roleId === null ? null : DB::table('organization_user')
             ->where('role_id', $roleId)
             ->orderBy('id')
             ->value('user_id');
@@ -242,25 +242,25 @@ class User extends Authenticatable implements MustVerifyEmail
         ];
     }
 
-    /** The stores this person is a member of (the platform row, store_id = 0, has no store and is not among them). */
-    public function stores(): BelongsToMany
+    /** The organizations this person is a member of (the platform row, organization_id = 0, has no organization and is not among them). */
+    public function organizations(): BelongsToMany
     {
-        return $this->belongsToMany(Store::class, 'store_user')
+        return $this->belongsToMany(Organization::class, 'organization_user')
             ->withPivot('role_id')
             ->withTimestamps();
     }
 
     /**
-     * The role this person holds in the currently selected store.
+     * The role this person holds in the currently selected organization.
      */
     public function currentRole(): ?Role
     {
-        $storeId = session('current_store_id');
-        if (! $storeId) {
+        $organizationId = session('current_organization_id');
+        if (! $organizationId) {
             return null;
         }
 
-        $pivot = $this->stores()->wherePivot('store_id', $storeId)->first();
+        $pivot = $this->organizations()->wherePivot('organization_id', $organizationId)->first();
         if (! $pivot || ! $pivot->pivot->role_id) {
             return null;
         }
@@ -269,42 +269,42 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
-     * The store this person works in, when the platform has paused it (its Active switch off; owner, 2026-09-30):
-     * their membership stands, but its pages are closed to them (EnsureStoreIsActive), their role there grants nothing
+     * The organization this person works in, when the platform has paused it (its Active switch off; owner, 2026-09-30):
+     * their membership stands, but its pages are closed to them (EnsureOrganizationIsActive), their role there grants nothing
      * (contextPermissionNames) and the dashboard says why, until the platform turns it back on. Its screens keep
-     * playing. Null above the stores, with no store chosen, in a store they are not a member of, or in an active one.
+     * playing. Null above the organizations, with no organization chosen, in an organization they are not a member of, or in an active one.
      */
-    public function pausedStore(): ?Store
+    public function pausedOrganization(): ?Organization
     {
-        $storeId = (int) session('current_store_id');
+        $organizationId = (int) session('current_organization_id');
 
-        if ($storeId === 0 || $this->globalRole() !== null) {
+        if ($organizationId === 0 || $this->globalRole() !== null) {
             return null;
         }
 
-        return $this->stores()->where('stores.id', $storeId)->where('stores.is_active', false)->first();
+        return $this->organizations()->where('organizations.id', $organizationId)->where('organizations.is_active', false)->first();
     }
 
     /**
-     * Whether Settings has a Stores tab for this person (owner's rule, 2026-09-17): a store member working in
-     * a store whose role there holds View Stores. Without it "Your stores" stays on the profile, so anybody
-     * can still leave a store.
+     * Whether Settings has an Organizations tab for this person (owner's rule, 2026-09-17): an organization member working in
+     * an organization whose role there holds View Organizations. Without it "Your organizations" stays on the profile, so anybody
+     * can still leave an organization.
      */
-    public function hasStoresTab(): bool
+    public function hasOrganizationsTab(): bool
     {
-        return $this->globalRole() === null && (bool) session('current_store_id') && $this->can('store-view');
+        return $this->globalRole() === null && (bool) session('current_organization_id') && $this->can('organization-view');
     }
 
     /**
-     * The platform role, held on the store_id = 0 row, if any: Super-Admin, or any role the
+     * The platform role, held on the organization_id = 0 row, if any: Super-Admin, or any role the
      * super admin made for the platform team.
      */
     public function globalRole(): ?Role
     {
         if (! $this->globalRoleResolved) {
-            $roleId = DB::table('store_user')
+            $roleId = DB::table('organization_user')
                 ->where('user_id', $this->id)
-                ->where('store_id', 0)
+                ->where('organization_id', 0)
                 ->value('role_id');
 
             $this->globalRoleMemo = $roleId ? Role::find($roleId) : null;
@@ -316,31 +316,31 @@ class User extends Authenticatable implements MustVerifyEmail
 
     /**
      * Whether this person holds a permission where they stand: their platform role when they have one
-     * (the tiers are exclusive, so it always wins — a store left in the session changes nothing),
-     * otherwise their role in the selected store.
+     * (the tiers are exclusive, so it always wins — an organization left in the session changes nothing),
+     * otherwise their role in the selected organization.
      */
-    public function hasPermissionInCurrentStore(string $permissionName): bool
+    public function hasPermissionInCurrentOrganization(string $permissionName): bool
     {
         return in_array($permissionName, $this->contextPermissionNames(), true);
     }
 
     /**
      * Every permission name the user holds in the current context (their platform
-     * role, or else the session's store role). Loaded ONCE per request per context —
+     * role, or else the session's organization role). Loaded ONCE per request per context —
      * a page render fires a dozen @can checks and they all share this list.
      *
      * @return array<int, string>
      */
     public function contextPermissionNames(): array
     {
-        // The platform team never works inside a store (the tiers are exclusive), so a store left
+        // The platform team never works inside an organization (the tiers are exclusive), so an organization left
         // in a platform account's session can never swap its platform role for no role at all.
         $platformRole = $this->globalRole();
-        $key = $platformRole !== null ? 'platform' : 'store:'.(int) session('current_store_id');
+        $key = $platformRole !== null ? 'platform' : 'organization:'.(int) session('current_organization_id');
 
         if (! array_key_exists($key, $this->permissionNamesMemo)) {
-            // A paused store grants its people nothing until the platform turns it back on (pausedStore).
-            $role = $platformRole ?? (session('current_store_id') && $this->pausedStore() === null ? $this->currentRole() : null);
+            // A paused organization grants its people nothing until the platform turns it back on (pausedOrganization).
+            $role = $platformRole ?? (session('current_organization_id') && $this->pausedOrganization() === null ? $this->currentRole() : null);
 
             $this->permissionNamesMemo[$key] = $role
                 ? $role->permissions()->pluck('name')->all()

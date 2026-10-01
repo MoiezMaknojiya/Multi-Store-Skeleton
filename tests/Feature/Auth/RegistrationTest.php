@@ -1,16 +1,16 @@
 <?php
 
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 /*
 |--------------------------------------------------------------------------
-| Public signup (docs/STORE-ORGANIZATION-SPEC.md rule 17)
+| Public signup (docs/ORGANIZATION-SPEC.md rule 17)
 |--------------------------------------------------------------------------
 |
-| One form: the account, the store, and the person's membership of it as its Owner. The role
+| One form: the account, the organization, and the person's membership of it as its Owner. The role
 | is never read from the request.
 |
 */
@@ -24,7 +24,7 @@ function validSignupPayload(): array
         'email' => 'sana@example.com',
         'password' => 'password123',
         'password_confirmation' => 'password123',
-        'store_name' => 'Sana Superstore',
+        'organization_name' => 'Sana Superstore',
         'street' => '7 High St',
         'suite' => null,
         'city' => 'Austin',
@@ -33,21 +33,21 @@ function validSignupPayload(): array
     ];
 }
 
-test('the registration screen renders with the store fields', function () {
+test('the registration screen renders with the organization fields', function () {
     $this->get('/register')->assertOk()->assertSee('Your Organization')->assertSee('Organization Name');
 });
 
-test('signing up creates the account, the store, and makes the person its Owner', function () {
+test('signing up creates the account, the organization, and makes the person its Owner', function () {
     // …and asks for the email to be confirmed before anything else (owner's rule, 2026-09-29).
     $this->post('/register', validSignupPayload())->assertRedirect(route('verification.notice'));
     $this->assertAuthenticated();
 
     $user = User::where('email', 'sana@example.com')->firstOrFail();
-    $store = Store::where('name', 'Sana Superstore')->firstOrFail();
+    $organization = Organization::where('name', 'Sana Superstore')->firstOrFail();
 
-    expect($store->created_by)->toBe($user->id)
-        ->and($store->country)->toBe('USA')   // not asked on the form
-        ->and(roleKeyIn($user, $store))->toBe(Role::OWNER);
+    expect($organization->created_by)->toBe($user->id)
+        ->and($organization->country)->toBe('USA')   // not asked on the form
+        ->and(roleKeyIn($user, $organization))->toBe(Role::OWNER);
 
     $this->assertDatabaseHas('activity_logs', ['action' => 'user.registered']);
 });
@@ -60,7 +60,7 @@ test('signup never takes a role from the request', function () {
 
     $user = User::where('email', 'sana@example.com')->firstOrFail();
     expect($user->isSuperAdmin())->toBeFalse()
-        ->and(DB::table('store_user')->where('user_id', $user->id)->pluck('role_id')->all())
+        ->and(DB::table('organization_user')->where('user_id', $user->id)->pluck('role_id')->all())
         ->toBe([Role::starter(Role::OWNER)->id]);
 });
 
@@ -71,14 +71,14 @@ test('without the Owner role, signup closes instead of guessing', function () {
     $this->post('/register', validSignupPayload())->assertSessionHasErrors(['email']);
 
     $this->assertDatabaseMissing('users', ['email' => 'sana@example.com']);
-    $this->assertDatabaseMissing('stores', ['name' => 'Sana Superstore']);
+    $this->assertDatabaseMissing('organizations', ['name' => 'Sana Superstore']);
 });
 
-test('an invalid store half creates nothing — no half-registered state', function () {
+test('an invalid organization half creates nothing — no half-registered state', function () {
     $payload = validSignupPayload();
-    $payload['store_name'] = '';
+    $payload['organization_name'] = '';
 
-    $this->post('/register', $payload)->assertSessionHasErrors(['store_name']);
+    $this->post('/register', $payload)->assertSessionHasErrors(['organization_name']);
 
     $this->assertDatabaseMissing('users', ['email' => 'sana@example.com']);
 });
@@ -89,7 +89,7 @@ test('the email is kept lowercased, so capitals can never make a second account'
     expect(User::sole()->email)->toBe('sana@example.com');
 
     auth()->logout();
-    $this->post('/register', [...validSignupPayload(), 'email' => 'SANA@example.com', 'store_name' => 'Second Shop'])
+    $this->post('/register', [...validSignupPayload(), 'email' => 'SANA@example.com', 'organization_name' => 'Second Organization'])
         ->assertSessionHasErrors('email');
 
     expect(User::count())->toBe(1);

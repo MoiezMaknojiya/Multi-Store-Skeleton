@@ -10,11 +10,11 @@ use App\Models\ChannelAd;
 use App\Models\Daypart;
 use App\Models\Invitation;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Models\User;
 use Facebook\WebDriver\Exception\NoSuchAlertException;
 use Facebook\WebDriver\WebDriverKeys;
@@ -32,7 +32,7 @@ use Tests\DuskTestCase;
  * away is followed by the page again.
  *
  * What is never pressed blindly — each has a flow test of its own that presses it for real: a plain form's submit
- * (it posts for real: sign out, the store switcher's shops, Settings' forms) and signing in as somebody else. A
+ * (it posts for real: sign out, the organization switcher's organizations, Settings' forms) and signing in as somebody else. A
  * button that asks before it acts (every delete, the yearly maintenance) is pressed: only its question opens.
  */
 class EveryButtonWorksTest extends DuskTestCase
@@ -60,11 +60,11 @@ class EveryButtonWorksTest extends DuskTestCase
         parent::tearDown();
     }
 
-    public function test_every_button_above_the_stores_works(): void
+    public function test_every_button_above_the_organizations_works(): void
     {
         $admin = $this->seedSuperAdmin();
-        [$alpha, $screen, $platformChannel] = $this->aShop();
-        Store::factory()->create(['name' => 'Orphan Store']);
+        [$alpha, $screen, $platformChannel] = $this->aOrganization();
+        Organization::factory()->create(['name' => 'Orphan Organization']);
         Campaign::factory()->create(['name' => 'Summer Cola Campaign']);
         Invitation::factory()->forPlatform()->create(['email' => 'new.colleague@example.com', 'role_id' => Role::superAdminId()]);
         $this->giveEveryRowItsPictures();
@@ -75,7 +75,7 @@ class EveryButtonWorksTest extends DuskTestCase
 
             $this->pressEveryButton($browser, [
                 '/dashboard',
-                '/stores',
+                '/organizations',
                 '/users',
                 '/roles',
                 '/permissions',
@@ -94,16 +94,16 @@ class EveryButtonWorksTest extends DuskTestCase
         });
     }
 
-    public function test_every_button_inside_a_store_works(): void
+    public function test_every_button_inside_a_organization_works(): void
     {
         $this->seedSuperAdmin();
-        [$alpha, $screen] = $this->aShop();
-        $ownChannel = Channel::factory()->create(['store_id' => $alpha->id, 'name' => 'Alpha Weekend Deals']);
-        $ad = BuilderAd::where('store_id', $alpha->id)->firstOrFail();
+        [$alpha, $screen] = $this->aOrganization();
+        $ownChannel = Channel::factory()->create(['organization_id' => $alpha->id, 'name' => 'Alpha Weekend Deals']);
+        $ad = BuilderAd::where('organization_id', $alpha->id)->firstOrFail();
 
-        // Everything a store's role may hold, so no button is missing for want of a permission.
-        $member = $this->storeMember($alpha, [
-            ...Permission::STORE, 'store-view', 'store-store', 'store-destroy',
+        // Everything an organization's role may hold, so no button is missing for want of a permission.
+        $member = $this->organizationMember($alpha, [
+            ...Permission::ORGANIZATION, 'organization-view', 'organization-store', 'organization-destroy',
             'channel-view', 'channel-store', 'channel-update', 'channel-destroy', 'activity-view',
         ], 'manager@example.com', 'Everything');
         $this->giveEveryRowItsPictures();
@@ -111,7 +111,7 @@ class EveryButtonWorksTest extends DuskTestCase
         $this->browse(function (Browser $browser) use ($member, $alpha, $screen, $ownChannel, $ad) {
             $this->freshSession($browser);
             $browser->loginAs($member);
-            $this->switchToStore($browser, $alpha);
+            $this->switchToOrganization($browser, $alpha);
 
             $this->pressEveryButton($browser, [
                 '/dashboard',
@@ -127,7 +127,7 @@ class EveryButtonWorksTest extends DuskTestCase
                 '/members',
                 '/roles',
                 '/activity',
-                '/settings/store',
+                '/settings/organization',
                 '/profile',
             ]);
         });
@@ -136,38 +136,38 @@ class EveryButtonWorksTest extends DuskTestCase
     /* ── Helpers ─────────────────────────────────────────────────────── */
 
     /**
-     * A shop with something on every page: people and an invitation, two screens (one with a playlist), files, a
+     * An organization with something on every page: people and an invitation, two screens (one with a playlist), files, a
      * daypart, a published ad, the platform's channel with an ad, and a log.
      *
-     * @return array{0: Store, 1: Screen, 2: Channel}
+     * @return array{0: Organization, 1: Screen, 2: Channel}
      */
-    private function aShop(): array
+    private function aOrganization(): array
     {
-        $alpha = Store::factory()->create(['name' => 'Alpha Mart']);
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
 
         $owner = User::factory()->create(['first_name' => 'Ali', 'last_name' => 'Raza', 'email' => 'ali@example.com']);
-        $owner->stores()->attach($alpha->id, ['role_id' => Role::owner()->id]);
+        $owner->organizations()->attach($alpha->id, ['role_id' => Role::owner()->id]);
 
-        $cashier = Role::create(['name' => 'Weekend Cashier', 'store_id' => $alpha->id]);
+        $cashier = Role::create(['name' => 'Weekend Cashier', 'organization_id' => $alpha->id]);
         $cashier->permissions()->sync(Permission::whereIn('name', ['screen-view', 'media-view'])->pluck('id'));
         User::factory()->create(['first_name' => 'Bilal', 'last_name' => 'Ahmed', 'email' => 'bilal@example.com'])
-            ->stores()->attach($alpha->id, ['role_id' => $cashier->id]);
+            ->organizations()->attach($alpha->id, ['role_id' => $cashier->id]);
 
-        Invitation::factory()->create(['store_id' => $alpha->id, 'email' => 'pending@example.com', 'role_id' => $cashier->id, 'invited_by' => $owner->id]);
+        Invitation::factory()->create(['organization_id' => $alpha->id, 'email' => 'pending@example.com', 'role_id' => $cashier->id, 'invited_by' => $owner->id]);
 
-        $menu = Media::factory()->create(['store_id' => $alpha->id, 'title' => 'Breakfast Menu Board']);
-        Media::factory()->create(['store_id' => $alpha->id, 'title' => 'Lunch Specials']);
+        $menu = Media::factory()->create(['organization_id' => $alpha->id, 'title' => 'Breakfast Menu Board']);
+        Media::factory()->create(['organization_id' => $alpha->id, 'title' => 'Lunch Specials']);
 
-        $screen = Screen::factory()->create(['store_id' => $alpha->id, 'name' => 'Front Counter TV']);
-        Screen::factory()->create(['store_id' => $alpha->id, 'name' => 'Drive-through Screen', 'last_seen_at' => null]);
+        $screen = Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Front Counter TV']);
+        Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Drive-through Screen', 'last_seen_at' => null]);
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $menu->id, 'position' => 0, 'duration_seconds' => 10]);
 
-        Daypart::factory()->between('06:00', '11:30')->create(['store_id' => $alpha->id, 'name' => 'Breakfast']);
+        Daypart::factory()->between('06:00', '11:30')->create(['organization_id' => $alpha->id, 'name' => 'Breakfast']);
 
-        BuilderAd::factory()->withText('Two for one')->published()->create(['store_id' => $alpha->id, 'name' => 'Weekend Burgers']);
+        BuilderAd::factory()->withText('Two for one')->published()->create(['organization_id' => $alpha->id, 'name' => 'Weekend Burgers']);
 
         $platformChannel = Channel::factory()->create(['name' => 'GAMA Wholesale']);
-        $promo = Media::factory()->create(['store_id' => null, 'title' => 'Mango Summer Promotion']);
+        $promo = Media::factory()->create(['organization_id' => null, 'title' => 'Mango Summer Promotion']);
         ChannelAd::factory()->create(['channel_id' => $platformChannel->id, 'media_id' => $promo->id]);
 
         ActivityLog::record('media.uploaded', $menu, 'Uploaded Breakfast Menu Board to the library', $owner);
@@ -177,7 +177,7 @@ class EveryButtonWorksTest extends DuskTestCase
 
     /**
      * The files the made-up rows name — every thumbnail (an Ad Builder page's poster too), and a picture's own file —
-     * so each page loads its pictures as a real shop's does, and a picture that does not load is a problem again.
+     * so each page loads its pictures as a real organization's does, and a picture that does not load is a problem again.
      * tearDown takes them away.
      */
     private function giveEveryRowItsPictures(): void

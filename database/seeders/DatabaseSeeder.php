@@ -30,14 +30,14 @@ class DatabaseSeeder extends Seeder
         $superAdminRole->fill(['is_global' => true])->save();
         $superAdminRole->permissions()->sync(Permission::pluck('id'));
 
-        // 3. The Owner role — the store role whose holders own their store; public signup needs it. The
+        // 3. The Owner role — the organization role whose holders own their organization; public signup needs it. The
         //    migrations create all four starter roles (2026_09_16_110200_insert_permissions_and_starter_roles); this only puts the Owner role back
         //    should it be missing, because its name and permissions are the super admin's to change (Roles
-        //    page) and a re-seed must never undo that. The other starters are ordinary store roles, so a
+        //    page) and a re-seed must never undo that. The other starters are ordinary organization roles, so a
         //    re-seed never brings back one the super admin deleted.
         $owner = Role::firstOrCreate(
             ['key' => Role::OWNER],
-            ['name' => Role::STARTERS[Role::OWNER]['name'], 'is_global' => false, 'store_id' => null, 'created_by' => null]
+            ['name' => Role::STARTERS[Role::OWNER]['name'], 'is_global' => false, 'organization_id' => null, 'created_by' => null]
         );
 
         if ($owner->wasRecentlyCreated) {
@@ -66,8 +66,8 @@ class DatabaseSeeder extends Seeder
         }
         $superAdmin->save();
 
-        // Held on the platform row (store_id = 0), by role object — never a hardcoded id.
-        $superAdmin->stores()->syncWithoutDetaching([
+        // Held on the platform row (organization_id = 0), by role object — never a hardcoded id.
+        $superAdmin->organizations()->syncWithoutDetaching([
             0 => ['role_id' => $superAdminRole->id],
         ]);
     }

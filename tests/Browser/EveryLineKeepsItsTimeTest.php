@@ -7,10 +7,10 @@ use App\Models\BuilderAsset;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Models\User;
 use App\Services\AdPublisher;
 use App\Services\MediaStorage;
@@ -22,7 +22,7 @@ use Tests\DuskTestCase;
 /**
  * Every kind of line on one television, each timed on the glass (owner, 2026-09-29: "brute force aur out of the box
  * testing … kuch break toh nahi ho raha"). A picture at the least it may (6 s); an Ad Builder ad of 6 s over a 20 s
- * background video, which is cut; a 3 s video, which no minimum holds; a shop's channel with a picture saved before
+ * background video, which is cut; a 3 s video, which no minimum holds; an organization's channel with a picture saved before
  * the six-second rule at 3 s, which plays 6, and an ad page of 7 s; and a picture line saved before the rule at 2 s,
  * which plays 6. What is measured is how long each one stays in front — not what any number says.
  */
@@ -33,23 +33,23 @@ class EveryLineKeepsItsTimeTest extends DuskTestCase
     public function test_each_kind_of_line_stays_on_the_glass_for_its_own_time(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store, Role::OWNER, 'owner@example.com');
-        $screen = Screen::factory()->withToken('times-token')->create(['store_id' => $store->id, 'name' => 'Counter TV']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization, Role::OWNER, 'owner@example.com');
+        $screen = Screen::factory()->withToken('times-token')->create(['organization_id' => $organization->id, 'name' => 'Counter TV']);
 
         $picture = fn (string $name, array $rgb): Media => Media::create([
-            ...app(MediaStorage::class)->store(new UploadedFile($this->fixtureImage($name, ...$rgb), $name, 'image/png', null, true), $store->id, []),
+            ...app(MediaStorage::class)->store(new UploadedFile($this->fixtureImage($name, ...$rgb), $name, 'image/png', null, true), $organization->id, []),
             'title' => $name,
         ]);
         $first = $picture('first.png', [200, 40, 40]);
         $old = $picture('old.png', [40, 40, 200]);
         $inChannel = $picture('in-channel.png', [40, 160, 60]);
 
-        $this->browse(function (Browser $panel, Browser $tv) use ($owner, $store, $screen, $first, $old, $inChannel) {
+        $this->browse(function (Browser $panel, Browser $tv) use ($owner, $organization, $screen, $first, $old, $inChannel) {
             /* ── Two real videos, made in the page and sent through the real doors ── */
             $this->freshSession($panel);
             $panel->loginAs($owner);
-            $this->switchToStore($panel, $store);
+            $this->switchToOrganization($panel, $organization);
             $panel->visit('/builder/assets');
             $this->waitForAlpine($panel);
             $this->defineMakeVideo($panel);
@@ -74,11 +74,11 @@ class EveryLineKeepsItsTimeTest extends DuskTestCase
             $this->assertSame(3, $clip->duration_seconds, 'the server measured the short video itself');
 
             /* ── Two ads: six seconds over the twenty-second video, and seven seconds plain ── */
-            $six = $this->publishedAd($store, $owner, 'Six seconds', 6, BuilderAsset::sole());
-            $seven = $this->publishedAd($store, $owner, 'Seven seconds', 7, null);
+            $six = $this->publishedAd($organization, $owner, 'Six seconds', 6, BuilderAsset::sole());
+            $seven = $this->publishedAd($organization, $owner, 'Seven seconds', 7, null);
 
-            /* ── The shop's channel: a picture saved before the rule at 3 s, and the seven-second page ── */
-            $channel = Channel::factory()->create(['name' => 'Alpha Deals', 'store_id' => $store->id]);
+            /* ── The organization's channel: a picture saved before the rule at 3 s, and the seven-second page ── */
+            $channel = Channel::factory()->create(['name' => 'Alpha Deals', 'organization_id' => $organization->id]);
             ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $inChannel->id, 'title' => 'Old deal', 'duration_seconds' => 3, 'position' => 0]);
             ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $seven->id, 'title' => 'Seven seconds', 'duration_seconds' => null, 'position' => 1]);
 
@@ -157,7 +157,7 @@ class EveryLineKeepsItsTimeTest extends DuskTestCase
     }
 
     /** An Ad Builder ad of $seconds, a text on it and — when given — a video as its background, published. */
-    private function publishedAd(Store $store, User $owner, string $name, int $seconds, ?BuilderAsset $video): Media
+    private function publishedAd(Organization $organization, User $owner, string $name, int $seconds, ?BuilderAsset $video): Media
     {
         $document = BuilderAd::blankDocument();
         $document['duration'] = $seconds;
@@ -174,7 +174,7 @@ class EveryLineKeepsItsTimeTest extends DuskTestCase
         }
 
         $ad = BuilderAd::create([
-            'store_id' => $store->id, 'name' => $name, 'orientation' => BuilderAd::LANDSCAPE,
+            'organization_id' => $organization->id, 'name' => $name, 'orientation' => BuilderAd::LANDSCAPE,
             'document' => $document, 'created_by' => $owner->id,
         ]);
 

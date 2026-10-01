@@ -5,9 +5,9 @@ namespace Tests\Browser;
 use App\Models\BuilderAd;
 use App\Models\Campaign;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Services\AdPublisher;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Storage;
@@ -17,10 +17,10 @@ use Tests\DuskTestCase;
 /**
  * The advertising break, on an actual television.
  *
- * This is the part that has to behave on a shop's wall for weeks without anybody
+ * This is the part that has to behave on an organization's wall for weeks without anybody
  * watching it, so it is tested for more than "the advert appeared":
  *
- *   · the shop's content PAUSES rather than restarting, and carries on from exactly
+ *   · the organization's content PAUSES rather than restarting, and carries on from exactly
  *     where it stopped — a two-hour video resumes at 1:00:00
  *   · only one video decodes at a time, so a cheap box is never asked to play two
  *   · the advert's element is DESTROYED when the break ends. A hidden <video> keeps
@@ -34,15 +34,15 @@ class NetworkAdBreakTest extends DuskTestCase
     use DatabaseMigrations;
 
     /**
-     * A shop that agreed, a television cleared for advertising, and one two-second campaign.
+     * An organization that agreed, a television cleared for advertising, and one two-second campaign.
      *
-     * @return array{0: Store, 1: Screen}
+     * @return array{0: Organization, 1: Screen}
      */
     private function setUpScreen(string $token): array
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart', 'accepts_network_ads' => true]);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart', 'accepts_network_ads' => true]);
         $screen = Screen::factory()->withToken($token)->create([
-            'store_id' => $store->id, 'name' => 'Counter TV', 'accepts_network_ads' => true,
+            'organization_id' => $organization->id, 'name' => 'Counter TV', 'accepts_network_ads' => true,
         ]);
 
         $campaign = Campaign::factory()->lasting(6)->create([
@@ -51,7 +51,7 @@ class NetworkAdBreakTest extends DuskTestCase
         ]);
         $campaign->screens()->attach($screen);
 
-        return [$store, $screen];
+        return [$organization, $screen];
     }
 
     /**
@@ -61,14 +61,14 @@ class NetworkAdBreakTest extends DuskTestCase
      * The advert's element is gone afterwards, not merely hidden — and the break comes
      * round again.
      */
-    public function test_an_advert_interrupts_the_shops_content_and_leaves_nothing_behind(): void
+    public function test_an_advert_interrupts_the_organizations_content_and_leaves_nothing_behind(): void
     {
-        [$store, $screen] = $this->setUpScreen('ad-token');
+        [$organization, $screen] = $this->setUpScreen('ad-token');
 
         $poster = Media::factory()->create([
-            'store_id' => $store->id, 'title' => 'Menu',
+            'organization_id' => $organization->id, 'title' => 'Menu',
             'type' => Media::TYPE_IMAGE, 'mime_type' => 'image/png',
-            'path' => $this->putImage("media/{$store->id}/menu.png", 20, 90, 200),
+            'path' => $this->putImage("media/{$organization->id}/menu.png", 20, 90, 200),
             'thumbnail_path' => null,
         ]);
 
@@ -83,7 +83,7 @@ class NetworkAdBreakTest extends DuskTestCase
             $tv->script("localStorage.clear(); localStorage.setItem('signage.device.token', 'ad-token');");
             $tv->visit('/player');
 
-            // -- The shop's own content ----------------------------------------
+            // -- The organization's own content ----------------------------------------
             $tv->waitUsing(30, 200, fn () => $tv->script(
                 'return !!document.querySelector("#layer-a:not([hidden]) img, #layer-b:not([hidden]) img");'
             )[0]);
@@ -98,7 +98,7 @@ class NetworkAdBreakTest extends DuskTestCase
             $this->assertSame(1, $tv->script('return document.getElementById("layer-ad").children.length;')[0]);
             $this->assertTrue($tv->script(
                 'return !!document.querySelector("#layer-a:not([hidden]) img, #layer-b:not([hidden]) img");'
-            )[0], 'the shop content should still be in the DOM, merely covered');
+            )[0], 'the organization content should still be in the DOM, merely covered');
 
             // -- And afterwards --------------------------------------------------
             $tv->waitUsing(30, 200, fn () => $tv->script(
@@ -110,7 +110,7 @@ class NetworkAdBreakTest extends DuskTestCase
             $this->assertSame(0, $tv->script('return document.getElementById("layer-ad").children.length;')[0],
                 'the advert element should be destroyed when the break ends');
 
-            // The shop's content is back on screen.
+            // The organization's content is back on screen.
             $this->assertTrue($tv->script(
                 'return !!document.querySelector("#layer-a:not([hidden]) img, #layer-b:not([hidden]) img");'
             )[0]);
@@ -139,9 +139,9 @@ class NetworkAdBreakTest extends DuskTestCase
      */
     public function test_a_video_is_paused_and_carries_on_from_where_it_stopped(): void
     {
-        [$store, $screen] = $this->setUpScreen('video-ad-token');
+        [$organization, $screen] = $this->setUpScreen('video-ad-token');
 
-        $this->browse(function (Browser $tv) use ($store, $screen) {
+        $this->browse(function (Browser $tv) use ($organization, $screen) {
             // -- Record a real clip, long enough to still be playing at the break --
             $tv->visit('/login');
             $tv->script(<<<'JS'
@@ -182,11 +182,11 @@ class NetworkAdBreakTest extends DuskTestCase
             }
 
             $binary = base64_decode(explode(',', $clip, 2)[1], true);
-            $path = "media/{$store->id}/clip.mp4";
+            $path = "media/{$organization->id}/clip.mp4";
             Storage::disk('public')->put($path, $binary);
 
             $video = Media::factory()->create([
-                'store_id' => $store->id, 'title' => 'Long clip',
+                'organization_id' => $organization->id, 'title' => 'Long clip',
                 'type' => Media::TYPE_VIDEO, 'mime_type' => 'video/mp4',
                 'path' => $path, 'thumbnail_path' => null, 'duration_seconds' => 16,
             ]);
@@ -221,7 +221,7 @@ class NetworkAdBreakTest extends DuskTestCase
             $paused = $tv->script("return document.querySelector('{$onScreen}')?.paused;")[0];
             $pausedAt = (float) $tv->script("return document.querySelector('{$onScreen}')?.currentTime ?? 0;")[0];
 
-            $this->assertTrue($paused, 'the shop video must be paused while the advert plays');
+            $this->assertTrue($paused, 'the organization video must be paused while the advert plays');
             $this->assertGreaterThan(0.2, $pausedAt, 'the video should have been playing when it was interrupted');
 
             // Mark the element itself. Whether the clip happens to be one second or
@@ -271,7 +271,7 @@ class NetworkAdBreakTest extends DuskTestCase
      */
     public function test_an_ad_page_under_a_break_is_let_go_and_comes_back_from_the_start(): void
     {
-        [$store, $screen] = $this->setUpScreen('page-break-token');
+        [$organization, $screen] = $this->setUpScreen('page-break-token');
 
         $document = BuilderAd::blankDocument();
         $document['duration'] = 120;    // long enough that the break lands in it
@@ -281,7 +281,7 @@ class NetworkAdBreakTest extends DuskTestCase
             'style' => ['fontSize' => 120, 'color' => '#ffffff'], 'animations' => ['in' => ['effect' => 'fade', 'duration' => 0.5]],
         ]];
         $ad = BuilderAd::create([
-            'store_id' => $store->id, 'name' => 'Back from the break', 'orientation' => BuilderAd::LANDSCAPE,
+            'organization_id' => $organization->id, 'name' => 'Back from the break', 'orientation' => BuilderAd::LANDSCAPE,
             'document' => $document,
         ]);
         $page = app(AdPublisher::class)->publish($ad);
@@ -318,15 +318,15 @@ class NetworkAdBreakTest extends DuskTestCase
     /**
      * A television that carries no advertising is never interrupted.
      *
-     * The consent switches are the whole basis of the deal with each shop, so this is
+     * The consent switches are the whole basis of the deal with each organization, so this is
      * checked where it actually matters — on the set itself, not only in the API.
      */
     public function test_a_screen_that_carries_no_advertising_is_never_interrupted(): void
     {
-        $store = Store::factory()->create(['accepts_network_ads' => true]);
-        // The shop agreed; this particular television did not.
+        $organization = Organization::factory()->create(['accepts_network_ads' => true]);
+        // The organization agreed; this particular television did not.
         $screen = Screen::factory()->withToken('clean-token')->create([
-            'store_id' => $store->id, 'accepts_network_ads' => false,
+            'organization_id' => $organization->id, 'accepts_network_ads' => false,
         ]);
 
         $campaign = Campaign::factory()->lasting(6)->create([
@@ -335,8 +335,8 @@ class NetworkAdBreakTest extends DuskTestCase
         $campaign->screens()->attach($screen);
 
         $poster = Media::factory()->create([
-            'store_id' => $store->id, 'type' => Media::TYPE_IMAGE, 'mime_type' => 'image/png',
-            'path' => $this->putImage("media/{$store->id}/menu.png", 20, 90, 200), 'thumbnail_path' => null,
+            'organization_id' => $organization->id, 'type' => Media::TYPE_IMAGE, 'mime_type' => 'image/png',
+            'path' => $this->putImage("media/{$organization->id}/menu.png", 20, 90, 200), 'thumbnail_path' => null,
         ]);
         PlaylistItem::create([
             'screen_id' => $screen->id, 'media_id' => $poster->id, 'position' => 0, 'duration_seconds' => 120,
@@ -375,10 +375,10 @@ class NetworkAdBreakTest extends DuskTestCase
                 'a screen that carries no advertising was interrupted anyway');
             $this->assertSame(0, $tv->script('return document.getElementById("layer-ad").children.length;')[0]);
 
-            // And not because the player had stopped: the shop's own picture is still up.
+            // And not because the player had stopped: the organization's own picture is still up.
             $this->assertTrue($tv->script(
                 'return !!document.querySelector("#layer-a:not([hidden]) img, #layer-b:not([hidden]) img");'
-            )[0], 'the player stopped showing the shop\'s content while it was being watched');
+            )[0], 'the player stopped showing the organization\'s content while it was being watched');
 
             $tv->visit('/login');
             $tv->script('localStorage.clear();');

@@ -133,7 +133,7 @@
 }
 
 /* Makes a control claim its whole positioned ancestor as the click target.
-   Used by the store card so the entire box is clickable, not just the words at
+   Used by the organization card so the entire box is clickable, not just the words at
    the bottom — a card is what the eye reads as one thing, so it should be what
    the finger hits.
 
@@ -204,7 +204,7 @@
            disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
-/* Row-action: extra action (green, e.g. Stores button). */
+/* Row-action: extra action (green, e.g. Organizations button). */
 @utility btn-row-success {
     @apply inline-flex items-center justify-center gap-1
            bg-green-50 dark:bg-green-900/20
@@ -296,7 +296,7 @@
 }
 
 /* Larger rounded variant for the plain-POST forms (x-auth.form-field) — the
-   auth and invitation pages, Profile and Settings → Stores — same 40px height
+   auth and invitation pages, Profile and Settings → Organizations — same 40px height
    as the standard form-input. The guest layout never turns dark mode on, but
    Profile and Settings live in the app shell, which does: hence the dark:
    variants (and the dark autofill override below). */
@@ -425,7 +425,7 @@
     }
 }
 
-/* A choice drawn as a box around its radio (a new role's Store role / Platform role): blue while its radio is
+/* A choice drawn as a box around its radio (a new role's Organization role / Platform role): blue while its radio is
    checked, read from the radio itself (:has), so it is right before Alpine starts and needs no binding. */
 @utility role-choice {
     @apply flex cursor-pointer items-start gap-3 rounded-md border border-gray-200 px-3 py-2.5
@@ -455,7 +455,7 @@
 }
 
 /* ── Notes ─────────────────────────────────────────────────────────────
-   A boxed sentence that needs noticing — a warning ("Select a store first"), a success line, an error or plain
+   A boxed sentence that needs noticing — a warning ("Select an organization first"), a success line, an error or plain
    information — one look for each, light and dark, so no page draws its own amber box. */
 @utility alert-warning {
     @apply rounded-md border px-4 py-3 text-sm
@@ -505,7 +505,7 @@
     caret-color: var(--color-gray-300);
 }
 
-/* form-input-auth in the dark app shell (Profile, Settings → Stores): the same
+/* form-input-auth in the dark app shell (Profile, Settings → Organizations): the same
    gray-900 surface, with its own lighter text (dark:text-gray-100). */
 .dark .form-input-auth:-webkit-autofill,
 .dark .form-input-auth:-webkit-autofill:hover,

@@ -3,7 +3,7 @@
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Services\AdPublisher;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Storage;
 |--------------------------------------------------------------------------
 |
 | The pictures and videos that go INSIDE an ad (docs/AD-BUILDER-SPEC.md §3) — deliberately not the
-| store's media library, which is what a shop plays. Same store wall, same formats, its own folder,
+| organization's media library, which is what an organization plays. Same organization wall, same formats, its own folder,
 | and a file still used by a design cannot be taken away underneath it.
 |
 */
@@ -22,26 +22,26 @@ use Illuminate\Support\Facades\Storage;
 beforeEach(function () {
     Storage::fake('public');
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->other = Store::factory()->create(['name' => 'Beta Deli']);
-    $this->designer = createStoreUser($this->store, ['ad-view', 'ad-store', 'ad-update', 'ad-destroy'], 'Designer');
-    $this->actingAs($this->designer)->withSession(['current_store_id' => $this->store->id]);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->other = Organization::factory()->create(['name' => 'Beta Deli']);
+    $this->designer = createOrganizationUser($this->organization, ['ad-view', 'ad-store', 'ad-update', 'ad-destroy'], 'Designer');
+    $this->actingAs($this->designer)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
-test('a picture lands on the shelf, in its own store’s folder', function () {
+test('a picture lands on the shelf, in its own organization’s folder', function () {
     $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png', 800, 600)])->assertOk();
 
     $asset = BuilderAsset::sole();
 
-    expect($asset->store_id)->toBe($this->store->id)
+    expect($asset->organization_id)->toBe($this->organization->id)
         ->and($asset->kind)->toBe(BuilderAsset::KIND_IMAGE)
         ->and($asset->title)->toBe('logo')
-        ->and($asset->path)->toStartWith("builder/{$this->store->id}/assets/")
+        ->and($asset->path)->toStartWith("builder/{$this->organization->id}/assets/")
         ->and($asset->width)->toBe(800);
 
     Storage::disk('public')->assertExists($asset->path);
 
-    // It is the BUILDER's shelf: nothing was added to the store's media library.
+    // It is the BUILDER's shelf: nothing was added to the organization's media library.
     expect(Media::count())->toBe(0);
 });
 
@@ -61,17 +61,17 @@ test('only what a television can render is accepted', function () {
         ->and(Storage::disk('public')->allFiles())->toBeEmpty();
 });
 
-test('the shelf shows this store’s files and says which ads use them', function () {
-    $used = BuilderAsset::factory()->create(['store_id' => $this->store->id, 'title' => 'Logo']);
-    $spare = BuilderAsset::factory()->create(['store_id' => $this->store->id, 'title' => 'Texture']);
-    BuilderAsset::factory()->create(['store_id' => $this->other->id, 'title' => 'Their logo']);
+test('the shelf shows this organization’s files and says which ads use them', function () {
+    $used = BuilderAsset::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Logo']);
+    $spare = BuilderAsset::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Texture']);
+    BuilderAsset::factory()->create(['organization_id' => $this->other->id, 'title' => 'Their logo']);
 
     $document = BuilderAd::blankDocument();
     $document['elements'] = [[
         'id' => 'el_1', 'type' => 'image', 'x' => 0, 'y' => 0, 'w' => 400, 'h' => 300,
         'assetId' => $used->id, 'style' => [], 'animations' => [],
     ]];
-    BuilderAd::factory()->create(['store_id' => $this->store->id, 'name' => 'Winter sale', 'document' => $document]);
+    BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Winter sale', 'document' => $document]);
 
     $rows = collect($this->getJson('/builder/assets/data')->assertOk()->json('assets'));
 
@@ -85,14 +85,14 @@ test('the shelf shows this store’s files and says which ads use them', functio
 });
 
 test('a file an ad still uses cannot be pulled out from under it', function () {
-    $asset = BuilderAsset::factory()->create(['store_id' => $this->store->id, 'title' => 'Logo']);
+    $asset = BuilderAsset::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Logo']);
 
     $document = BuilderAd::blankDocument();
     $document['elements'] = [[
         'id' => 'el_1', 'type' => 'image', 'x' => 0, 'y' => 0, 'w' => 400, 'h' => 300,
         'assetId' => $asset->id, 'style' => [], 'animations' => [],
     ]];
-    BuilderAd::factory()->create(['store_id' => $this->store->id, 'name' => 'Winter sale', 'document' => $document]);
+    BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Winter sale', 'document' => $document]);
 
     $this->deleteJson("/builder/assets/{$asset->id}")
         ->assertStatus(422)
@@ -104,14 +104,14 @@ test('a file an ad still uses cannot be pulled out from under it', function () {
 test('a file only the published version still shows cannot be pulled out from under the screens', function () {
     // The brute-force round, 2026-09-29: taken out of the draft, a file the page on the screens still shows was
     // deletable — and every television without a copy lost it.
-    $asset = BuilderAsset::factory()->create(['store_id' => $this->store->id, 'title' => 'Logo']);
+    $asset = BuilderAsset::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Logo']);
 
     $document = BuilderAd::blankDocument();
     $document['elements'] = [[
         'id' => 'el_1', 'type' => 'image', 'x' => 0, 'y' => 0, 'w' => 400, 'h' => 300,
         'assetId' => $asset->id, 'style' => [], 'animations' => [],
     ]];
-    $ad = BuilderAd::factory()->published()->create(['store_id' => $this->store->id, 'name' => 'Winter sale', 'document' => $document]);
+    $ad = BuilderAd::factory()->published()->create(['organization_id' => $this->organization->id, 'name' => 'Winter sale', 'document' => $document]);
     BuilderAd::withoutTimestamps(fn () => $ad->forceFill(['document' => BuilderAd::blankDocument()])->save());
 
     $this->deleteJson("/builder/assets/{$asset->id}")
@@ -139,22 +139,22 @@ test('an unused file goes, and takes its bytes with it', function () {
     Storage::disk('public')->assertMissing($thumb);
 });
 
-test('deleting a store clears its shelf', function () {
-    BuilderAsset::factory()->count(2)->create(['store_id' => $this->store->id]);
-    $keep = BuilderAsset::factory()->create(['store_id' => $this->other->id]);
+test('deleting an organization clears its shelf', function () {
+    BuilderAsset::factory()->count(2)->create(['organization_id' => $this->organization->id]);
+    $keep = BuilderAsset::factory()->create(['organization_id' => $this->other->id]);
 
-    $this->store->delete();
+    $this->organization->delete();
 
-    expect(BuilderAsset::where('store_id', $this->store->id)->count())->toBe(0)
+    expect(BuilderAsset::where('organization_id', $this->organization->id)->count())->toBe(0)
         ->and(BuilderAsset::find($keep->id))->not->toBeNull();
 });
 
-test('a deleted store leaves no ad files behind either — and takes no file its rows do not name', function () {
+test('a deleted organization leaves no ad files behind either — and takes no file its rows do not name', function () {
     $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png')])->assertOk();
     $asset = BuilderAsset::sole();
 
     // A draft with a poster, and a published ad: its page and its poster are named by the library's row.
-    [$draft, $published] = BuilderAd::factory()->withText()->count(2)->create(['store_id' => $this->store->id])->all();
+    [$draft, $published] = BuilderAd::factory()->withText()->count(2)->create(['organization_id' => $this->organization->id])->all();
 
     foreach ([$draft, $published] as $ad) {
         $ad->forceFill(['thumbnail_path' => $ad->storageDirectory().'/poster.jpg'])->save();
@@ -166,7 +166,7 @@ test('a deleted store leaves no ad files behind either — and takes no file its
     // A file nobody's row names, in an ad's folder: a folder delete would have taken it on a guess.
     Storage::disk('public')->put($draft->storageDirectory().'/not-ours.txt', 'bytes');
 
-    $this->store->delete();
+    $this->organization->delete();
 
     // The rows would have cascaded on their own; the point of purgeBuilder is the bytes.
     Storage::disk('public')->assertMissing($asset->path);
@@ -176,36 +176,36 @@ test('a deleted store leaves no ad files behind either — and takes no file its
     Storage::disk('public')->assertExists($draft->storageDirectory().'/not-ours.txt');
 });
 
-test('the platform uploads to the shop it chose — or, with none chosen, shares the file with every shop', function () {
-    // The platform team stands in no store: the page sends the shop picked in its Shop list, or none.
+test('the platform uploads to the organization it chose — or, with none chosen, shares the file with every organization', function () {
+    // The platform team stands in no organization: the page sends the organization picked in its Organization list, or none.
     $admin = createSuperAdmin();
     $this->actingAs($admin);
     $this->flushSession();
 
-    $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png'), 'store_id' => 999999])
+    $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png'), 'organization_id' => 999999])
         ->assertStatus(422)->assertJsonValidationErrors('file');
-    $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png'), 'store_id' => [$this->other->id]])
-        ->assertStatus(422)->assertJsonValidationErrors('store_id');
+    $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png'), 'organization_id' => [$this->other->id]])
+        ->assertStatus(422)->assertJsonValidationErrors('organization_id');
 
     expect(BuilderAsset::count())->toBe(0);
 
-    $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png'), 'store_id' => $this->other->id])
+    $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png'), 'organization_id' => $this->other->id])
         ->assertOk();
 
     $asset = BuilderAsset::sole();
 
-    expect($asset->store_id)->toBe($this->other->id)
+    expect($asset->organization_id)->toBe($this->other->id)
         ->and($asset->path)->toStartWith("builder/{$this->other->id}/assets/");
 
-    // No shop named: the shelf the platform shares with every shop (tests/Feature/Builder/SharedAssetsTest.php).
+    // No organization named: the shelf the platform shares with every organization (tests/Feature/Builder/SharedAssetsTest.php).
     $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('brand.png')])->assertOk();
 
-    expect(BuilderAsset::whereNull('store_id')->sole()->path)->toStartWith('builder/platform/assets/');
+    expect(BuilderAsset::whereNull('organization_id')->sole()->path)->toStartWith('builder/platform/assets/');
 });
 
-test('a store’s person uploads to the store they work in, whatever shop the request names', function () {
-    $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png'), 'store_id' => $this->other->id])
+test('an organization’s person uploads to the organization they work in, whatever organization the request names', function () {
+    $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png'), 'organization_id' => $this->other->id])
         ->assertOk();
 
-    expect(BuilderAsset::sole()->store_id)->toBe($this->store->id);
+    expect(BuilderAsset::sole()->organization_id)->toBe($this->organization->id);
 });

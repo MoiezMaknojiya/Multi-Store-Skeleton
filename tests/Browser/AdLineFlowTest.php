@@ -4,8 +4,8 @@ namespace Tests\Browser;
 
 use App\Models\BuilderAd;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Dusk\Browser;
@@ -24,14 +24,14 @@ class AdLineFlowTest extends DuskTestCase
     public function test_a_line_is_added_styled_turned_and_published(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store, Role::OWNER, 'owner@example.com');
-        $ad = BuilderAd::factory()->create(['store_id' => $store->id, 'name' => 'Menu']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization, Role::OWNER, 'owner@example.com');
+        $ad = BuilderAd::factory()->create(['organization_id' => $organization->id, 'name' => 'Menu']);
 
-        $this->browse(function (Browser $browser) use ($owner, $store, $ad) {
+        $this->browse(function (Browser $browser) use ($owner, $organization, $ad) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/builder/'.$ad->id);
             $this->waitForAlpine($browser);
@@ -75,7 +75,7 @@ class AdLineFlowTest extends DuskTestCase
             ]);
 
             $this->jsClick($browser, '@ad-publish');
-            $browser->waitUsing(25, 250, fn () => Media::where('store_id', $store->id)->where('type', Media::TYPE_HTML)->exists());
+            $browser->waitUsing(25, 250, fn () => Media::where('organization_id', $organization->id)->where('type', Media::TYPE_HTML)->exists());
             $html = Storage::disk('public')->get(Media::where('type', Media::TYPE_HTML)->sole()->path);
 
             $this->assertStringContainsString('border-top:12px dashed #ffd166;', $html);

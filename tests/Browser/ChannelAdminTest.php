@@ -5,9 +5,9 @@ namespace Tests\Browser;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -47,16 +47,16 @@ class ChannelAdminTest extends DuskTestCase
             $browser->waitFor('@channel-name-'.$channel->id)
                 ->assertSeeIn('@channel-ads-'.$channel->id, 'No ads yet');
 
-            // A shop whose Ad Builder has published an ad: the platform's channel may show a shop's file.
-            $store = Store::factory()->create(['name' => 'Alpha Mart']);
-            $page = Media::factory()->adPage()->create(['store_id' => $store->id, 'title' => 'Burger Deal', 'thumbnail_path' => null]);
+            // An organization whose Ad Builder has published an ad: the platform's channel may show an organization's file.
+            $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+            $page = Media::factory()->adPage()->create(['organization_id' => $organization->id, 'title' => 'Burger Deal', 'thumbnail_path' => null]);
             // A file plays from a playlist or from a channel, never both (owner's rule, 2026-09-26): an ad on a screen's
             // playlist is not offered here — and the picker says so rather than look empty (owner, 2026-10-01).
-            $pizza = Media::factory()->adPage()->create(['store_id' => $store->id, 'title' => 'Pizza Night', 'thumbnail_path' => null]);
-            PlaylistItem::create(['screen_id' => Screen::factory()->create(['store_id' => $store->id])->id, 'media_id' => $pizza->id, 'position' => 0, 'duration_seconds' => 6]);
-            $bakery = Store::factory()->create(['name' => 'Beta Bakes']);
-            $bread = Media::factory()->adPage()->create(['store_id' => $bakery->id, 'title' => 'Bread Sale', 'thumbnail_path' => null]);
-            PlaylistItem::create(['screen_id' => Screen::factory()->create(['store_id' => $bakery->id])->id, 'media_id' => $bread->id, 'position' => 0, 'duration_seconds' => 6]);
+            $pizza = Media::factory()->adPage()->create(['organization_id' => $organization->id, 'title' => 'Pizza Night', 'thumbnail_path' => null]);
+            PlaylistItem::create(['screen_id' => Screen::factory()->create(['organization_id' => $organization->id])->id, 'media_id' => $pizza->id, 'position' => 0, 'duration_seconds' => 6]);
+            $bakery = Organization::factory()->create(['name' => 'Beta Bakes']);
+            $bread = Media::factory()->adPage()->create(['organization_id' => $bakery->id, 'title' => 'Bread Sale', 'thumbnail_path' => null]);
+            PlaylistItem::create(['screen_id' => Screen::factory()->create(['organization_id' => $bakery->id])->id, 'media_id' => $bread->id, 'position' => 0, 'duration_seconds' => 6]);
 
             // -- Its ads page: an upload, which joins the platform's library first --
             $browser->visit('/channels/'.$channel->id);
@@ -81,7 +81,7 @@ class ChannelAdminTest extends DuskTestCase
             $browser->waitUsing(15, 200, fn () => ChannelAd::where('channel_id', $channel->id)->exists());
             $ad = ChannelAd::firstWhere('channel_id', $channel->id);
             $this->assertSame(12, $ad->duration_seconds);
-            $this->assertNull($ad->media->store_id, "the upload did not join the platform's library");
+            $this->assertNull($ad->media->organization_id, "the upload did not join the platform's library");
             $this->assertStringStartsWith('media/platform/', $ad->media->path);
 
             $browser->waitFor('@channel-ad-row-'.$ad->id)
@@ -110,22 +110,22 @@ class ChannelAdminTest extends DuskTestCase
             $again = ChannelAd::where('channel_id', $channel->id)->latest('id')->first();
             $this->assertSame($ad->media_id, $again->media_id);
             $this->assertSame(7, $again->duration_seconds);
-            $this->assertSame(1, Media::whereNull('store_id')->count(), 'choosing a library file made a copy of it');
+            $this->assertSame(1, Media::whereNull('organization_id')->count(), 'choosing a library file made a copy of it');
             $browser->waitFor('@channel-ad-row-'.$again->id)->assertSeeIn('@channel-ad-title-'.$again->id, 'Coke again');
 
-            // -- An Ad Builder ad: the platform's own library has none, so a shop is chosen --
+            // -- An Ad Builder ad: the platform's own library has none, so an organization is chosen --
             $this->jsClick($browser, '@add-channel-ad');
             $browser->waitFor('@channel-ad-form');
             $this->jsClick($browser, '@channel-ad-source-ads');
             $browser->waitFor('@channel-ad-picker-empty')
                 ->assertSeeIn('@channel-ad-picker-empty', 'or choose an organization above')
-                // A shop whose only published ad is on a playlist: an empty tab that says why.
+                // An organization whose only published ad is on a playlist: an empty tab that says why.
                 ->select('@channel-ad-library', (string) $bakery->id)
                 ->waitForTextIn('@channel-ad-picker-empty', '1 published ad is on a playlist, so not listed here')
                 ->assertMissing('@channel-ad-pick-'.$bread->id)
                 ->screenshot('channel-ad-picker-all-on-playlists')
-                // A shop with one ad free and one on a playlist: the free one, and a line for the other.
-                ->select('@channel-ad-library', (string) $store->id)
+                // An organization with one ad free and one on a playlist: the free one, and a line for the other.
+                ->select('@channel-ad-library', (string) $organization->id)
                 ->waitFor('@channel-ad-pick-'.$page->id)
                 ->assertMissing('@channel-ad-pick-'.$pizza->id)
                 ->assertSeeIn('@channel-ad-picker-note', '1 published ad is on a playlist, so not listed: nothing plays twice.');
@@ -171,7 +171,7 @@ class ChannelAdminTest extends DuskTestCase
             $browser->waitUsing(10, 200, fn () => $second->fresh()->position === 2);
 
             // -- Deleting says how far the channel has spread, first ---------------
-            $screen = Screen::factory()->create(['store_id' => $store->id]);
+            $screen = Screen::factory()->create(['organization_id' => $organization->id]);
             PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $channel->id, 'position' => 0]);
 
             $browser->visit('/channels');
@@ -203,23 +203,23 @@ class ChannelAdminTest extends DuskTestCase
     }
 
     /**
-     * Inside a shop, the platform's channel is listed and opened to look at (owner, 2026-09-19) — nothing on
-     * it offers a change — while the shop's own channel keeps every button.
+     * Inside an organization, the platform's channel is listed and opened to look at (owner, 2026-09-19) — nothing on
+     * it offers a change — while the organization's own channel keeps every button.
      */
-    public function test_inside_a_shop_the_platforms_channel_is_there_to_look_at(): void
+    public function test_inside_a_organization_the_platforms_channel_is_there_to_look_at(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $keeper = $this->storeMember($store, ['channel-view', 'channel-store', 'channel-update', 'channel-destroy']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $keeper = $this->organizationMember($organization, ['channel-view', 'channel-store', 'channel-update', 'channel-destroy']);
 
         $gama = Channel::factory()->create(['name' => 'GAMA']);
         $promo = ChannelAd::factory()->lasting(10)->showing(['thumbnail_path' => null])->create(['channel_id' => $gama->id, 'title' => 'Monster']);
-        $own = Channel::factory()->create(['name' => 'Alpha Specials', 'store_id' => $store->id]);
+        $own = Channel::factory()->create(['name' => 'Alpha Specials', 'organization_id' => $organization->id]);
 
-        $this->browse(function (Browser $browser) use ($keeper, $store, $gama, $promo, $own) {
+        $this->browse(function (Browser $browser) use ($keeper, $organization, $gama, $promo, $own) {
             $this->freshSession($browser);
             $browser->loginAs($keeper);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/channels');
             $this->waitForAlpine($browser);
@@ -231,7 +231,7 @@ class ChannelAdminTest extends DuskTestCase
                 ->assertVisible('@edit-channel-'.$own->id)
                 ->assertVisible('@delete-channel-'.$own->id)
                 ->assertMissing('@channel-from-platform-'.$own->id)
-                ->screenshot('channels-inside-a-shop');
+                ->screenshot('channels-inside-a-organization');
 
             $browser->visit('/channels/'.$gama->id);
             $this->waitForAlpine($browser);

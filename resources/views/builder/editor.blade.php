@@ -1,11 +1,11 @@
 @php
-    // The platform team stands in no store, so a new ad asks which shop it is for (the controller hands
-    // them the shops). A store's own people never see this: they are already working somewhere.
+    // The platform team stands in no organization, so a new ad asks which organization it is for (the controller hands
+    // them the organizations). An organization's own people never see this: they are already working somewhere.
     $platformUser = auth()->user()->globalRole() !== null;
-    $stores = $ad ? [] : ($stores ?? []);
-    // An ad for every shop (owner, 2026-10-01): a new one is made with All shops, first in the Shop list above the
-    // stores; a saved one names no shop, and only the platform opens it here — a shop's people copy it instead.
-    $sharedAd = $ad !== null && $ad->store_id === null;
+    $organizations = $ad ? [] : ($organizations ?? []);
+    // An ad for every organization (owner, 2026-10-01): a new one is made with All organizations, first in the Organization list above the
+    // organizations; a saved one names no organization, and only the platform opens it here — an organization's people copy it instead.
+    $sharedAd = $ad !== null && $ad->organization_id === null;
     $ownerLabel ??= null;
 
     // The panel's lists are the server's own (AdCompiler, AdAnimations): every option is a value the
@@ -113,8 +113,8 @@
              'orientation' => $orientation,
              'document' => $document,
              'assets' => $assets,
-             'storeId' => $platformUser ? ($ad?->store_id) : null,
-             'choosesShop' => $platformUser && ! $ad,
+             'organizationId' => $platformUser ? ($ad?->organization_id) : null,
+             'choosesOrganization' => $platformUser && ! $ad,
              'shared' => $sharedAd,
              // Where the ad stands with the screens (docs/AD-BUILDER-SPEC.md §9): on them or not, whether they
              // show its latest changes, and whether there is a published version to go back to.
@@ -172,14 +172,14 @@
                           : 'For a screen the usual way round (1920 × 1080). Chosen when the ad was made; it cannot change.'"
                       x-text="orientation === 'portrait' ? 'Portrait' : 'Landscape'"></span>
 
-                {{-- Above the stores a new ad says whose it is — All shops first (owner, 2026-10-01), as the Assets
+                {{-- Above the organizations a new ad says whose it is — All organizations first (owner, 2026-10-01), as the Assets
                      page's list does — and the first save fixes it. A saved ad says it beside its shape. --}}
                 @if ($platformUser && ! $ad)
-                    <select x-model.number="storeId" @change="shopChanged()" x-bind:disabled="!!adId" class="form-select h-9 w-44"
-                            dusk="ad-store" aria-label="Organization" x-bind:title="adId ? 'Chosen with the first save' : ''">
+                    <select x-model.number="organizationId" @change="organizationChanged()" x-bind:disabled="!!adId" class="form-select h-9 w-44"
+                            dusk="ad-organization" aria-label="Organization" x-bind:title="adId ? 'Chosen with the first save' : ''">
                         <option value="">All organizations</option>
-                        @foreach ($stores as $store)
-                            <option value="{{ $store['id'] }}">{{ $store['name'] }}</option>
+                        @foreach ($organizations as $organization)
+                            <option value="{{ $organization['id'] }}">{{ $organization['name'] }}</option>
                         @endforeach
                     </select>
                 @elseif ($ownerLabel)
@@ -1058,16 +1058,16 @@
                     </div>
                 </div>
 
-                {{-- A new picture or video straight from here (owner, 2026-09-30): it joins this ad's shelf — the shop
-                     the person works in, or above the stores the ad's shop, or with All shops the shelf shared with every
-                     shop (owner, 2026-10-01) — and is there to pick the moment it is in, under the same rules as the
-                     Assets page (30-second videos, the shop's 512 MB). The editor listens here, not on the box: an
+                {{-- A new picture or video straight from here (owner, 2026-09-30): it joins this ad's shelf — the organization
+                     the person works in, or above the organizations the ad's organization, or with All organizations the shelf shared with every
+                     organization (owner, 2026-10-01) — and is there to pick the moment it is in, under the same rules as the
+                     Assets page (30-second videos, the organization's 512 MB). The editor listens here, not on the box: an
                      expression on the box runs with the box's own `this`. --}}
                 @can('ad-store')
                     <div class="mt-4" x-on:upload-added="onAssetUploaded($event.detail)" dusk="picker-upload">
                         <x-upload-dropzone purpose="asset" mode="add" :multiple="true" add-url="/builder/assets" dusk="picker"
                             :max-video-seconds="\App\Models\BuilderAsset::MAX_VIDEO_SECONDS"
-                            context="{ store: storeId, fields: storeId ? { store_id: storeId } : {}, storage: shelfStorage }"
+                            context="{ organization: organizationId, fields: organizationId ? { organization_id: organizationId } : {}, storage: shelfStorage }"
                             hint="JPG, PNG, GIF, WEBP, MP4 or WEBM, up to 250 MB each. Videos up to 30 seconds." />
                     </div>
                 @endcan

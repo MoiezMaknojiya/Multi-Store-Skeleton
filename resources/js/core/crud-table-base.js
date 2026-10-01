@@ -1,7 +1,7 @@
 /**
  * Factory function for CRUD table Alpine.js components.
  * Provides shared pagination, debounced search, fetch, save, and delete logic.
- * The listings built on it — accounts, stores, permissions, the activity log, media, screens, dayparts,
+ * The listings built on it — accounts, organizations, permissions, the activity log, media, screens, dayparts,
  * campaigns, channels, and the Ad Builder's ads and assets — add their own form shape and overrides
  * (roles, playlists and channel ads have their own components instead).
  */
@@ -20,9 +20,9 @@ import { unreadableFields } from './validate.js';
 const ROWS_PER_PAGE = 50;
 
 export function createCrudTable({
-    fetchUrl,            // API endpoint for listing, e.g. '/stores/data'
-    dataKey,             // JSON response key holding the items array, e.g. 'stores'
-    entityLabel,         // Human-readable name for error messages, e.g. 'store'
+    fetchUrl,            // API endpoint for listing, e.g. '/organizations/data'
+    dataKey,             // JSON response key holding the items array, e.g. 'organizations'
+    entityLabel,         // Human-readable name for error messages, e.g. 'organization'
 
     formModalName,       // Modal name for create/edit form
     deleteModalName,     // Modal name for delete confirmation
@@ -113,7 +113,7 @@ export function createCrudTable({
                 this.lastPage = data.lastPage;
                 this.refreshFailed = false;
                 this.loadFailed = false;
-                /* A listing may say more than its rows — the media library says how full its shop is. */
+                /* A listing may say more than its rows — the media library says how full its organization is. */
                 if (typeof this.afterFetch === 'function') this.afterFetch(data);
             } catch (error) {
                 if (requestToken !== this.fetchToken) return;

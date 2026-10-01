@@ -76,12 +76,12 @@ export function registerAdEditor(Alpine) {
                 maxSeconds: config.adSeconds?.max ?? null,
             }),
             assets: config.assets ?? [],
-            storeId: config.storeId ?? null,
-            /* The platform team making a NEW ad says which shop it is for — All shops first, an ad for every
-             * shop (owner, 2026-10-01) — and the shelf follows the choice, so nothing from another shop can be
+            organizationId: config.organizationId ?? null,
+            /* The platform team making a NEW ad says which organization it is for — All organizations first, an ad for every
+             * organization (owner, 2026-10-01) — and the shelf follows the choice, so nothing from another organization can be
              * placed and then lost when the ad is saved. */
-            choosesShop: config.choosesShop ?? false,
-            /* Made for every shop: its shelf is the files shared with every shop alone. */
+            choosesOrganization: config.choosesOrganization ?? false,
+            /* Made for every organization: its shelf is the files shared with every organization alone. */
             shared: config.shared ?? false,
 
             /* What this person may do here, as the routes decide it: a saved ad is changed and published
@@ -147,7 +147,7 @@ export function registerAdEditor(Alpine) {
             assetPickerOpen: false,
             assetPickerMode: 'element',
             assetPickerKind: null,
-            /* How full the shop's shelf is ({used, limit}), as the last upload from the picker said: the uploader checks
+            /* How full the organization's shelf is ({used, limit}), as the last upload from the picker said: the uploader checks
              * a file against it before a byte is sent. Unknown until then — the server decides either way. */
             shelfStorage: null,
 
@@ -567,30 +567,30 @@ export function registerAdEditor(Alpine) {
             },
 
             /**
-             * Whether an asset is on this ad's shelf: a file the platform shares with every shop always is (owner,
-             * 2026-09-29). For the platform team building for a shop, only that shop's own besides, because the
-             * compiler only ever uses an ad's own store's files and the shared ones; a store's own people are only
-             * ever handed their own shop's and the shared. The picker and a paste both ask.
+             * Whether an asset is on this ad's shelf: a file the platform shares with every organization always is (owner,
+             * 2026-09-29). For the platform team building for an organization, only that organization's own besides, because the
+             * compiler only ever uses an ad's own organization's files and the shared ones; an organization's own people are only
+             * ever handed their own organization's and the shared. The picker and a paste both ask.
              */
             onThisShelf(asset) {
-                if (!asset.store_id) return true;
-                // An ad for every shop uses the shared files alone: a shop's own would show in no other shop's copy.
+                if (!asset.organization_id) return true;
+                // An ad for every organization uses the shared files alone: an organization's own would show in no other organization's copy.
                 if (this.isShared()) return false;
-                if (this.choosesShop && !this.storeId) return false;
+                if (this.choosesOrganization && !this.organizationId) return false;
 
-                return !this.storeId || asset.store_id === this.storeId;
+                return !this.organizationId || asset.organization_id === this.organizationId;
             },
 
-            /** Made for every shop: a saved ad as the server says, a new one while All shops is chosen. */
+            /** Made for every organization: a saved ad as the server says, a new one while All organizations is chosen. */
             isShared() {
-                return this.adId ? this.shared : (this.choosesShop && !this.storeId);
+                return this.adId ? this.shared : (this.choosesOrganization && !this.organizationId);
             },
 
             /**
-             * A new ad's shop chosen again: the picker's storage meter was the other shop's, and a file already on the
+             * A new ad's organization chosen again: the picker's storage meter was the other organization's, and a file already on the
              * stage that is not on the new shelf would show on no screen, so it is said at once.
              */
-            shopChanged() {
+            organizationChanged() {
                 this.shelfStorage = null;
 
                 const ids = [
@@ -613,8 +613,8 @@ export function registerAdEditor(Alpine) {
 
                 if (!asset?.id || this.assets.some((each) => each.id === asset.id)) return;
 
-                const { id, store_id, title, kind, disk, path, thumbnail_path, width, height, duration_seconds, url, thumbnail_url } = asset;
-                this.assets = [{ id, store_id, title, kind, disk, path, thumbnail_path, width, height, duration_seconds, url, thumbnail_url }, ...this.assets];
+                const { id, organization_id, title, kind, disk, path, thumbnail_path, width, height, duration_seconds, url, thumbnail_url } = asset;
+                this.assets = [{ id, organization_id, title, kind, disk, path, thumbnail_path, width, height, duration_seconds, url, thumbnail_url }, ...this.assets];
             },
 
             pickerTitle() {
@@ -1358,7 +1358,7 @@ export function registerAdEditor(Alpine) {
                     const sentRevision = this.revision;
                     const payload = { name: this.name, document: clone(this.doc) };
 
-                    if (this.storeId) payload.store_id = this.storeId;
+                    if (this.organizationId) payload.organization_id = this.organizationId;
                     // Said once, with the first save: a saved ad's orientation is its own (§12).
                     if (!this.adId) payload.orientation = this.orientation;
 
@@ -1466,7 +1466,7 @@ export function registerAdEditor(Alpine) {
             },
 
             publicationHint() {
-                // An ad for every shop is published for the shops to see and copy (owner, 2026-10-01).
+                // An ad for every organization is published for the organizations to see and copy (owner, 2026-10-01).
                 if (this.isShared()) {
                     if (!this.published) return 'No organization sees it until you publish it.';
 

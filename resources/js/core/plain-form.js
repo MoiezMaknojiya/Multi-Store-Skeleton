@@ -1,6 +1,6 @@
 /**
  * Client-side validation for plain-POST forms (the auth pages, the invitation page, Profile and
- * Settings → Stores).
+ * Settings → Organizations).
  * Reads the named fields off the submitted form, runs the given rules (validate.js),
  * and on failure blocks the submit and paints the same red-border + message UX the
  * server-side errors use — no page reload for obvious mistakes. Returns true when

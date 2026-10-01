@@ -2,16 +2,16 @@
 
 use App\Models\BuilderAd;
 use App\Models\Channel;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Screen;
-use App\Models\Store;
 
 /*
 |--------------------------------------------------------------------------
 | Every button says its words in Title Case (owner, 2026-09-30: "Create Ad")
 |--------------------------------------------------------------------------
 |
-| Read from the pages themselves, not from a list of labels: every page of the panel, above the stores and inside
+| Read from the pages themselves, not from a list of labels: every page of the panel, above the organizations and inside
 | one, is opened, and every button, every link drawn as a button, every tab and every menu item it holds — shown or
 | waiting in a template — is read, its own words and the words its Alpine binding may show. Every word capitalised
 | but a, an, the, and, or, for, to, in, of, on, at, by, from and with, unless first or last or a verb's own particle.
@@ -71,9 +71,9 @@ function buttonWordsOf(string $html): array
     libxml_clear_errors();
     $xpath = new DOMXPath($dom);
 
-    // Labels that are data, not words of ours: a store's name in the switcher, the person's own menu, a page number,
+    // Labels that are data, not words of ours: an organization's name in the switcher, the person's own menu, a page number,
     // a font's or a file's name in the editor's pickers, a layer's name.
-    $data = ['store-switcher', 'store-switch-', 'sidebar-settings', 'pick-asset-', 'font-', 'layer-', 'element-', 'history-step'];
+    $data = ['organization-switcher', 'organization-switch-', 'sidebar-settings', 'pick-asset-', 'font-', 'layer-', 'element-', 'history-step'];
 
     $words = [];
     $nodes = $xpath->query('//button | //a[contains(@class, "btn-")] | //*[@role="menuitem"] | //*[@role="tab"] | //*[contains(@class, "tab-link")]');
@@ -123,12 +123,12 @@ function wordsNotTitleCased(array $pages, callable $open): array
     return $wrong;
 }
 
-test('every button above the stores says its words in Title Case', function () {
+test('every button above the organizations says its words in Title Case', function () {
     $admin = createSuperAdmin();
-    Store::factory()->create(['name' => 'Alpha Mart']);
+    Organization::factory()->create(['name' => 'Alpha Mart']);
     $channel = Channel::factory()->create();
 
-    $pages = ['/dashboard', '/users', '/stores', '/permissions', '/roles', '/activity', '/channels', "/channels/{$channel->id}",
+    $pages = ['/dashboard', '/users', '/organizations', '/permissions', '/roles', '/activity', '/channels', "/channels/{$channel->id}",
         '/campaigns', '/builder', '/builder/assets', '/builder/create?orientation=landscape', '/media', '/screens', '/dayparts', '/profile'];
 
     $wrong = wordsNotTitleCased($pages, fn (string $page) => $this->actingAs($admin)->get($page)->assertOk()->getContent());
@@ -136,19 +136,19 @@ test('every button above the stores says its words in Title Case', function () {
     expect($wrong)->toBe([]);
 });
 
-test('every button inside a store says its words in Title Case', function () {
-    $store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $owner = createStoreUser($store, [...Permission::STORE, 'store-view', 'store-store', 'store-destroy', 'store-update',
+test('every button inside an organization says its words in Title Case', function () {
+    $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $owner = createOrganizationUser($organization, [...Permission::ORGANIZATION, 'organization-view', 'organization-store', 'organization-destroy', 'organization-update',
         'channel-view', 'channel-store', 'channel-update', 'channel-destroy', 'activity-view'], 'Everything');
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
-    $channel = Channel::factory()->create(['store_id' => $store->id]);
-    $ad = BuilderAd::factory()->create(['store_id' => $store->id]);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
+    $channel = Channel::factory()->create(['organization_id' => $organization->id]);
+    $ad = BuilderAd::factory()->create(['organization_id' => $organization->id]);
 
     $pages = ['/dashboard', '/screens', "/screens/{$screen->id}", '/media', '/dayparts', '/channels', "/channels/{$channel->id}",
-        '/builder', '/builder/assets', "/builder/{$ad->id}", '/members', '/roles', '/activity', '/settings/store', '/profile'];
+        '/builder', '/builder/assets', "/builder/{$ad->id}", '/members', '/roles', '/activity', '/settings/organization', '/profile'];
 
     $wrong = wordsNotTitleCased($pages, fn (string $page) => $this->actingAs($owner)
-        ->withSession(['current_store_id' => $store->id])->get($page)->assertOk()->getContent());
+        ->withSession(['current_organization_id' => $organization->id])->get($page)->assertOk()->getContent());
 
     expect($wrong)->toBe([]);
 });
@@ -162,12 +162,12 @@ test('the doors before the panel say their buttons in Title Case too', function 
 test('the Title Case rule itself', function (string $label, string $expected) {
     expect(titleCased($label))->toBe($expected);
 })->with([
-    ['Remove from store', 'Remove from Store'],
+    ['Remove from organization', 'Remove from Organization'],
     ['Log in as', 'Log In As'],
     ['Sign in to accept', 'Sign In to Accept'],
     ['Go to the dashboard', 'Go to the Dashboard'],
     ['Copy and replace', 'Copy and Replace'],
-    ['Turn off for this shop', 'Turn Off for This Shop'],
+    ['Turn off for this organization', 'Turn Off for This Organization'],
     ['Choose a picture…', 'Choose a Picture…'],
     ['OK', 'OK'],
     ['+ Add a colour', '+ Add a Colour'],

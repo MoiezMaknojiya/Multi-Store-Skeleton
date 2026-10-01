@@ -21,13 +21,13 @@
     </script>
 </head>
 
-{{-- A focused, sidebar-less shell for pages that stand on their own (e.g. the store
+{{-- A focused, sidebar-less shell for pages that stand on their own (e.g. the organization
      picker). Just a slim top bar with the brand and the user menu, then the content. --}}
 <body class="font-sans antialiased bg-gray-100 dark:bg-gray-900" x-data="layoutHandler">
     <a href="#main-content" class="skip-link" dusk="skip-to-content">Skip to main content</a>
 
     <div class="min-h-screen flex flex-col">
-        {{-- Impersonation Banner — "Log in as" a member of several stores lands here first --}}
+        {{-- Impersonation Banner — "Log in as" a member of several organizations lands here first --}}
         <x-impersonation-banner />
 
         {{-- Slim top bar --}}

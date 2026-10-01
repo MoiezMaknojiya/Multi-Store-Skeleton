@@ -2,7 +2,7 @@
      file is dropped on or chosen with, and a row per file with its preview, its progress and its buttons. The chooser is
      the box's own input, out of sight but not out of reach: a click, Enter or Space opens it. `context` is an Alpine
      expression the page keeps the box up to date with: where the file goes, the fields its door needs besides, and the
-     shop's storage. A page listens for the box's events (upload-added, upload-ready, …) on an element of its OWN around
+     organization's storage. A page listens for the box's events (upload-added, upload-ready, …) on an element of its OWN around
      the box, never on the box: an expression on the box runs with the box's `this`, and a page method called from there
      would write its own state into the box's (a list refreshed there once replaced the box's rows). --}}
 @props([

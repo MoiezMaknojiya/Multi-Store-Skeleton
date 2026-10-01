@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
+use App\Models\Organization;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -23,7 +23,7 @@ class ScreenFactory extends Factory
     public function definition(): array
     {
         return [
-            'store_id' => Store::factory(),
+            'organization_id' => Organization::factory(),
             'name' => fake()->randomElement(['Counter TV', 'Window Screen', 'Menu Board', 'Entrance Display']),
             'orientation' => 'landscape',
             // Set explicitly rather than left to the column default, so the model in

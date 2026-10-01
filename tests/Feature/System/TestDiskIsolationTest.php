@@ -6,7 +6,7 @@
 |--------------------------------------------------------------------------
 |
 | A test that forgot Storage::fake('public') once deleted the owner's own published ads: its fresh
-| database numbered its store and ads from 1, exactly like the real one, so builder/1/ads/1 was the
+| database numbered its organization and ads from 1, exactly like the real one, so builder/1/ads/1 was the
 | same folder on both. config/filesystems.php now gives the tests a throwaway root, as Dusk has its own.
 |
 */

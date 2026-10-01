@@ -4,7 +4,7 @@ namespace Tests\Browser;
 
 use App\Models\BuilderAd;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Storage;
@@ -29,15 +29,15 @@ class AdGroupsFlowTest extends DuskTestCase
 
     public function test_a_menu_row_is_grouped_moved_scaled_turned_edited_inside_and_ungrouped(): void
     {
-        [$designer, $store, $ad] = $this->adWith([
+        [$designer, $organization, $ad] = $this->adWith([
             $this->text('dish', 100, 300, 'Chicken karahi', 600, 100),
             $this->text('price', 800, 300, '$12', 200, 100),
             $this->text('note', 100, 420, 'with naan', 400, 60),
             $this->text('headline', 100, 60, 'Menu of the day', 900, 120),
         ]);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad) {
-            $this->openEditor($browser, $designer, $store, $ad);
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad) {
+            $this->openEditor($browser, $designer, $organization, $ad);
 
             /* ── 1. Three texts become one group, placed where the frontmost of them was ── */
             $this->jsClick($browser, '@layer-dish');
@@ -173,7 +173,7 @@ class AdGroupsFlowTest extends DuskTestCase
             $this->assertSame('slide', $saved[$regrouped['id']]['animations']['in']['effect']);
 
             $this->jsClick($browser, '@ad-publish');
-            $browser->waitUsing(25, 250, fn () => Media::where('store_id', $store->id)->where('type', Media::TYPE_HTML)->exists());
+            $browser->waitUsing(25, 250, fn () => Media::where('organization_id', $organization->id)->where('type', Media::TYPE_HTML)->exists());
             $html = Storage::disk('public')->get(Media::where('type', Media::TYPE_HTML)->sole()->path);
 
             $this->assertStringContainsString('data-anim-id="'.$regrouped['id'].'"', $html);
@@ -186,15 +186,15 @@ class AdGroupsFlowTest extends DuskTestCase
 
     public function test_groups_nest_three_deep_and_no_deeper(): void
     {
-        [$designer, $store, $ad] = $this->adWith([
+        [$designer, $organization, $ad] = $this->adWith([
             $this->text('a', 100, 100, 'a', 200, 60),
             $this->text('b', 400, 100, 'b', 200, 60),
             $this->text('c', 700, 100, 'c', 200, 60),
             $this->text('d', 1000, 100, 'd', 200, 60),
         ]);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad) {
-            $this->openEditor($browser, $designer, $store, $ad);
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad) {
+            $this->openEditor($browser, $designer, $organization, $ad);
 
             // a+b → group 1; group 1 + c → group 2; group 2 + d → group 3: three deep for a and b.
             $this->selectLayers($browser, ['a', 'b']);
@@ -233,17 +233,17 @@ class AdGroupsFlowTest extends DuskTestCase
 
     public function test_inside_a_group_the_gaps_turned_children_shift_the_layers_and_a_paste_do_what_they_show(): void
     {
-        [$designer, $store, $ad] = $this->adWith([
+        [$designer, $organization, $ad] = $this->adWith([
             $this->text('dish', 100, 300, 'Chicken karahi', 600, 100),
             $this->text('price', 800, 300, '$12', 200, 100),
             [...$this->text('bar', 100, 600, 'Rule', 400, 40), 'rotation' => 90],
             $this->text('label', 400, 600, 'Daily', 300, 80),
             $this->text('stray', 1400, 900, 'Loose', 300, 80),
         ]);
-        $portrait = BuilderAd::factory()->portrait()->create(['store_id' => $store->id, 'name' => 'Board', 'orientation' => BuilderAd::PORTRAIT]);
+        $portrait = BuilderAd::factory()->portrait()->create(['organization_id' => $organization->id, 'name' => 'Board', 'orientation' => BuilderAd::PORTRAIT]);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad, $portrait) {
-            $this->openEditor($browser, $designer, $store, $ad);
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad, $portrait) {
+            $this->openEditor($browser, $designer, $organization, $ad);
 
             /* ── 1. Two groups: the row (dish, price) and the rule with its label ── */
             $this->selectLayers($browser, ['dish', 'price']);
@@ -386,13 +386,13 @@ class AdGroupsFlowTest extends DuskTestCase
     private function adWith(array $elements): array
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember($store, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($organization, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
 
         $document = BuilderAd::blankDocument();
         $document['elements'] = array_map(fn (array $element, int $z) => [...$element, 'z' => $z], $elements, array_keys($elements));
 
-        return [$designer, $store, BuilderAd::factory()->create(['store_id' => $store->id, 'name' => 'Menu', 'document' => $document])];
+        return [$designer, $organization, BuilderAd::factory()->create(['organization_id' => $organization->id, 'name' => 'Menu', 'document' => $document])];
     }
 
     private function text(string $id, int $x, int $y, string $words, int $w, int $h): array
@@ -405,11 +405,11 @@ class AdGroupsFlowTest extends DuskTestCase
         ];
     }
 
-    private function openEditor(Browser $browser, User $designer, Store $store, BuilderAd $ad): void
+    private function openEditor(Browser $browser, User $designer, Organization $organization, BuilderAd $ad): void
     {
         $this->freshSession($browser);
         $browser->loginAs($designer);
-        $this->switchToStore($browser, $store);
+        $this->switchToOrganization($browser, $organization);
 
         // Every test starts from the editor's defaults, whatever the last one left in this browser.
         $browser->script(

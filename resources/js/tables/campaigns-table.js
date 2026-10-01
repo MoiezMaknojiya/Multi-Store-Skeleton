@@ -3,8 +3,8 @@
  *
  * Like the media library, creating one means uploading a FILE, so it posts FormData
  * rather than JSON and measures a video in the browser (there is no ffmpeg on the
- * server). Unlike anything else in the panel, it belongs to no store: the screens it
- * runs on are chosen from every shop at once.
+ * server). Unlike anything else in the panel, it belongs to no organization: the screens it
+ * runs on are chosen from every organization at once.
  */
 import axios from 'axios';
 import { dayLabel, windowLabel as clockRange } from '../core/clock.js';
@@ -280,15 +280,15 @@ export function registerCampaignsTable(Alpine) {
 
             /* ── The screen picker ─────────────────────────────────────── */
 
-            /** Screens grouped under the shop they stand in. */
-            screensByStore() {
+            /** Screens grouped under the organization they stand in. */
+            screensByOrganization() {
                 const groups = new Map();
 
                 this.allScreens.forEach((screen) => {
-                    if (! groups.has(screen.store_id)) {
-                        groups.set(screen.store_id, { name: screen.store_name, screens: [] });
+                    if (! groups.has(screen.organization_id)) {
+                        groups.set(screen.organization_id, { name: screen.organization_name, screens: [] });
                     }
-                    groups.get(screen.store_id).screens.push(screen);
+                    groups.get(screen.organization_id).screens.push(screen);
                 });
 
                 return [...groups.entries()].map(([id, group]) => ({ id, ...group }));
@@ -304,17 +304,17 @@ export function registerCampaignsTable(Alpine) {
                 return this.form.screen_ids.includes(id);
             },
 
-            /** Is every screen of the shop that can carry adverts chosen? Then its button clears them. */
-            storeAllChosen(group) {
+            /** Is every screen of the organization that can carry adverts chosen? Then its button clears them. */
+            organizationAllChosen(group) {
                 const eligible = group.screens.filter((screen) => screen.carries_ads);
 
                 return eligible.length > 0 && eligible.every((screen) => this.isChosen(screen.id));
             },
 
-            /** Every screen in one shop that CAN carry advertising, in one click. */
-            toggleStore(group) {
+            /** Every screen in one organization that CAN carry advertising, in one click. */
+            toggleOrganization(group) {
                 const eligible = group.screens.filter((screen) => screen.carries_ads).map((s) => s.id);
-                const allChosen = this.storeAllChosen(group);
+                const allChosen = this.organizationAllChosen(group);
 
                 eligible.forEach((id) => {
                     const chosen = this.isChosen(id);
@@ -325,7 +325,7 @@ export function registerCampaignsTable(Alpine) {
 
             /** Why this screen cannot be chosen, in words. */
             blockedReason(screen) {
-                if (! screen.store_accepts) return 'this organization has not agreed to advertising';
+                if (! screen.organization_accepts) return 'this organization has not agreed to advertising';
                 if (! screen.screen_accepts) return 'this screen is kept clear of advertising';
 
                 return '';

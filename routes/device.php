@@ -21,14 +21,14 @@ use Illuminate\Support\Facades\Route;
 | Every throttle here is a NAMED limiter (see AppServiceProvider) and never the
 | bare `throttle:n,1` form. That form keys on domain and IP alone for a request
 | with no logged-in user, so every route using it shares one counter — which
-| meant a shop's own TVs could spend the signup form's budget and lock a new
+| meant an organization's own TVs could spend the signup form's budget and lock a new
 | screen out of pairing. The named limiters below count per device instead.
 |
 */
 
 // A screen with no token asks for a pairing code. Throttled because this is the
-// one endpoint anyone on the internet can call cold — but not so tightly that a
-// shop with several TVs behind one router locks itself out. Guessing a code is
+// one endpoint anyone on the internet can call cold — but not so tightly that an
+// organization with several TVs behind one router locks itself out. Guessing a code is
 // not the threat this defends against (32^6 possibilities, alive for 15 minutes);
 // filling the table is.
 Route::post('/register', [DeviceController::class, 'register'])

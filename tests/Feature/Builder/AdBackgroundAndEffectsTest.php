@@ -2,7 +2,7 @@
 
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Services\AdCompiler;
 
 /*
@@ -18,23 +18,23 @@ use App\Services\AdCompiler;
 */
 
 beforeEach(function () {
-    $this->store = Store::factory()->create();
-    $this->picture = BuilderAsset::factory()->create(['store_id' => $this->store->id, 'path' => 'builder/1/assets/snow.png']);
-    $this->clip = BuilderAsset::factory()->video()->create(['store_id' => $this->store->id, 'path' => 'builder/1/assets/loop.mp4']);
+    $this->organization = Organization::factory()->create();
+    $this->picture = BuilderAsset::factory()->create(['organization_id' => $this->organization->id, 'path' => 'builder/1/assets/snow.png']);
+    $this->clip = BuilderAsset::factory()->video()->create(['organization_id' => $this->organization->id, 'path' => 'builder/1/assets/loop.mp4']);
 });
 
-/** Compile a document for this store. */
-function compileFor(Store $store, array $layers = [], array $elements = [], string $colour = '#101828'): string
+/** Compile a document for this organization. */
+function compileFor(Organization $organization, array $layers = [], array $elements = [], string $colour = '#101828'): string
 {
     $document = BuilderAd::blankDocument();
     $document['stage']['background'] = ['color' => $colour, 'layers' => $layers];
     $document['elements'] = $elements;
 
-    return app(AdCompiler::class)->compile(BuilderAd::factory()->create(['store_id' => $store->id, 'document' => $document]));
+    return app(AdCompiler::class)->compile(BuilderAd::factory()->create(['organization_id' => $organization->id, 'document' => $document]));
 }
 
 test('the layers are stacked in order on the stage colour, each with its own opacity and blend', function () {
-    $html = compileFor($this->store, [
+    $html = compileFor($this->organization, [
         ['id' => 'a', 'type' => 'color', 'color' => '#1e3a8a', 'opacity' => 0.6, 'blend' => 'multiply'],
         ['id' => 'b', 'type' => 'gradient', 'opacity' => 1, 'blend' => 'screen', 'gradient' => [
             'kind' => 'linear', 'angle' => 135, 'stops' => [['color' => '#000000', 'at' => 0], ['color' => '#ffffff', 'at' => 100]],
@@ -61,7 +61,7 @@ test('the layers are stacked in order on the stage colour, each with its own opa
 });
 
 test('a radial gradient, and one with more than two stops', function () {
-    $html = compileFor($this->store, [['id' => 'a', 'type' => 'gradient', 'gradient' => [
+    $html = compileFor($this->organization, [['id' => 'a', 'type' => 'gradient', 'gradient' => [
         'kind' => 'radial',
         'stops' => [['color' => 'rgba(255,255,255,0.3)', 'at' => 0], ['color' => '#3b2216', 'at' => 55], ['color' => '#120a06', 'at' => 100]],
     ]]]);
@@ -70,17 +70,17 @@ test('a radial gradient, and one with more than two stops', function () {
 });
 
 test('a layer the television could not draw is left out, not drawn wrong', function () {
-    $other = Store::factory()->create();
-    $theirs = BuilderAsset::factory()->create(['store_id' => $other->id, 'path' => 'builder/2/assets/theirs.png']);
+    $other = Organization::factory()->create();
+    $theirs = BuilderAsset::factory()->create(['organization_id' => $other->id, 'path' => 'builder/2/assets/theirs.png']);
 
-    $html = compileFor($this->store, [
+    $html = compileFor($this->organization, [
         ['id' => 'hidden', 'type' => 'color', 'color' => '#abcdef', 'visible' => false],
         ['id' => 'not-a-colour', 'type' => 'color', 'color' => 'red; background:url(x)'],
         ['id' => 'one-stop', 'type' => 'gradient', 'gradient' => ['stops' => [['color' => '#ff0000', 'at' => 0]]]],
         ['id' => 'no-picture', 'type' => 'image'],
         ['id' => 'a-video-as-picture', 'type' => 'image', 'assetId' => $this->clip->id],
         ['id' => 'a-picture-as-video', 'type' => 'video', 'assetId' => $this->picture->id],
-        ['id' => 'another-shop', 'type' => 'image', 'assetId' => $theirs->id],
+        ['id' => 'another-organization', 'type' => 'image', 'assetId' => $theirs->id],
         ['id' => 'unknown', 'type' => 'iframe', 'src' => 'https://example.com'],
     ]);
 
@@ -94,7 +94,7 @@ test('a layer the television could not draw is left out, not drawn wrong', funct
 });
 
 test('a picture gets its fit, focus point, corners, frame, shadow, filters and mirror', function () {
-    $html = compileFor($this->store, elements: [[
+    $html = compileFor($this->organization, elements: [[
         'id' => 'photo', 'type' => 'image', 'x' => 10, 'y' => 20, 'w' => 640, 'h' => 400, 'rotation' => 4, 'z' => 0,
         'assetId' => $this->picture->id,
         'style' => [
@@ -119,7 +119,7 @@ test('a picture gets its fit, focus point, corners, frame, shadow, filters and m
 });
 
 test('a shape is a rectangle or an ellipse, filled with a colour or a gradient', function () {
-    $html = compileFor($this->store, elements: [
+    $html = compileFor($this->organization, elements: [
         ['id' => 'rect', 'type' => 'shape', 'x' => 0, 'y' => 0, 'w' => 100, 'h' => 100, 'z' => 0,
             'style' => ['shape' => 'rect', 'fill' => '#2563eb', 'radius' => 16]],
         ['id' => 'ellipse', 'type' => 'shape', 'x' => 0, 'y' => 0, 'w' => 100, 'h' => 100, 'z' => 1,
@@ -134,7 +134,7 @@ test('a shape is a rectangle or an ellipse, filled with a colour or a gradient',
 });
 
 test('a line is a stroke across the middle of its box — its thickness, dash pattern and colour, nothing else', function () {
-    $html = compileFor($this->store, elements: [
+    $html = compileFor($this->organization, elements: [
         ['id' => 'rule', 'type' => 'shape', 'x' => 100, 'y' => 200, 'w' => 900, 'h' => 40, 'z' => 0,
             'style' => ['shape' => 'line', 'fill' => '#ffd166', 'lineWidth' => 8, 'lineStyle' => 'dashed',
                 // What a filled shape would draw, and a line never does.
@@ -158,7 +158,7 @@ test('a line is a stroke across the middle of its box — its thickness, dash pa
 });
 
 test('a Ken Burns loop zooms the picture inside its own frame', function () {
-    $html = compileFor($this->store, elements: [[
+    $html = compileFor($this->organization, elements: [[
         'id' => 'photo', 'type' => 'image', 'x' => 0, 'y' => 0, 'w' => 800, 'h' => 450, 'z' => 0, 'assetId' => $this->picture->id,
         'style' => ['radius' => 24],
         'animations' => ['loop' => ['effect' => 'kenburns', 'amount' => 12]],
@@ -172,7 +172,7 @@ test('a Ken Burns loop zooms the picture inside its own frame', function () {
 });
 
 test('numbers beyond what the compiler writes are held at its limits', function () {
-    $html = compileFor($this->store, elements: [[
+    $html = compileFor($this->organization, elements: [[
         'id' => 'photo', 'type' => 'image', 'x' => 99999, 'y' => -99999, 'w' => 0, 'h' => 50000, 'rotation' => 999, 'opacity' => 7, 'z' => 0,
         'assetId' => $this->picture->id,
         'style' => ['radius' => 5000, 'filters' => ['blur' => 900, 'brightness' => -5], 'border' => ['width' => 999, 'color' => '#000000']],

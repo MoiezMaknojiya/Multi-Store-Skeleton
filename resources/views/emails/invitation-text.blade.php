@@ -9,4 +9,4 @@ If you weren't expecting it, you can safely ignore this email — nothing happen
 
 This invitation was sent to {!! $email !!}.
 {!! config('app.name') !!}
-{{-- Plain text, so every value is printed as it is: escaped, a store like "Ali & Sons" read "Ali &amp; Sons". --}}
+{{-- Plain text, so every value is printed as it is: escaped, an organization like "Ali & Sons" read "Ali &amp; Sons". --}}

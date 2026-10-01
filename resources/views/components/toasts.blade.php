@@ -1,6 +1,6 @@
 {{-- The toasts, filled by window.toast() from any component (resources/js/app.js), and the flash message a
      redirect brought ("Welcome to Alpha Mart!", "Switched to …") shown as a success toast. Shared by both
-     shells a signed-in person sees — the app layout and the focused layout (the store picker), so a flash
+     shells a signed-in person sees — the app layout and the focused layout (the organization picker), so a flash
      that reaches the picker is shown there too. The Profile and Settings forms show their own status keys
      themselves, so those never become a toast. --}}
 @php($__flash = session('status'))
@@ -32,7 +32,7 @@
 
 {{-- A saved form says so as a toast in words — a key is never shown raw — and the email's own keys stay beside the
      email field on the profile, which says them there. --}}
-@php($__said = ['profile-updated' => 'Your profile is saved.', 'password-updated' => 'Your password is changed.', 'store-updated' => 'Organization details saved.'])
+@php($__said = ['profile-updated' => 'Your profile is saved.', 'password-updated' => 'Your password is changed.', 'organization-updated' => 'Organization details saved.'])
 @php($__toast = is_string($__flash) && ! in_array($__flash, ['email-pending', 'email-link-resent', 'email-changed', 'email-change-cancelled', 'verification-link-sent'], true) ? ($__said[$__flash] ?? $__flash) : null)
 @if ($__toast)
     <script>

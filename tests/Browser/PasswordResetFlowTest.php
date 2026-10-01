@@ -9,7 +9,7 @@ use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
 
 /**
- * A shop owner who cannot get in, getting back in.
+ * An organization owner who cannot get in, getting back in.
  *
  * The backend tests for this (tests/Feature/Auth/PasswordResetTest.php) use
  * Notification::fake(), which proves the application's logic but stops short of

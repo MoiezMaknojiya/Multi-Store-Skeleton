@@ -1,7 +1,7 @@
 # Ad Builder — spec
 
 > A visual builder for television adverts — 1920×1080, or 1080×1920 for a screen mounted upright (§12). The owner asked for "an Elementor-like builder"
-> (2026-09-17). This file is what gets built and why; `docs/STORE-ORGANIZATION-SPEC.md` still rules who
+> (2026-09-17). This file is what gets built and why; `docs/ORGANIZATION-SPEC.md` still rules who
 > may do it, and `.claude/rules/02-project-conventions.md` still rules how the code is written.
 
 ---
@@ -10,9 +10,9 @@
 
 | Question | Answer |
 | --- | --- |
-| Who builds ads | **Both sides.** A store's people build their store's ads; the platform builds for any store and sees them all. |
+| Who builds ads | **Both sides.** An organization's people build their organization's ads; the platform builds for any organization and sees them all. |
 | How an ad reaches a screen | **It becomes a media row of `type = 'html'`.** The playlist picker, schedule rules, copy-playlist, the device manifest and the cache key then work unchanged. |
-| Where the Builder's images and videos live | **Its own shelf** (`builder/{store}/assets/…`), not the store's Media library. |
+| Where the Builder's images and videos live | **Its own shelf** (`builder/{organization}/assets/…`), not the organization's Media library. |
 | Delivery | **Staged**, with the owner looking at each stage before the next. |
 | Canvas | **A television's, fixed: 1920×1080 landscape or 1080×1920 portrait**, chosen when the ad is made (§12). No other size, no aspect-ratio change, no responsive breakpoints. Content outside the frame is clipped. The reason, from the owner on 2026-09-19: every screen they sell to is Full HD or better — "is se kum ha hi nahi" — and a portrait television is that same panel turned on the wall, which the player turns the picture with (`#stage[data-orientation]`). A portrait canvas was declined that day and asked for on 2026-09-23, for menu boards ("Portrait Boards … lazmi"). |
 | Duration | ~~The playlist line carries the seconds, exactly like an image.~~ **The design's own** (owner, 2026-09-28, the industry's way — Xibo's layout duration, Canva's page duration): a length in seconds set in the Stage panel (`document.duration`, 6 by default and 6 at least like a picture, 300 at most), published onto the page's media row, and every playlist and channel plays the ad that long. A video inside it repeats when it is shorter and is cut when the ad ends; animations loop for as long as the ad is on screen, and each one the length cuts says so under its timing — an entrance or an exit that starts after the end, one still running at it, a loop that only starts after it. The editor's Play and the Preview tab show it the same way: for its length, then from the start again. A design made before designs had a length keeps each line's seconds — published again or not — until somebody types a Length (the brute-force round, 2026-09-29). |
@@ -75,7 +75,7 @@ one output.
 
 ```
 builder_ads
-  id, store_id → stores (cascade), name,
+  id, organization_id → organizations (cascade), name,
   orientation     string (landscape) -- landscape 1920×1080 or portrait 1080×1920: chosen when the ad is made, fixed after (§12)
   document        json          -- the editable design
   thumbnail_path  string|null   -- poster captured in the browser at save
@@ -85,13 +85,13 @@ builder_ads
   published_name  string|null   --   Discard changes goes back to it (NULL for an ad published before 2026-09-21
                                 --   and changed since — kept again at its next Publish)
   created_by, updated_by → users (nullOnDelete)
-  timestamps, index (store_id, updated_at)
+  timestamps, index (organization_id, updated_at)
 
 builder_assets
-  id, store_id → stores (cascade), kind ('image'|'video'), title,
+  id, organization_id → organizations (cascade), kind ('image'|'video'), title,
   disk, path, thumbnail_path|null, mime_type, size,
   width|null, height|null, duration_seconds|null,
-  created_by → users (nullOnDelete), timestamps, index (store_id, kind)
+  created_by → users (nullOnDelete), timestamps, index (organization_id, kind)
 
 builder_fonts                     -- stage 2
   id, family (unique), slug (unique), kind ('sans'|'serif'|'display'|'mono'|'urdu'),
@@ -102,17 +102,17 @@ builder_fonts                     -- stage 2
 Files (the `public` disk, like media and channels):
 
 ```
-builder/{store_id}/assets/{random}.{ext}          the asset
-builder/{store_id}/assets/thumbs/{random}.jpg     its thumbnail
-builder/platform/assets/…                         an asset the platform shares with every shop (store_id NULL)
-builder/{store_id}/ads/{ad_id}/index.html         the published ad
-builder/{store_id}/ads/{ad_id}/poster.jpg         the ad's poster
-builder/{store_id}/ads/{ad_id}/published.jpg      the published media row's own copy of that poster
+builder/{organization_id}/assets/{random}.{ext}          the asset
+builder/{organization_id}/assets/thumbs/{random}.jpg     its thumbnail
+builder/platform/assets/…                         an asset the platform shares with every organization (organization_id NULL)
+builder/{organization_id}/ads/{ad_id}/index.html         the published ad
+builder/{organization_id}/ads/{ad_id}/poster.jpg         the ad's poster
+builder/{organization_id}/ads/{ad_id}/published.jpg      the published media row's own copy of that poster
 fonts/{slug}/{weight}-{style}-{n}.woff2           self-hosted Google fonts (one file per weight, style and subset)
 fonts/{slug}/font.css                             the family's own stylesheet, pointing at those files
 ```
 
-**Deleting.** A store's deletion purges its ads, its assets and their files — `Store::purgeBuilder()`,
+**Deleting.** An organization's deletion purges its ads, its assets and their files — `Organization::purgeBuilder()`,
 called from `purgeContents()` alongside `purgeMedia()`/`purgeChannels()`, rows inside the transaction and
 files after commit (the rule in `02-project-conventions.md`). Deleting an ad deletes its published media
 row (so it leaves every playlist it was on), its HTML, the row's poster copy and its own poster. Deleting that
@@ -122,24 +122,24 @@ a copy of their own). Deleting an asset is refused while an ad still uses it, an
 shape as a role that somebody still holds).
 
 **The shared shelf** (owner, 2026-09-29: "mujhe sub store k liya upload karna ho toh takay woo mere asset ko use
-kar sake aur agar permission du toh woo delete bhi kar sake"). An asset with no shop — `builder_assets.store_id`
-NULL, under `builder/platform/assets/` — is the platform's, shared with every shop. Above the stores the Assets page's
-Shop list offers All shops and each shop: an upload with a shop chosen is that shop's, and with All shops it is shared
+kar sake aur agar permission du toh woo delete bhi kar sake"). An asset with no organization — `builder_assets.organization_id`
+NULL, under `builder/platform/assets/` — is the platform's, shared with every organization. Above the organizations the Assets page's
+Organization list offers All organizations and each organization: an upload with an organization chosen is that organization's, and with All organizations it is shared
 (the page says which under its note; owner, 2026-09-30: "all shop ka option araha ha toh shared with everyone q araha
-ha" — one option, not two saying the same). Every shop's shelf lists the shared files beside its own,
-marked "From the platform", and the editor's picker offers them for any shop (`BuilderAsset::onShelfOf`,
-`AdCompiler::assetsFor`, `onThisShelf`). A shared file counts to no shop's 512 MB (the server's reserve still holds),
-and a deleted shop takes its own files, never the shared ones. Only the platform deletes it — above the stores,
-with Delete Ads (owner, 2026-10-01: a shop sees and uses it, "srif delete nahi kar sakta ha"; the Delete Shared
-Assets permission of 2026-09-29 is gone, §4) — from every shop's shelf at once, and never while an ad of ANY shop,
-or the platform's, uses it. A shop's shelf counts the other shops' ads using a shared file and never names them, so
-one shop never learns another's designs.
+ha" — one option, not two saying the same). Every organization's shelf lists the shared files beside its own,
+marked "From the platform", and the editor's picker offers them for any organization (`BuilderAsset::onShelfOf`,
+`AdCompiler::assetsFor`, `onThisShelf`). A shared file counts to no organization's 512 MB (the server's reserve still holds),
+and a deleted organization takes its own files, never the shared ones. Only the platform deletes it — above the organizations,
+with Delete Ads (owner, 2026-10-01: an organization sees and uses it, "srif delete nahi kar sakta ha"; the Delete Shared
+Assets permission of 2026-09-29 is gone, §4) — from every organization's shelf at once, and never while an ad of ANY organization,
+or the platform's, uses it. An organization's shelf counts the other organizations' ads using a shared file and never names them, so
+one organization never learns another's designs.
 
 ---
 
 ## 4. Permissions
 
-Four new rows in `Permission::STORE` — a store's own work, and on a platform role they reach every store:
+Four new rows in `Permission::ORGANIZATION` — an organization's own work, and on a platform role they reach every organization:
 
 | Name | Label |
 | --- | --- |
@@ -149,14 +149,14 @@ Four new rows in `Permission::STORE` — a store's own work, and on a platform r
 | `ad-destroy` | Delete Ads |
 
 A migration of its own inserts them, grants all four to Super-Admin, and grants them to the Owner and
-Admin starter roles by key. A shop's own assets have no separate permission: uploading one is part of creating an
+Admin starter roles by key. An organization's own assets have no separate permission: uploading one is part of creating an
 ad (`ad-store`), removing one part of `ad-destroy` — a permission has to be enough for its own job.
 
-There is no fifth. What the platform shares with every shop — its files (§3) and its ads (the 2026-10-01 addenda)
-— is changed and deleted above the stores alone, with these same four; a shop's people see it, use it and copy the
-ads. (A Delete Shared Assets permission, `ad-shared-destroy`, let a shop's role delete a shared file from 2026-09-29;
+There is no fifth. What the platform shares with every organization — its files (§3) and its ads (the 2026-10-01 addenda)
+— is changed and deleted above the organizations alone, with these same four; an organization's people see it, use it and copy the
+ads. (A Delete Shared Assets permission, `ad-shared-destroy`, let an organization's role delete a shared file from 2026-09-29;
 the owner took it away on 2026-10-01, with the two made for shared ads that morning — migration `2026_10_01_120000`.)
-The delete route asks `ad-destroy`, the controller also whether the person stands above the stores for a shared file,
+The delete route asks `ad-destroy`, the controller also whether the person stands above the organizations for a shared file,
 and each row says `can_delete`.
 
 ---
@@ -182,7 +182,7 @@ Inside the `['auth', 'throttle:admin']` group, sidebar group **Ad Builder** (gat
 | DELETE | `/builder/{ad}` | `builder.destroy` | `ad-destroy` (password) |
 | GET | `/builder/assets/data` | `builder.assets.data` | `ad-view` |
 | POST | `/builder/assets` | `builder.assets.store` | `ad-store` |
-| DELETE | `/builder/assets/{asset}` | `builder.assets.destroy` | `ad-destroy` — a shared file above the stores only (in the controller) |
+| DELETE | `/builder/assets/{asset}` | `builder.assets.destroy` | `ad-destroy` — a shared file above the organizations only (in the controller) |
 | GET | `/builder/fonts` | `builder.fonts` | `ad-view`, `ad-store` or `ad-update` (in the controller) |
 | POST | `/builder/fonts` | `builder.fonts.store` | `ad-store` or `ad-update` (in the controller) + `throttle:font-install` |
 
@@ -190,10 +190,10 @@ The three "in the controller" routes carry no `can:` — a route's `can:` cannot
 controllers answer 403 without one of those permissions: the editor opens with Create Ads or Update Ads, and
 neither needs View Ads.
 
-`BuilderAd::visibleTo($user)` / `BuilderAsset::visibleTo($user)`: above the stores, every store's (each row
-saying whose it is); inside a store, that store's own and nothing else (none at all with no store chosen) —
+`BuilderAd::visibleTo($user)` / `BuilderAsset::visibleTo($user)`: above the organizations, every organization's (each row
+saying whose it is); inside an organization, that organization's own and nothing else (none at all with no organization chosen) —
 anything else is a 404: on top of the permission check, every controller action looks its target up again
-through that scope (`visibleTo(…)->findOrFail()`), not through `ResolvesCurrentStore`. Deleting an ad is a
+through that scope (`visibleTo(…)->findOrFail()`), not through `ResolvesCurrentOrganization`. Deleting an ad is a
 **big delete** (the password, `ConfirmsPassword`); everything else is one confirmation.
 
 ---
@@ -334,7 +334,7 @@ so the three can never disagree. **Every key is named in the rules**, because wh
   Urdu's 233 KB — is carried once for the range (`font-weight: 400 700`), which halved the Urdu example's
   page. Only a file the family's own row names is ever read. A family nobody installed is simply a name
   the device resolves — the page never reaches out to Google.
-- A font is not store content: it belongs to the installation, like a colour. What is store-scoped is the
+- A font is not organization content: it belongs to the installation, like a colour. What is organization-scoped is the
   design that names it.
 
 ---
@@ -380,8 +380,8 @@ Not built (said rather than half-built): typewriter, mask reveal and marquee.
 
 ## 9. Output and playback
 
-**The shop's 512 MB (owner, 2026-09-28).** The Builder writes into its shop's storage in three places, each
-through `App\Services\StoreStorage` (`.claude/rules/02-project-conventions.md`, **Upload limits**): the shelf's
+**The organization's 512 MB (owner, 2026-09-28).** The Builder writes into its organization's storage in three places, each
+through `App\Services\OrganizationStorage` (`.claude/rules/02-project-conventions.md`, **Upload limits**): the shelf's
 uploads (`MediaStorage::addBuilderAsset` — refused when they do not fit, and a video is **30 seconds** at most,
 `BuilderAsset::MAX_VIDEO_SECONDS`, owner 2026-09-28: a design's video, as a background layer or on the stage,
 repeats for as long as the ad is on screen), a published page with its poster's copy (`AdPublisher::publish` — what it adds less what the
@@ -425,9 +425,9 @@ rewrite what is already there and are not asked.
   it with a CSS transform to whatever the screen is, centred, so a television of that shape is pixel-exact
   and anything else is letterboxed (or pillarboxed) rather than reflowed. The page's body takes the stage's
   own colour, so those bars are the ad's ground, never black.
-- The file is written to `builder/{store}/ads/{ad}/index.html`; the ad's **media row** (`type = 'html'`,
+- The file is written to `builder/{organization}/ads/{ad}/index.html`; the ad's **media row** (`type = 'html'`,
   `mime_type = 'text/html'`, `path` = that file) is created or refreshed. Its `thumbnail_path` names a copy of
-  its own, `builder/{store}/ads/{ad}/published.jpg`, which every publish rewrites from the design's poster
+  its own, `builder/{organization}/ads/{ad}/published.jpg`, which every publish rewrites from the design's poster
   (`AdPublisher::posterFor`); when the design has no poster the copy is removed and `thumbnail_path` is NULL.
   A copy rather than the design's file, because deleting the row from the Media library takes the files it
   names, and the design must keep its poster.
@@ -438,7 +438,7 @@ rewrite what is already there and are not asked.
   fetch their own pieces.
 - `DeviceController::playlist` needs no new shape: `{type: 'html', url, checksum}` already fits, and the
   checksum changes whenever the file is republished, so a device refetches it.
-- Schedules, copy-playlist, the store wall and deletion all work because the ad *is* a media row.
+- Schedules, copy-playlist, the organization wall and deletion all work because the ad *is* a media row.
 - **Draft and publish, the industry's way** (owner, 2026-09-21: "publish wala kaam jo industry standard k
   hisab se best" — researched against Xibo's layouts, Contentful's "Changed" and Strapi 5's "Modified"; it
   replaced, the same day, a first rule that took a changed ad off the screens):
@@ -460,7 +460,7 @@ rewrite what is already there and are not asked.
     everywhere at once. One confirmation, no password: it deletes nothing.
   - **Where an ad may be chosen — Publish alone decides** (owner, 2026-10-01: "agar publish honga toh hi content
     library aur channel mein show honga warna nahi honga, aur channel mein add ha toh content library mein show
-    naah ho usko"). A published ad is offered to the shop's own pickers — the playlist's
+    naah ho usko"). A published ad is offered to the organization's own pickers — the playlist's
     (`PlaylistController::availableMedia`, the Content library) and the holding picture's
     (`ScreenController::mediaOptions`) — and to a channel's alike; a draft to none. The rule every file follows
     (2026-09-26: a file plays from playlists or from channels, never both) keeps an ad a channel shows off the
@@ -484,10 +484,10 @@ rewrite what is already there and are not asked.
 | --- | --- |
 | **1a — the canvas** ✅ *(built 2026-09-17)* | `builder_ads` + `builder_assets`, the four `ad-*` permissions, the Builder section with its three tabs, the editor (top bar, Add panel, 1920×1080 stage with zoom and snapping guides, Layers panel, properties panel), Text · Image · Video · Shape, drag / eight resize handles / rotate, z-order, lock, hide, rename, undo/redo with coalescing, the keyboard set, save/load, the Ads gallery with duplicate and password-protected delete, and the Assets shelf with upload and "used by". |
 | **1b — on the television** ✅ *(built 2026-09-17)* | `AdCompiler` (design → one self-contained page, every value read through a reader that can only produce something safe), Publish → a `media` row of `type = html` refreshed in place so playlists keep it, the player's `html` branch (a sandboxed frame), and the whole path proven end to end in a browser: publish → picker → playlist → a television playing the ad. |
-| **2 — words** ✅ *(built 2026-09-17)* | The full typography set in the panel with Elementor's **Show more** (font, size, weight, colour, alignment buttons · line height, letter and word spacing, vertical anchor, case, decoration, italic, padding, a coloured panel with its radius, a text shadow and an outline), `builder_fonts` + `config/fonts.php` (51 curated Google families in five kinds, plus the system faces), and an installer that **downloads a family once and serves it from this server for good** — every subset kept, so an Urdu or Arabic advert keeps its own face, and a shop's television never asks fonts.googleapis.com for anything. |
+| **2 — words** ✅ *(built 2026-09-17)* | The full typography set in the panel with Elementor's **Show more** (font, size, weight, colour, alignment buttons · line height, letter and word spacing, vertical anchor, case, decoration, italic, padding, a coloured panel with its radius, a text shadow and an outline), `builder_fonts` + `config/fonts.php` (51 curated Google families in five kinds, plus the system faces), and an installer that **downloads a family once and serves it from this server for good** — every subset kept, so an Urdu or Arabic advert keeps its own face, and an organization's television never asks fonts.googleapis.com for anything. |
 | **3 — pictures** ✅ *(built 2026-09-18)* | The Stage panel: the stage colour and up to 12 background layers — colour, linear/radial gradient (2–6 stops), picture (cover/contain/actual size or a scale %, tile across/down, nine-point position) and video (cover/contain) — each with opacity, 16 blend modes, show/hide, reorder and duplicate. Pictures and videos: replace, five fits, a focus point, corners, mirror, a frame, a drop shadow and eight filters. Shapes: rectangle or ellipse, one colour or a gradient, frame and shadow. A blend mode on any element. The editor's stage draws all of it with the compiler's own rules (`styles.js`, `background.js`). |
-| **4 — motion** ✅ *(built 2026-09-18)* | An animation library (GSAP 3.15 at first; Anime.js 4.5, MIT, since 2026-09-19 — §8), the shared runtime, and the Animation tab: in/loop/out with every effect in §8, the Ease Visualizer with draggable custom curves, per-element preview and ▶ Play. Plus `php artisan builder:examples {store}`: four finished ads — Winter Sale, Fresh Coffee, Grand Opening and an Urdu Burger Deal — with their own drawn pictures, stored exactly as the editor would store them. |
-| **5 — the polish** ✅ *(built 2026-09-18)* | Everything in §10a: many selected and moved as one, marquee, align and distribute, the clipboard with paste style and paste animation, the right-click menu, bring to front / send to back, the Layers panel's drag and rename, rulers and guides with snapping, zoom and pan, the History panel, autosave, the shortcuts list, the empty-stage hint, posters taken in the browser and re-drawn by the server, the sandboxed draft preview, and the platform's shop filter — with the full test sweep, adversarial suite included. |
+| **4 — motion** ✅ *(built 2026-09-18)* | An animation library (GSAP 3.15 at first; Anime.js 4.5, MIT, since 2026-09-19 — §8), the shared runtime, and the Animation tab: in/loop/out with every effect in §8, the Ease Visualizer with draggable custom curves, per-element preview and ▶ Play. Plus `php artisan builder:examples {organization}`: four finished ads — Winter Sale, Fresh Coffee, Grand Opening and an Urdu Burger Deal — with their own drawn pictures, stored exactly as the editor would store them. |
+| **5 — the polish** ✅ *(built 2026-09-18)* | Everything in §10a: many selected and moved as one, marquee, align and distribute, the clipboard with paste style and paste animation, the right-click menu, bring to front / send to back, the Layers panel's drag and rename, rulers and guides with snapping, zoom and pan, the History panel, autosave, the shortcuts list, the empty-stage hint, posters taken in the browser and re-drawn by the server, the sandboxed draft preview, and the platform's organization filter — with the full test sweep, adversarial suite included. |
 
 ### 10a. Stage 5 in detail (planned 2026-09-18, the owner: "sare stages kardo")
 
@@ -507,7 +507,7 @@ the outermost two staying put.
 onto the selection — the keys that make sense for each kind (text ← text, picture ← picture or video, shape
 ← shape; frame, shadow, corners and blend between any two). Ctrl+Alt+V pastes its animations. The clipboard
 lives in `localStorage`, so it carries from one ad to another; an element whose picture is not on this
-shop's shelf is left out, and the person is told.
+organization's shelf is left out, and the person is told.
 
 **Order.** Bring to front / send to back (Ctrl+Shift+] / Ctrl+Shift+[) beside the one-step commands.
 
@@ -541,15 +541,15 @@ posters use too). The listing, the media library and the playlist picker show it
 version so no cache shows an old one. A copy gets its own poster file rather than sharing its original's.
 
 **Draft preview.** `GET /builder/{ad}/preview` (`ad-view` or `ad-update`, checked in the controller; the
-store wall) answers the page the compiler would publish, from the SAVED design, full screen in a new tab —
+organization wall) answers the page the compiler would publish, from the SAVED design, full screen in a new tab —
 with `Content-Security-Policy: sandbox allow-scripts` (it runs in an opaque origin, as the player's frame does on a set no worker keeps — §15)
-and `Cache-Control: no-store, private`. Nothing is written.
+and `Cache-Control: no-organization, private`. Nothing is written.
 
-**Platform listing.** Above the stores, the Ads and Assets pages gain a shop filter (`?store_id=`); inside a
-store it is not offered, and sending it cannot widen what `visibleTo` allows. On the Assets page the same Shop
-list says where a platform upload goes: the page sends it as `store_id`, and with no shop chosen, or one that
-does not exist, the upload answers 422 on `file` ("Choose the shop in the Shop list first…"). A store's person
-always uploads to the store they work in; a `store_id` they send is not read.
+**Platform listing.** Above the organizations, the Ads and Assets pages gain an organization filter (`?organization_id=`); inside an
+organization it is not offered, and sending it cannot widen what `visibleTo` allows. On the Assets page the same Organization
+list says where a platform upload goes: the page sends it as `organization_id`, and with no organization chosen, or one that
+does not exist, the upload answers 422 on `file` ("Choose the organization in the Organization list first…"). An organization's person
+always uploads to the organization they work in; an `organization_id` they send is not read.
 
 **Keyboard help & empty stage.** `?` (or the ⌨ button) lists every shortcut. An empty stage says where to
 start; the hint is drawn outside the stage, so no poster or published page ever carries it.
@@ -622,8 +622,8 @@ row of the decisions table), no animation timeline scrubber (the ad is not a vid
   the adverts showed system faces on the televisions. The fonts now travel inside the page (§7a). Nothing
   in the feature tests could see it: only a real browser in an opaque origin does.
 - **A test that forgot `Storage::fake('public')` deleted the owner's published ads.** Pest runs as `testing`,
-  whose public disk was the REAL `storage/app/public`, and its fresh database numbers stores and ads from 1
-  exactly like the real one — so the store-deletion test's `purgeBuilder()` removed the folders
+  whose public disk was the REAL `storage/app/public`, and its fresh database numbers organizations and ads from 1
+  exactly like the real one — so the organization-deletion test's `purgeBuilder()` removed the folders
   `builder/1/ads/1` and `builder/1/ads/2` of the owner's own example ads. Three fixes: the tests' public disk
   has a throwaway root of its own (`config/filesystems.php`, pinned by `TestDiskIsolationTest`), the
   purge unlinks only the paths its rows name and never a folder, and that test file fakes the disk.
@@ -662,7 +662,7 @@ refuses a document whose stage is not that orientation's size — 422 on `docume
 "A portrait ad is 1080 × 1920 — the size a television mounted upright is. An ad's orientation is chosen when
 it is made." — and on an update `orientation` in the payload is not read at all. Why fixed: every element's
 box is in stage pixels, so turning a 1920-wide design into a 1080-wide one is a new design, not a setting —
-and the tools the shops know (Yodeck, OptiSigns, Canva) ask the size up front for the same reason. A **copy**
+and the tools the organizations know (Yodeck, OptiSigns, Canva) ask the size up front for the same reason. A **copy**
 keeps the orientation; the examples are landscape, and `builder:examples` leaves alone an ad of an example's
 name that was made upright (its shape is somebody's design) rather than giving it a stage of the other shape.
 
@@ -676,7 +676,7 @@ picker that already says "portrait" for a photograph says it for an ad page the 
 a mismatched screen shows are the ad's ground, not black. On a portrait screen the player's frame is
 1080 × 1920 (the rotated stage), so a portrait ad fills it pixel for pixel; on a landscape screen the same ad
 plays pillarboxed at 607 × 1080, and a landscape ad on a portrait screen letterboxed at 1080 × 607. That is
-the shop's mistake, not a rule to enforce (owner: "woo toh store owner ka masla ya galti ha"), so the panel
+the organization's mistake, not a rule to enforce (owner: "woo toh store owner ka masla ya galti ha"), so the panel
 SAYS it instead of refusing: the playlist page marks a line, or a picker row, whose orientation is not the
 screen's — "Portrait · shows with bars at the sides on this screen" — and every tile and row that names a
 type names the orientation beside it (the holding-picture list, the channel pickers and rows, the library).
@@ -697,7 +697,7 @@ portrait poster is 360 × 640; the Ads page keeps its 16:9 tiles and draws a por
 
 **Not changed.** The device manifest (the page fits itself, so `{type: 'html', url, checksum}` is still all a
 television needs), schedules, channels (a channel plays on any screen; its ads say their orientation in the
-pickers), the store wall and the draft/publish model.
+pickers), the organization wall and the draft/publish model.
 
 ---
 
@@ -827,7 +827,7 @@ draws the stroke the way the page will, and the page carries it.
 
 ## 15. Offline playback — the player as a progressive web app (owner, 2026-09-23: "screen ko Offline cache bhi karo, progressive banao")
 
-**What it is.** A television keeps playing when the shop's internet drops: what its playlist says for every
+**What it is.** A television keeps playing when the organization's internet drops: what its playlist says for every
 moment of the next three days — dayparts, dates and all — from a cache on the set itself, every file of it
 (pictures, videos, Ad Builder pages and what those pages load), and back to live the moment the line returns.
 Nothing on the television says so (owner's rule: the panel says a screen is offline, from its missed
@@ -908,7 +908,7 @@ anywhere else the player is exactly what it was — online only — because ever
      so the worker holds a copy before any line drops. The player also asks the browser to keep its storage
      (`navigator.storage.persist()`), so a disk running low does not clear the one thing an offline set has.
 2. **The manifest** (`DeviceController::playlist`, one instant for all of it) says a little more than what
-   plays now: the holding picture travels as `fallback` whenever the shop set one and it is still on the
+   plays now: the holding picture travels as `fallback` whenever the organization set one and it is still on the
    screens (never an unpublished ad page), even while items are due; and **`timeline`** says what the screen shows
    at every moment its answer changes over the next `TIMELINE_HOURS` (72) — a daypart opening or closing, a
    new local day (a line's dates turn over there), a campaign's window (`ScheduleResolver::changePoints`,
@@ -1007,49 +1007,49 @@ timeline); the set reboots with no line and plays the page again; the server ret
   chunk is 76 KB (24 KB gzipped).
 - **Upload from the picker.** The asset picker (a new element, a background layer's file, a replacement) carries the
   shared uploader for whoever holds `ad-store`, posting to the shelf's own door (`/builder/assets`, the same rules:
-  30-second videos, the shop's 512 MB, the server's reserve). The file joins this ad's shelf — the shop worked in, or
-  above the stores the ad's own shop, sent as `store_id` — and is first on the picker's grid the moment it is in
-  (`onAssetUploaded`). A new ad above the stores names its shop first; a file dropped before that is refused as it is
-  chosen ("Choose the shop this ad is for first, at the top."). Without `ad-store` the picker offers no box.
+  30-second videos, the organization's 512 MB, the server's reserve). The file joins this ad's shelf — the organization worked in, or
+  above the organizations the ad's own organization, sent as `organization_id` — and is first on the picker's grid the moment it is in
+  (`onAssetUploaded`). A new ad above the organizations names its organization first; a file dropped before that is refused as it is
+  chosen ("Choose the organization this ad is for first, at the top."). Without `ad-store` the picker offers no box.
 
-## Addendum — 2026-10-01: ads for every shop
+## Addendum — 2026-10-01: ads for every organization
 
-The owner met "Choose the shop this ad is for first, at the top." in the editor's picker, and asked: "mein all shop k
+The owner met "Choose the organization this ad is for first, at the top." in the editor's picker, and asked: "mein all shop k
 liya ads kese banao? jese asset mein ha woo ads sub ko dikhe aur woo copy kar sake" — and "sub khel permission ka
-honga, mein duga toh woo mera kaam bhi delete kar sakte ha". Asked when shops should see such an ad, "publish ke
+honga, mein duga toh woo mera kaam bhi delete kar sakte ha". Asked when organizations should see such an ad, "publish ke
 baad"; asked how to split the permissions, "teen alag".
 
-- **What it is.** An ad with no shop (`builder_ads.store_id` NULL — migration `2026_10_01_110000`, whose `down()`
-  takes the shared ads, their library rows and their files) is the platform's, made for every shop, as a shelf asset
-  with no shop already is (§3). Its poster and page live under `builder/platform/ads/{id}/`; it uses the shared files
-  alone (`BuilderAsset::onShelfOf(null)`); its page is published into the platform's own library (`media.store_id`
-  NULL), which no shop's wall counts and which only the platform's channels reach — so it has no Show in playlists
-  (refused, 422), and a shop plays it from its own copy.
-- **Making one.** Above the stores the editor's Shop list starts at **All shops** for whoever holds Update Shared Ads,
-  then each shop; the first save fixes the choice (the list is disabled after it), and a saved ad says "Every shop"
-  (or its shop's name) beside its shape. The picker's uploader then puts a file on the shared shelf, so nothing asks
-  for a shop first. Changing the list after a file is on the stage says which files will not show there. Without
-  Update Shared Ads a new ad still names its shop first, with the old words.
-- **What a shop sees.** Inside a shop the Ads page lists its own ads and the platform's — once published, with the
+- **What it is.** An ad with no organization (`builder_ads.organization_id` NULL — migration `2026_10_01_110000`, whose `down()`
+  takes the shared ads, their library rows and their files) is the platform's, made for every organization, as a shelf asset
+  with no organization already is (§3). Its poster and page live under `builder/platform/ads/{id}/`; it uses the shared files
+  alone (`BuilderAsset::onShelfOf(null)`); its page is published into the platform's own library (`media.organization_id`
+  NULL), which no organization's wall counts and which only the platform's channels reach — so it has no Show in playlists
+  (refused, 422), and an organization plays it from its own copy.
+- **Making one.** Above the organizations the editor's Organization list starts at **All organizations** for whoever holds Update Shared Ads,
+  then each organization; the first save fixes the choice (the list is disabled after it), and a saved ad says "Every organization"
+  (or its organization's name) beside its shape. The picker's uploader then puts a file on the shared shelf, so nothing asks
+  for an organization first. Changing the list after a file is on the stage says which files will not show there. Without
+  Update Shared Ads a new ad still names its organization first, with the old words.
+- **What an organization sees.** Inside an organization the Ads page lists its own ads and the platform's — once published, with the
   published name and poster ("From the platform"), never the platform's unfinished changes or anybody's name from
-  above the stores; a store person holding Update Shared Ads or Delete Shared Ads also sees the drafts.
-  Preview shows a shop the published version. **Copy** makes the platform's ad the shop's own: a draft of the
-  published version, under its name while the shop has none so called (then "(copy)"), its poster copied within the
-  shop's 512 MB, logged as `ad.copied` in the shop. The copy is independent: the platform's later changes, or its
-  delete, leave it as it is. Above the stores Copy keeps a shared ad shared.
+  above the organizations; an organization person holding Update Shared Ads or Delete Shared Ads also sees the drafts.
+  Preview shows an organization the published version. **Copy** makes the platform's ad the organization's own: a draft of the
+  published version, under its name while the organization has none so called (then "(copy)"), its poster copied within the
+  organization's 512 MB, logged as `ad.copied` in the organization. The copy is independent: the platform's later changes, or its
+  delete, leave it as it is. Above the organizations Copy keeps a shared ad shared.
 - **Permissions** (migration `2026_10_01_110100`): **Update Shared Ads** (`ad-shared-update`, new) makes, changes,
-  publishes and takes off an ad for every shop; **Delete Shared Ads** (`ad-shared-destroy`, new) deletes one — with
+  publishes and takes off an ad for every organization; **Delete Shared Ads** (`ad-shared-destroy`, new) deletes one — with
   the password, never while a channel shows its page; **Delete Shared Assets** is the shelf's own, renamed
   `ad-shared-asset-destroy` on the same row, so whoever held it keeps exactly that. All three are platform
-  permissions a store's role may carry (`Permission::STORE_SCOPED`), held by Super-Admin alone to start with, and asked
-  wherever the person stands: the routes ask `update-builder-ads` / `delete-builder-ads` (either the shop's own
+  permissions an organization's role may carry (`Permission::ORGANIZATION_SCOPED`), held by Super-Admin alone to start with, and asked
+  wherever the person stands: the routes ask `update-builder-ads` / `delete-builder-ads` (either the organization's own
   permission or the shared one) and `BuilderController` asks the one each ad needs; every gallery row carries
   `can: {update, copy, delete}`, so a card offers exactly what the server allows.
-- **Tests.** `SharedAdsTest` (making one, what shops see and when, copying, each permission, the shared files alone,
-  the platform's channel, Preview, a deleted shop, both migrations up and down), `AdBuilderAttackTest` (a shop never
-  makes one, a draft is nothing to a shop, another shop's copy stays theirs), `EditorPickerUploadTest` (All shops
-  needs no shop first), `AdBuilderFlowTest` in the browser (the owner's own steps: an ad for All shops with a file from
-  the picker, published, copied by a shop).
+- **Tests.** `SharedAdsTest` (making one, what organizations see and when, copying, each permission, the shared files alone,
+  the platform's channel, Preview, a deleted organization, both migrations up and down), `AdBuilderAttackTest` (an organization never
+  makes one, a draft is nothing to an organization, another organization's copy stays theirs), `EditorPickerUploadTest` (All organizations
+  needs no organization first), `AdBuilderFlowTest` in the browser (the owner's own steps: an ad for All organizations with a file from
+  the picker, published, copied by an organization).
 
 ## Addendum — 2026-10-01, later: what the platform shares is the platform's
 
@@ -1058,16 +1058,16 @@ bhi use kar sakta ha aur dekh sakta ha, srif delete nahi kar sakta ha, toh delet
 permission hata do aur update shared ad ki bhi."
 
 - **Gone:** Update Shared Ads, Delete Shared Ads and Delete Shared Assets (migration `2026_10_01_120000`, whose `down()`
-  brings the three back held by Super-Admin, the only role that ever held them). No permission lets a shop's people
-  change or delete an ad or a file the platform shares with every shop, whatever their role holds: they see it, use it
+  brings the three back held by Super-Admin, the only role that ever held them). No permission lets an organization's people
+  change or delete an ad or a file the platform shares with every organization, whatever their role holds: they see it, use it
   (a shared file in their designs) and copy it (a shared ad into their own Ads). A shared ad's draft is never theirs to
   see.
-- **Above the stores** the ordinary permissions look after the platform's own, as they do its library and its
-  channels: Create Ads makes an ad for All shops (the editor's Shop list starts there for every platform designer, so
-  the "Choose the shop this ad is for first" refusal and the uploader's `needsStore` are gone), Update Ads changes,
+- **Above the organizations** the ordinary permissions look after the platform's own, as they do its library and its
+  channels: Create Ads makes an ad for All organizations (the editor's Organization list starts there for every platform designer, so
+  the "Choose the organization this ad is for first" refusal and the uploader's `needsOrganization` are gone), Update Ads changes,
   publishes and takes one off, Delete Ads deletes one, and a shared file.
-- Refusals say why: "An ad for every shop is the platform's: copy it to change it.", "… only the platform deletes it.",
-  "A file shared with every shop is the platform's: only the platform deletes it." The routes are back on `ad-update`
+- Refusals say why: "An ad for every organization is the platform's: copy it to change it.", "… only the platform deletes it.",
+  "A file shared with every organization is the platform's: only the platform deletes it." The routes are back on `ad-update`
   and `ad-destroy`; the either-permission gates are gone.
 
 ## Addendum — 2026-10-01, evening: Publish alone decides where an ad may be chosen

@@ -9,9 +9,9 @@ use App\Http\Requests\Signage\UpdateMediaRequest;
 use App\Models\ActivityLog;
 use App\Models\BuilderAd;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Services\MediaStorage;
-use App\Services\StoreStorage;
+use App\Services\OrganizationStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -34,27 +34,27 @@ class MediaController extends Controller
     ];
 
     /**
-     * The media library page. Above the stores it reads one library at a time — the platform's own, or a
-     * shop's — and the chooser decides where an upload lands as well (docs/CHANNEL-CONTENT-SPEC.md §3). The
+     * The media library page. Above the organizations it reads one library at a time — the platform's own, or an
+     * organization's — and the chooser decides where an upload lands as well (docs/CHANNEL-CONTENT-SPEC.md §3). The
      * storage of the library it opens on comes with the page, so the meter is there at once instead of pushing
      * the filters and the drop box down when the list arrives.
      */
-    public function index(Request $request, StoreStorage $quota): View
+    public function index(Request $request, OrganizationStorage $quota): View
     {
-        $aboveTheStores = $request->user()->globalRole() !== null;
+        $aboveTheOrganizations = $request->user()->globalRole() !== null;
 
         return view('media.index', [
-            'libraries' => $aboveTheStores ? Store::orderBy('name')->get(['id', 'name'])->toArray() : null,
+            'libraries' => $aboveTheOrganizations ? Organization::orderBy('name')->get(['id', 'name'])->toArray() : null,
             'storage' => $quota->summary($this->libraryOnThePage(null)),
         ]);
     }
 
     /**
-     * Return paginated, searchable media as JSON, scoped to where the person stands. Above the stores the page
-     * reads one library at a time — `library=platform` for the platform's own, or a shop's id — and with no
-     * `library` every library within reach; inside a store there is only the store's, whatever is sent.
+     * Return paginated, searchable media as JSON, scoped to where the person stands. Above the organizations the page
+     * reads one library at a time — `library=platform` for the platform's own, or an organization's id — and with no
+     * `library` every library within reach; inside an organization there is only the organization's, whatever is sent.
      */
-    public function data(Request $request, StoreStorage $quota): JsonResponse
+    public function data(Request $request, OrganizationStorage $quota): JsonResponse
     {
         $filters = $request->validate([
             'type' => ['nullable', Rule::in([Media::TYPE_IMAGE, Media::TYPE_VIDEO, Media::TYPE_HTML])],
@@ -65,12 +65,12 @@ class MediaController extends Controller
 
         // An Ad Builder page taken off the screens (unpublished) is in no library until it is published again (owner,
         // 2026-09-21): the Ad Builder is where a draft lives.
-        $query = Media::visibleTo(auth()->user())->withoutDrafts()->with('store:id,name');
+        $query = Media::visibleTo(auth()->user())->withoutDrafts()->with('organization:id,name');
 
         if (auth()->user()->globalRole() !== null && filled($filters['library'] ?? null)) {
             $filters['library'] === 'platform'
                 ? $query->platformOwned()
-                : $query->where('store_id', (int) $filters['library']);
+                : $query->where('organization_id', (int) $filters['library']);
         }
 
         if (! empty($filters['type'])) {
@@ -92,23 +92,23 @@ class MediaController extends Controller
                 $files->each(fn (Media $media) => $media->setAttribute('in_channels_message', $refusals[$media->id] ?? null));
             });
 
-        // How full the library on the page is — the shop's own, or above the stores the shop chosen; the
-        // platform's own library has no wall (StoreStorage).
+        // How full the library on the page is — the organization's own, or above the organizations the organization chosen; the
+        // platform's own library has no wall (OrganizationStorage).
         return $listing->setData([...$listing->getData(true), 'storage' => $quota->summary($this->libraryOnThePage($filters['library'] ?? null))]);
     }
 
-    /** The shop whose library the page shows, or null for the platform's own (or every library at once). */
+    /** The organization whose library the page shows, or null for the platform's own (or every library at once). */
     private function libraryOnThePage(?string $library): ?int
     {
         if (auth()->user()->globalRole() === null) {
-            return (int) session('current_store_id') ?: null;
+            return (int) session('current_organization_id') ?: null;
         }
 
-        return $library !== null && $library !== 'platform' && Store::whereKey((int) $library)->exists() ? (int) $library : null;
+        return $library !== null && $library !== 'platform' && Organization::whereKey((int) $library)->exists() ? (int) $library : null;
     }
 
-    /** Upload a file into a library: the current store's, or — above the stores — the one the page chose. */
-    public function store(StoreMediaRequest $request, MediaStorage $storage, StoreStorage $quota): JsonResponse
+    /** Upload a file into a library: the current organization's, or — above the organizations — the one the page chose. */
+    public function store(StoreMediaRequest $request, MediaStorage $storage, OrganizationStorage $quota): JsonResponse
     {
         $media = $storage->addToLibrary(
             $request->file('file'),
@@ -123,13 +123,13 @@ class MediaController extends Controller
 
         $request->forgetFinishedUpload();
 
-        return response()->json(['message' => 'File uploaded successfully', 'media' => $media, 'storage' => $quota->summary($media->store_id)]);
+        return response()->json(['message' => 'File uploaded successfully', 'media' => $media, 'storage' => $quota->summary($media->organization_id)]);
     }
 
     /** Rename a file, describe it, or set its schedule window. */
     public function update(UpdateMediaRequest $request, Media $media): JsonResponse
     {
-        // Route middleware is not enough: the target has to be inside the store the
+        // Route middleware is not enough: the target has to be inside the organization the
         // actor is working in, or it does not exist for them (404, never 403).
         $media = Media::visibleTo(auth()->user())->findOrFail($media->id);
         $before = $media->title;
@@ -143,7 +143,7 @@ class MediaController extends Controller
     }
 
     /** Delete a file, its thumbnail and its row. */
-    public function destroy(Media $media, MediaStorage $storage, StoreStorage $quota): JsonResponse
+    public function destroy(Media $media, MediaStorage $storage, OrganizationStorage $quota): JsonResponse
     {
         $media = Media::visibleTo(auth()->user())->findOrFail($media->id);
         $title = $media->title;
@@ -168,38 +168,38 @@ class MediaController extends Controller
             DB::afterCommit(fn () => $storage->deleteFiles($media->disk, $media->path, $thumbnail));
         });
 
-        ActivityLog::record('media.deleted', null, "Deleted media {$title}", storeId: $media->store_id);
+        ActivityLog::record('media.deleted', null, "Deleted media {$title}", organizationId: $media->organization_id);
 
-        return response()->json(['message' => 'Media deleted successfully', 'storage' => $quota->summary($media->store_id)]);
+        return response()->json(['message' => 'Media deleted successfully', 'storage' => $quota->summary($media->organization_id)]);
     }
 
     /**
-     * Whose library an upload joins. A store's person: the store they are working in — with none selected
-     * the upload is refused, there being no library of their own to put it in. The platform team: the shop
+     * Whose library an upload joins. An organization's person: the organization they are working in — with none selected
+     * the upload is refused, there being no library of their own to put it in. The platform team: the organization
      * chosen on the page, or with none chosen the platform's own library (null).
      */
     private function uploadTarget(StoreMediaRequest $request): ?int
     {
         if (auth()->user()->globalRole() === null) {
-            $storeId = (int) session('current_store_id');
+            $organizationId = (int) session('current_organization_id');
 
-            if (! $storeId) {
+            if (! $organizationId) {
                 throw ValidationException::withMessages([
                     'file' => 'Select an organization before uploading — media belongs to the organization it is uploaded in.',
                 ]);
             }
 
-            return $storeId;
+            return $organizationId;
         }
 
-        $storeId = (int) ($request->validated('store_id') ?? 0);
+        $organizationId = (int) ($request->validated('organization_id') ?? 0);
 
-        if ($storeId !== 0 && ! Store::whereKey($storeId)->exists()) {
+        if ($organizationId !== 0 && ! Organization::whereKey($organizationId)->exists()) {
             throw ValidationException::withMessages([
                 'file' => 'That organization no longer exists. Reload the page and choose again.',
             ]);
         }
 
-        return $storeId === 0 ? null : $storeId;
+        return $organizationId === 0 ? null : $organizationId;
     }
 }

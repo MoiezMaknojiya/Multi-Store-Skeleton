@@ -2,13 +2,13 @@
 
 use App\Models\ActivityLog;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 
 /*
 |--------------------------------------------------------------------------
-| A shop's dashboard for every role a shop could make (owner, 2026-09-30)
+| An organization's dashboard for every role an organization could make (owner, 2026-09-30)
 |--------------------------------------------------------------------------
 |
 | Every combination of the permissions the dashboard reads — 2^7 roles — opened as a person holding exactly that
@@ -22,17 +22,17 @@ beforeEach(function () {
 });
 
 test('every role\'s dashboard opens, offers only what the role may open and never a button of its own', function () {
-    $store = Store::factory()->create(['name' => 'Alpha Mart']);
-    Screen::factory()->create(['store_id' => $store->id, 'last_seen_at' => null]);
-    Media::factory()->create(['store_id' => $store->id]);
-    ActivityLog::create(['actor_name' => 'Ali', 'store_id' => $store->id, 'action' => 'media.uploaded', 'description' => 'Uploaded a poster']);
+    $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    Screen::factory()->create(['organization_id' => $organization->id, 'last_seen_at' => null]);
+    Media::factory()->create(['organization_id' => $organization->id]);
+    ActivityLog::create(['actor_name' => 'Ali', 'organization_id' => $organization->id, 'action' => 'media.uploaded', 'description' => 'Uploaded a poster']);
 
     $permissions = ['screen-view', 'screen-store', 'media-view', 'media-store', 'ad-view', 'channel-view', 'activity-view'];
 
     foreach (range(0, 2 ** count($permissions) - 1) as $mask) {
         $held = array_values(array_filter($permissions, fn (string $p, int $i) => ($mask >> $i) & 1, ARRAY_FILTER_USE_BOTH));
-        $person = createStoreUser($store, $held, "Role {$mask}");
-        $as = fn () => $this->actingAs($person)->withSession(['current_store_id' => $store->id]);
+        $person = createOrganizationUser($organization, $held, "Role {$mask}");
+        $as = fn () => $this->actingAs($person)->withSession(['current_organization_id' => $organization->id]);
 
         $response = $as()->get('/dashboard')->assertOk();
         $summary = $response->viewData('summary');
@@ -51,7 +51,7 @@ test('every role\'s dashboard opens, offers only what the role may open and neve
             ->and(is_null($summary['attention']))->toBe(! array_intersect(['screen-view', 'media-view'], $held), "attention for {$role}");
 
         // "Nothing for your role" only when there is nothing else.
-        $nothing = str_contains($response->getContent(), 'dusk="dashboard-store-nothing"');
+        $nothing = str_contains($response->getContent(), 'dusk="dashboard-organization-nothing"');
         expect($nothing)->toBe($cards === [] && $summary['activity'] === null, "the empty card for {$role}");
 
         // Every link offered opens for this very person.

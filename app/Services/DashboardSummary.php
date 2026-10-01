@@ -7,9 +7,9 @@ use App\Models\BuilderAd;
 use App\Models\Campaign;
 use App\Models\Channel;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -18,30 +18,30 @@ use Illuminate\Support\Str;
 
 /**
  * What the landing page says (owner, 2026-09-30: "user friendly banao puri site ko" — the dashboard was an empty
- * page): how the shop is doing and what needs doing, or — above the stores — how the platform is. Every part is the
+ * page): how the organization is doing and what needs doing, or — above the organizations — how the platform is. Every part is the
  * person's to see only with the permission its own page asks, and every link goes where that permission leads, so the
- * dashboard never offers what a click would refuse (the one exception is the platform's count of stores, which every
- * account above the stores has always been shown). Counts only: it reads no file and no design.
+ * dashboard never offers what a click would refuse (the one exception is the platform's count of organizations, which every
+ * account above the organizations has always been shown). Counts only: it reads no file and no design.
  */
 class DashboardSummary
 {
-    /** A shop's storage this full is said on the dashboard. */
+    /** An organization's storage this full is said on the dashboard. */
     private const STORAGE_WARNING_PERCENT = 90;
 
     /** How many of each list the dashboard names; the rest are counted in one line leading to where they all are. */
     private const LIST_LENGTH = 5;
 
-    public function __construct(private readonly StoreStorage $quota, private readonly DiskGuard $disk) {}
+    public function __construct(private readonly OrganizationStorage $quota, private readonly DiskGuard $disk) {}
 
     /**
-     * One shop's dashboard, for a person working in it. `attention` is null for somebody who may look at neither the
+     * One organization's dashboard, for a person working in it. `attention` is null for somebody who may look at neither the
      * screens nor the files (nothing they could be told about), and `activity` for somebody without the log — an empty
      * list means "all quiet", which is not the same thing.
      *
-     * @return array{store: string, cards: list<array<string, mixed>>, attention: list<array<string, mixed>>|null,
+     * @return array{organization: string, cards: list<array<string, mixed>>, attention: list<array<string, mixed>>|null,
      *     steps: list<array<string, mixed>>, activity: list<array<string, mixed>>|null}
      */
-    public function forStore(Store $store, User $user): array
+    public function forOrganization(Organization $organization, User $user): array
     {
         $cards = [];
         $attention = [];
@@ -49,8 +49,8 @@ class DashboardSummary
         $mediaCount = null;
 
         if ($user->can('screen-view')) {
-            $screens = Screen::where('store_id', $store->id)->withCount('playlistItems')->orderBy('name')
-                ->get(['id', 'name', 'last_seen_at', 'store_id']);
+            $screens = Screen::where('organization_id', $organization->id)->withCount('playlistItems')->orderBy('name')
+                ->get(['id', 'name', 'last_seen_at', 'organization_id']);
             $online = $screens->filter(fn (Screen $screen) => $screen->is_online)->count();
 
             $cards[] = [
@@ -87,13 +87,13 @@ class DashboardSummary
         }
 
         if ($user->can('media-view')) {
-            $mediaCount = Media::where('store_id', $store->id)->withoutDrafts()->count();
-            $storage = $this->quota->summary($store->id);
+            $mediaCount = Media::where('organization_id', $organization->id)->withoutDrafts()->count();
+            $storage = $this->quota->summary($organization->id);
             $percent = $storage && $storage['limit'] > 0 ? (int) floor($storage['used'] * 100 / $storage['limit']) : 0;
 
             $cards[] = [
                 'key' => 'media', 'label' => 'Files', 'value' => $mediaCount,
-                'detail' => $storage ? StoreStorage::inWords($storage['used']).' of '.StoreStorage::inWords($storage['limit']).' used' : null,
+                'detail' => $storage ? OrganizationStorage::inWords($storage['used']).' of '.OrganizationStorage::inWords($storage['limit']).' used' : null,
                 'href' => route('media.view'),
             ];
 
@@ -109,7 +109,7 @@ class DashboardSummary
         }
 
         if ($user->can('ad-view')) {
-            $ads = BuilderAd::where('store_id', $store->id)->selectRaw('count(*) as total, count(published_at) as published')->first();
+            $ads = BuilderAd::where('organization_id', $organization->id)->selectRaw('count(*) as total, count(published_at) as published')->first();
             $published = (int) ($ads->published ?? 0);
             $drafts = (int) ($ads->total ?? 0) - $published;
 
@@ -122,25 +122,25 @@ class DashboardSummary
 
         if ($user->can('channel-view')) {
             $cards[] = [
-                'key' => 'channels', 'label' => 'Channels', 'value' => Channel::where('store_id', $store->id)->count(),
+                'key' => 'channels', 'label' => 'Channels', 'value' => Channel::where('organization_id', $organization->id)->count(),
                 'detail' => 'made by this organization',
                 'href' => route('channels.view'),
             ];
         }
 
         return [
-            'store' => $store->name,
+            'organization' => $organization->name,
             'cards' => $cards,
             'attention' => $user->can('screen-view') || $user->can('media-view') ? $attention : null,
             'steps' => $this->gettingStarted($user, $screens, $mediaCount),
             'activity' => $user->can('activity-view')
-                ? $this->recentActivity(ActivityLog::where('store_id', $store->id))
+                ? $this->recentActivity(ActivityLog::where('organization_id', $organization->id))
                 : null,
         ];
     }
 
     /**
-     * The platform's dashboard, for a person above the stores; null parts as in forStore.
+     * The platform's dashboard, for a person above the organizations; null parts as in forOrganization.
      *
      * @return array{cards: list<array<string, mixed>>, attention: list<array<string, mixed>>|null, activity: list<array<string, mixed>>|null}
      */
@@ -149,17 +149,17 @@ class DashboardSummary
         $cards = [];
         $attention = [];
 
-        $stores = Store::count();
+        $organizations = Organization::count();
         $cards[] = [
-            'key' => 'stores', 'label' => 'Organizations', 'value' => $stores,
-            'detail' => Store::where('is_active', true)->count().' active',
-            'href' => $user->can('store-view') ? route('stores.view') : null,
+            'key' => 'organizations', 'label' => 'Organizations', 'value' => $organizations,
+            'detail' => Organization::where('is_active', true)->count().' active',
+            'href' => $user->can('organization-view') ? route('organizations.view') : null,
         ];
 
         if ($user->can('user-view')) {
             // The accounts the Users page lists to this person: the platform team is the super admins' business.
             $accounts = User::query()->when(! $user->isSuperAdmin(), fn (Builder $query) => $query->whereNotIn(
-                'id', DB::table('store_user')->where('store_id', 0)->select('user_id')
+                'id', DB::table('organization_user')->where('organization_id', 0)->select('user_id')
             ));
 
             $cards[] = [
@@ -208,34 +208,34 @@ class DashboardSummary
             }
         }
 
-        if ($user->can('store-view')) {
+        if ($user->can('organization-view')) {
             $ownerId = Role::owner()?->id;
-            $ownerless = Store::whereDoesntHave('users', fn (Builder $users) => $users->where('store_user.role_id', $ownerId));
+            $ownerless = Organization::whereDoesntHave('users', fn (Builder $users) => $users->where('organization_user.role_id', $ownerId));
 
-            foreach ((clone $ownerless)->orderBy('name')->limit(self::LIST_LENGTH)->get(['id', 'name']) as $store) {
+            foreach ((clone $ownerless)->orderBy('name')->limit(self::LIST_LENGTH)->get(['id', 'name']) as $organization) {
                 $attention[] = [
-                    'key' => "store-ownerless-{$store->id}",
+                    'key' => "organization-ownerless-{$organization->id}",
                     'tone' => 'warning',
-                    'text' => "{$store->name} has no Owner",
+                    'text' => "{$organization->name} has no Owner",
                     'detail' => 'Invite one from the Organizations page',
-                    'href' => route('stores.view'),
+                    'href' => route('organizations.view'),
                 ];
             }
-            $attention = [...$attention, ...$this->andMore('store-ownerless-more', $ownerless->count(), 'warning',
-                'more organizations have no Owner', 'They are all on the Organizations page', route('stores.view'))];
+            $attention = [...$attention, ...$this->andMore('organization-ownerless-more', $ownerless->count(), 'warning',
+                'more organizations have no Owner', 'They are all on the Organizations page', route('organizations.view'))];
         }
 
         return [
             'cards' => $cards,
-            'attention' => $user->can('store-view') ? $attention : null,
+            'attention' => $user->can('organization-view') ? $attention : null,
             'activity' => $user->can('activity-view') ? $this->recentActivity(ActivityLog::query()) : null,
         ];
     }
 
     /**
-     * The first three things a new shop does, each ticked once done, and each offered only to somebody who may do it —
+     * The first three things a new organization does, each ticked once done, and each offered only to somebody who may do it —
      * which takes the page it happens on too (Add Screen is on the Screens page, behind screen-view). All done, the
-     * list goes: a shop that runs needs no checklist.
+     * list goes: an organization that runs needs no checklist.
      *
      * @param  Collection<int, Screen>  $screens
      * @return list<array<string, mixed>>

@@ -26,7 +26,7 @@
                 {{ __('Your account is removed for good. Enter your password to confirm.') }}
             </p>
 
-            {{-- The plain-POST track, laid out like Delete Store on Settings → Stores. No native `required`:
+            {{-- The plain-POST track, laid out like Delete Organization on Settings → Organizations. No native `required`:
                  client validation (validateBeforeSubmit) shows the same red-border + message UX as every
                  other form. The id stays `password` — unique on this page (the password form uses its own). --}}
             <div class="mt-6">

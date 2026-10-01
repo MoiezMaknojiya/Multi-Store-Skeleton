@@ -3,7 +3,7 @@
 use App\Models\BuilderAd;
 use App\Models\BuilderFont;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Services\AdCompiler;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -23,9 +23,9 @@ use Illuminate\Support\Facades\Storage;
 beforeEach(function () {
     Storage::fake('public');
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->designer = createStoreUser($this->store, ['ad-view', 'ad-store', 'ad-update'], 'Designer');
-    $this->actingAs($this->designer)->withSession(['current_store_id' => $this->store->id]);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->designer = createOrganizationUser($this->organization, ['ad-view', 'ad-store', 'ad-update'], 'Designer');
+    $this->actingAs($this->designer)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 /** Google's own answer, in the shape the CSS API really sends: one block per weight per subset. */
@@ -145,7 +145,7 @@ test('a published ad carries its own fonts, and only the ones it uses', function
         'animations' => [],
     ]];
 
-    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'name' => 'Winter', 'document' => $document]);
+    $ad = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Winter', 'document' => $document]);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
 
     $html = Storage::disk('public')->get(Media::sole()->path);
@@ -156,7 +156,7 @@ test('a published ad carries its own fonts, and only the ones it uses', function
         ->toContain('src:url(data:font/woff2;base64,'.base64_encode('woff2-bytes').") format('woff2')")
         ->not->toContain('/storage/fonts/')              // nothing left to fetch
         ->not->toContain("font-family:'Lora'")           // not used by this design
-        ->not->toContain('fonts.googleapis.com')         // a shop's television never asks Google
+        ->not->toContain('fonts.googleapis.com')         // an organization's television never asks Google
         ->not->toContain('fonts.gstatic.com')
         ->toContain("font-family:'Poppins', sans-serif;");
 
@@ -179,7 +179,7 @@ test('a weight the family does not have is drawn with the one a browser would pi
             'text' => 'Sale', 'style' => ['fontFamily' => 'Poppins', 'fontWeight' => $weight], 'animations' => [],
         ]];
 
-        return app(AdCompiler::class)->compile(BuilderAd::factory()->make(['store_id' => $this->store->id, 'document' => $document]));
+        return app(AdCompiler::class)->compile(BuilderAd::factory()->make(['organization_id' => $this->organization->id, 'document' => $document]));
     };
 
     // CSS font matching: 800 → the heavier 700; 300 → the lighter 400; 450 → nothing up to 500, so 400.
@@ -208,7 +208,7 @@ test('only the subsets the words need are carried: an Urdu headline brings the A
             'text' => $words, 'style' => ['fontFamily' => 'Noto Nastaliq Urdu'], 'animations' => [],
         ]];
 
-        return app(AdCompiler::class)->compile(BuilderAd::factory()->make(['store_id' => $this->store->id, 'document' => $document]));
+        return app(AdCompiler::class)->compile(BuilderAd::factory()->make(['organization_id' => $this->organization->id, 'document' => $document]));
     };
 
     expect($compiled('زبردست'))->toContain(base64_encode('arabic-bytes'))->not->toContain(base64_encode('latin-bytes'))
@@ -237,7 +237,7 @@ test('a variable font — one file for every weight — is carried once, for the
     $document = BuilderAd::blankDocument();
     $document['elements'] = [$text('el_1', 'زبردست', 400), $text('el_2', 'ڈیل', 700)];
 
-    $html = app(AdCompiler::class)->compile(BuilderAd::factory()->make(['store_id' => $this->store->id, 'document' => $document]));
+    $html = app(AdCompiler::class)->compile(BuilderAd::factory()->make(['organization_id' => $this->organization->id, 'document' => $document]));
 
     expect(substr_count($html, '@font-face'))->toBe(1)
         ->and($html)->toContain("font-family:'Noto Nastaliq Urdu';font-style:normal;font-weight:400 700;")
@@ -261,7 +261,7 @@ test('the whole typography set reaches the page, and nothing else does', functio
         'animations' => [],
     ]];
 
-    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => $document]);
+    $ad = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'document' => $document]);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
 
     $html = Storage::disk('public')->get(Media::sole()->path);
@@ -298,7 +298,7 @@ test('a shadow or an outline with a nonsense colour is simply not written', func
         'animations' => [],
     ]];
 
-    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => $document]);
+    $ad = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'document' => $document]);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
 
     $html = Storage::disk('public')->get(Media::sole()->path);
@@ -311,15 +311,15 @@ test('a shadow or an outline with a nonsense colour is simply not written', func
 });
 
 test('a font list and an install both need the ad permissions', function () {
-    $outsider = createStoreUser($this->store, ['screen-view'], 'Screens only');
-    $this->actingAs($outsider)->withSession(['current_store_id' => $this->store->id]);
+    $outsider = createOrganizationUser($this->organization, ['screen-view'], 'Screens only');
+    $this->actingAs($outsider)->withSession(['current_organization_id' => $this->organization->id]);
 
     $this->getJson('/builder/fonts')->assertForbidden();
     $this->postJson('/builder/fonts', ['family' => 'Poppins'])->assertForbidden();
 
     // Looking at the ads is enough to see the list, not to fetch a font from Google.
-    $viewer = createStoreUser($this->store, ['ad-view'], 'Looks only');
-    $this->actingAs($viewer)->withSession(['current_store_id' => $this->store->id]);
+    $viewer = createOrganizationUser($this->organization, ['ad-view'], 'Looks only');
+    $this->actingAs($viewer)->withSession(['current_organization_id' => $this->organization->id]);
 
     $this->getJson('/builder/fonts')->assertOk();
     $this->postJson('/builder/fonts', ['family' => 'Poppins'])->assertForbidden();
@@ -333,8 +333,8 @@ test('the editor has its fonts for whoever opens it: Create Ads alone, or Update
 
     // Neither needs View Ads to open the editor, so neither may need it for the font picker.
     foreach ([['ad-store'], ['ad-update']] as $i => $permissions) {
-        $designer = createStoreUser($this->store, $permissions, "Designer {$i}");
-        $this->actingAs($designer)->withSession(['current_store_id' => $this->store->id]);
+        $designer = createOrganizationUser($this->organization, $permissions, "Designer {$i}");
+        $this->actingAs($designer)->withSession(['current_organization_id' => $this->organization->id]);
 
         $this->getJson('/builder/fonts')->assertOk();
         $this->postJson('/builder/fonts', ['family' => 'Poppins'])->assertOk();
@@ -358,7 +358,7 @@ test('a family written in another case is still set in its installed font', func
         'text' => 'Sale', 'style' => ['fontFamily' => 'anton'], 'animations' => [],
     ]];
 
-    $html = app(AdCompiler::class)->compile(BuilderAd::factory()->make(['store_id' => $this->store->id, 'document' => $document]));
+    $html = app(AdCompiler::class)->compile(BuilderAd::factory()->make(['organization_id' => $this->organization->id, 'document' => $document]));
 
     expect($html)->toContain("@font-face{font-family:'Anton';")
         ->toContain(base64_encode('anton-bytes'))

@@ -4,61 +4,61 @@ namespace App\Http\Controllers\Advertising;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
+use App\Models\Organization;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Whether a shop and its televisions carry network advertising.
+ * Whether an organization and its televisions carry network advertising.
  *
- * This is the platform owner's setting, agreed in the deal — not something a
- * shopkeeper turns on one morning. Both flags start OFF: a shop that was never asked
+ * This is the platform owner's setting, agreed in the deal — not something an
+ * organization member turns on one morning. Both flags start OFF: an organization that was never asked
  * has never agreed, and a television nobody chose is not a billboard.
  *
  * Two ways in, and they are gated differently on purpose:
  *
- * - INSIDE a shop (`store`, `screens`) — behind `network-ads-toggle`, true only in an
- *   IMPERSONATED session belonging to a live super admin. A super admin cannot enter a
- *   store directly in this app, so "Log in as" is the only way in, and the control sits
- *   exactly where they can reach it and nowhere a store user can.
- * - ACROSS shops (`stores`) — behind `campaign-manage`, the plain super-admin ability.
- *   The stores listing is the platform owner's own page, reached without impersonating
+ * - INSIDE an organization (`organization`, `screens`) — behind `network-ads-toggle`, true only in an
+ *   IMPERSONATED session belonging to a live super admin. A super admin cannot enter an
+ *   organization directly in this app, so "Log in as" is the only way in, and the control sits
+ *   exactly where they can reach it and nowhere an organization user can.
+ * - ACROSS organizations (`organizations`) — behind `campaign-manage`, the plain super-admin ability.
+ *   The organizations listing is the platform owner's own page, reached without impersonating
  *   anybody, so demanding an impersonated session there would shut the door on the one
  *   person it is meant for.
  *
- * Either way the answer to "may a shopkeeper touch this?" is no.
+ * Either way the answer to "may an organization member touch this?" is no.
  */
 class NetworkAdsController extends Controller
 {
-    /** Does this shop carry advertising at all? */
-    public function store(Request $request): JsonResponse
+    /** Does this organization carry advertising at all? */
+    public function organization(Request $request): JsonResponse
     {
         $validated = $request->validate(['accepts' => ['required', 'boolean']]);
 
-        $store = $this->currentStore();
-        $store->update(['accepts_network_ads' => $validated['accepts']]);
+        $organization = $this->currentOrganization();
+        $organization->update(['accepts_network_ads' => $validated['accepts']]);
 
         ActivityLog::record(
-            'store.network_ads_updated',
-            $store,
-            ($validated['accepts'] ? 'Enabled' : 'Disabled')." network advertising for organization {$store->name}"
+            'organization.network_ads_updated',
+            $organization,
+            ($validated['accepts'] ? 'Enabled' : 'Disabled')." network advertising for organization {$organization->name}"
         );
 
         return response()->json([
             'message' => $validated['accepts']
                 ? 'This organization now carries network advertising.'
                 : 'Network advertising is off for this organization.',
-            'accepts_network_ads' => $store->accepts_network_ads,
+            'accepts_network_ads' => $organization->accepts_network_ads,
         ]);
     }
 
     /**
      * And which of its televisions do.
      *
-     * Takes a list rather than one id, so "all the screens in this shop" and "just
+     * Takes a list rather than one id, so "all the screens in this organization" and "just
      * this one" are the same call — the bulk switch is not a second endpoint with a
      * second set of rules to keep in step.
      */
@@ -70,11 +70,11 @@ class NetworkAdsController extends Controller
             'accepts' => ['required', 'boolean'],
         ]);
 
-        $store = $this->currentStore();
+        $organization = $this->currentOrganization();
 
-        // Scoped to the store being worked in, so a stray id from another shop
+        // Scoped to the organization being worked in, so a stray id from another organization
         // changes nothing rather than reaching across the wall.
-        $screens = Screen::where('store_id', $store->id)
+        $screens = Screen::where('organization_id', $organization->id)
             ->whereIn('id', $validated['screen_ids'])
             ->get();
 
@@ -89,10 +89,10 @@ class NetworkAdsController extends Controller
 
         ActivityLog::record(
             'screen.network_ads_updated',
-            $store,
+            $organization,
             ($validated['accepts'] ? 'Enabled' : 'Disabled').' network advertising on '
                 .$screens->count().' screen'.($screens->count() === 1 ? '' : 's')
-                .' in organization '.$store->name
+                .' in organization '.$organization->name
         );
 
         return response()->json([
@@ -103,73 +103,73 @@ class NetworkAdsController extends Controller
     }
 
     /**
-     * Whole shops at once, from the stores listing — the way a deal is actually struck.
+     * Whole organizations at once, from the organizations listing — the way a deal is actually struck.
      *
-     * The consent flags are ANDed at play time (shop AND television), so switching a
-     * shop on alone would change nothing on any screen: every television starts off.
+     * The consent flags are ANDed at play time (organization AND television), so switching an
+     * organization on alone would change nothing on any screen: every television starts off.
      * A bulk switch that quietly does nothing is worse than no bulk switch, so this
-     * sets BOTH — the shop and every television in it — and the panel says so before
+     * sets BOTH — the organization and every television in it — and the panel says so before
      * it is pressed. Afterwards a single set-apart screen is a trip inside; that is
      * the exception, and exceptions are worth a click.
      */
-    public function stores(Request $request): JsonResponse
+    public function organizations(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'store_ids' => ['required', 'array', 'min:1'],
-            'store_ids.*' => ['integer', 'min:1'],
+            'organization_ids' => ['required', 'array', 'min:1'],
+            'organization_ids.*' => ['integer', 'min:1'],
             'accepts' => ['required', 'boolean'],
         ]);
 
-        $stores = Store::whereIn('id', $validated['store_ids'])->get();
+        $organizations = Organization::whereIn('id', $validated['organization_ids'])->get();
 
-        if ($stores->isEmpty()) {
+        if ($organizations->isEmpty()) {
             throw ValidationException::withMessages([
-                'store_ids' => 'None of those organizations exist.',
+                'organization_ids' => 'None of those organizations exist.',
             ]);
         }
 
         $accepts = $validated['accepts'];
-        $ids = $stores->pluck('id');
+        $ids = $organizations->pluck('id');
         $screenCount = 0;
 
-        // One transaction: a shop marked as carrying advertising whose televisions were
+        // One transaction: an organization marked as carrying advertising whose televisions were
         // never switched is exactly the silent half-state this endpoint exists to avoid.
         DB::transaction(function () use ($ids, $accepts, &$screenCount) {
-            Store::whereIn('id', $ids)->update(['accepts_network_ads' => $accepts]);
-            $screenCount = Screen::whereIn('store_id', $ids)
+            Organization::whereIn('id', $ids)->update(['accepts_network_ads' => $accepts]);
+            $screenCount = Screen::whereIn('organization_id', $ids)
                 ->update(['accepts_network_ads' => $accepts]);
         });
 
-        $shops = $stores->count().' organization'.($stores->count() === 1 ? '' : 's');
+        $inWords = $organizations->count().' organization'.($organizations->count() === 1 ? '' : 's');
         $screens = $screenCount.' screen'.($screenCount === 1 ? '' : 's');
 
         ActivityLog::record(
-            'store.network_ads_updated',
-            $stores->count() === 1 ? $stores->first() : null,
-            ($accepts ? 'Enabled' : 'Disabled')." network advertising for {$shops} ({$screens})"
+            'organization.network_ads_updated',
+            $organizations->count() === 1 ? $organizations->first() : null,
+            ($accepts ? 'Enabled' : 'Disabled')." network advertising for {$inWords} ({$screens})"
         );
 
         return response()->json([
-            'message' => ($accepts ? 'Advertising is on for ' : 'Advertising is off for ')."{$shops} — {$screens} updated.",
-            'store_ids' => $ids->all(),
+            'message' => ($accepts ? 'Advertising is on for ' : 'Advertising is off for ')."{$inWords} — {$screens} updated.",
+            'organization_ids' => $ids->all(),
             'accepts' => $accepts,
         ]);
     }
 
     /**
-     * The shop being worked in. "Log in as" starts with none chosen (ImpersonateController clears it, and the
-     * dashboard then picks the person's only store or asks which), so a session with no store is told so.
+     * The organization being worked in. "Log in as" starts with none chosen (ImpersonateController clears it, and the
+     * dashboard then picks the person's only organization or asks which), so a session with no organization is told so.
      */
-    private function currentStore(): Store
+    private function currentOrganization(): Organization
     {
-        $storeId = (int) session('current_store_id');
+        $organizationId = (int) session('current_organization_id');
 
-        if (! $storeId) {
+        if (! $organizationId) {
             throw ValidationException::withMessages([
                 'accepts' => 'Select an organization first — advertising is agreed per organization.',
             ]);
         }
 
-        return Store::findOrFail($storeId);
+        return Organization::findOrFail($organizationId);
     }
 }

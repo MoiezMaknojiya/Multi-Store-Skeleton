@@ -1,5 +1,5 @@
 {{-- The warning the super admins get when the server's own disk runs low (App\Notifications\DiskAlmostFullNotification):
-     every upload is refused until there is room again (App\Services\DiskGuard), whatever each shop's own allowance
+     every upload is refused until there is room again (App\Services\DiskGuard), whatever each organization's own allowance
      says — so the message says what is happening, how much is left and what to do. --}}
 <x-email.layout title="Uploads are paused: the server is almost full"
                 :preheader="'Only '.$free.' free on the server. Uploads are refused until there is more room.'">

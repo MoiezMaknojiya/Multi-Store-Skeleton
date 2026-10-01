@@ -6,9 +6,9 @@
     {{-- Js::from, not @json: @json leaves its quotes raw and the first string would
          close this attribute (see .claude/rules/02-project-conventions.md). --}}
     <div x-data="screensTable({{ Js::from([
-            'hasStore' => (bool) session('current_store_id'),
+            'hasOrganization' => (bool) session('current_organization_id'),
             'defaultTimezone' => \App\Models\Screen::DEFAULT_TIMEZONE,
-            'storeAcceptsAds' => $storeAcceptsAds,
+            'organizationAcceptsAds' => $organizationAcceptsAds,
             // One set of words for a screen's four ways, the model's — the list and the dialogs say the same.
             'orientations' => $orientations,
          ]) }})"
@@ -16,8 +16,8 @@
 
 
         {{-- Network advertising. Rendered only inside an impersonated super-admin
-             session — whether a shop carries advertising is the platform owner's
-             setting, agreed in the deal, and a shopkeeper never sees this at all.
+             session — whether an organization carries advertising is the platform owner's
+             setting, agreed in the deal, and an organization member never sees this at all.
              The routes carry the same gate, so hiding it is not what protects it:
              this is simply the one place the owner can reach it. --}}
         @can('network-ads-toggle')
@@ -30,16 +30,16 @@
                     </p>
                 </div>
 
-                <button @click="toggleStoreAds()" x-bind:disabled="savingAds" dusk="store-ads-toggle"
-                        x-bind:class="storeAcceptsAds ? 'btn-row-danger' : 'btn-primary'">
-                    <span x-text="storeAcceptsAds ? 'Turn off for this organization' : 'This organization has agreed'"></span>
+                <button @click="toggleOrganizationAds()" x-bind:disabled="savingAds" dusk="organization-ads-toggle"
+                        x-bind:class="organizationAcceptsAds ? 'btn-row-danger' : 'btn-primary'">
+                    <span x-text="organizationAcceptsAds ? 'Turn off for this organization' : 'This organization has agreed'"></span>
                 </button>
             </div>
 
             {{-- The bulk switch. Deliberately worded with the SAME two words as the
                  button on every row — one action should not have two vocabularies,
                  or nobody can tell that they do the same thing. --}}
-            <div x-show="storeAcceptsAds" x-cloak class="mt-4 flex flex-wrap items-center gap-2">
+            <div x-show="organizationAcceptsAds" x-cloak class="mt-4 flex flex-wrap items-center gap-2">
                 <span class="text-xs text-gray-500 dark:text-gray-400">
                     Every screen in this organization at once:
                 </span>
@@ -119,8 +119,8 @@
                              facts about this screen's pairing, and the name column stays
                              about the name.
 
-                             Only the last block of the uuid — twelve characters tell a
-                             shop's handful of sets apart, and the player prints the same
+                             Only the last block of the uuid — twelve characters tell an
+                             organization's handful of sets apart, and the player prints the same
                              block, so the two can be matched at a glance. The whole value
                              is on the tooltip for anyone who needs it, and a click selects
                              just the id. A screen no device has claimed shows nothing here
@@ -138,11 +138,11 @@
                         </td>
                         <td class="px-5 py-4">
                             <div class="flex items-center justify-end gap-2">
-                                {{-- One television's answer, inside a shop that has
+                                {{-- One television's answer, inside an organization that has
                                      already agreed. The set over the children's tables
                                      can stay clear while the rest carry adverts. --}}
                                 @can('network-ads-toggle')
-                                <button x-show="storeAcceptsAds" x-cloak
+                                <button x-show="organizationAcceptsAds" x-cloak
                                         @click="setScreenAds([item.id], !item.accepts_network_ads)"
                                         x-bind:disabled="savingAds"
                                         x-bind:dusk="'screen-ads-' + item.id"
@@ -206,7 +206,7 @@
                 </p>
 
                 <form @submit.prevent="pairScreen" novalidate dusk="screen-pair-form" class="mt-4 space-y-4">
-                    <div x-show="!hasStore && pairForm.mode === 'new'" x-cloak class="alert-warning">
+                    <div x-show="!hasOrganization && pairForm.mode === 'new'" x-cloak class="alert-warning">
                         Select an organization first.
                     </div>
 
@@ -307,7 +307,7 @@
 
                     {{-- What fills a gap between two schedules, or an hour nothing was
                          scheduled for. Left unset, the screen simply goes black — which
-                         is what a shop usually wants overnight. --}}
+                         is what an organization usually wants overnight. --}}
                     <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
                         <x-crud.form-field label="When nothing is scheduled, show" field="default_media_id">
                             <select x-model="form.default_media_id" dusk="screen-edit-default-media"

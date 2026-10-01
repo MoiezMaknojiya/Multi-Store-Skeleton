@@ -43,9 +43,9 @@ class BuilderAssetRequest extends FormRequest
             'height' => ['nullable', 'integer', 'min:1', 'max:16384'],
             'poster' => ['nullable', 'string', 'starts_with:data:image/', 'max:'.StoreMediaRequest::POSTER_MAX_CHARACTERS],
 
-            // The shop, said by the platform team only (a store's person uploads to the store they stand
+            // The organization, said by the platform team only (an organization's person uploads to the organization they stand
             // in, and whatever they send here is not read). Whether it exists is the controller's.
-            'store_id' => ['nullable', 'integer', 'min:1'],
+            'organization_id' => ['nullable', 'integer', 'min:1'],
         ];
     }
 

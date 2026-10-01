@@ -3,7 +3,7 @@
 namespace Tests\Browser;
 
 use App\Models\BuilderAd;
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -23,13 +23,13 @@ class AdBuilderPermissionsTest extends DuskTestCase
     public function test_a_designer_who_may_only_create_saves_a_new_ad_once_and_stays_on_create(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $maker = $this->storeMember($store, ['ad-store'], 'maker@example.com', 'Ad Maker');
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $maker = $this->organizationMember($organization, ['ad-store'], 'maker@example.com', 'Ad Maker');
 
-        $this->browse(function (Browser $browser) use ($maker, $store) {
+        $this->browse(function (Browser $browser) use ($maker, $organization) {
             $this->freshSession($browser);
             $browser->loginAs($maker);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
@@ -49,7 +49,7 @@ class AdBuilderPermissionsTest extends DuskTestCase
                 ->waitForText('Ad saved');
 
             $ad = BuilderAd::firstWhere('name', 'First try');
-            $this->assertSame($store->id, $ad->store_id);
+            $this->assertSame($organization->id, $ad->organization_id);
             $this->assertCount(1, $ad->document['elements']);
 
             // The saved ad's own address is the editor's, which is Update Ads: somebody who may only
@@ -71,14 +71,14 @@ class AdBuilderPermissionsTest extends DuskTestCase
     public function test_a_designer_without_view_ads_is_offered_no_way_into_the_gallery(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember($store, ['ad-store', 'ad-update'], 'designer@example.com', 'Designer');
-        $ad = BuilderAd::factory()->withText()->create(['store_id' => $store->id, 'name' => 'Winter sale']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($organization, ['ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $ad = BuilderAd::factory()->withText()->create(['organization_id' => $organization->id, 'name' => 'Winter sale']);
 
-        $this->browse(function (Browser $browser) use ($designer, $store, $ad) {
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/builder/'.$ad->id);
             $this->waitForAlpine($browser);

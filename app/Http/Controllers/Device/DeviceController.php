@@ -24,7 +24,7 @@ class DeviceController extends Controller
 {
     /**
      * How far ahead a manifest says what the screen should show (docs/AD-BUILDER-SPEC.md §15): a weekend
-     * with the shop's line down still follows its dayparts; after that, the last answer plays on.
+     * with the organization's line down still follows its dayparts; after that, the last answer plays on.
      */
     public const TIMELINE_HOURS = 72;
 
@@ -115,7 +115,7 @@ class DeviceController extends Controller
             'fallback' => $fallback,
             'ad_break' => [
                 // Counted from the moment the player started, not from the clock —
-                // the owner's choice, so two shops that booted at different times do
+                // the owner's choice, so two organizations that booted at different times do
                 // not cut to advertising at the same instant.
                 'every_seconds' => Campaign::breakEverySeconds(),
                 'items' => $adBreak->map(fn (Campaign $campaign) => $this->campaignItem($campaign))->values()->all(),
@@ -142,7 +142,7 @@ class DeviceController extends Controller
                 ? $this->channelEntry($item)
                 : $this->manifestItem($item->id, $item->media, $this->lineSeconds($item)))->values()->all();
 
-        // Nothing due: the shop's own holding picture rather than a black rectangle
+        // Nothing due: the organization's own holding picture rather than a black rectangle
         // in the middle of the afternoon. It goes out as an ordinary item, so the
         // player needs no idea that it is a fallback. Id 0, because no playlist row
         // stands behind it.
@@ -311,7 +311,7 @@ class DeviceController extends Controller
      *
      * Blankness is part of it: going dark changes nothing about the (empty) item
      * list, and the player has to notice anyway. So is the advertising break — a
-     * campaign starting or ending changes nothing about the shop's own playlist, and
+     * campaign starting or ending changes nothing about the organization's own playlist, and
      * the television would otherwise carry the old advert until something else
      * happened to change.
      *

@@ -2,10 +2,10 @@
 
 use App\Models\Channel;
 use App\Models\Invitation;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -15,9 +15,9 @@ use Tests\TestCase;
 |--------------------------------------------------------------------------
 |
 | "Store change kar k organization kar du? Baki sub functionality same rakho bs naam change ... hospital aur education
-| like school aur bhi dusre institue ko bhi sell kar saku future mein." Every word a person reads says organization;
-| the code, the tables, the routes and the permission names (`store-view` …) keep "store", so nothing else changes.
-| A page that says "store" or "shop" again fails here.
+| like school aur bhi dusre institue ko bhi sell kar saku future mein." Every word a person reads says organization —
+| and, the same day, the code and the database too ("ab haar jagha organization kardo"). A page that says "store" or
+| "shop" again fails here.
 |
 */
 
@@ -82,65 +82,72 @@ test('the check finds the words wherever a person reads them, and never in code'
 });
 
 test('the pages a guest sees say organization', function () {
-    $store = Store::factory()->create(['name' => 'Alpha Clinic']);
-    $owner = createStoreMember($store);
-    [, $token] = Invitation::open($store, 'new.person@example.com', Role::owner(), $owner);
+    $organization = Organization::factory()->create(['name' => 'Alpha Clinic']);
+    $owner = createOrganizationMember($organization);
+    [, $token] = Invitation::open($organization, 'new.person@example.com', Role::owner(), $owner);
 
     assertEveryPageSaysOrganization($this, ['/login', '/register', '/forgot-password', '/invitations/'.$token]);
 });
 
 test('the pages above the organizations say organization', function () {
-    Store::factory()->create(['name' => 'Alpha Clinic']);
+    Organization::factory()->create(['name' => 'Alpha Clinic']);
     $channel = Channel::factory()->create(['name' => 'GAMA Wholesale']);
 
     $this->actingAs(createSuperAdmin());
 
     assertEveryPageSaysOrganization($this, [
-        '/dashboard', '/users', '/stores', '/permissions', '/roles', '/activity', '/channels', '/channels/'.$channel->id,
+        '/dashboard', '/users', '/organizations', '/permissions', '/roles', '/activity', '/channels', '/channels/'.$channel->id,
         '/campaigns', '/media', '/builder', '/builder/assets', '/builder/create?orientation=portrait', '/profile',
     ]);
 });
 
 test('the pages inside an organization say organization', function () {
-    $store = Store::factory()->create(['name' => 'Alpha Clinic']);
+    $organization = Organization::factory()->create(['name' => 'Alpha Clinic']);
     // A role holding everything an organization's role may hold, so no page, card or button is hidden for want of one.
-    $member = createStoreUser($store, [...Permission::STORE, ...Permission::STORE_SCOPED], 'Everything');
-    $screen = Screen::factory()->create(['store_id' => $store->id, 'name' => 'Lobby TV']);
-    $channel = Channel::factory()->create(['store_id' => $store->id, 'name' => 'Clinic News']);
+    $member = createOrganizationUser($organization, [...Permission::ORGANIZATION, ...Permission::ORGANIZATION_SCOPED], 'Everything');
+    $screen = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Lobby TV']);
+    $channel = Channel::factory()->create(['organization_id' => $organization->id, 'name' => 'Clinic News']);
 
-    $this->actingAs($member)->withSession(['current_store_id' => $store->id]);
+    $this->actingAs($member)->withSession(['current_organization_id' => $organization->id]);
 
     assertEveryPageSaysOrganization($this, [
         '/dashboard', '/screens', '/screens/'.$screen->id, '/media', '/dayparts', '/channels', '/channels/'.$channel->id,
         '/builder', '/builder/assets', '/builder/create?orientation=landscape', '/members', '/roles', '/activity',
-        '/settings/store', '/profile',
+        '/settings/organization', '/profile',
     ]);
 });
 
 test('the four permissions about organizations are labelled so, and a label the super admin retyped is kept', function () {
-    $labels = fn () => DB::table('permissions')->whereIn('name', ['store-update', 'store-view', 'store-store', 'store-destroy'])
+    $labels = fn (string $prefix) => DB::table('permissions')
+        ->whereIn('name', ["{$prefix}-update", "{$prefix}-view", "{$prefix}-store", "{$prefix}-destroy"])
         ->pluck('label', 'name')->all();
 
-    // A fresh install: the baseline inserts the words of its day, and this migration brings them to what the code ships.
-    expect($labels())->toEqual([
-        'store-update' => Permission::LABELS['store-update'],
-        'store-view' => Permission::LABELS['store-view'],
-        'store-store' => Permission::LABELS['store-store'],
-        'store-destroy' => Permission::LABELS['store-destroy'],
-    ])->and(Permission::LABELS['store-view'])->toBe('View Organizations');
+    // A fresh install: the baseline inserts the words of its day, the label migration and the rename bring them to what
+    // the code ships.
+    expect($labels('organization'))->toEqual([
+        'organization-update' => Permission::LABELS['organization-update'],
+        'organization-view' => Permission::LABELS['organization-view'],
+        'organization-store' => Permission::LABELS['organization-store'],
+        'organization-destroy' => Permission::LABELS['organization-destroy'],
+    ])->and(Permission::LABELS['organization-view'])->toBe('View Organizations');
 
-    $migration = require database_path('migrations/2026_10_01_140000_say_organization_in_the_permission_labels.php');
-    $migration->down();
+    // The label migration ran while the permissions were still called store-…: the rename goes back first.
+    $rename = require database_path('migrations/2026_10_01_150000_call_stores_organizations_in_the_database.php');
+    $relabel = require database_path('migrations/2026_10_01_140000_say_organization_in_the_permission_labels.php');
+    $rename->down();
+    $relabel->down();
 
-    expect($labels())->toEqual([
+    expect($labels('store'))->toEqual([
         'store-update' => 'Update Store Details', 'store-view' => 'View Stores', 'store-store' => 'Create Stores', 'store-destroy' => 'Delete Stores',
     ]);
 
     // The super admin retyped one on the Permissions page meanwhile, in other capitals: theirs stays.
     DB::table('permissions')->where('name', 'store-view')->update(['label' => 'view stores']);
-    $migration->up();
+    $relabel->up();
+    $rename->up();
 
-    expect($labels())->toEqual([
-        'store-update' => 'Update Organization Details', 'store-view' => 'view stores', 'store-store' => 'Create Organizations', 'store-destroy' => 'Delete Organizations',
+    expect($labels('organization'))->toEqual([
+        'organization-update' => 'Update Organization Details', 'organization-view' => 'view stores',
+        'organization-store' => 'Create Organizations', 'organization-destroy' => 'Delete Organizations',
     ]);
 });

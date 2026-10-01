@@ -7,9 +7,9 @@ use App\Models\BuilderAsset;
 use App\Models\BuilderFont;
 use App\Models\Campaign;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\Upload;
 use App\Models\User;
 use Facebook\WebDriver\Chrome\ChromeOptions;
@@ -123,7 +123,7 @@ abstract class DuskTestCase extends BaseTestCase
     }
 
     /**
-     * Every file on the shelves a test can write to: the media libraries (a store's,
+     * Every file on the shelves a test can write to: the media libraries (an organization's,
      * and the platform's under media/platform), the shelf channels kept their files on
      * before they took them from the libraries, the campaigns, and the Ad Builder's own
      * (its assets and published pages, and the fonts it installs).
@@ -201,24 +201,24 @@ abstract class DuskTestCase extends BaseTestCase
     }
 
     /**
-     * A member of the store. Pass a starter role key (Role::OWNER, Role::STAFF…) for one of the
-     * starter store roles, or a list of permission names for a custom role of that store holding
+     * A member of the organization. Pass a starter role key (Role::OWNER, Role::STAFF…) for one of the
+     * starter organization roles, or a list of permission names for a custom role of that organization holding
      * exactly those. Seed first (seedSuperAdmin) so the roles and permissions exist.
      *
      * @param  string|array<int, string>  $roleKeyOrPermissions
      */
-    protected function storeMember(Store $store, string|array $roleKeyOrPermissions = Role::OWNER, string $email = 'owner@example.com', string $roleName = 'Shop Team'): User
+    protected function organizationMember(Organization $organization, string|array $roleKeyOrPermissions = Role::OWNER, string $email = 'owner@example.com', string $roleName = 'Organization Team'): User
     {
         if (is_string($roleKeyOrPermissions)) {
             $roleId = Role::starter($roleKeyOrPermissions)->id;
         } else {
-            $role = Role::create(['name' => $roleName, 'store_id' => $store->id]);
+            $role = Role::create(['name' => $roleName, 'organization_id' => $organization->id]);
             $role->permissions()->sync(Permission::whereIn('name', $roleKeyOrPermissions)->pluck('id'));
             $roleId = $role->id;
         }
 
         $user = User::factory()->create(['email' => $email]);
-        $user->stores()->attach($store->id, ['role_id' => $roleId]);
+        $user->organizations()->attach($organization->id, ['role_id' => $roleId]);
 
         return $user;
     }
@@ -327,7 +327,7 @@ abstract class DuskTestCase extends BaseTestCase
     }
 
     /** Dusk keeps its first browser open from one test of a class to the next (it
-     *  closes it only once the class is done), so cookies (auth + the selected store)
+     *  closes it only once the class is done), so cookies (auth + the selected organization)
      *  carry over from test to test — start each test with none. */
     protected function freshSession(Browser $browser): void
     {
@@ -557,19 +557,19 @@ abstract class DuskTestCase extends BaseTestCase
         );
     }
 
-    /** Put a store into session context through the real UI. A single-store user is
-     *  auto-selected (the selector redirects to the dashboard); a multi-store user
-     *  lands on the selector and picks the store card. Assumes the browser is
+    /** Put an organization into session context through the real UI. A single-organization user is
+     *  auto-selected (the selector redirects to the dashboard); a multi-organization user
+     *  lands on the selector and picks the organization card. Assumes the browser is
      *  already authenticated as the user. */
-    protected function switchToStore(Browser $browser, Store $store): void
+    protected function switchToOrganization(Browser $browser, Organization $organization): void
     {
-        $browser->visit('/select-store');
+        $browser->visit('/select-organization');
 
-        if (str_contains($browser->driver->getCurrentURL(), '/select-store')) {
-            $browser->waitForText($store->name)
-                ->waitForReload(fn (Browser $b) => $this->jsClick($b, '@switch-store-'.$store->id));
+        if (str_contains($browser->driver->getCurrentURL(), '/select-organization')) {
+            $browser->waitForText($organization->name)
+                ->waitForReload(fn (Browser $b) => $this->jsClick($b, '@switch-organization-'.$organization->id));
         }
-        // else: single store — already auto-selected and on the dashboard.
+        // else: single organization — already auto-selected and on the dashboard.
     }
 
     /** Click a trigger and wait for its effect, retrying if the click was missed. */

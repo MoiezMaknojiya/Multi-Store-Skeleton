@@ -1,8 +1,8 @@
 <?php
 
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\User;
 
 /*
@@ -21,7 +21,7 @@ test('a super admin passes every permission check with none on the role — and 
 
     $this->actingAs($superAdmin)->getJson('/channels/data')->assertOk();
     $this->actingAs($superAdmin)->getJson('/activity/data')->assertOk();
-    $this->actingAs($superAdmin)->getJson('/stores/data')->assertOk();
+    $this->actingAs($superAdmin)->getJson('/organizations/data')->assertOk();
 
     Permission::create(['name' => 'report-export']);
     expect($superAdmin->fresh()->can('report-export'))->toBeTrue();
@@ -30,11 +30,11 @@ test('a super admin passes every permission check with none on the role — and 
 test('the rules that are not permissions still stand for a super admin', function () {
     $superAdmin = createSuperAdmin();
     registerPermissionGates();
-    $store = Store::factory()->create();
+    $organization = Organization::factory()->create();
 
-    // The in-shop advertising switch is a place ("logged in as one of the shop's people"), not a permission.
-    $this->actingAs($superAdmin)->withSession(['current_store_id' => $store->id])
-        ->putJson('/network-ads/store', ['accepts' => true])->assertForbidden();
+    // The in-organization advertising switch is a place ("logged in as one of the organization's people"), not a permission.
+    $this->actingAs($superAdmin)->withSession(['current_organization_id' => $organization->id])
+        ->putJson('/network-ads/organization', ['accepts' => true])->assertForbidden();
 
     // Super-Admin and the Owner role are never deleted; a super admin never deletes themselves.
     $this->actingAs($superAdmin)->deleteJson('/roles/'.Role::superAdminId(), ['password' => 'password'])->assertForbidden();

@@ -15,7 +15,7 @@ use Illuminate\Support\Str;
  *
  * A TV has no login, so it proves who it is with a long random token instead.
  * Getting that token onto the TV is the whole problem: the device asks for a
- * short code, shows it on screen, and the shop owner types it into their own
+ * short code, shows it on screen, and the organization owner types it into their own
  * panel. Only then does a token exist, and only the device that asked for the
  * code can collect it.
  */
@@ -32,7 +32,7 @@ class DevicePairing
     /**
      * Give a device a fresh pairing code. Re-registering the same device returns
      * its live code rather than minting a new one, so a page refresh does not
-     * change the number a shop owner is halfway through typing.
+     * change the number an organization owner is halfway through typing.
      *
      * @return array{device_uuid: string, code: string, expires_at: string, poll_secret: string, known_device: bool}
      */
@@ -187,8 +187,8 @@ class DevicePairing
             // screen and leaves the original stranded with all of its playlist.
             //
             // The screen's NAME deliberately does not travel with it. This endpoint
-            // is open, and whoever holds a uuid has no business learning what a
-            // shop calls its televisions.
+            // is open, and whoever holds a uuid has no business learning what an
+            // organization calls its televisions.
             'known_device' => Screen::where('device_uuid', $request->device_uuid)->exists(),
         ];
     }

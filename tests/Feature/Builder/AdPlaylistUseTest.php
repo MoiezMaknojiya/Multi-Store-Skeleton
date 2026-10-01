@@ -4,9 +4,9 @@ use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
@@ -26,14 +26,14 @@ use Illuminate\Support\Facades\Storage;
 beforeEach(function () {
     Storage::fake('public');
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->designer = createStoreUser($this->store, [
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->designer = createOrganizationUser($this->organization, [
         'ad-view', 'ad-store', 'ad-update', 'screen-view', 'screen-update', 'screen-playlist', 'media-view',
         'channel-view', 'channel-update',
     ], 'Designer');
-    $this->actingAs($this->designer)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->designer)->withSession(['current_organization_id' => $this->organization->id]);
 
-    $this->screen = Screen::factory()->create(['store_id' => $this->store->id, 'name' => 'Lobby TV']);
+    $this->screen = Screen::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Lobby TV']);
 });
 
 /** The ids a picker answers with. */
@@ -43,8 +43,8 @@ function pickerIds(string $uri, string $key = 'media'): array
 }
 
 test('a draft is offered nowhere; published, it is in the Content library and the channel picker at once', function () {
-    $ad = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id, 'name' => 'Winter sale']);
-    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Deals']);
+    $ad = BuilderAd::factory()->withText()->create(['organization_id' => $this->organization->id, 'name' => 'Winter sale']);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Deals']);
 
     // A draft has no page yet: no picker has anything of it.
     expect(Media::count())->toBe(0);
@@ -71,8 +71,8 @@ test('a draft is offered nowhere; published, it is in the Content library and th
 });
 
 test('unpublished, an ad leaves both pickers until it is published again', function () {
-    $ad = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id]);
-    $channel = Channel::factory()->create(['store_id' => $this->store->id]);
+    $ad = BuilderAd::factory()->withText()->published()->create(['organization_id' => $this->organization->id]);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id]);
 
     $this->postJson("/builder/{$ad->id}/unpublish")->assertOk();
 
@@ -86,9 +86,9 @@ test('unpublished, an ad leaves both pickers until it is published again', funct
 });
 
 test('an ad a channel shows stays out of the Content library, and one a playlist holds stays out of the channel picker', function () {
-    $inChannel = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id, 'name' => 'Channel sale']);
-    $onPlaylist = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id, 'name' => 'Lobby sale']);
-    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Deals']);
+    $inChannel = BuilderAd::factory()->withText()->published()->create(['organization_id' => $this->organization->id, 'name' => 'Channel sale']);
+    $onPlaylist = BuilderAd::factory()->withText()->published()->create(['organization_id' => $this->organization->id, 'name' => 'Lobby sale']);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Deals']);
 
     ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $inChannel->media_id]);
     PlaylistItem::create(['screen_id' => $this->screen->id, 'media_id' => $onPlaylist->media_id, 'position' => 0, 'duration_seconds' => 10]);
@@ -98,7 +98,7 @@ test('an ad a channel shows stays out of the Content library, and one a playlist
 });
 
 test('the tick is gone: no address answers it, and no ad carries it', function () {
-    $ad = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id]);
+    $ad = BuilderAd::factory()->withText()->published()->create(['organization_id' => $this->organization->id]);
 
     $this->postJson("/builder/{$ad->id}/in-playlists", ['in_playlists' => false])->assertNotFound();
 

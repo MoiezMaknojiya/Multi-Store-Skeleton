@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 
 /**
  * The shared paginatedResponse() behind the panel's paged listings — the activity log, campaigns, channels,
- * dayparts, media, permissions, screens, stores, accounts, and the Ad Builder's ads and assets — so search,
+ * dayparts, media, permissions, screens, organizations, accounts, and the Ad Builder's ads and assets — so search,
  * paging and the JSON shape are written once. (Members and roles are small enough to arrive whole.)
  */
 trait HandlesCrudData

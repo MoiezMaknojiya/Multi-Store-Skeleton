@@ -1,5 +1,5 @@
 /**
- * The Members page (resources/views/members/index.blade.php): the current store's team and its
+ * The Members page (resources/views/members/index.blade.php): the current organization's team and its
  * open invitations. What may be done to each row comes from the server (`can_manage`, the
  * assignable roles), so the page never offers an action MemberController would refuse.
  */
@@ -8,7 +8,7 @@ import { validate, required, emailFormat, maxLen } from '../core/validate.js';
 
 export function registerMembersPage(Alpine) {
     Alpine.data('membersPage', (config = {}) => ({
-        storeName: config.storeName ?? '',
+        organizationName: config.organizationName ?? '',
 
         loading: true,
         members: [],

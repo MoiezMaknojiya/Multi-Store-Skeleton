@@ -6,8 +6,8 @@
  *    (<x-upload-dropzone>, docs/UPLOADS-SPEC.md) sends each in chunks, measures a
  *    video in the browser and adds each to the library as it arrives — this page only
  *    refreshes its list and its storage meter when one has (onUploaded);
- *  - above the stores the page reads one library at a time — the platform's own
- *    or a shop's — and an upload joins the one chosen (docs/CHANNEL-CONTENT-SPEC.md);
+ *  - above the organizations the page reads one library at a time — the platform's own
+ *    or an organization's — and an upload joins the one chosen (docs/CHANNEL-CONTENT-SPEC.md);
  *  - a file a channel shows is refused before the delete is confirmed: the row
  *    carries the server's own words for it;
  *  - a file keeps its name alone (owner, 2026-10-01): Rename is the shared save of
@@ -26,8 +26,8 @@ export function registerMediaTable(Alpine) {
         deleteModalName: 'confirm-media-deletion',
 
         extraState: {
-            // Above the stores, every shop [{id, name}] and the library shown: 'platform' or a shop's id.
-            // Inside a store there is only the store's own, and no choosing (null).
+            // Above the organizations, every organization [{id, name}] and the library shown: 'platform' or an organization's id.
+            // Inside an organization there is only the organization's own, and no choosing (null).
             libraries: config.libraries ?? null,
             library: 'platform',
             filterType: '',

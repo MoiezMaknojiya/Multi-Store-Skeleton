@@ -34,7 +34,7 @@ Schedule::call(function () {
 | Accounts never confirmed — removed after a week (owner's rule, 2026-09-29)
 |--------------------------------------------------------------------------
 | Daily, in the quiet of the night: an account that has not confirmed its email within User::UNVERIFIED_DAYS
-| days goes, with the store it made alone (PruneUnverifiedAccounts).
+| days goes, with the organization it made alone (PruneUnverifiedAccounts).
 */
 Schedule::command('accounts:prune-unverified')->dailyAt('03:15')->name('prune-unverified-accounts')->withoutOverlapping();
 
@@ -53,6 +53,6 @@ Schedule::command('disk:check')->hourly()->name('disk-space-check')->withoutOver
 | Uploads never finished — taken after a day (docs/UPLOADS-SPEC.md)
 |--------------------------------------------------------------------------
 | A file sent in chunks and never added anywhere keeps its bytes for 24 hours; then this takes them, with any part no
-| row names any more (its shop or its person deleted meanwhile).
+| row names any more (its organization or its person deleted meanwhile).
 */
 Schedule::command('uploads:prune')->hourly()->name('prune-uploads')->withoutOverlapping();

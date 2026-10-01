@@ -1,15 +1,15 @@
 <?php
 
 use App\Models\Daypart;
-use App\Models\Store;
+use App\Models\Organization;
 
 /*
 |--------------------------------------------------------------------------
-| Dayparts — the named windows of time a shop reuses
+| Dayparts — the named windows of time an organization reuses
 |--------------------------------------------------------------------------
 |
-| A daypart is shop inventory, like a media file: everyone working in the store
-| shares it, whoever typed it in, and it is invisible from any other store. Its
+| A daypart is organization inventory, like a media file: everyone working in the organization
+| shares it, whoever typed it in, and it is invisible from any other organization. Its
 | exceptions are replaced as a whole set on every save, the same way a playlist
 | is, so a half-applied set of hours never survives.
 |
@@ -28,12 +28,12 @@ function daypartPayload(array $overrides = []): array
 }
 
 beforeEach(function () {
-    $this->store = Store::factory()->create();
-    $this->actor = createStoreUser($this->store, [
+    $this->organization = Organization::factory()->create();
+    $this->actor = createOrganizationUser($this->organization, [
         'daypart-view', 'daypart-store', 'daypart-update', 'daypart-destroy',
     ]);
 
-    $this->actingAs($this->actor)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->actor)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 test('guests cannot reach any daypart endpoint', function () {
@@ -69,7 +69,7 @@ test('a daypart is created with its exceptions in one call', function () {
 
     $daypart = Daypart::where('name', 'Deli hours')->firstOrFail();
 
-    expect($daypart->store_id)->toBe($this->store->id);
+    expect($daypart->organization_id)->toBe($this->organization->id);
     expect($daypart->created_by)->toBe($this->actor->id);
     // "H:i" in PHP whichever database is underneath — see HasClockTimes.
     expect($daypart->start_time)->toBe('07:00');
@@ -81,7 +81,7 @@ test('a daypart is created with its exceptions in one call', function () {
 });
 
 test('saving replaces the whole set of exceptions rather than adding to it', function () {
-    $daypart = Daypart::factory()->create(['store_id' => $this->store->id]);
+    $daypart = Daypart::factory()->create(['organization_id' => $this->organization->id]);
     $daypart->syncExceptions([
         ['weekday' => 1, 'start_time' => '10:00', 'end_time' => '12:00'],
         ['weekday' => 2, 'start_time' => '10:00', 'end_time' => '12:00'],
@@ -116,29 +116,29 @@ test('an end time equal to the start is refused, because it has no honest readin
     expect(Daypart::count())->toBe(0);
 });
 
-test('two dayparts in one store cannot share a name, but two stores can', function () {
-    $otherStore = Store::factory()->create();
-    $neighbour = createStoreUser($otherStore, ['daypart-store'], 'Neighbour Role');
+test('two dayparts in one organization cannot share a name, but two organizations can', function () {
+    $otherOrganization = Organization::factory()->create();
+    $neighbour = createOrganizationUser($otherOrganization, ['daypart-store'], 'Neighbour Role');
 
     $this->postJson('/dayparts', daypartPayload())->assertOk();
 
-    // The same name in a different store is a different window entirely: the name check looks inside the
-    // store the person works in, so it goes through the endpoint rather than the factory.
-    $this->actingAs($neighbour)->withSession(['current_store_id' => $otherStore->id])
+    // The same name in a different organization is a different window entirely: the name check looks inside the
+    // organization the person works in, so it goes through the endpoint rather than the factory.
+    $this->actingAs($neighbour)->withSession(['current_organization_id' => $otherOrganization->id])
         ->postJson('/dayparts', daypartPayload())->assertOk();
 
-    // Back in the first store, the name is taken.
-    $this->actingAs($this->actor)->withSession(['current_store_id' => $this->store->id])
+    // Back in the first organization, the name is taken.
+    $this->actingAs($this->actor)->withSession(['current_organization_id' => $this->organization->id])
         ->postJson('/dayparts', daypartPayload())
         ->assertStatus(422)
         ->assertJsonValidationErrors('name');
 
-    expect(Daypart::where('name', 'Deli hours')->orderBy('store_id')->pluck('store_id')->all())
-        ->toBe([$this->store->id, $otherStore->id]);
+    expect(Daypart::where('name', 'Deli hours')->orderBy('organization_id')->pluck('organization_id')->all())
+        ->toBe([$this->organization->id, $otherOrganization->id]);
 });
 
 test('renaming a daypart does not collide with its own name', function () {
-    $daypart = Daypart::factory()->create(['store_id' => $this->store->id, 'name' => 'Deli hours']);
+    $daypart = Daypart::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Deli hours']);
 
     $this->putJson("/dayparts/{$daypart->id}", daypartPayload([
         'name' => 'Deli hours', 'start_time' => '08:00',
@@ -164,7 +164,7 @@ test('one weekday cannot appear twice, and a lone time is refused', function () 
 });
 
 test('retiring a daypart keeps it, it just leaves the pickers', function () {
-    $daypart = Daypart::factory()->create(['store_id' => $this->store->id]);
+    $daypart = Daypart::factory()->create(['organization_id' => $this->organization->id]);
 
     $this->putJson("/dayparts/{$daypart->id}", daypartPayload([
         'name' => $daypart->name, 'is_retired' => true,
@@ -175,9 +175,9 @@ test('retiring a daypart keeps it, it just leaves the pickers', function () {
     expect(Daypart::count())->toBe(1);
 });
 
-test('a store user only sees the dayparts of the store they are working in', function () {
-    $mine = Daypart::factory()->create(['store_id' => $this->store->id, 'name' => 'Deli hours']);
-    $theirs = Daypart::factory()->create(['store_id' => Store::factory()->create()->id, 'name' => 'Bakery hours']);
+test('an organization user only sees the dayparts of the organization they are working in', function () {
+    $mine = Daypart::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Deli hours']);
+    $theirs = Daypart::factory()->create(['organization_id' => Organization::factory()->create()->id, 'name' => 'Bakery hours']);
 
     $ids = collect($this->getJson('/dayparts/data')->assertOk()->json('dayparts'))->pluck('id');
 
@@ -185,20 +185,20 @@ test('a store user only sees the dayparts of the store they are working in', fun
     expect($ids)->not->toContain($theirs->id);
 });
 
-test('another store\'s daypart is unreachable, not merely hidden', function () {
+test('another organization\'s daypart is unreachable, not merely hidden', function () {
     $theirs = Daypart::factory()->create([
-        'store_id' => Store::factory()->create()->id, 'name' => 'Bakery hours',
+        'organization_id' => Organization::factory()->create()->id, 'name' => 'Bakery hours',
     ]);
 
-    // 404, never 403: from this store that daypart does not exist.
+    // 404, never 403: from this organization that daypart does not exist.
     $this->putJson("/dayparts/{$theirs->id}", daypartPayload(['name' => 'Hijacked']))->assertNotFound();
     $this->deleteJson("/dayparts/{$theirs->id}")->assertNotFound();
 
     $this->assertDatabaseHas('dayparts', ['id' => $theirs->id, 'name' => 'Bakery hours']);
 });
 
-test('a daypart belongs to a store, so one cannot be created without a store context', function () {
-    // A super admin has the permission everywhere but is standing in no store, so
+test('a daypart belongs to an organization, so one cannot be created without an organization context', function () {
+    // A super admin has the permission everywhere but is standing in no organization, so
     // the gate lets them through and the controller is what has to say no.
     $globalActor = createSuperAdmin(['daypart-store']);
 
@@ -211,14 +211,14 @@ test('a daypart belongs to a store, so one cannot be created without a store con
     expect(Daypart::count())->toBe(0);
 });
 
-test('a daypart is shop inventory — a colleague in the same store can edit it', function () {
-    $colleague = createStoreUser($this->store, ['daypart-view', 'daypart-update'], 'Colleague Role');
+test('a daypart is organization inventory — a colleague in the same organization can edit it', function () {
+    $colleague = createOrganizationUser($this->organization, ['daypart-view', 'daypart-update'], 'Colleague Role');
     $daypart = Daypart::factory()->create([
-        'store_id' => $this->store->id, 'created_by' => $this->actor->id,
+        'organization_id' => $this->organization->id, 'created_by' => $this->actor->id,
     ]);
 
     // "Deli hours" belongs to the deli, not to whoever typed it in.
-    $this->actingAs($colleague)->withSession(['current_store_id' => $this->store->id])
+    $this->actingAs($colleague)->withSession(['current_organization_id' => $this->organization->id])
         ->putJson("/dayparts/{$daypart->id}", daypartPayload(['name' => 'Deli hours (winter)']))
         ->assertOk();
 
@@ -226,10 +226,10 @@ test('a daypart is shop inventory — a colleague in the same store can edit it'
 });
 
 test('each daypart action needs its own permission', function () {
-    $viewer = createStoreUser($this->store, ['daypart-view'], 'Viewer Role');
-    $daypart = Daypart::factory()->create(['store_id' => $this->store->id]);
+    $viewer = createOrganizationUser($this->organization, ['daypart-view'], 'Viewer Role');
+    $daypart = Daypart::factory()->create(['organization_id' => $this->organization->id]);
 
-    $this->actingAs($viewer)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($viewer)->withSession(['current_organization_id' => $this->organization->id]);
 
     $this->getJson('/dayparts/data')->assertOk();
     $this->postJson('/dayparts', daypartPayload())->assertForbidden();
@@ -238,7 +238,7 @@ test('each daypart action needs its own permission', function () {
 });
 
 test('deleting a daypart takes its exceptions with it', function () {
-    $daypart = Daypart::factory()->create(['store_id' => $this->store->id]);
+    $daypart = Daypart::factory()->create(['organization_id' => $this->organization->id]);
     $daypart->syncExceptions([['weekday' => 7, 'start_time' => '09:00', 'end_time' => '16:00']]);
 
     $this->deleteJson("/dayparts/{$daypart->id}")->assertOk();
@@ -248,8 +248,8 @@ test('deleting a daypart takes its exceptions with it', function () {
 });
 
 test('dayparts are searchable by name', function () {
-    Daypart::factory()->create(['store_id' => $this->store->id, 'name' => 'Deli hours']);
-    Daypart::factory()->create(['store_id' => $this->store->id, 'name' => 'Bakery hours']);
+    Daypart::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Deli hours']);
+    Daypart::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Bakery hours']);
 
     $names = collect($this->getJson('/dayparts/data?search=deli')->assertOk()->json('dayparts'))->pluck('name');
 
@@ -257,7 +257,7 @@ test('dayparts are searchable by name', function () {
 });
 
 test('the listing carries each daypart\'s exceptions, so a row can show them without a second call', function () {
-    $daypart = Daypart::factory()->create(['store_id' => $this->store->id]);
+    $daypart = Daypart::factory()->create(['organization_id' => $this->organization->id]);
     $daypart->syncExceptions([['weekday' => 7, 'start_time' => '09:00', 'end_time' => '16:00']]);
 
     $row = collect($this->getJson('/dayparts/data')->assertOk()->json('dayparts'))->firstWhere('id', $daypart->id);

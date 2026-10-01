@@ -28,12 +28,12 @@ class Screen extends Model
      *  The player beats every 60s, so three minutes tolerates two missed beats. */
     public const OFFLINE_AFTER_MINUTES = 3;
 
-    /** What a newly paired television keeps until the shop says otherwise. An IANA
+    /** What a newly paired television keeps until the organization says otherwise. An IANA
      *  zone, so it follows the daylight-saving switch on its own. */
     public const DEFAULT_TIMEZONE = 'America/Chicago';
 
     protected $fillable = [
-        'store_id', 'name', 'orientation', 'timezone', 'default_media_id',
+        'organization_id', 'name', 'orientation', 'timezone', 'default_media_id',
         'accepts_network_ads', 'token_hash', 'device_uuid',
         'paired_at', 'paired_by', 'last_seen_at', 'created_by',
     ];
@@ -53,8 +53,8 @@ class Screen extends Model
     }
 
     /**
-     * Screens are scoped to the STORE, like media: a screen is shop equipment, so everyone working in that
-     * shop manages it. Global users and super admins span every store; with no store selected there is nothing.
+     * Screens are scoped to the ORGANIZATION, like media: a screen is organization equipment, so everyone working in that
+     * organization manages it. Global users and super admins span every organization; with no organization selected there is nothing.
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
@@ -62,18 +62,18 @@ class Screen extends Model
             return $query;
         }
 
-        $currentStoreId = session('current_store_id');
+        $currentOrganizationId = session('current_organization_id');
 
-        if (! $currentStoreId) {
+        if (! $currentOrganizationId) {
             return $query->whereRaw('0 = 1');
         }
 
-        return $query->where('store_id', $currentStoreId);
+        return $query->where('organization_id', $currentOrganizationId);
     }
 
-    public function store(): BelongsTo
+    public function organization(): BelongsTo
     {
-        return $this->belongsTo(Store::class);
+        return $this->belongsTo(Organization::class);
     }
 
     /** The ordered list this screen plays. */

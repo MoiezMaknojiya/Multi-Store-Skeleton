@@ -3,7 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -24,7 +24,7 @@ class MediaFactory extends Factory
         $name = (string) Str::ulid();
 
         return [
-            'store_id' => Store::factory(),
+            'organization_id' => Organization::factory(),
             'title' => fake()->words(3, true),
             'type' => Media::TYPE_IMAGE,
             'mime_type' => 'image/jpeg',
@@ -49,10 +49,10 @@ class MediaFactory extends Factory
         ]);
     }
 
-    /** A file of the platform's own library, which belongs to no shop. */
+    /** A file of the platform's own library, which belongs to no organization. */
     public function platformOwned(): static
     {
-        return $this->state(fn () => ['store_id' => null]);
+        return $this->state(fn () => ['organization_id' => null]);
     }
 
     /** A published Ad Builder page, as AdPublisher writes one. */

@@ -1,11 +1,11 @@
-{{-- The current store's team (docs/STORE-ORGANIZATION-SPEC.md §8). Buttons are gated by the
+{{-- The current organization's team (docs/ORGANIZATION-SPEC.md §8). Buttons are gated by the
      route permissions here; what may be done to each ROW comes from the server (can_manage). --}}
 <x-app-layout>
     <x-slot name="header">
         <h1 class="page-title">{{ __('Members') }}</h1>
     </x-slot>
 
-    <div x-data="membersPage({{ Js::from(['storeName' => $store->name]) }})"
+    <div x-data="membersPage({{ Js::from(['organizationName' => $organization->name]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
         {{-- Invite stands on each list's header line (beside the members' search); leaving — the person's own step —
@@ -29,7 +29,7 @@
         {{-- Members --}}
         <div x-show="tab === 'members'" class="card" id="panel-members" role="tabpanel" aria-labelledby="tab-members" dusk="members-table">
             <div class="card-header">
-                <h2 class="text-subheading min-w-0">Team of {{ $store->name }}</h2>
+                <h2 class="text-subheading min-w-0">Team of {{ $organization->name }}</h2>
                 <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap sm:justify-end">
                     @can('member-invite')
                         <x-crud.add-button label="Invite Member" @click="openInvite()" dusk="invite-member" />
@@ -177,7 +177,7 @@
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Invite a member</h2>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        They'll get an email with a link to join {{ $store->name }}.
+                        They'll get an email with a link to join {{ $organization->name }}.
                     </p>
                 </div>
 
@@ -227,7 +227,7 @@
             <form @submit.prevent="removeMember()" class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Remove <span x-text="selectedMember?.name"></span>?</h2>
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                    They lose access to {{ $store->name }} at once. Their account and what they added stay.
+                    They lose access to {{ $organization->name }} at once. Their account and what they added stay.
                 </p>
 
                 {{-- They can be invited back, so it asks only that it is you. --}}
@@ -261,16 +261,16 @@
             </div>
         </x-modal>
 
-        {{-- Leave store --}}
-        <x-modal name="leave-store" :show="false" maxWidth="md" focusable>
+        {{-- Leave organization --}}
+        <x-modal name="leave-organization" :show="false" maxWidth="md" focusable>
             <div class="p-6">
-                <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Leave {{ $store->name }}?</h2>
+                <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Leave {{ $organization->name }}?</h2>
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
                     You lose access at once. To come back, someone must invite you again.
                 </p>
                 <div class="mt-6 flex flex-wrap justify-end gap-3">
-                    <x-secondary-button x-on:click="$dispatch('close-modal', 'leave-store')">Cancel</x-secondary-button>
-                    <x-danger-button x-on:click="leave()" x-bind:disabled="leaving" dusk="leave-store-confirm">
+                    <x-secondary-button x-on:click="$dispatch('close-modal', 'leave-organization')">Cancel</x-secondary-button>
+                    <x-danger-button x-on:click="leave()" x-bind:disabled="leaving" dusk="leave-organization-confirm">
                         <x-spinner x-show="leaving" x-cloak />
                         Leave Organization
                     </x-danger-button>
@@ -280,16 +280,16 @@
 
         {{-- Leaving: the person's own step, at the foot of the page like Delete Account on the profile. The only
              Owner is told at once why not (the server refuses it too). --}}
-        <div class="card p-5 sm:p-6" dusk="leave-store-card">
+        <div class="card p-5 sm:p-6" dusk="leave-organization-card">
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div class="min-w-0">
-                    <h2 class="text-subheading">Leave {{ $store->name }}</h2>
+                    <h2 class="text-subheading">Leave {{ $organization->name }}</h2>
                     <p class="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
                         You lose access at once.
                     </p>
                 </div>
-                <button type="button" class="btn-secondary" dusk="leave-store"
-                    x-on:click="isSoleOwner() ? window.toast('You are the only Owner of ' + storeName + '. Make someone else an Owner before you leave.') : $dispatch('open-modal', 'leave-store')">
+                <button type="button" class="btn-secondary" dusk="leave-organization"
+                    x-on:click="isSoleOwner() ? window.toast('You are the only Owner of ' + organizationName + '. Make someone else an Owner before you leave.') : $dispatch('open-modal', 'leave-organization')">
                     Leave Organization
                 </button>
             </div>

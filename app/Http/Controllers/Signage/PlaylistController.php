@@ -31,8 +31,8 @@ class PlaylistController extends Controller
     /** A sane ceiling — a playlist longer than this is a mistake, not a use case. */
     private const MAX_ITEMS = 200;
 
-    /** Same reasoning for one item's schedules: a handful expresses everything a
-     *  shop actually means, and a hundred is a runaway client. */
+    /** Same reasoning for one item's schedules: a handful expresses everything an
+     *  organization actually means, and a hundred is a runaway client. */
     private const MAX_RULES = 10;
 
     /** The current playlist, with just enough of each file to render a row. */
@@ -47,7 +47,7 @@ class PlaylistController extends Controller
     }
 
     /**
-     * The media this screen is allowed to play: its own store's library.
+     * The media this screen is allowed to play: its own organization's library.
      *
      * Its own endpoint, gated by the playlist permission, so someone who may
      * change playlists does not also need media-view — a permission is meant to
@@ -65,7 +65,7 @@ class PlaylistController extends Controller
         // Never an Ad Builder page taken off the screens (unpublished): nobody picks one until it is published
         // again — nor any file a channel shows, an ad included (owner's rule, 2026-09-26): it would play twice on a
         // screen that also carries the channel. Publish alone decides the rest (owner, 2026-10-01).
-        $media = Media::where('store_id', $screen->store_id)
+        $media = Media::where('organization_id', $screen->organization_id)
             ->withoutDrafts()
             ->inNoChannel()
             ->when($search !== '', fn (Builder $q) => $q->where('title', 'like', "%{$search}%"))
@@ -86,8 +86,8 @@ class PlaylistController extends Controller
     }
 
     /**
-     * Every channel this screen could carry: the platform's, offered to every shop, and
-     * the screen's own store's channels — never another store's (Channel::availableTo).
+     * Every channel this screen could carry: the platform's, offered to every organization, and
+     * the screen's own organization's channels — never another organization's (Channel::availableTo).
      *
      * Gated by the playlist permission, like the media picker above, and described
      * against the screen's own today: "3 ads running" has to mean the three this
@@ -103,8 +103,8 @@ class PlaylistController extends Controller
         return response()->json([
             'channels' => $channels->map(fn (Channel $channel) => [
                 'id' => $channel->id,
-                // The store's own channel, told apart in the box from the platform's.
-                'is_store_channel' => $channel->store_id !== null,
+                // The organization's own channel, told apart in the box from the platform's.
+                'is_organization_channel' => $channel->organization_id !== null,
                 ...$this->channelSummary($channel, $today),
                 // "Show ads" in the box: exactly what adding this channel would play.
                 'ads' => $channel->runningAdsOn($today)->map(fn (ChannelAd $ad) => [
@@ -156,11 +156,11 @@ class PlaylistController extends Controller
 
         $items = $validated['items'];
         $this->assertEachLineIsAFileOrAChannel($items);
-        $this->assertMediaBelongsToTheSameStore($screen, $items);
+        $this->assertMediaBelongsToTheSameOrganization($screen, $items);
         $this->assertFilesAreInNoChannel($items);
         $this->assertPicturesStayUpLongEnough($items);
         $this->assertChannelsAreAvailable($screen, $items);
-        $this->assertDaypartsBelongToTheSameStore($screen, $items);
+        $this->assertDaypartsBelongToTheSameOrganization($screen, $items);
 
         // A save replaces the WHOLE list, so a client working from a stale copy
         // would quietly wipe out whatever changed in the meantime — a colleague
@@ -197,7 +197,7 @@ class PlaylistController extends Controller
      * Copy this whole playlist — items, durations and schedules — onto other screens.
      *
      * Deliberately the WHOLE playlist rather than one item's schedule: it is one
-     * thing to explain, one thing to undo, and it is what a shop actually wants when
+     * thing to explain, one thing to undo, and it is what an organization actually wants when
      * three televisions are meant to show the same thing. The target's playlist is
      * replaced, so the panel asks first and says exactly what it is about to wipe —
      * copyTargets() below is what fills that confirmation in.
@@ -214,7 +214,7 @@ class PlaylistController extends Controller
         ]);
 
         $targets = Screen::visibleTo(auth()->user())
-            ->where('store_id', $screen->store_id)
+            ->where('organization_id', $screen->organization_id)
             ->whereIn('id', $validated['target_screen_ids'])
             ->where('id', '!=', $screen->id)
             ->get();
@@ -265,7 +265,7 @@ class PlaylistController extends Controller
         $screen = Screen::visibleTo(auth()->user())->findOrFail($screen->id);
 
         $targets = Screen::visibleTo(auth()->user())
-            ->where('store_id', $screen->store_id)
+            ->where('organization_id', $screen->organization_id)
             ->where('id', '!=', $screen->id)
             ->withCount('playlistItems')
             ->orderBy('name')
@@ -324,7 +324,7 @@ class PlaylistController extends Controller
                 $rule->created_at = $from;
 
                 if ($rule->daypart_id !== null
-                    && ! Daypart::where('id', $rule->daypart_id)->where('store_id', $screen->store_id)->exists()) {
+                    && ! Daypart::where('id', $rule->daypart_id)->where('organization_id', $screen->organization_id)->exists()) {
                     throw ValidationException::withMessages([
                         'rules' => 'Those opening hours belong to a different organization.',
                     ]);
@@ -345,11 +345,11 @@ class PlaylistController extends Controller
     }
 
     /**
-     * A screen can only play its own store's files. Without this, a client could
-     * post any media id it liked and a shop would end up showing another shop's
-     * content — the store wall applied to the one place it is easy to forget.
+     * A screen can only play its own organization's files. Without this, a client could
+     * post any media id it liked and an organization would end up showing another organization's
+     * content — the organization wall applied to the one place it is easy to forget.
      */
-    private function assertMediaBelongsToTheSameStore(Screen $screen, array $items): void
+    private function assertMediaBelongsToTheSameOrganization(Screen $screen, array $items): void
     {
         // Null means "this line is a channel", nothing else — so the filter asks for
         // exactly that, rather than dropping every falsy value with it.
@@ -359,7 +359,7 @@ class PlaylistController extends Controller
             return;
         }
 
-        $allowed = Media::where('store_id', $screen->store_id)->whereIn('id', $ids)->count();
+        $allowed = Media::where('organization_id', $screen->organization_id)->whereIn('id', $ids)->count();
 
         if ($allowed !== $ids->count()) {
             throw ValidationException::withMessages([
@@ -444,8 +444,8 @@ class PlaylistController extends Controller
     }
 
     /**
-     * A channel line may carry the platform's channel or the screen's own store's — the
-     * store wall again, since a channel id is a number any client can post. It also catches
+     * A channel line may carry the platform's channel or the screen's own organization's — the
+     * organization wall again, since a channel id is a number any client can post. It also catches
      * a channel deleted while this page was open, which would otherwise fail on the foreign
      * key with an error nobody could read.
      */
@@ -468,7 +468,7 @@ class PlaylistController extends Controller
      * A daypart on a rule is a foreign key a client can post any number into, so it
      * goes through the same wall the media does.
      */
-    private function assertDaypartsBelongToTheSameStore(Screen $screen, array $items): void
+    private function assertDaypartsBelongToTheSameOrganization(Screen $screen, array $items): void
     {
         $ids = collect($items)
             ->flatMap(fn (array $item) => $item['rules'] ?? [])
@@ -480,7 +480,7 @@ class PlaylistController extends Controller
             return;
         }
 
-        $allowed = Daypart::where('store_id', $screen->store_id)->whereIn('id', $ids)->count();
+        $allowed = Daypart::where('organization_id', $screen->organization_id)->whereIn('id', $ids)->count();
 
         if ($allowed !== $ids->count()) {
             throw ValidationException::withMessages([
@@ -498,7 +498,7 @@ class PlaylistController extends Controller
         // Sorted by KEY before anything reads their order, and this is not defensive
         // tidying: a validated array is rebuilt rule by rule, not row by row, so a line
         // that has no `media_id` at all — a channel — is inserted into the result AFTER
-        // every line that has one. The keys are still the positions the shop arranged;
+        // every line that has one. The keys are still the positions the organization arranged;
         // the array's own order is not. Trusting it saved "channel first, poster second"
         // to a television the other way round.
         ksort($items);
@@ -644,7 +644,7 @@ class PlaylistController extends Controller
         return [
             'items.*.rules' => ['array', 'max:'.self::MAX_RULES],
             // min:1 deliberately: a posted 0 reads as "no id" to filled()/->filter() and would pass the
-            // same-store check below on its way to a foreign-key error.
+            // same-organization check below on its way to a foreign-key error.
             'items.*.rules.*.daypart_id' => ['nullable', 'integer', 'min:1'],
             'items.*.rules.*.starts_on' => ['nullable', 'date_format:Y-m-d'],
             'items.*.rules.*.ends_on' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:items.*.rules.*.starts_on'],
@@ -734,7 +734,7 @@ class PlaylistController extends Controller
                     'title' => $item->media?->title,
                     'type' => $item->media?->type,
                     // Which way the file is: the page says when it is not the screen's way, because that
-                    // plays with bars (docs/AD-BUILDER-SPEC.md §12) — the shop's to notice, not a refusal.
+                    // plays with bars (docs/AD-BUILDER-SPEC.md §12) — the organization's to notice, not a refusal.
                     'orientation' => $item->media?->orientation,
                     'thumbnail_url' => $item->media?->thumbnail_url,
                     // Both null means "always"; the player never sees an item whose

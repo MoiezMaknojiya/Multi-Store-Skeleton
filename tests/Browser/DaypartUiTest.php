@@ -3,7 +3,7 @@
 namespace Tests\Browser;
 
 use App\Models\Daypart;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
@@ -12,7 +12,7 @@ use Tests\DuskTestCase;
 /**
  * Building a daypart through the real page.
  *
- * The backend tests prove the rules; this proves the shop owner can actually reach
+ * The backend tests prove the rules; this proves the organization owner can actually reach
  * them. The specific thing it guards against is a page that renders fine in a Blade
  * assertion and throws in a browser — an Alpine method the view calls but the
  * component never defined, a repeating row whose model never binds, a summary that
@@ -22,12 +22,12 @@ class DaypartUiTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    /** A shop owner who runs their own opening hours. */
-    private function owner(Store $store): User
+    /** An organization owner who runs their own opening hours. */
+    private function owner(Organization $organization): User
     {
         $this->seedSuperAdmin();
 
-        return $this->storeMember($store, ['daypart-view', 'daypart-store', 'daypart-update', 'daypart-destroy']);
+        return $this->organizationMember($organization, ['daypart-view', 'daypart-store', 'daypart-update', 'daypart-destroy']);
     }
 
     /**
@@ -36,17 +36,17 @@ class DaypartUiTest extends DuskTestCase
      */
     public function test_an_owner_builds_a_daypart_with_an_exception_then_retires_and_deletes_it(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->owner($store);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->owner($organization);
 
-        $this->browse(function (Browser $browser) use ($owner, $store) {
+        $this->browse(function (Browser $browser) use ($owner, $organization) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
-            // -- Reached the way a shop owner reaches it -----------------------
-            // Through the sidebar, not by typing the URL: dayparts are shop inventory
-            // like the media library, so a store user runs their own — this is not an
+            // -- Reached the way an organization owner reaches it -----------------------
+            // Through the sidebar, not by typing the URL: dayparts are organization inventory
+            // like the media library, so an organization user runs their own — this is not an
             // administrator's page.
             $browser->visit('/dashboard');
             $this->waitForAlpine($browser);
@@ -115,7 +115,7 @@ class DaypartUiTest extends DuskTestCase
                 ->assertSee('Active');
 
             $daypart = Daypart::with('exceptions')->firstOrFail();
-            $this->assertSame($store->id, $daypart->store_id);
+            $this->assertSame($organization->id, $daypart->organization_id);
             $this->assertSame('07:00', $daypart->start_time);
             $this->assertNull($daypart->windowFor(7), 'Sunday should be closed');
             $this->assertSame(['07:00', '20:00'], $daypart->windowFor(6), 'Saturday should have its own hours');
@@ -162,17 +162,17 @@ class DaypartUiTest extends DuskTestCase
      */
     public function test_a_window_that_crosses_midnight_is_labelled_as_such(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->owner($store);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->owner($organization);
 
         Daypart::factory()->overnight()->create([
-            'store_id' => $store->id, 'name' => 'Late night',
+            'organization_id' => $organization->id, 'name' => 'Late night',
         ]);
 
-        $this->browse(function (Browser $browser) use ($owner, $store) {
+        $this->browse(function (Browser $browser) use ($owner, $organization) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/dayparts');
             $this->waitForAlpine($browser);

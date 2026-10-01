@@ -1,9 +1,9 @@
 /**
  * The Roles page (resources/views/roles/index.blade.php), from where the person stands
- * (docs/STORE-ORGANIZATION-SPEC.md §2–4 — owner's rules, 2026-09-17): on the platform every role — the
- * super admin makes a role and says what it is for (a store role, offered in every store, or a platform
- * role), and looks after the custom roles stores made; inside a store the store roles to read and the
- * store's own custom roles.
+ * (docs/ORGANIZATION-SPEC.md §2–4 — owner's rules, 2026-09-17): on the platform every role — the
+ * super admin makes a role and says what it is for (an organization role, offered in every organization, or a platform
+ * role), and looks after the custom roles organizations made; inside an organization the organization roles to read and the
+ * organization's own custom roles.
  *
  * The permissions offered in the form come from the server (/roles/assignable) and are only those the
  * role can hold — nothing greyed out — so the checklist never offers what RoleController would refuse.
@@ -11,10 +11,10 @@
 import axios from 'axios';
 import { validate, required, maxLen, minCount } from '../core/validate.js';
 
-/* Group titles, in the order a store is set up and run. Anything else is appended. The catalogue's own
+/* Group titles, in the order an organization is set up and run. Anything else is appended. The catalogue's own
    permissions (permission-*) are listed for the Super-Admin role alone. */
 const GROUPS = {
-    store: 'Organizations',
+    organization: 'Organizations',
     member: 'Members',
     role: 'Roles',
     screen: 'Screens',
@@ -27,13 +27,13 @@ const GROUPS = {
     permission: 'Permissions',
 };
 
-/* The groups that reach every store on a platform role, and only the member's own store on a store's role.
-   Accounts are not among them: they are the platform's alone, and never listed for a store's role. */
-const SCOPED_GROUPS = ['store', 'channel', 'activity'];
+/* The groups that reach every organization on a platform role, and only the member's own organization on an organization's role.
+   Accounts are not among them: they are the platform's alone, and never listed for an organization's role. */
+const SCOPED_GROUPS = ['organization', 'channel', 'activity'];
 
 const KINDS = {
     super_admin: { label: 'Super admin', badge: 'badge-danger' },
-    store: { label: 'Organization role', badge: 'badge-warning' },
+    organization: { label: 'Organization role', badge: 'badge-warning' },
     platform: { label: 'Platform role', badge: 'badge-info' },
     custom: { label: 'Custom role', badge: 'badge-neutral' },
 };
@@ -41,14 +41,14 @@ const KINDS = {
 export function registerRolesPage(Alpine) {
     Alpine.data('rolesPage', (config = {}) => ({
         isPlatform: config.isPlatform ?? false,
-        storeName: config.storeName ?? null,
+        organizationName: config.organizationName ?? null,
 
         loading: true,
         roles: [],
         assignable: [],
         loadingAssignable: false,
 
-        form: { name: '', type: 'store', permissions: [] },
+        form: { name: '', type: 'organization', permissions: [] },
         formErrors: {},
         editingRole: null,
         openingForm: false,
@@ -82,7 +82,7 @@ export function registerRolesPage(Alpine) {
             return this.isPlatform ? this.roles.filter((role) => role.kind !== 'custom') : this.roles;
         },
 
-        storeCustomRoles() {
+        organizationCustomRoles() {
             return this.isPlatform ? this.roles.filter((role) => role.kind === 'custom') : [];
         },
 
@@ -110,7 +110,7 @@ export function registerRolesPage(Alpine) {
 
         /* ── Create / edit ─────────────────────────────────────────────── */
 
-        /** What the role in the form is: store, platform or custom. */
+        /** What the role in the form is: organization, platform or custom. */
         formType() {
             return this.editingRole?.kind ?? (this.isPlatform ? this.form.type : 'custom');
         },
@@ -120,21 +120,21 @@ export function registerRolesPage(Alpine) {
             if (this.editingRole?.is_owner_role) {
                 return 'This is the Owner role: whoever holds it owns their organization. You can rename it and change what it allows; it is never deleted.';
             }
-            if (type === 'store') return 'An organization role is offered in every organization. What you save here applies in all of them at once.';
+            if (type === 'organization') return 'An organization role is offered in every organization. What you save here applies in all of them at once.';
             if (type === 'platform') return 'A platform role works above the organizations: what it allows reaches every organization. The permission catalogue stays with Super-Admin.';
-            if (this.isPlatform) return `A custom role of ${this.editingRole?.store_name ?? 'one organization'}: it is offered there alone.`;
+            if (this.isPlatform) return `A custom role of ${this.editingRole?.organization_name ?? 'one organization'}: it is offered there alone.`;
 
-            return `A custom role of ${this.storeName}. You can only give it permissions you hold yourself.`;
+            return `A custom role of ${this.organizationName}. You can only give it permissions you hold yourself.`;
         },
 
-        /** The hint beside a group whose permissions reach the member's own store alone on a store's role. */
+        /** The hint beside a group whose permissions reach the member's own organization alone on an organization's role. */
         groupHint(group) {
             return this.formType() !== 'platform' && SCOPED_GROUPS.includes(group.key) ? 'This organization only' : '';
         },
 
         async loadAssignable(params) {
-            // Only the list asked for last may fill the checklist: Store role, Platform role, Store role again
-            // sends three requests, and the platform's list landing last would offer a store role what it
+            // Only the list asked for last may fill the checklist: Organization role, Platform role, Organization role again
+            // sends three requests, and the platform's list landing last would offer an organization role what it
             // cannot hold — and untick what it can.
             const token = ++this.assignableToken;
             this.loadingAssignable = true;
@@ -161,7 +161,7 @@ export function registerRolesPage(Alpine) {
                 this.formErrors = {};
                 this.form = {
                     name: role?.name ?? '',
-                    type: role?.kind === 'platform' ? 'platform' : 'store',
+                    type: role?.kind === 'platform' ? 'platform' : 'organization',
                     permissions: role ? role.permissions.map((permission) => Number(permission.id)) : [],
                 };
                 this.assignable = [];

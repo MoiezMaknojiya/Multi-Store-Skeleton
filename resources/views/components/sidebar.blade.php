@@ -26,12 +26,12 @@
             icon="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
 
         {{-- Two different sidebars share this file. The platform team (a global role) works
-             above the stores: every store, every account, the platform's own pages. A store
-             member works inside one store: its screens and content, its team — and, when their
-             role there carries them, its channels and activity, for that store alone.
-             The stores themselves are the platform's page only: a member changes the store they
-             work in, and sees every store they belong to, under Settings → Stores (the user menu,
-             and the account at the foot of this bar). See docs/STORE-ORGANIZATION-SPEC.md §8. --}}
+             above the organizations: every organization, every account, the platform's own pages. An organization
+             member works inside one organization: its screens and content, its team — and, when their
+             role there carries them, its channels and activity, for that organization alone.
+             The organizations themselves are the platform's page only: a member changes the organization they
+             work in, and sees every organization they belong to, under Settings → Organizations (the user menu,
+             and the account at the foot of this bar). See docs/ORGANIZATION-SPEC.md §8. --}}
         @php($__onPlatform = auth()->user()->globalRole() !== null)
 
         @if ($__onPlatform)
@@ -58,11 +58,11 @@
             @endcan
         @endif
 
-        {{-- Users first, then Stores (owner, 2026-09-30). --}}
-        @if ($__onPlatform && auth()->user()->can('store-view'))
+        {{-- Users first, then Organizations (owner, 2026-09-30). --}}
+        @if ($__onPlatform && auth()->user()->can('organization-view'))
         <x-sidebar.nav-item
-            href="{{ route('stores.view') }}"
-            routeMatch="stores.*"
+            href="{{ route('organizations.view') }}"
+            routeMatch="organizations.*"
             label="Organizations"
             icon="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
         @endif
@@ -76,7 +76,7 @@
         @endcan
 
         {{-- Screens, then the hours those screens keep, then the files that fill
-             them: the order somebody actually sets a shop up in. --}}
+             them: the order somebody actually sets an organization up in. --}}
         @can('daypart-view')
         <x-sidebar.nav-item
             href="{{ route('dayparts.view') }}"
@@ -108,7 +108,7 @@
         @endcan
 
         @unless ($__onPlatform)
-            {{-- The store's own people: its members and its roles. Accounts are the platform's page (owner's rule, 2026-09-17). --}}
+            {{-- The organization's own people: its members and its roles. Accounts are the platform's page (owner's rule, 2026-09-17). --}}
             {{-- Inline form only in this file: Blade reads a block-form PHP section as starting at the
                  FIRST inline one above it, and the page stops compiling. --}}
             @php($__teamHome = collect(['member-view' => 'members.view', 'role-view' => 'roles.view'])->first(fn ($route, $permission) => auth()->user()->can($permission)))
@@ -129,8 +129,8 @@
             @endif
         @endunless
 
-        {{-- The platform's own advertising, sold to brands and carried by shops that
-             agreed. Not a store's page at all — only a super admin ever sees it. --}}
+        {{-- The platform's own advertising, sold to brands and carried by organizations that
+             agreed. Not an organization's page at all — only a super admin ever sees it. --}}
         @can('campaign-manage')
         <x-sidebar.nav-item
             href="{{ route('campaigns.view') }}"
@@ -139,7 +139,7 @@
             icon="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
         @endcan
 
-        {{-- Channels: above the stores every channel; inside a store, the store's own
+        {{-- Channels: above the organizations every channel; inside an organization, the organization's own
              channels for its own screens (see ChannelController). --}}
         @can('channel-view')
         <x-sidebar.nav-item
@@ -149,8 +149,8 @@
             icon="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
         @endcan
 
-        {{-- Activity Log: above the stores every store's history; inside a store, that
-             store's own (see ActivityLogController). --}}
+        {{-- Activity Log: above the organizations every organization's history; inside an organization, that
+             organization's own (see ActivityLogController). --}}
         @can('activity-view')
         <x-sidebar.nav-item
             href="{{ route('activity.view') }}"
@@ -161,12 +161,12 @@
 
     </nav>
 
-    {{-- The account at the foot of the bar opens Settings: the profile, and the store's settings. --}}
+    {{-- The account at the foot of the bar opens Settings: the profile, and the organization's settings. --}}
     <div class="px-3 py-4 border-t border-gray-200 dark:border-gray-700">
         <a href="{{ route('profile.edit') }}" dusk="sidebar-settings" title="Settings"
            aria-label="Settings — {{ auth()->user()->name ?? 'User' }}"
-           @if (request()->routeIs('profile.*', 'store-settings.*')) aria-current="page" @endif
-           class="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 {{ request()->routeIs('profile.*', 'store-settings.*') ? 'bg-gray-100 dark:bg-gray-800' : '' }}">
+           @if (request()->routeIs('profile.*', 'organization-settings.*')) aria-current="page" @endif
+           class="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 {{ request()->routeIs('profile.*', 'organization-settings.*') ? 'bg-gray-100 dark:bg-gray-800' : '' }}">
             <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-semibold flex-shrink-0" aria-hidden="true">
                 {{ mb_strtoupper(mb_substr(auth()->user()->name ?: 'U', 0, 1)) }}
             </div>

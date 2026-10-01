@@ -33,7 +33,7 @@ export function registerScreensTable(Alpine) {
         deleteModalName: 'confirm-screen-deletion',
 
         extraState: {
-            hasStore: config.hasStore ?? false,
+            hasOrganization: config.hasOrganization ?? false,
             /* The model's words for the four ways (Screen::ORIENTATIONS), so the list and the dialogs agree. */
             orientations: config.orientations ?? {},
             browserTimezone: browserTimezone(),
@@ -46,9 +46,9 @@ export function registerScreensTable(Alpine) {
             mediaOptionsToken: 0,
 
             /* Network advertising. The panel below is rendered only when the gate
-             * passes, so these are meaningless — and unreachable — to a shopkeeper. */
+             * passes, so these are meaningless — and unreachable — to an organization member. */
 
-            storeAcceptsAds: config.storeAcceptsAds ?? false,
+            organizationAcceptsAds: config.organizationAcceptsAds ?? false,
             savingAds: false,
         },
 
@@ -237,14 +237,14 @@ export function registerScreensTable(Alpine) {
 
             /* ── Network advertising ───────────────────────────────────── */
 
-            /** Does this shop carry advertising at all? Nothing runs until it does. */
-            async toggleStoreAds() {
+            /** Does this organization carry advertising at all? Nothing runs until it does. */
+            async toggleOrganizationAds() {
                 if (this.savingAds) return;
 
                 this.savingAds = true;
                 try {
-                    const { data } = await axios.put('/network-ads/store', { accepts: ! this.storeAcceptsAds });
-                    this.storeAcceptsAds = data.accepts_network_ads;
+                    const { data } = await axios.put('/network-ads/organization', { accepts: ! this.organizationAcceptsAds });
+                    this.organizationAcceptsAds = data.accepts_network_ads;
                     window.toast(data.message, 'success');
                 } catch (error) {
                     window.toast(error.response?.data?.message ?? 'Could not change that.');
@@ -274,7 +274,7 @@ export function registerScreensTable(Alpine) {
             },
 
             adsLabel(screen) {
-                if (! this.storeAcceptsAds) return 'Organization has not agreed';
+                if (! this.organizationAcceptsAds) return 'Organization has not agreed';
 
                 return screen.accepts_network_ads ? 'Carries adverts' : 'Kept clear';
             },

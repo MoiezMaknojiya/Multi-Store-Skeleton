@@ -1,9 +1,9 @@
 <?php
 
 use App\Models\Channel;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
-use App\Models\Store;
 use App\Notifications\ResetPasswordNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -16,27 +16,27 @@ use Illuminate\Support\Str;
 |--------------------------------------------------------------------------
 |
 | Guessing a password one endpoint at a time, keeping a session after the account changed underneath it,
-| and walking back into a store the person was removed from.
+| and walking back into an organization the person was removed from.
 |
 */
 
 beforeEach(function () {
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->owner = createStoreUser($this->store, [...Permission::STORE, 'store-view', 'store-destroy', 'channel-view', 'channel-destroy'], 'Everything');
-    $this->staff = createStoreMember($this->store, Role::STAFF);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->owner = createOrganizationUser($this->organization, [...Permission::ORGANIZATION, 'organization-view', 'organization-destroy', 'channel-view', 'channel-destroy'], 'Everything');
+    $this->staff = createOrganizationMember($this->organization, Role::STAFF);
 });
 
 test('five wrong passwords stop the sixth, whichever endpoints they were spread across', function () {
-    $role = Role::create(['name' => 'Spare', 'store_id' => $this->store->id]);
-    $channel = Channel::factory()->create(['store_id' => $this->store->id]);
+    $role = Role::create(['name' => 'Spare', 'organization_id' => $this->organization->id]);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id]);
 
-    $this->actingAs($this->owner)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->owner)->withSession(['current_organization_id' => $this->organization->id]);
 
     $attempts = [
         fn () => $this->deleteJson("/members/{$this->staff->id}", ['password' => 'wrong-1']),
         fn () => $this->deleteJson("/roles/{$role->id}", ['password' => 'wrong-2']),
         fn () => $this->deleteJson("/channels/{$channel->id}", ['password' => 'wrong-3']),
-        fn () => $this->delete('/settings/store', ['confirm_name' => 'Alpha Mart', 'password' => 'wrong-4']),
+        fn () => $this->delete('/settings/organization', ['confirm_name' => 'Alpha Mart', 'password' => 'wrong-4']),
         fn () => $this->deleteJson("/members/{$this->staff->id}", ['password' => 'wrong-5']),
     ];
 
@@ -48,28 +48,28 @@ test('five wrong passwords stop the sixth, whichever endpoints they were spread 
     $blocked = $this->deleteJson("/members/{$this->staff->id}", ['password' => 'password']);
     expect($blocked->status())->toBe(429);
 
-    expect(roleKeyIn($this->staff, $this->store))->toBe(Role::STAFF)
+    expect(roleKeyIn($this->staff, $this->organization))->toBe(Role::STAFF)
         ->and(Role::find($role->id))->not->toBeNull()
         ->and(Channel::find($channel->id))->not->toBeNull()
-        ->and(Store::find($this->store->id))->not->toBeNull();
+        ->and(Organization::find($this->organization->id))->not->toBeNull();
 });
 
 test('one person’s wrong passwords never lock another person out', function () {
-    // Removing somebody needs every permission their role holds (StoreTeam::mayManage), so this
-    // person gets the whole store's permissions: the counter is what is under test here.
-    $second = createStoreUser($this->store, [...Permission::STORE], 'Remover');
-    $victim = createStoreMember($this->store, Role::STAFF);
+    // Removing somebody needs every permission their role holds (OrganizationTeam::mayManage), so this
+    // person gets the whole organization's permissions: the counter is what is under test here.
+    $second = createOrganizationUser($this->organization, [...Permission::ORGANIZATION], 'Remover');
+    $victim = createOrganizationMember($this->organization, Role::STAFF);
 
-    $this->actingAs($this->owner)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->owner)->withSession(['current_organization_id' => $this->organization->id]);
     for ($i = 0; $i < 6; $i++) {
         $this->deleteJson("/members/{$victim->id}", ['password' => 'nope-'.$i]);
     }
 
     // The other person's counter is untouched.
-    $this->actingAs($second)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($second)->withSession(['current_organization_id' => $this->organization->id]);
     $this->deleteJson("/members/{$victim->id}", ['password' => 'password'])->assertOk();
 
-    expect(roleKeyIn($victim, $this->store))->toBeNull();
+    expect(roleKeyIn($victim, $this->organization))->toBeNull();
 });
 
 test('signing in is throttled, and a wrong password never says which half was wrong', function () {
@@ -106,35 +106,35 @@ test('signing in is throttled, and a wrong password never says which half was wr
 });
 
 test('a member removed mid-session loses everything on the very next request', function () {
-    $this->actingAs($this->staff)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->staff)->withSession(['current_organization_id' => $this->organization->id]);
     $this->getJson('/screens/data')->assertOk();
 
-    DB::table('store_user')->where('user_id', $this->staff->id)->where('store_id', $this->store->id)->delete();
+    DB::table('organization_user')->where('user_id', $this->staff->id)->where('organization_id', $this->organization->id)->delete();
 
     // The next request builds the person from the session's id afresh, so it reads the membership
     // that is no longer there. (A User instance memoises its permissions for the life of ONE request
     // — see User::$permissionNamesMemo — and a test would otherwise keep the first request's answer.)
-    $this->actingAs($this->staff->fresh())->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->staff->fresh())->withSession(['current_organization_id' => $this->organization->id]);
 
-    // The session still names the store, but the membership it was read through is gone — so every
+    // The session still names the organization, but the membership it was read through is gone — so every
     // permission goes with it, with no sign-out in between.
     foreach (['screens', 'media', 'dayparts', 'channels', 'members'] as $resource) {
         expect($this->getJson("/{$resource}/data")->status())->toBe(403, "/{$resource}/data");
     }
 
     $this->get('/members')->assertForbidden();
-    $this->get('/settings/store')->assertForbidden();
+    $this->get('/settings/organization')->assertForbidden();
 });
 
 test('a role stripped of its permissions mid-session stops opening the pages it opened', function () {
     $role = Role::firstWhere('name', 'Everything');
-    $this->actingAs($this->owner)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->owner)->withSession(['current_organization_id' => $this->organization->id]);
     $this->get('/members')->assertOk();
 
     $role->permissions()->detach();
 
     // A fresh instance of the same person: the page is shut now.
-    $this->actingAs($this->owner->fresh())->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->owner->fresh())->withSession(['current_organization_id' => $this->organization->id]);
     $this->get('/members')->assertForbidden();
     $this->get('/screens')->assertForbidden();
     $this->getJson('/media/data')->assertForbidden();
@@ -159,7 +159,7 @@ test('signing in starts a brand-new session, so anything planted in the old one 
         ->assertRedirect(route('dashboard', absolute: false));
     $this->assertAuthenticatedAs($this->staff);
 
-    // A new id, handed back in the cookie, and the planted session is gone from the store — so the id the
+    // A new id, handed back in the cookie, and the planted session is gone from the organization — so the id the
     // attacker knows opens nothing, and the way back that was planted in it went with the sign-in.
     expect(session()->getId())->not->toBe($planted)
         ->and($response->getCookie($cookie)->getValue())->toBe(session()->getId())
@@ -191,23 +191,23 @@ test('the password change and the reset link cannot be used to take an account o
     expect(Hash::check('password', $this->staff->fresh()->password))->toBeTrue();
 
     // Nobody sets somebody else's password: there is no endpoint for it.
-    $this->actingAs($this->owner)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->owner)->withSession(['current_organization_id' => $this->organization->id]);
     expect($this->putJson("/members/{$this->staff->id}", ['password' => 'Hijacked!2345'])->status())->toBeIn([403, 404, 422])
         ->and($this->putJson("/users/{$this->staff->id}", ['password' => 'Hijacked!2345'])->status())->toBeIn([403, 404, 405])
         ->and(Hash::check('password', $this->staff->fresh()->password))->toBeTrue();
 });
 
-test('a platform account carrying a store id in its session gains nothing from it', function () {
-    $support = createPlatformUser(['user-view', 'store-view'], 'Support');
+test('a platform account carrying an organization id in its session gains nothing from it', function () {
+    $support = createPlatformUser(['user-view', 'organization-view'], 'Support');
 
-    $this->actingAs($support)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($support)->withSession(['current_organization_id' => $this->organization->id]);
 
     $this->get('/members')->assertForbidden();
-    $this->get('/settings/store')->assertNotFound();
+    $this->get('/settings/organization')->assertNotFound();
     $this->postJson('/dayparts', ['name' => 'Theirs', 'start_time' => '07:00', 'end_time' => '08:00'])->assertForbidden();
     // What their platform role does give still works.
     $this->getJson('/users/data')->assertOk();
-    $this->getJson('/stores/data')->assertOk();
+    $this->getJson('/organizations/data')->assertOk();
 });
 
 test('the forgotten-password form is not a mail cannon, nor a way to read an address list quickly', function () {

@@ -4,7 +4,7 @@
  *
  * There is no browser on the server to photograph an HTML advert, so the editor takes its own picture —
  * `modern-screenshot` (MIT) clones the stage with its styles, pictures and fonts into an SVG and draws it
- * on a canvas. The server keeps the result only if GD can read it as a picture, and stores GD's own
+ * on a canvas. The server keeps the result only if GD can read it as a picture, and organizations GD's own
  * re-encoding (`MediaStorage::storePoster`).
  *
  * The library is imported only when a poster is first taken, so the panel's shared bundle — every page

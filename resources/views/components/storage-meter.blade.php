@@ -1,5 +1,5 @@
 {{--
-    How full a shop's storage is: 512 MB each (App\Services\StoreStorage, owner's rule 2026-09-28). Drawn from the
+    How full an organization's storage is: 512 MB each (App\Services\OrganizationStorage, owner's rule 2026-09-28). Drawn from the
     page's own Alpine state — `storage`, {used, limit} as the server sent it, or null for a library with no wall
     (the platform's own), when nothing shows — and its storageText() and storageLevel() methods. The bar turns amber
     at three quarters and red at nine tenths, and a screen reader hears the words ("120 MB of 512 MB used"), not a bare number.
@@ -11,7 +11,7 @@
 @props(['initial' => null])
 
 @php
-    $__words = $initial ? \App\Services\StoreStorage::inWords($initial['used']).' of '.\App\Services\StoreStorage::inWords($initial['limit']).' used' : '';
+    $__words = $initial ? \App\Services\OrganizationStorage::inWords($initial['used']).' of '.\App\Services\OrganizationStorage::inWords($initial['limit']).' used' : '';
     $__percent = $initial && $initial['limit'] > 0 ? min(100, (int) round($initial['used'] * 100 / $initial['limit'])) : 0;
 @endphp
 

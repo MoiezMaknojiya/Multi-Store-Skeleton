@@ -1,29 +1,29 @@
 <?php
 
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\User;
 
 /*
 |--------------------------------------------------------------------------
-| What reaches across every shop stays above the shops
+| What reaches across every organization stays above the organizations
 |--------------------------------------------------------------------------
 |
 | The owner's rules (2026-09-16). Reading the activity log is a permission a platform role
-| holds for every store, and a store's role for its own store's entries alone. Deleting its
-| old years drops every store's history at once, so that stays above the stores: the super
-| admin may hand it to a platform user, never to a store's role. The permission catalogue
+| holds for every organization, and an organization's role for its own organization's entries alone. Deleting its
+| old years drops every organization's history at once, so that stays above the organizations: the super
+| admin may hand it to a platform user, never to an organization's role. The permission catalogue
 | belongs to the super admin alone, never delegated.
 |
 | Each rule holds twice: RoleController refuses the permission on a role it does not fit
-| (a store's role holds only what works inside a store; no role but Super-Admin holds the
+| (an organization's role holds only what works inside an organization; no role but Super-Admin holds the
 | catalogue), and the routes hold a tier lock — so a row that reached the wrong role some
 | other way (written before the rule, or straight into the database) still opens nothing.
 |
 */
 
-/** A store-less user on a platform role carrying exactly these permissions. */
+/** An organization-less user on a platform role carrying exactly these permissions. */
 function platformGlobalUser(array $permissions): User
 {
     return createPlatformUser($permissions, 'Ops');
@@ -51,19 +51,19 @@ test('a super admin may give the activity log — reading and deleting — to a 
         ->and($role->permissions->pluck('name')->sort()->values()->all())->toBe(['activity-destroy', 'activity-view']);
 });
 
-test("deleting old years never goes on a store's role, however it is asked — not even by the super admin", function () {
-    $store = Store::factory()->create();
-    $owner = createStoreMember($store, Role::OWNER);
+test("deleting old years never goes on an organization's role, however it is asked — not even by the super admin", function () {
+    $organization = Organization::factory()->create();
+    $owner = createOrganizationMember($organization, Role::OWNER);
 
     // The Owner holds neither, so can give neither.
     foreach (['activity-view', 'activity-destroy'] as $name) {
-        $this->actingAs($owner)->withSession(['current_store_id' => $store->id])->postJson('/roles', [
+        $this->actingAs($owner)->withSession(['current_organization_id' => $organization->id])->postJson('/roles', [
             'name' => 'Nosy Cashier',
             'permissions' => Permission::whereIn('name', ['screen-view', $name])->pluck('id')->all(),
         ])->assertStatus(422)->assertJsonValidationErrors('permissions');
     }
 
-    // The super admin may give a store role the reading, never the deleting.
+    // The super admin may give an organization role the reading, never the deleting.
     $staff = Role::starter(Role::STAFF);
     $this->actingAs($this->admin)->putJson("/roles/{$staff->id}", [
         'name' => 'Staff',
@@ -80,11 +80,11 @@ test("deleting old years never goes on a store's role, however it is asked — n
 |--------------------------------------------------------------------------
 */
 
-test("a store role reads its own store's history — and maintenance stays shut even if the deleting reached it", function () {
-    $store = Store::factory()->create();
-    $legacy = createStoreUser($store, ['activity-view', 'activity-destroy']);
+test("an organization role reads its own organization's history — and maintenance stays shut even if the deleting reached it", function () {
+    $organization = Organization::factory()->create();
+    $legacy = createOrganizationUser($organization, ['activity-view', 'activity-destroy']);
 
-    $this->actingAs($legacy)->withSession(['current_store_id' => $store->id]);
+    $this->actingAs($legacy)->withSession(['current_organization_id' => $organization->id]);
 
     $this->get('/activity')->assertOk()->assertDontSee('Run Yearly Maintenance');
     $this->getJson('/activity/data')->assertOk();
@@ -120,24 +120,24 @@ test('a platform user trusted with deleting runs the yearly maintenance', functi
 |--------------------------------------------------------------------------
 */
 
-test('the permission catalogue goes on no role but Super-Admin — not a platform one, not a store one', function () {
+test('the permission catalogue goes on no role but Super-Admin — not a platform one, not an organization one', function () {
     $catalogue = grantPermissions(['permission-view'])->pluck('id')->all();
 
-    foreach (['platform', 'store'] as $type) {
+    foreach (['platform', 'organization'] as $type) {
         $this->actingAs($this->admin)->postJson('/roles', ['name' => 'Ops', 'type' => $type, 'permissions' => $catalogue])
             ->assertStatus(422)->assertJsonValidationErrors(['permissions' => 'Permission management belongs to the Super-Admin role alone.']);
     }
 
-    $store = Store::factory()->create();
-    $owner = createStoreMember($store, Role::OWNER);
-    $this->actingAs($owner)->withSession(['current_store_id' => $store->id])
+    $organization = Organization::factory()->create();
+    $owner = createOrganizationMember($organization, Role::OWNER);
+    $this->actingAs($owner)->withSession(['current_organization_id' => $organization->id])
         ->postJson('/roles', ['name' => 'Cashier', 'permissions' => $catalogue])
         ->assertStatus(422)->assertJsonValidationErrors('permissions');
 
     expect(Role::whereIn('name', ['Ops', 'Cashier'])->exists())->toBeFalse();
 });
 
-test('anybody else holding it — platform user or store user — opens nothing', function () {
+test('anybody else holding it — platform user or organization user — opens nothing', function () {
     $target = Permission::firstWhere('name', 'permission-view');
 
     // A platform user: the one a stray row would most plausibly reach.
@@ -147,14 +147,14 @@ test('anybody else holding it — platform user or store user — opens nothing'
     $this->actingAs($ops)->getJson('/permissions/data')->assertForbidden();
     $this->actingAs($ops)->postJson('/permissions', ['name' => 'anything'])->assertForbidden();
     // The escalation itself: renaming a permission they hold into one they do not.
-    $this->actingAs($ops)->putJson("/permissions/{$target->id}", ['name' => 'store-destroy'])->assertForbidden();
+    $this->actingAs($ops)->putJson("/permissions/{$target->id}", ['name' => 'organization-destroy'])->assertForbidden();
     $this->actingAs($ops)->get('/dashboard')->assertOk()->assertDontSee(route('permissions.view'));
 
-    // A store user, with their shop selected.
-    $store = Store::factory()->create();
-    $cashier = createStoreUser($store, ['permission-view', 'permission-update']);
+    // An organization user, with their organization selected.
+    $organization = Organization::factory()->create();
+    $cashier = createOrganizationUser($organization, ['permission-view', 'permission-update']);
 
-    $this->actingAs($cashier)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($cashier)->withSession(['current_organization_id' => $organization->id])
         ->getJson('/permissions/data')->assertForbidden();
 
     expect($target->fresh()->name)->toBe('permission-view');

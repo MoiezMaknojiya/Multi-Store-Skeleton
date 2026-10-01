@@ -43,14 +43,14 @@
         html, body { height: 100%; margin: 0; background: #000; overflow: hidden; }
         body { font-family: ui-sans-serif, system-ui, sans-serif; color: #fff; }
 
-        /* The arrow is hidden only while content is PLAYING — a shop wall should
+        /* The arrow is hidden only while content is PLAYING — an organization wall should
            not have a mouse pointer parked on it. On the pairing and error screens
            a person is standing right there, and hiding their cursor just makes the
            set feel broken. show() puts this class on and takes it off. */
         body.kiosk { cursor: none; }
 
         /* Nothing on this screen's playlist is due right now: the panel goes dark —
-           no picture, no message, nothing. A shop's television with "No content"
+           no picture, no message, nothing. An organization's television with "No content"
            written across it at three in the morning looks broken; a black one looks
            switched off, which is what it should look like. Hidden rather than
            emptied, so the next poll brings it straight back. */
@@ -78,7 +78,7 @@
             line-height: 1;
             /* Bright blue rather than white: it is the only thing on this screen
                anybody has to copy, and it should be obvious which. Light enough to
-               stay legible on black on a cheap panel across a shop. */
+               stay legible on black on a cheap panel across an organization. */
             color: #5eb0ff;
         }
         .muted { color: #9aa4b2; }
@@ -124,11 +124,11 @@
                 <p class="muted" style="font-size:20px">Starting up...</p>
             </div>
 
-            {{-- Waiting to be adopted by a shop owner --}}
+            {{-- Waiting to be adopted by an organization owner --}}
             <div id="view-pairing" hidden class="text-center" style="padding:5vh 4vw">
                 {{-- Split into two spans the player can rewrite with textContent:
                      a device that has been set up before must be sent to Replace
-                     device, not Add Screen, or the shop ends up with a duplicate
+                     device, not Add Screen, or the organization ends up with a duplicate
                      screen and its real one stranded. Never innerHTML — this text
                      is chosen by the server. --}}
                 <p class="muted" style="font-size:clamp(16px,2.2vw,26px); margin:0 0 3vh">
@@ -167,7 +167,7 @@
                 <div id="layer-a" class="media-layer" hidden dusk="layer-a"></div>
                 <div id="layer-b" class="media-layer" hidden dusk="layer-b"></div>
 
-                {{-- The network advertisement, over the top of both. The shop's own
+                {{-- The network advertisement, over the top of both. The organization's own
                      content is PAUSED underneath, not torn down, so a two-hour video
                      carries on from 1:00:00 rather than starting again. Emptied when
                      the break ends — a hidden <video> keeps its decoder otherwise. --}}

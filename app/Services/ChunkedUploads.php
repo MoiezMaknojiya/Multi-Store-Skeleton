@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Http\Requests\Signage\StoreMediaRequest;
 use App\Models\Channel;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Models\Upload;
 use App\Models\User;
 use Closure;
@@ -20,8 +20,8 @@ use Illuminate\Validation\ValidationException;
  * (docs/UPLOADS-SPEC.md, owner 2026-09-29).
  *
  * Everything that would refuse the finished file is asked when the upload is OPENED, before a byte is sent: the
- * permission, the place (a shop the person works in, a channel within reach), the format by its name, the size, the
- * shop's 512 MB counting every upload still open for that shop — decided under the shop's lock, as StoreStorage
+ * permission, the place (an organization the person works in, a channel within reach), the format by its name, the size, the
+ * organization's 512 MB counting every upload still open for that organization — decided under the organization's lock, as OrganizationStorage
  * decides — and the server's reserve counting every open upload's missing bytes. When the last byte is in, the form
  * the file was chosen for posts the upload's id, and the file goes through the same door as ever
  * (Http\Requests\Concerns\TakesAFinishedUpload): its format read from its bytes, a video's length from the file.
@@ -40,7 +40,7 @@ class ChunkedUploads
     /** An unfinished upload is kept this long, then uploads:prune takes it. */
     public const LIFETIME_HOURS = 24;
 
-    public function __construct(private readonly StoreStorage $quota, private readonly DiskGuard $disk) {}
+    public function __construct(private readonly OrganizationStorage $quota, private readonly DiskGuard $disk) {}
 
     /** The largest file any of the four places takes. */
     public static function maxSize(): int
@@ -61,7 +61,7 @@ class ChunkedUploads
             throw ValidationException::withMessages(['file' => 'Say where the file is going.']);
         }
 
-        $storeId = $this->placeFor($user, $purpose, $meta);
+        $organizationId = $this->placeFor($user, $purpose, $meta);
         $filename = $this->filenameOf($meta['name'] ?? $meta['filename'] ?? null);
 
         $extension = Str::contains($filename, '.') ? Str::lower(Str::afterLast($filename, '.')) : '';
@@ -84,7 +84,7 @@ class ChunkedUploads
 
         $attributes = [
             'user_id' => $user->id,
-            'store_id' => $storeId,
+            'organization_id' => $organizationId,
             'purpose' => $purpose,
             'filename' => $filename,
             'file_type' => $this->typeOf($meta['type'] ?? $meta['filetype'] ?? null),
@@ -93,9 +93,9 @@ class ChunkedUploads
             'expires_at' => now()->addHours(self::LIFETIME_HOURS),
         ];
 
-        $upload = $storeId === null
+        $upload = $organizationId === null
             ? Upload::create($attributes)
-            : $this->reservedInShop($storeId, $size, fn () => Upload::create($attributes));
+            : $this->reservedInOrganization($organizationId, $size, fn () => Upload::create($attributes));
 
         Storage::disk(Upload::DISK)->put($upload->partName(), '');
 
@@ -212,7 +212,7 @@ class ChunkedUploads
     }
 
     /**
-     * The shop the file will count to (null for none) — once the person may put a file there at all, by the same
+     * The organization the file will count to (null for none) — once the person may put a file there at all, by the same
      * permission and the same place the form's own door asks for.
      *
      * @param  array<string, string>  $meta
@@ -223,27 +223,27 @@ class ChunkedUploads
             'media' => $this->libraryFor($user, $meta['library'] ?? null),
             'channel' => $this->channelLibrary($user, $meta['channel'] ?? null),
             'campaign' => $this->adsNetwork(),
-            'asset' => $this->shelfFor($user, $meta['store'] ?? null),
+            'asset' => $this->shelfFor($user, $meta['organization'] ?? null),
         };
     }
 
-    /** The Media page's library: the shop the person works in, or — above the stores — the one the page chose. */
+    /** The Media page's library: the organization the person works in, or — above the organizations — the one the page chose. */
     private function libraryFor(User $user, ?string $library): ?int
     {
         abort_unless($user->can('media-store'), 403);
 
         if ($user->globalRole() === null) {
-            return $this->currentStore('Select an organization before uploading — media belongs to the organization it is uploaded in.');
+            return $this->currentOrganization('Select an organization before uploading — media belongs to the organization it is uploaded in.');
         }
 
         if ($library === null || $library === '' || $library === 'platform') {
             return null;
         }
 
-        return $this->existingStore($library, 'That organization no longer exists. Reload the page and choose again.');
+        return $this->existingOrganization($library, 'That organization no longer exists. Reload the page and choose again.');
     }
 
-    /** A channel's Upload joins the channel's library: the shop's for a shop's channel, none for the platform's. */
+    /** A channel's Upload joins the channel's library: the organization's for an organization's channel, none for the platform's. */
     private function channelLibrary(User $user, ?string $channel): ?int
     {
         abort_unless($user->can('channel-update'), 403);
@@ -252,10 +252,10 @@ class ChunkedUploads
 
         abort_if($found === null, 404, 'That channel was not found.');
 
-        return $found->store_id;
+        return $found->organization_id;
     }
 
-    /** An advert belongs to the ads network, above every shop. */
+    /** An advert belongs to the ads network, above every organization. */
     private function adsNetwork(): ?int
     {
         abort_unless(Gate::allows('campaign-manage'), 403);
@@ -264,36 +264,36 @@ class ChunkedUploads
     }
 
     /**
-     * The Ad Builder's shelf: the shop the person works in, or — above the stores — the one the page chose, or with
-     * none chosen the shelf the platform shares with every shop (owner, 2026-09-29).
+     * The Ad Builder's shelf: the organization the person works in, or — above the organizations — the one the page chose, or with
+     * none chosen the shelf the platform shares with every organization (owner, 2026-09-29).
      */
-    private function shelfFor(User $user, ?string $store): ?int
+    private function shelfFor(User $user, ?string $organization): ?int
     {
         abort_unless($user->can('ad-store'), 403);
 
         if ($user->globalRole() !== null) {
-            return $store === null || $store === '' || $store === 'shared'
+            return $organization === null || $organization === '' || $organization === 'shared'
                 ? null
-                : $this->existingStore($store, 'That organization no longer exists. Reload the page and choose again.');
+                : $this->existingOrganization($organization, 'That organization no longer exists. Reload the page and choose again.');
         }
 
-        return $this->currentStore('Select an organization before uploading — an ad\'s pictures belong to the organization they were uploaded for.');
+        return $this->currentOrganization('Select an organization before uploading — an ad\'s pictures belong to the organization they were uploaded for.');
     }
 
-    private function currentStore(string $missing): int
+    private function currentOrganization(string $missing): int
     {
-        $storeId = (int) session('current_store_id');
+        $organizationId = (int) session('current_organization_id');
 
-        if ($storeId === 0) {
+        if ($organizationId === 0) {
             throw ValidationException::withMessages(['file' => $missing]);
         }
 
-        return $storeId;
+        return $organizationId;
     }
 
-    private function existingStore(?string $id, string $missing): int
+    private function existingOrganization(?string $id, string $missing): int
     {
-        if (! is_string($id) || ! ctype_digit($id) || ! Store::whereKey((int) $id)->exists()) {
+        if (! is_string($id) || ! ctype_digit($id) || ! Organization::whereKey((int) $id)->exists()) {
             throw ValidationException::withMessages(['file' => $missing]);
         }
 
@@ -301,23 +301,23 @@ class ChunkedUploads
     }
 
     /**
-     * Make the upload's row only while the shop has room for it beside what it holds and every upload still open for
-     * it — decided under the shop's row lock, reading inside the lock (StoreStorage::withRoom). Call it outside any
+     * Make the upload's row only while the organization has room for it beside what it holds and every upload still open for
+     * it — decided under the organization's row lock, reading inside the lock (OrganizationStorage::withRoom). Call it outside any
      * other transaction.
      *
      * @param  Closure(): Upload  $create
      */
-    private function reservedInShop(int $storeId, int $size, Closure $create): Upload
+    private function reservedInOrganization(int $organizationId, int $size, Closure $create): Upload
     {
-        return DB::transaction(function () use ($storeId, $size, $create) {
-            if (Store::whereKey($storeId)->lockForUpdate()->first(['id']) === null) {
+        return DB::transaction(function () use ($organizationId, $size, $create) {
+            if (Organization::whereKey($organizationId)->lockForUpdate()->first(['id']) === null) {
                 throw ValidationException::withMessages(['file' => 'That organization no longer exists. Reload the page and choose again.']);
             }
 
-            $taken = $this->quota->used($storeId) + (int) Upload::where('store_id', $storeId)->open()->sum('size');
+            $taken = $this->quota->used($organizationId) + (int) Upload::where('organization_id', $organizationId)->open()->sum('size');
 
-            if ($taken + $size > StoreStorage::LIMIT_BYTES) {
-                throw ValidationException::withMessages(['file' => $this->quota->fullMessage($storeId, $size, $taken)]);
+            if ($taken + $size > OrganizationStorage::LIMIT_BYTES) {
+                throw ValidationException::withMessages(['file' => $this->quota->fullMessage($organizationId, $size, $taken)]);
             }
 
             return $create();

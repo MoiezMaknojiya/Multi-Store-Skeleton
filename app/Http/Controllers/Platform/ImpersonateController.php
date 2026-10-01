@@ -32,7 +32,7 @@ class ImpersonateController extends Controller
         ActivityLog::record('impersonate.started', $user,
             'Logged in as '.$user->name.' ('.$user->email.')');
 
-        session()->forget('current_store_id');
+        session()->forget('current_organization_id');
         Auth::login($user);
         $request->session()->regenerate();
 
@@ -76,7 +76,7 @@ class ImpersonateController extends Controller
         ActivityLog::record('impersonate.stopped', null,
             'Returned to '.$admin->name.' from impersonating '.auth()->user()->name, $admin);
 
-        session()->forget([...self::SESSION_KEYS, 'current_store_id']);
+        session()->forget([...self::SESSION_KEYS, 'current_organization_id']);
         Auth::login($admin);
         $request->session()->regenerate();
 

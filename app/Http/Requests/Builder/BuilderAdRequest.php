@@ -58,7 +58,7 @@ class BuilderAdRequest extends FormRequest
     private const COLOUR = ['nullable', 'string', 'max:64'];
 
     /**
-     * An ad is saved only from where it can be seen: another shop's is not found (404) — before its
+     * An ad is saved only from where it can be seen: another organization's is not found (404) — before its
      * document is checked, so the answer never says the id exists.
      */
     public function authorize(): bool
@@ -227,9 +227,9 @@ class BuilderAdRequest extends FormRequest
             // The poster the editor captures, as a data URI. Optional: an ad saves without one.
             'thumbnail' => ['nullable', 'string', 'starts_with:data:image/', 'max:4000000'],
 
-            // The shop a new ad is for, said by the platform team only (a store's person builds in the store
+            // The organization a new ad is for, said by the platform team only (an organization's person builds in the organization
             // they stand in, and whatever they send here is not read). Whether it exists is the controller's.
-            'store_id' => ['nullable', 'integer', 'min:1'],
+            'organization_id' => ['nullable', 'integer', 'min:1'],
         ];
     }
 

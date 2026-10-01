@@ -9,7 +9,7 @@ use App\Http\Controllers\Auth\RegisteredUserController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
-    // Public sign-up: a new customer registers themselves WITH their store and
+    // Public sign-up: a new customer registers themselves WITH their organization and
     // becomes its Owner — the role is never client input.
     Route::get('register', [RegisteredUserController::class, 'create'])
         ->name('register');

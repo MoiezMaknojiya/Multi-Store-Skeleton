@@ -2,9 +2,9 @@
 
 use App\Models\Daypart;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\ScheduleRule;
 use App\Models\Screen;
-use App\Models\Store;
 use Carbon\CarbonImmutable;
 
 /*
@@ -32,14 +32,14 @@ function itemBody(Media $media, array $rules = []): array
 }
 
 beforeEach(function () {
-    $this->store = Store::factory()->create();
-    $this->actor = createStoreUser($this->store, ['screen-view', 'screen-playlist']);
-    $this->screen = Screen::factory()->create(['store_id' => $this->store->id]);
-    $this->poster = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Poster']);
-    $this->other = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Other']);
-    $this->lunch = Daypart::factory()->between('11:00', '15:00')->create(['store_id' => $this->store->id]);
+    $this->organization = Organization::factory()->create();
+    $this->actor = createOrganizationUser($this->organization, ['screen-view', 'screen-playlist']);
+    $this->screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
+    $this->poster = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Poster']);
+    $this->other = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Other']);
+    $this->lunch = Daypart::factory()->between('11:00', '15:00')->create(['organization_id' => $this->organization->id]);
 
-    $this->actingAs($this->actor)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->actor)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 test('a schedule is saved with the playlist and read back with it', function () {
@@ -133,8 +133,8 @@ test('saving the same schedule twice is not a conflict', function () {
     expect($this->screen->fresh()->playlistItems->first()->scheduleRules)->toHaveCount(1);
 });
 
-test('a daypart from another store cannot be pinned to this screen\'s playlist', function () {
-    $theirs = Daypart::factory()->create(['store_id' => Store::factory()->create()->id]);
+test('a daypart from another organization cannot be pinned to this screen\'s playlist', function () {
+    $theirs = Daypart::factory()->create(['organization_id' => Organization::factory()->create()->id]);
 
     $this->putJson("/screens/{$this->screen->id}/playlist", playlistBody($this->screen, [
         itemBody($this->poster, [['daypart_id' => $theirs->id]]),
@@ -200,7 +200,7 @@ test('the preview says when the item would actually play', function () {
 });
 
 test('the preview merges several rules rather than listing each separately', function () {
-    $evening = Daypart::factory()->between('16:00', '20:00')->create(['store_id' => $this->store->id]);
+    $evening = Daypart::factory()->between('16:00', '20:00')->create(['organization_id' => $this->organization->id]);
 
     $occurrences = $this->postJson("/screens/{$this->screen->id}/playlist/preview", [
         'rules' => [
@@ -254,8 +254,8 @@ test('a repeat with no start date previews the same way saving it would behave',
     expect(collect($saved)->pluck('date')->all())->toBe($dates);
 });
 
-test('a preview cannot be built against another store\'s hours', function () {
-    $theirs = Daypart::factory()->create(['store_id' => Store::factory()->create()->id]);
+test('a preview cannot be built against another organization\'s hours', function () {
+    $theirs = Daypart::factory()->create(['organization_id' => Organization::factory()->create()->id]);
 
     $this->postJson("/screens/{$this->screen->id}/playlist/preview", [
         'rules' => [['daypart_id' => $theirs->id]],
@@ -263,7 +263,7 @@ test('a preview cannot be built against another store\'s hours', function () {
 });
 
 test('the whole playlist, schedules included, copies onto other screens', function () {
-    $target = Screen::factory()->create(['store_id' => $this->store->id, 'name' => 'Window TV']);
+    $target = Screen::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Window TV']);
 
     // The target already has something, which the copy is going to replace.
     $this->putJson("/screens/{$target->id}/playlist", playlistBody($target, [itemBody($this->other)]))->assertOk();
@@ -285,7 +285,7 @@ test('the whole playlist, schedules included, copies onto other screens', functi
 });
 
 test('the copy targets say how many items each screen would lose', function () {
-    $target = Screen::factory()->create(['store_id' => $this->store->id, 'name' => 'Window TV']);
+    $target = Screen::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Window TV']);
     $this->putJson("/screens/{$target->id}/playlist", playlistBody($target, [
         itemBody($this->other), itemBody($this->poster),
     ]))->assertOk();
@@ -297,8 +297,8 @@ test('the copy targets say how many items each screen would lose', function () {
     expect($screens[0]['playlist_items_count'])->toBe(2);
 });
 
-test('a playlist cannot be copied onto another store\'s screen', function () {
-    $theirs = Screen::factory()->create(['store_id' => Store::factory()->create()->id]);
+test('a playlist cannot be copied onto another organization\'s screen', function () {
+    $theirs = Screen::factory()->create(['organization_id' => Organization::factory()->create()->id]);
 
     $this->putJson("/screens/{$this->screen->id}/playlist", playlistBody($this->screen, [
         itemBody($this->poster),
@@ -312,9 +312,9 @@ test('a playlist cannot be copied onto another store\'s screen', function () {
 });
 
 test('changing playlists is what gates the schedule, the preview and the copy', function () {
-    $viewer = createStoreUser($this->store, ['screen-view'], 'Viewer Role');
+    $viewer = createOrganizationUser($this->organization, ['screen-view'], 'Viewer Role');
 
-    $this->actingAs($viewer)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($viewer)->withSession(['current_organization_id' => $this->organization->id]);
 
     $this->postJson("/screens/{$this->screen->id}/playlist/preview", ['rules' => []])->assertForbidden();
     $this->getJson("/screens/{$this->screen->id}/playlist/copy-targets")->assertForbidden();

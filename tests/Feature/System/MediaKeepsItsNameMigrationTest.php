@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -25,9 +25,9 @@ test('the dates and the description leave the media table, and the migration goe
     expect(Schema::hasColumns('media', ['description', 'starts_at', 'expires_at']))->toBeTrue();
 
     // A file as it was before: with an expiry that had already passed and a description.
-    $store = Store::factory()->create();
+    $organization = Organization::factory()->create();
     $id = DB::table('media')->insertGetId([
-        'store_id' => $store->id, 'title' => 'Old poster', 'description' => 'Shown until March', 'type' => 'image',
+        'organization_id' => $organization->id, 'title' => 'Old poster', 'description' => 'Shown until March', 'type' => 'image',
         'mime_type' => 'image/jpeg', 'disk' => 'public', 'path' => 'media/1/old.jpg', 'size' => 1000,
         'starts_at' => '2026-09-28 03:11:00', 'expires_at' => '2026-09-30 03:10:00',
         'created_at' => now(), 'updated_at' => now(),

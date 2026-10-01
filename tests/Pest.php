@@ -1,8 +1,8 @@
 <?php
 
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Route;
@@ -53,7 +53,7 @@ function grantPermissions(array $names): Collection
     return collect($names)->map(function (string $name) {
         $permission = Permission::firstOrCreate(['name' => $name]);
 
-        Gate::define($permission->name, fn (User $user) => $user->hasPermissionInCurrentStore($permission->name));
+        Gate::define($permission->name, fn (User $user) => $user->hasPermissionInCurrentOrganization($permission->name));
 
         return $permission;
     });
@@ -61,7 +61,7 @@ function grantPermissions(array $names): Collection
 
 /**
  * Create a super admin: the Super-Admin role (made here when the test has none yet — in a real install the
- * seeder makes it, not the migrations) held on the store_id = 0 platform row, the way the seeder holds it.
+ * seeder makes it, not the migrations) held on the organization_id = 0 platform row, the way the seeder holds it.
  * The first one made in a test is the primary super admin.
  *
  * A super admin holds every permission whatever the role's rows say (the Gate::before in AppServiceProvider),
@@ -79,25 +79,25 @@ function createSuperAdmin(array $permissionNames = []): User
     $role->permissions()->syncWithoutDetaching($permissions->pluck('id'));
 
     $user = User::factory()->create();
-    $user->stores()->attach(0, ['role_id' => $role->id]);
+    $user->organizations()->attach(0, ['role_id' => $role->id]);
 
     return $user;
 }
 
 /**
- * Create a member of the given store holding a CUSTOM role of that store with exactly the given
- * permissions. Callers still need ->withSession(['current_store_id' => $store->id]) on the
- * request for the store-scoped permission check to take effect.
+ * Create a member of the given organization holding a CUSTOM role of that organization with exactly the given
+ * permissions. Callers still need ->withSession(['current_organization_id' => $organization->id]) on the
+ * request for the organization-scoped permission check to take effect.
  */
-function createStoreUser(Store $store, array $permissionNames, string $roleName = 'Test Role'): User
+function createOrganizationUser(Organization $organization, array $permissionNames, string $roleName = 'Test Role'): User
 {
     $permissions = grantPermissions($permissionNames);
 
-    $role = Role::create(['name' => $roleName, 'store_id' => $store->id]);
+    $role = Role::create(['name' => $roleName, 'organization_id' => $organization->id]);
     $role->permissions()->sync($permissions->pluck('id'));
 
     $user = User::factory()->create();
-    $user->stores()->attach($store->id, ['role_id' => $role->id]);
+    $user->organizations()->attach($organization->id, ['role_id' => $role->id]);
 
     return $user;
 }
@@ -105,33 +105,33 @@ function createStoreUser(Store $store, array $permissionNames, string $roleName 
 /**
  * Register a gate for every permission row, the way AppServiceProvider does at boot — needed
  * whenever a test relies on rows it did not create through grantPermissions(), such as the
- * starter store roles the migrations install.
+ * starter organization roles the migrations install.
  */
 function registerPermissionGates(): void
 {
     Permission::all()->each(fn (Permission $permission) => Gate::define(
         $permission->name,
-        fn (User $user) => $user->hasPermissionInCurrentStore($permission->name)
+        fn (User $user) => $user->hasPermissionInCurrentOrganization($permission->name)
     ));
 }
 
 /**
- * Create a member of the store holding one of the starter store roles (Owner by default). The
+ * Create a member of the organization holding one of the starter organization roles (Owner by default). The
  * migrations install those roles with their permissions; this registers the gates for them.
  */
-function createStoreMember(Store $store, string $roleKey = Role::OWNER, array $attributes = []): User
+function createOrganizationMember(Organization $organization, string $roleKey = Role::OWNER, array $attributes = []): User
 {
     registerPermissionGates();
 
     $user = User::factory()->create($attributes);
-    $user->stores()->attach($store->id, ['role_id' => Role::starter($roleKey)->id]);
+    $user->organizations()->attach($organization->id, ['role_id' => Role::starter($roleKey)->id]);
 
     return $user;
 }
 
 /**
  * Create a member of the platform team: a global role with the given permissions, held on the
- * store_id = 0 row. Not a super admin.
+ * organization_id = 0 row. Not a super admin.
  */
 function createPlatformUser(array $permissionNames, string $roleName = 'Platform Staff'): User
 {
@@ -141,15 +141,15 @@ function createPlatformUser(array $permissionNames, string $roleName = 'Platform
     $role->permissions()->sync($permissions->pluck('id'));
 
     $user = User::factory()->create();
-    $user->stores()->attach(0, ['role_id' => $role->id]);
+    $user->organizations()->attach(0, ['role_id' => $role->id]);
 
     return $user;
 }
 
-/** The starter-role key a person holds in a store (null for any other role, or when not a member). */
-function roleKeyIn(User $user, Store $store): ?string
+/** The starter-role key a person holds in an organization (null for any other role, or when not a member). */
+function roleKeyIn(User $user, Organization $organization): ?string
 {
-    $roleId = DB::table('store_user')->where('store_id', $store->id)->where('user_id', $user->id)->value('role_id');
+    $roleId = DB::table('organization_user')->where('organization_id', $organization->id)->where('user_id', $user->id)->value('role_id');
 
     return $roleId ? Role::find($roleId)?->key : null;
 }
@@ -177,4 +177,27 @@ function routesUnder(string $prefix): array
             ->map(fn (string $method) => [$method, '/'.preg_replace('/\{[^}]+\}/', '1', $route->uri())]))
         ->values()
         ->all();
+}
+
+/*
+|--------------------------------------------------------------------------
+| Older migrations, run as they ran
+|--------------------------------------------------------------------------
+|
+| A migration written before 2026_10_01_150000 speaks of `stores`, `store_user` and `store_id`: it ran before the
+| database said organization. A test that runs one by hand undoes that rename first and does it again afterwards, so
+| the older migration meets the names it was written for.
+|
+*/
+
+function withTheNamesOfTheirDay(Closure $callback): void
+{
+    $rename = require database_path('migrations/2026_10_01_150000_call_stores_organizations_in_the_database.php');
+    $rename->down();
+
+    try {
+        $callback();
+    } finally {
+        $rename->up();
+    }
 }

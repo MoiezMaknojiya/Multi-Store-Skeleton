@@ -1,8 +1,8 @@
 <?php
 
+use App\Models\Organization;
 use App\Models\PairingRequest;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Services\DevicePairing;
 
 /* ── Registration ──────────────────────────────────────────────────────── */
@@ -61,9 +61,9 @@ test('a device whose code expired can simply ask for another one', function () {
 });
 
 test('a device that lost its token starts over instead of colliding', function () {
-    $store = Store::factory()->create();
+    $organization = Organization::factory()->create();
     $device = $this->postJson('/device/register')->assertOk()->json();
-    $screen = Screen::factory()->unpaired()->create(['store_id' => $store->id]);
+    $screen = Screen::factory()->unpaired()->create(['organization_id' => $organization->id]);
     app(DevicePairing::class)->claim($device['code'], $screen);
 
     // The TV never collected the token (browsing data cleared, say) and asks again.
@@ -75,7 +75,7 @@ test('a device that lost its token starts over instead of colliding', function (
 });
 
 test('expired codes are swept up, but a claimed token waits for its device', function () {
-    $store = Store::factory()->create();
+    $organization = Organization::factory()->create();
 
     // Dead: nobody ever typed it in.
     $abandoned = $this->postJson('/device/register')->json();
@@ -83,7 +83,7 @@ test('expired codes are swept up, but a claimed token waits for its device', fun
 
     // Claimed, but the TV has not collected its token yet — it may just be slow.
     $claimed = $this->postJson('/device/register')->json();
-    app(DevicePairing::class)->claim($claimed['code'], Screen::factory()->unpaired()->create(['store_id' => $store->id]));
+    app(DevicePairing::class)->claim($claimed['code'], Screen::factory()->unpaired()->create(['organization_id' => $organization->id]));
     PairingRequest::where('device_uuid', $claimed['device_uuid'])->update(['expires_at' => now()->subMinute()]);
 
     app(DevicePairing::class)->pruneExpired();
@@ -110,9 +110,9 @@ test('an unclaimed code polls as pending', function () {
 });
 
 test('a guessed device id cannot steal a freshly minted token', function () {
-    $store = Store::factory()->create();
+    $organization = Organization::factory()->create();
     $device = $this->postJson('/device/register')->json();
-    $screen = Screen::factory()->unpaired()->create(['store_id' => $store->id]);
+    $screen = Screen::factory()->unpaired()->create(['organization_id' => $organization->id]);
 
     expect(app(DevicePairing::class)->claim($device['code'], $screen))->toBeTrue();
 
@@ -130,9 +130,9 @@ test('a guessed device id cannot steal a freshly minted token', function () {
 });
 
 test('the token is handed over exactly once and the request is destroyed', function () {
-    $store = Store::factory()->create();
+    $organization = Organization::factory()->create();
     $device = $this->postJson('/device/register')->json();
-    $screen = Screen::factory()->unpaired()->create(['store_id' => $store->id]);
+    $screen = Screen::factory()->unpaired()->create(['organization_id' => $organization->id]);
     app(DevicePairing::class)->claim($device['code'], $screen);
 
     $query = http_build_query([
@@ -159,11 +159,11 @@ test('an expired code reports itself so the TV can fetch a new one', function ()
 });
 
 test('an expired code can no longer be claimed', function () {
-    $store = Store::factory()->create();
+    $organization = Organization::factory()->create();
     $device = $this->postJson('/device/register')->json();
     PairingRequest::query()->update(['expires_at' => now()->subMinute()]);
 
-    $screen = Screen::factory()->unpaired()->create(['store_id' => $store->id]);
+    $screen = Screen::factory()->unpaired()->create(['organization_id' => $organization->id]);
 
     expect(app(DevicePairing::class)->claim($device['code'], $screen))->toBeFalse();
     expect($screen->fresh()->token_hash)->toBeNull();
@@ -177,7 +177,7 @@ test('the playlist and heartbeat refuse a device with no token', function () {
 });
 
 test('a wrong token is refused', function () {
-    Screen::factory()->create(['store_id' => Store::factory()]);
+    Screen::factory()->create(['organization_id' => Organization::factory()]);
 
     $this->withHeader('Authorization', 'Bearer not-a-real-token')
         ->getJson('/device/playlist')->assertUnauthorized();
@@ -185,7 +185,7 @@ test('a wrong token is refused', function () {
 
 test('a paired screen gets an envelope it can already build against', function () {
     $screen = Screen::factory()->withToken('device-token-abc')->create([
-        'store_id' => Store::factory(),
+        'organization_id' => Organization::factory(),
         'name' => 'Counter TV',
         'orientation' => 'portrait',
     ]);
@@ -202,7 +202,7 @@ test('a paired screen gets an envelope it can already build against', function (
 });
 
 test('a heartbeat marks the screen online', function () {
-    $screen = Screen::factory()->offline()->withToken('tok')->create(['store_id' => Store::factory()]);
+    $screen = Screen::factory()->offline()->withToken('tok')->create(['organization_id' => Organization::factory()]);
     expect($screen->is_online)->toBeFalse();
 
     $this->withHeader('Authorization', 'Bearer tok')->postJson('/device/heartbeat')->assertOk();
@@ -211,7 +211,7 @@ test('a heartbeat marks the screen online', function () {
 });
 
 test('deleting a screen locks its device out on the very next request', function () {
-    $screen = Screen::factory()->withToken('tok')->create(['store_id' => Store::factory()]);
+    $screen = Screen::factory()->withToken('tok')->create(['organization_id' => Organization::factory()]);
 
     $this->withHeader('Authorization', 'Bearer tok')->getJson('/device/playlist')->assertOk();
 
@@ -222,8 +222,8 @@ test('deleting a screen locks its device out on the very next request', function
 });
 
 test('re-pairing rotates the token so the old device stops playing', function () {
-    $store = Store::factory()->create();
-    $screen = Screen::factory()->withToken('old-token')->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $screen = Screen::factory()->withToken('old-token')->create(['organization_id' => $organization->id]);
 
     $device = $this->postJson('/device/register')->json();
     expect(app(DevicePairing::class)->claim($device['code'], $screen))->toBeTrue();
@@ -249,29 +249,29 @@ test('a device nobody has seen before is sent to Add Screen', function () {
 });
 
 test('a device that already belongs to a screen is sent to Replace device', function () {
-    $store = Store::factory()->create();
+    $organization = Organization::factory()->create();
     $device = $this->postJson('/device/register')->json();
-    $screen = Screen::factory()->unpaired()->create(['store_id' => $store->id, 'name' => 'Counter TV']);
+    $screen = Screen::factory()->unpaired()->create(['organization_id' => $organization->id, 'name' => 'Counter TV']);
     app(DevicePairing::class)->claim($device['code'], $screen);
 
     // The television lost its token — a bad deploy, a 401, cleared site data —
     // but it still knows its own uuid, so it asks again with the same one.
     $again = $this->postJson('/device/register', ['device_uuid' => $device['device_uuid']])->assertOk();
 
-    // Getting this wrong is what costs the shop: told to Add Screen, the owner
+    // Getting this wrong is what costs the organization: told to Add Screen, the owner
     // makes a SECOND screen and the real one is stranded with all its playlist.
     $again->assertJson(['known_device' => true]);
 
     // The name never travels. This endpoint is open, and holding a uuid is no
-    // reason to learn what a shop calls its televisions.
+    // reason to learn what an organization calls its televisions.
     expect($again->json())->not->toHaveKey('screen_name');
     expect(json_encode($again->json()))->not->toContain('Counter TV');
 });
 
 test('once the screen is gone the device is a stranger again', function () {
-    $store = Store::factory()->create();
+    $organization = Organization::factory()->create();
     $device = $this->postJson('/device/register')->json();
-    $screen = Screen::factory()->unpaired()->create(['store_id' => $store->id]);
+    $screen = Screen::factory()->unpaired()->create(['organization_id' => $organization->id]);
     app(DevicePairing::class)->claim($device['code'], $screen);
 
     $screen->delete();
@@ -283,8 +283,8 @@ test('once the screen is gone the device is a stranger again', function () {
 });
 
 test('a device replaced by another one is a stranger again too', function () {
-    $store = Store::factory()->create();
-    $screen = Screen::factory()->unpaired()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $screen = Screen::factory()->unpaired()->create(['organization_id' => $organization->id]);
     $pairing = app(DevicePairing::class);
 
     $first = $this->postJson('/device/register')->json();
@@ -308,11 +308,11 @@ test('a device replaced by another one is a stranger again too', function () {
 /* ── One code, one screen ──────────────────────────────────────────────── */
 
 test('a code answers to exactly one screen — the second claim is refused', function () {
-    $store = Store::factory()->create();
+    $organization = Organization::factory()->create();
     // Unpaired on purpose: these are screens the owner just created and is
     // about to point at a TV. The factory default is an ALREADY paired screen.
-    $first = Screen::factory()->unpaired()->create(['store_id' => $store->id, 'name' => 'Counter TV']);
-    $second = Screen::factory()->unpaired()->create(['store_id' => $store->id, 'name' => 'Window TV']);
+    $first = Screen::factory()->unpaired()->create(['organization_id' => $organization->id, 'name' => 'Counter TV']);
+    $second = Screen::factory()->unpaired()->create(['organization_id' => $organization->id, 'name' => 'Window TV']);
 
     $pairing = app(DevicePairing::class);
     $code = $pairing->register()['code'];
@@ -334,10 +334,10 @@ test('a code answers to exactly one screen — the second claim is refused', fun
 });
 
 test('a screen left unpaired by a refused claim keeps its settings', function () {
-    $store = Store::factory()->create();
-    $taken = Screen::factory()->unpaired()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $taken = Screen::factory()->unpaired()->create(['organization_id' => $organization->id]);
     $loser = Screen::factory()->unpaired()->create([
-        'store_id' => $store->id, 'name' => 'Window TV', 'orientation' => 'portrait',
+        'organization_id' => $organization->id, 'name' => 'Window TV', 'orientation' => 'portrait',
     ]);
 
     $pairing = app(DevicePairing::class);

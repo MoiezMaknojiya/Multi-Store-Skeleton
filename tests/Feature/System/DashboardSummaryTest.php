@@ -4,26 +4,26 @@ use App\Models\ActivityLog;
 use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Models\User;
 use App\Services\DiskGuard;
-use App\Services\StoreStorage;
+use App\Services\OrganizationStorage;
 use Illuminate\Testing\TestResponse;
 
 /*
- * The dashboard (owner, 2026-09-30: "user friendly banao puri site ko"): a shop's numbers, what needs a look and its
- * first steps, or the platform's — every part by its permission, every link to a page the person may open, and a
- * shop's counts from that shop alone.
+ * The dashboard (owner, 2026-09-30: "user friendly banao puri site ko"): an organization's numbers, what needs a look and its
+ * first steps, or the platform's — every part by its permission, every link to a page the person may open, and an
+ * organization's counts from that organization alone.
  */
 
-/** The dashboard as the person sees it, working in $store when one is given. */
-function dashboardFor(User $user, ?Store $store = null): TestResponse
+/** The dashboard as the person sees it, working in $organization when one is given. */
+function dashboardFor(User $user, ?Organization $organization = null): TestResponse
 {
     $request = test()->actingAs($user);
 
-    if ($store !== null) {
-        $request = $request->withSession(['current_store_id' => $store->id]);
+    if ($organization !== null) {
+        $request = $request->withSession(['current_organization_id' => $organization->id]);
     }
 
     return $request->get('/dashboard')->assertOk();
@@ -45,30 +45,30 @@ function linksOf(array $summary): array
     ])->pluck('href')->filter()->values()->all();
 }
 
-test('a shop\'s dashboard counts that shop alone', function () {
-    $alpha = Store::factory()->create(['name' => 'Alpha Mart']);
-    $beta = Store::factory()->create();
-    $viewer = createStoreUser($alpha, ['screen-view', 'media-view', 'ad-view', 'channel-view'], 'Looks At Everything');
+test('an organization\'s dashboard counts that organization alone', function () {
+    $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $beta = Organization::factory()->create();
+    $viewer = createOrganizationUser($alpha, ['screen-view', 'media-view', 'ad-view', 'channel-view'], 'Looks At Everything');
 
-    Screen::factory()->create(['store_id' => $alpha->id]);                                     // online
-    Screen::factory()->create(['store_id' => $alpha->id, 'last_seen_at' => now()->subHour()]); // offline
-    Screen::factory()->count(3)->create(['store_id' => $beta->id]);
+    Screen::factory()->create(['organization_id' => $alpha->id]);                                     // online
+    Screen::factory()->create(['organization_id' => $alpha->id, 'last_seen_at' => now()->subHour()]); // offline
+    Screen::factory()->count(3)->create(['organization_id' => $beta->id]);
 
-    Media::factory()->count(2)->create(['store_id' => $alpha->id]);
-    Media::factory()->count(5)->create(['store_id' => $beta->id]);
+    Media::factory()->count(2)->create(['organization_id' => $alpha->id]);
+    Media::factory()->count(5)->create(['organization_id' => $beta->id]);
 
-    BuilderAd::factory()->create(['store_id' => $alpha->id, 'published_at' => now()]);
-    BuilderAd::factory()->create(['store_id' => $alpha->id]);
-    BuilderAd::factory()->count(2)->create(['store_id' => $beta->id, 'published_at' => now()]);
+    BuilderAd::factory()->create(['organization_id' => $alpha->id, 'published_at' => now()]);
+    BuilderAd::factory()->create(['organization_id' => $alpha->id]);
+    BuilderAd::factory()->count(2)->create(['organization_id' => $beta->id, 'published_at' => now()]);
 
-    Channel::factory()->create(['store_id' => $alpha->id]);
-    Channel::factory()->create(['store_id' => $beta->id]);
-    Channel::factory()->create(['store_id' => null]);   // the platform's: offered to every shop, made by none
+    Channel::factory()->create(['organization_id' => $alpha->id]);
+    Channel::factory()->create(['organization_id' => $beta->id]);
+    Channel::factory()->create(['organization_id' => null]);   // the platform's: offered to every organization, made by none
 
     $response = dashboardFor($viewer, $alpha);
     $cards = cardsOf($response);
 
-    expect($response->viewData('summary')['store'])->toBe('Alpha Mart')
+    expect($response->viewData('summary')['organization'])->toBe('Alpha Mart')
         ->and($cards['screens']['value'])->toBe(2)
         ->and($cards['screens']['detail'])->toBe('1 online now')
         ->and($cards['media']['value'])->toBe(2)
@@ -76,15 +76,15 @@ test('a shop\'s dashboard counts that shop alone', function () {
         ->and($cards['ads']['detail'])->toBe('published · 1 draft')
         ->and($cards['channels']['value'])->toBe(1);
 
-    $response->assertSee('dusk="dashboard-store"', false)->assertSee('Alpha Mart');
+    $response->assertSee('dusk="dashboard-organization"', false)->assertSee('Alpha Mart');
 });
 
-test('each part of a shop\'s dashboard needs its own permission, and every link opens for the person given it', function () {
-    $alpha = Store::factory()->create();
-    $screen = Screen::factory()->create(['store_id' => $alpha->id, 'last_seen_at' => null]);
+test('each part of an organization\'s dashboard needs its own permission, and every link opens for the person given it', function () {
+    $alpha = Organization::factory()->create();
+    $screen = Screen::factory()->create(['organization_id' => $alpha->id, 'last_seen_at' => null]);
 
     // Screens alone: their card and what needs a look, nothing else — no steps, no log.
-    $watcher = createStoreUser($alpha, ['screen-view'], 'Screen Watcher');
+    $watcher = createOrganizationUser($alpha, ['screen-view'], 'Screen Watcher');
     $summary = dashboardFor($watcher, $alpha)->viewData('summary');
 
     expect(array_column($summary['cards'], 'key'))->toBe(['screens'])
@@ -93,17 +93,17 @@ test('each part of a shop\'s dashboard needs its own permission, and every link 
         ->and($summary['activity'])->toBeNull();
 
     // Adding without the page it happens on offers nothing: Add Screen is on the Screens page.
-    $adder = createStoreUser($alpha, ['screen-store', 'media-store', 'ad-store'], 'Adder Without Pages');
+    $adder = createOrganizationUser($alpha, ['screen-store', 'media-store', 'ad-store'], 'Adder Without Pages');
     $summary = dashboardFor($adder, $alpha)->viewData('summary');
 
     expect($summary['cards'])->toBe([])
         ->and($summary['steps'])->toBe([])
         ->and($summary['attention'])->toBeNull();
-    dashboardFor($adder, $alpha)->assertSee('dusk="dashboard-store-nothing"', false);
+    dashboardFor($adder, $alpha)->assertSee('dusk="dashboard-organization-nothing"', false);
 
-    // The Owner gets every part its role holds (a shop's own channels are the super admin's to give), and every link
+    // The Owner gets every part its role holds (an organization's own channels are the super admin's to give), and every link
     // it is offered opens.
-    $owner = createStoreMember($alpha);
+    $owner = createOrganizationMember($alpha);
     $summary = dashboardFor($owner, $alpha)->viewData('summary');
 
     expect(array_column($summary['cards'], 'key'))->toBe(['screens', 'media', 'ads'])
@@ -117,23 +117,23 @@ test('each part of a shop\'s dashboard needs its own permission, and every link 
         expect($links)->not->toBeEmpty();
 
         foreach ($links as $link) {
-            $this->actingAs($person)->withSession(['current_store_id' => $alpha->id])->get($link)->assertOk();
+            $this->actingAs($person)->withSession(['current_organization_id' => $alpha->id])->get($link)->assertOk();
         }
     }
 
     expect(linksOf(dashboardFor($owner, $alpha)->viewData('summary')))->toContain(route('screens.show', $screen));
 });
 
-test('what needs a look: a screen that is offline, one with nothing to play, and a shop nearly full', function () {
-    $alpha = Store::factory()->create();
-    $owner = createStoreMember($alpha);
-    $never = Screen::factory()->create(['store_id' => $alpha->id, 'name' => 'Back Office TV', 'last_seen_at' => null]);
-    $gone = Screen::factory()->create(['store_id' => $alpha->id, 'name' => 'Window TV', 'last_seen_at' => now()->subHours(2)]);
-    $playing = Screen::factory()->create(['store_id' => $alpha->id, 'name' => 'Counter TV']);
-    $playing->playlistItems()->create(['media_id' => Media::factory()->create(['store_id' => $alpha->id])->id, 'position' => 1, 'duration_seconds' => 10]);
+test('what needs a look: a screen that is offline, one with nothing to play, and an organization nearly full', function () {
+    $alpha = Organization::factory()->create();
+    $owner = createOrganizationMember($alpha);
+    $never = Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Back Office TV', 'last_seen_at' => null]);
+    $gone = Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Window TV', 'last_seen_at' => now()->subHours(2)]);
+    $playing = Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Counter TV']);
+    $playing->playlistItems()->create(['media_id' => Media::factory()->create(['organization_id' => $alpha->id])->id, 'position' => 1, 'duration_seconds' => 10]);
 
-    $this->mock(StoreStorage::class, fn ($mock) => $mock->shouldReceive('summary')
-        ->andReturn(['used' => 490 * 1024 * 1024, 'limit' => StoreStorage::LIMIT_BYTES]));   // 95.7%, said as 95
+    $this->mock(OrganizationStorage::class, fn ($mock) => $mock->shouldReceive('summary')
+        ->andReturn(['used' => 490 * 1024 * 1024, 'limit' => OrganizationStorage::LIMIT_BYTES]));   // 95.7%, said as 95
 
     $response = dashboardFor($owner, $alpha);
     $attention = collect($response->viewData('summary')['attention'])->keyBy('key');
@@ -148,9 +148,9 @@ test('what needs a look: a screen that is offline, one with nothing to play, and
 });
 
 test('a long list names five and counts the rest, leading to where they all are', function () {
-    $alpha = Store::factory()->create();
-    $watcher = createStoreUser($alpha, ['screen-view'], 'Screen Watcher');
-    Screen::factory()->count(7)->create(['store_id' => $alpha->id, 'last_seen_at' => null]);
+    $alpha = Organization::factory()->create();
+    $watcher = createOrganizationUser($alpha, ['screen-view'], 'Screen Watcher');
+    Screen::factory()->count(7)->create(['organization_id' => $alpha->id, 'last_seen_at' => null]);
 
     $attention = collect(dashboardFor($watcher, $alpha)->viewData('summary')['attention']);
     $offline = $attention->filter(fn (array $item) => str_starts_with($item['key'], 'screen-offline-'));
@@ -168,18 +168,18 @@ test('a long list names five and counts the rest, leading to where they all are'
         ->toMatch('/dusk="dashboard-attention-count">14<span class="sr-only"> to look at<\/span>/');
 
     // Five or fewer: no counting line.
-    $beta = Store::factory()->create();
-    $small = createStoreUser($beta, ['screen-view'], 'Small Shop Watcher');
-    Screen::factory()->count(5)->create(['store_id' => $beta->id, 'last_seen_at' => null]);
+    $beta = Organization::factory()->create();
+    $small = createOrganizationUser($beta, ['screen-view'], 'Small Organization Watcher');
+    Screen::factory()->count(5)->create(['organization_id' => $beta->id, 'last_seen_at' => null]);
 
     expect(array_column(dashboardFor($small, $beta)->viewData('summary')['attention'], 'key'))->not->toContain('screen-offline-more');
 });
 
-test('a shop with nothing wrong says so, rather than showing an empty box', function () {
-    $alpha = Store::factory()->create();
-    $owner = createStoreMember($alpha);
-    $screen = Screen::factory()->create(['store_id' => $alpha->id]);
-    $screen->playlistItems()->create(['media_id' => Media::factory()->create(['store_id' => $alpha->id])->id, 'position' => 1, 'duration_seconds' => 10]);
+test('an organization with nothing wrong says so, rather than showing an empty box', function () {
+    $alpha = Organization::factory()->create();
+    $owner = createOrganizationMember($alpha);
+    $screen = Screen::factory()->create(['organization_id' => $alpha->id]);
+    $screen->playlistItems()->create(['media_id' => Media::factory()->create(['organization_id' => $alpha->id])->id, 'position' => 1, 'duration_seconds' => 10]);
 
     $response = dashboardFor($owner, $alpha);
 
@@ -188,18 +188,18 @@ test('a shop with nothing wrong says so, rather than showing an empty box', func
 });
 
 test('the first steps are ticked as they are done, and go once all are', function () {
-    $alpha = Store::factory()->create();
-    $owner = createStoreMember($alpha);
+    $alpha = Organization::factory()->create();
+    $owner = createOrganizationMember($alpha);
     $steps = fn () => collect(dashboardFor($owner, $alpha)->viewData('summary')['steps'])->pluck('done', 'key')->all();
 
-    // A new shop: pair and upload (nothing to put a file on yet).
+    // A new organization: pair and upload (nothing to put a file on yet).
     expect($steps())->toBe(['pair' => false, 'upload' => false]);
     dashboardFor($owner, $alpha)->assertSee('Get your organization on screen')->assertSee('0 of 2 done');
 
-    $screen = Screen::factory()->create(['store_id' => $alpha->id]);
+    $screen = Screen::factory()->create(['organization_id' => $alpha->id]);
     expect($steps())->toBe(['pair' => true, 'upload' => false, 'play' => false]);
 
-    $file = Media::factory()->create(['store_id' => $alpha->id]);
+    $file = Media::factory()->create(['organization_id' => $alpha->id]);
     expect($steps())->toBe(['pair' => true, 'upload' => true, 'play' => false]);
 
     $screen->playlistItems()->create(['media_id' => $file->id, 'position' => 1, 'duration_seconds' => 10]);
@@ -207,50 +207,50 @@ test('the first steps are ticked as they are done, and go once all are', functio
     dashboardFor($owner, $alpha)->assertDontSee('dusk="dashboard-steps"', false);
 });
 
-test('a shop\'s recent activity is its own, and only for a role that may read the log', function () {
-    $alpha = Store::factory()->create();
-    $beta = Store::factory()->create();
-    ActivityLog::create(['actor_name' => 'Ali', 'store_id' => $alpha->id, 'action' => 'media.uploaded', 'description' => 'Uploaded Alpha poster']);
-    ActivityLog::create(['actor_name' => 'Bano', 'store_id' => $beta->id, 'action' => 'media.uploaded', 'description' => 'Uploaded Beta poster']);
-    ActivityLog::create(['actor_name' => 'Root', 'store_id' => null, 'action' => 'auth.login', 'description' => 'Signed in']);
+test('an organization\'s recent activity is its own, and only for a role that may read the log', function () {
+    $alpha = Organization::factory()->create();
+    $beta = Organization::factory()->create();
+    ActivityLog::create(['actor_name' => 'Ali', 'organization_id' => $alpha->id, 'action' => 'media.uploaded', 'description' => 'Uploaded Alpha poster']);
+    ActivityLog::create(['actor_name' => 'Bano', 'organization_id' => $beta->id, 'action' => 'media.uploaded', 'description' => 'Uploaded Beta poster']);
+    ActivityLog::create(['actor_name' => 'Root', 'organization_id' => null, 'action' => 'auth.login', 'description' => 'Signed in']);
 
-    $reader = createStoreUser($alpha, ['activity-view'], 'Log Reader');
+    $reader = createOrganizationUser($alpha, ['activity-view'], 'Log Reader');
     $response = dashboardFor($reader, $alpha);
 
     expect(array_column($response->viewData('summary')['activity'], 'what'))->toBe(['Uploaded Alpha poster']);
     $response->assertSee('Uploaded Alpha poster')->assertDontSee('Beta poster')->assertSee(route('activity.view'), false);
 
-    $other = createStoreUser($alpha, ['screen-view'], 'No Log');
+    $other = createOrganizationUser($alpha, ['screen-view'], 'No Log');
     $response = dashboardFor($other, $alpha);
 
     expect($response->viewData('summary')['activity'])->toBeNull();
     $response->assertDontSee('dusk="dashboard-activity"', false);
 });
 
-test('the platform\'s dashboard: every part by its permission, and a store with no Owner said', function () {
-    $owned = Store::factory()->create(['name' => 'Owned Store']);
-    createStoreMember($owned);
-    Store::factory()->create(['name' => 'Orphan Store']);
-    Screen::factory()->create(['store_id' => $owned->id]);
+test('the platform\'s dashboard: every part by its permission, and an organization with no Owner said', function () {
+    $owned = Organization::factory()->create(['name' => 'Owned Organization']);
+    createOrganizationMember($owned);
+    Organization::factory()->create(['name' => 'Orphan Organization']);
+    Screen::factory()->create(['organization_id' => $owned->id]);
 
     $admin = createSuperAdmin();
     $summary = dashboardFor($admin)->viewData('summary');
 
-    expect(array_column($summary['cards'], 'key'))->toContain('stores', 'users', 'screens', 'campaigns')
-        ->and(array_column($summary['attention'], 'text'))->toBe(['Orphan Store has no Owner'])
+    expect(array_column($summary['cards'], 'key'))->toContain('organizations', 'users', 'screens', 'campaigns')
+        ->and(array_column($summary['attention'], 'text'))->toBe(['Orphan Organization has no Owner'])
         ->and($summary['activity'])->toBe([]);
 
     foreach (linksOf($summary) as $link) {
         $this->actingAs($admin)->get($link)->assertOk();
     }
 
-    // Stores alone: the count with its link and the stores to look after — no accounts, no log.
-    $support = createPlatformUser(['store-view'], 'Store Support');
+    // Organizations alone: the count with its link and the organizations to look after — no accounts, no log.
+    $support = createPlatformUser(['organization-view'], 'Organization Support');
     $summary = dashboardFor($support)->viewData('summary');
 
-    expect(array_column($summary['cards'], 'key'))->toBe(['stores'])
-        ->and($summary['cards'][0]['href'])->toBe(route('stores.view'))
-        ->and(array_column($summary['attention'], 'text'))->toBe(['Orphan Store has no Owner'])
+    expect(array_column($summary['cards'], 'key'))->toBe(['organizations'])
+        ->and($summary['cards'][0]['href'])->toBe(route('organizations.view'))
+        ->and(array_column($summary['attention'], 'text'))->toBe(['Orphan Organization has no Owner'])
         ->and($summary['activity'])->toBeNull();
 
     // Nothing at all: the count every platform account has always seen, and no link it could not open.
@@ -261,13 +261,13 @@ test('the platform\'s dashboard: every part by its permission, and a store with 
     expect($summary['cards'][0]['href'])->toBeNull()
         ->and($summary['attention'])->toBeNull()
         ->and($summary['activity'])->toBeNull();
-    $response->assertDontSee('href="'.route('stores.view').'"', false);
+    $response->assertDontSee('href="'.route('organizations.view').'"', false);
 });
 
 test('the platform\'s count of accounts is what its Users page lists to the viewer', function () {
-    $store = Store::factory()->create();
-    createStoreMember($store);                                    // a customer
-    createStoreMember($store, attributes: ['email_verified_at' => null]);
+    $organization = Organization::factory()->create();
+    createOrganizationMember($organization);                                    // a customer
+    createOrganizationMember($organization, attributes: ['email_verified_at' => null]);
     $admin = createSuperAdmin();                                  // the platform team…
     $support = createPlatformUser(['user-view'], 'Support');      // …which support does not list
 
@@ -286,5 +286,5 @@ test('a server running low on space is on the super admin\'s dashboard', functio
         ->and(collect($summary['attention'])->firstWhere('key', 'disk')['text'])->toBe('The server is running low on space');
 
     // Support does not see the server's disk.
-    expect(cardsOf(dashboardFor(createPlatformUser(['store-view'], 'Support'))))->not->toHaveKey('disk');
+    expect(cardsOf(dashboardFor(createPlatformUser(['organization-view'], 'Support'))))->not->toHaveKey('disk');
 });

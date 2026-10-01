@@ -1,9 +1,9 @@
 <?php
 
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
-use App\Models\Store;
 
 /** A screen with a playlist of the given media, in order. */
 function playlistOf(Screen $screen, array $media, int $seconds = 10): void
@@ -19,23 +19,23 @@ function playlistOf(Screen $screen, array $media, int $seconds = 10): void
 }
 
 test('guests cannot read or write a playlist', function () {
-    $screen = Screen::factory()->create(['store_id' => Store::factory()]);
+    $screen = Screen::factory()->create(['organization_id' => Organization::factory()]);
 
     $this->getJson("/screens/{$screen->id}/playlist")->assertUnauthorized();
     $this->putJson("/screens/{$screen->id}/playlist", ['items' => []])->assertUnauthorized();
 });
 
 test('the playlist page and its data are readable with screen-view', function () {
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-view']);
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
-    $media = Media::factory()->create(['store_id' => $store->id, 'title' => 'Breakfast Board']);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-view']);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
+    $media = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Breakfast Board']);
     playlistOf($screen, [$media]);
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->get("/screens/{$screen->id}")->assertOk();
 
-    $items = $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $items = $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->getJson("/screens/{$screen->id}/playlist")->assertOk()->json('items');
 
     expect($items)->toHaveCount(1);
@@ -43,28 +43,28 @@ test('the playlist page and its data are readable with screen-view', function ()
     expect($items[0]['duration_seconds'])->toBe(10);
 });
 
-test('a screen in another store is unreachable', function () {
-    $storeA = Store::factory()->create();
-    $storeB = Store::factory()->create();
-    $actor = createStoreUser($storeA, ['screen-view', 'screen-playlist']);
-    $theirs = Screen::factory()->create(['store_id' => $storeB->id]);
+test('a screen in another organization is unreachable', function () {
+    $organizationA = Organization::factory()->create();
+    $organizationB = Organization::factory()->create();
+    $actor = createOrganizationUser($organizationA, ['screen-view', 'screen-playlist']);
+    $theirs = Screen::factory()->create(['organization_id' => $organizationB->id]);
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $storeA->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organizationA->id])
         ->get("/screens/{$theirs->id}")->assertNotFound();
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $storeA->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organizationA->id])
         ->putJson("/screens/{$theirs->id}/playlist", ['items' => []])->assertNotFound();
 });
 
 test('saving a playlist writes the order exactly as sent', function () {
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-playlist']);
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-playlist']);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
 
-    $first = Media::factory()->create(['store_id' => $store->id, 'title' => 'One']);
-    $second = Media::factory()->create(['store_id' => $store->id, 'title' => 'Two']);
+    $first = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'One']);
+    $second = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Two']);
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => $screen->playlistFingerprint(),
             'items' => [
@@ -80,13 +80,13 @@ test('saving a playlist writes the order exactly as sent', function () {
 });
 
 test('saving replaces the playlist rather than appending to it', function () {
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-playlist']);
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
-    $media = Media::factory()->count(3)->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-playlist']);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
+    $media = Media::factory()->count(3)->create(['organization_id' => $organization->id]);
     playlistOf($screen, $media->all());
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => $screen->playlistFingerprint(),
             'items' => [['media_id' => $media[0]->id, 'duration_seconds' => 12]],
@@ -96,25 +96,25 @@ test('saving replaces the playlist rather than appending to it', function () {
 });
 
 test('an empty playlist is a valid save — that is how you clear a screen', function () {
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-playlist']);
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
-    playlistOf($screen, Media::factory()->count(2)->create(['store_id' => $store->id])->all());
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-playlist']);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
+    playlistOf($screen, Media::factory()->count(2)->create(['organization_id' => $organization->id])->all());
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", ['items' => [], 'version' => $screen->playlistFingerprint()])->assertOk();
 
     expect($screen->playlistItems()->count())->toBe(0);
 });
 
-test('a screen cannot be made to play another store\'s file', function () {
-    $storeA = Store::factory()->create();
-    $storeB = Store::factory()->create();
-    $actor = createStoreUser($storeA, ['screen-playlist']);
-    $screen = Screen::factory()->create(['store_id' => $storeA->id]);
-    $theirFile = Media::factory()->create(['store_id' => $storeB->id]);
+test('a screen cannot be made to play another organization\'s file', function () {
+    $organizationA = Organization::factory()->create();
+    $organizationB = Organization::factory()->create();
+    $actor = createOrganizationUser($organizationA, ['screen-playlist']);
+    $screen = Screen::factory()->create(['organization_id' => $organizationA->id]);
+    $theirFile = Media::factory()->create(['organization_id' => $organizationB->id]);
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $storeA->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organizationA->id])
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => $screen->playlistFingerprint(),
             'items' => [['media_id' => $theirFile->id, 'duration_seconds' => 10]],
@@ -126,12 +126,12 @@ test('a screen cannot be made to play another store\'s file', function () {
 });
 
 test('a duration must be a sane number of seconds', function () {
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-playlist']);
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
-    $media = Media::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-playlist']);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
+    $media = Media::factory()->create(['organization_id' => $organization->id]);
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => $screen->playlistFingerprint(),
             'items' => [['media_id' => $media->id, 'duration_seconds' => 0]],
@@ -139,45 +139,45 @@ test('a duration must be a sane number of seconds', function () {
 });
 
 test('changing a playlist needs screen-playlist, not just screen-view', function () {
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-view']);
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-view']);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", ['items' => []])->assertForbidden();
 });
 
 test('the picker is self-sufficient: screen-playlist alone lists the library', function () {
-    $store = Store::factory()->create();
+    $organization = Organization::factory()->create();
     // Deliberately NO media-view — a permission must be enough for its own job.
-    $actor = createStoreUser($store, ['screen-playlist']);
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
-    Media::factory()->create(['store_id' => $store->id, 'title' => 'Breakfast Board']);
-    Media::factory()->create(['store_id' => Store::factory(), 'title' => 'Someone Else']);
+    $actor = createOrganizationUser($organization, ['screen-playlist']);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
+    Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Breakfast Board']);
+    Media::factory()->create(['organization_id' => Organization::factory(), 'title' => 'Someone Else']);
 
-    $media = $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $media = $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->getJson("/screens/{$screen->id}/available-media")->assertOk()->json('media');
 
     expect(collect($media)->pluck('title')->all())->toBe(['Breakfast Board']);
 });
 
 test('the picker can be searched', function () {
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-playlist']);
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
-    Media::factory()->create(['store_id' => $store->id, 'title' => 'Breakfast Board']);
-    Media::factory()->create(['store_id' => $store->id, 'title' => 'Lunch Poster']);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-playlist']);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
+    Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Breakfast Board']);
+    Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Lunch Poster']);
 
-    $media = $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $media = $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->getJson("/screens/{$screen->id}/available-media?search=Lunch")->assertOk()->json('media');
 
     expect(collect($media)->pluck('title')->all())->toBe(['Lunch Poster']);
 });
 
 test('deleting a file takes it off every screen it was playing on', function () {
-    $store = Store::factory()->create();
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
-    $media = Media::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
+    $media = Media::factory()->create(['organization_id' => $organization->id]);
     playlistOf($screen, [$media]);
 
     $media->delete();
@@ -188,10 +188,10 @@ test('deleting a file takes it off every screen it was playing on', function () 
 /* ── What the device actually receives ─────────────────────────────────── */
 
 test('the manifest carries the playlist in order, with a cache key per item', function () {
-    $store = Store::factory()->create();
-    $screen = Screen::factory()->withToken('tok')->create(['store_id' => $store->id]);
-    $image = Media::factory()->create(['store_id' => $store->id, 'title' => 'Poster']);
-    $video = Media::factory()->video()->create(['store_id' => $store->id, 'title' => 'Clip']);
+    $organization = Organization::factory()->create();
+    $screen = Screen::factory()->withToken('tok')->create(['organization_id' => $organization->id]);
+    $image = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Poster']);
+    $video = Media::factory()->video()->create(['organization_id' => $organization->id, 'title' => 'Clip']);
     playlistOf($screen, [$image, $video], 12);
 
     $response = $this->withHeader('Authorization', 'Bearer tok')
@@ -208,14 +208,14 @@ test('the manifest carries the playlist in order, with a cache key per item', fu
 });
 
 test('a line outside its schedule never reaches the TV, and the panel keeps it', function () {
-    $store = Store::factory()->create();
-    $screen = Screen::factory()->withToken('tok')->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $screen = Screen::factory()->withToken('tok')->create(['organization_id' => $organization->id]);
 
     // When a file plays is its line's to say (owner, 2026-10-01): one line that ended, one that has not begun.
     playlistOf($screen, [
-        Media::factory()->create(['store_id' => $store->id, 'title' => 'Live']),
-        Media::factory()->create(['store_id' => $store->id, 'title' => 'Last week']),
-        Media::factory()->create(['store_id' => $store->id, 'title' => 'Next week']),
+        Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Live']),
+        Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Last week']),
+        Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Next week']),
     ]);
     [, $ended, $coming] = $screen->playlistItems()->orderBy('position')->get()->all();
     $ended->scheduleRules()->create(['starts_on' => now()->subDays(10)->toDateString(), 'ends_on' => now()->subDays(3)->toDateString()]);
@@ -230,9 +230,9 @@ test('a line outside its schedule never reaches the TV, and the panel keeps it',
 });
 
 test('the manifest version changes when the playlist changes, and not otherwise', function () {
-    $store = Store::factory()->create();
-    $screen = Screen::factory()->withToken('tok')->create(['store_id' => $store->id]);
-    $media = Media::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $screen = Screen::factory()->withToken('tok')->create(['organization_id' => $organization->id]);
+    $media = Media::factory()->create(['organization_id' => $organization->id]);
 
     $before = $this->withHeader('Authorization', 'Bearer tok')->getJson('/device/playlist')->json('version');
     expect($this->withHeader('Authorization', 'Bearer tok')->getJson('/device/playlist')->json('version'))->toBe($before);
@@ -247,7 +247,7 @@ test('the manifest carries the server clock so a wrong TV clock cannot matter', 
     // Frozen, so the answer can be compared to the second: "within a few seconds" would also pass for a
     // clock read from anywhere else, and a signed difference passes for any time in the past.
     $this->travelTo('2026-03-20 18:04:05');
-    Screen::factory()->withToken('tok')->create(['store_id' => Store::factory()]);
+    Screen::factory()->withToken('tok')->create(['organization_id' => Organization::factory()]);
 
     $serverTime = $this->withHeader('Authorization', 'Bearer tok')
         ->getJson('/device/playlist')->assertOk()->json('server_time');
@@ -256,13 +256,13 @@ test('the manifest carries the server clock so a wrong TV clock cannot matter', 
 });
 
 test('a screen only ever receives its own playlist', function () {
-    $storeA = Store::factory()->create();
-    $storeB = Store::factory()->create();
-    $mine = Screen::factory()->withToken('mine')->create(['store_id' => $storeA->id]);
-    $theirs = Screen::factory()->withToken('theirs')->create(['store_id' => $storeB->id]);
+    $organizationA = Organization::factory()->create();
+    $organizationB = Organization::factory()->create();
+    $mine = Screen::factory()->withToken('mine')->create(['organization_id' => $organizationA->id]);
+    $theirs = Screen::factory()->withToken('theirs')->create(['organization_id' => $organizationB->id]);
 
-    playlistOf($mine, [Media::factory()->create(['store_id' => $storeA->id])]);
-    playlistOf($theirs, Media::factory()->count(2)->create(['store_id' => $storeB->id])->all());
+    playlistOf($mine, [Media::factory()->create(['organization_id' => $organizationA->id])]);
+    playlistOf($theirs, Media::factory()->count(2)->create(['organization_id' => $organizationB->id])->all());
 
     expect($this->withHeader('Authorization', 'Bearer mine')->getJson('/device/playlist')->json('items'))->toHaveCount(1);
     expect($this->withHeader('Authorization', 'Bearer theirs')->getJson('/device/playlist')->json('items'))->toHaveCount(2);
@@ -271,16 +271,16 @@ test('a screen only ever receives its own playlist', function () {
 /* ── Mixed playlists: images and videos together ───────────────────────── */
 
 test('a mixed playlist reaches the device in order, with each type intact', function () {
-    $store = Store::factory()->create();
-    $screen = Screen::factory()->withToken('tok')->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $screen = Screen::factory()->withToken('tok')->create(['organization_id' => $organization->id]);
 
-    $poster = Media::factory()->create(['store_id' => $store->id, 'title' => 'Poster']);
+    $poster = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Poster']);
     $clip = Media::factory()->video()->create([
-        'store_id' => $store->id, 'title' => 'Clip', 'duration_seconds' => 30, 'mime_type' => 'video/mp4',
+        'organization_id' => $organization->id, 'title' => 'Clip', 'duration_seconds' => 30, 'mime_type' => 'video/mp4',
     ]);
-    $second = Media::factory()->create(['store_id' => $store->id, 'title' => 'Second Poster']);
+    $second = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Second Poster']);
     $webm = Media::factory()->video()->create([
-        'store_id' => $store->id, 'title' => 'Webm Clip', 'duration_seconds' => 12, 'mime_type' => 'video/webm',
+        'organization_id' => $organization->id, 'title' => 'Webm Clip', 'duration_seconds' => 12, 'mime_type' => 'video/webm',
     ]);
 
     // Deliberately interleaved: image, video, image, video.
@@ -307,16 +307,16 @@ test('a mixed playlist reaches the device in order, with each type intact', func
 });
 
 test('a long playlist keeps its exact order', function () {
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-playlist']);
-    $screen = Screen::factory()->withToken('tok')->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-playlist']);
+    $screen = Screen::factory()->withToken('tok')->create(['organization_id' => $organization->id]);
 
     // Twelve files, alternating type, saved in one call.
     $media = collect(range(1, 12))->map(fn ($n) => $n % 2 === 0
-        ? Media::factory()->video()->create(['store_id' => $store->id, 'title' => "Clip {$n}"])
-        : Media::factory()->create(['store_id' => $store->id, 'title' => "Poster {$n}"]));
+        ? Media::factory()->video()->create(['organization_id' => $organization->id, 'title' => "Clip {$n}"])
+        : Media::factory()->create(['organization_id' => $organization->id, 'title' => "Poster {$n}"]));
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => $screen->playlistFingerprint(),
             'items' => $media->map(fn ($m) => ['media_id' => $m->id, 'duration_seconds' => 7])->all(),
@@ -332,14 +332,14 @@ test('a long playlist keeps its exact order', function () {
 });
 
 test('the same file can appear more than once in a playlist, at different lengths', function () {
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-playlist']);
-    $screen = Screen::factory()->withToken('tok')->create(['store_id' => $store->id]);
-    $logo = Media::factory()->create(['store_id' => $store->id, 'title' => 'Logo']);
-    $offer = Media::factory()->create(['store_id' => $store->id, 'title' => 'Offer']);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-playlist']);
+    $screen = Screen::factory()->withToken('tok')->create(['organization_id' => $organization->id]);
+    $logo = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Logo']);
+    $offer = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Offer']);
 
-    // A shop that shows its logo between every promo.
-    $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    // An organization that shows its logo between every promo.
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => $screen->playlistFingerprint(),
             'items' => [
@@ -361,12 +361,12 @@ test('the same file can appear more than once in a playlist, at different length
 });
 
 test('a video whose line has ended drops out while the images around it keep playing', function () {
-    $store = Store::factory()->create();
-    $screen = Screen::factory()->withToken('tok')->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $screen = Screen::factory()->withToken('tok')->create(['organization_id' => $organization->id]);
 
-    $before = Media::factory()->create(['store_id' => $store->id, 'title' => 'Before']);
-    $oldClip = Media::factory()->video()->create(['store_id' => $store->id, 'title' => 'Old Promo']);
-    $after = Media::factory()->create(['store_id' => $store->id, 'title' => 'After']);
+    $before = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Before']);
+    $oldClip = Media::factory()->video()->create(['organization_id' => $organization->id, 'title' => 'Old Promo']);
+    $after = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'After']);
     playlistOf($screen, [$before, $oldClip, $after]);
     $screen->playlistItems()->where('media_id', $oldClip->id)->sole()
         ->scheduleRules()->create(['ends_on' => now()->subDays(2)->toDateString()]);
@@ -380,12 +380,12 @@ test('a video whose line has ended drops out while the images around it keep pla
 });
 
 test('a playlist longer than the cap is refused whole', function () {
-    $store = Store::factory()->create();
-    $actor = createStoreUser($store, ['screen-playlist']);
-    $screen = Screen::factory()->create(['store_id' => $store->id]);
-    $media = Media::factory()->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-playlist']);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
+    $media = Media::factory()->create(['organization_id' => $organization->id]);
 
-    $this->actingAs($actor)->withSession(['current_store_id' => $store->id])
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => $screen->playlistFingerprint(),
             'items' => array_fill(0, 201, ['media_id' => $media->id, 'duration_seconds' => 6]),

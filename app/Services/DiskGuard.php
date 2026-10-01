@@ -15,9 +15,9 @@ use Illuminate\Validation\ValidationException;
 use Throwable;
 
 /**
- * The server's own disk, guarded (owner's decisions, 2026-09-29). Every shop has its 512 MB (StoreStorage), but
- * shops are made at signup by anybody with an inbox, and the platform's library and the ads network have no wall
- * of their own — so whatever the shops' allowances add up to, an upload is refused once the disk would be left with
+ * The server's own disk, guarded (owner's decisions, 2026-09-29). Every organization has its 512 MB (OrganizationStorage), but
+ * organizations are made at signup by anybody with an inbox, and the platform's library and the ads network have no wall
+ * of their own — so whatever the organizations' allowances add up to, an upload is refused once the disk would be left with
  * less than its reserve (config signage.upload_reserve_bytes, 5 GB unless SIGNAGE_UPLOAD_RESERVE_MB says), and the
  * super admins are told by email, at most once every ALERT_HOURS hours. Screens keep playing what they have.
  *
@@ -107,7 +107,7 @@ class DiskGuard
         $gigabytes = $bytes / (1024 ** 3);
 
         if ($gigabytes < 1) {
-            return StoreStorage::inWords($bytes);
+            return OrganizationStorage::inWords($bytes);
         }
 
         return (fmod($gigabytes, 1.0) === 0.0 ? (string) (int) $gigabytes : number_format($gigabytes, 1)).' GB';
@@ -126,9 +126,9 @@ class DiskGuard
     /** Every super admin gets $notification. A mail server that refuses is reported, never thrown. */
     private function tellTheSuperAdmins(MailNotification $notification): void
     {
-        // Platform memberships sit on the sentinel store 0, which has no row in `stores`: read the pivot itself.
-        $admins = User::whereIn('id', DB::table('store_user')
-            ->where('store_id', 0)
+        // Platform memberships sit on the sentinel organization 0, which has no row in `organizations`: read the pivot itself.
+        $admins = User::whereIn('id', DB::table('organization_user')
+            ->where('organization_id', 0)
             ->where('role_id', Role::superAdminId())
             ->pluck('user_id'))->get();
 

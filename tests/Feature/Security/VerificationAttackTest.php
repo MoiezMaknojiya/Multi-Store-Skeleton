@@ -84,7 +84,7 @@ test('an address holds one account: signing up with a taken one is refused, conf
     foreach (['taken@example.com', 'waiting@example.com', 'TAKEN@example.com'] as $email) {
         $this->post('/register', [
             'first_name' => 'Sana', 'last_name' => 'Owner', 'phone' => '3213214321', 'email' => $email,
-            'password' => 'password123', 'password_confirmation' => 'password123', 'store_name' => 'Another Store',
+            'password' => 'password123', 'password_confirmation' => 'password123', 'organization_name' => 'Another Organization',
             'street' => '7 High St', 'city' => 'Austin', 'state' => 'TX', 'zip_code' => '73301',
         ])->assertSessionHasErrors('email');
         $this->assertGuest();

@@ -45,7 +45,7 @@ class CampaignRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:120'],
             // Who the advert is FOR, kept apart from what the campaign is called so
-            // that "never run this brand in that shop" is a later table, not a later
+            // that "never run this brand in that organization" is a later table, not a later
             // migration of this one.
             'advertiser_name' => ['nullable', 'string', 'max:120'],
 

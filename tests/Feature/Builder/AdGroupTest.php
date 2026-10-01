@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\BuilderAd;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Services\AdCompiler;
 use Illuminate\Support\Facades\Storage;
 
@@ -19,9 +19,9 @@ use Illuminate\Support\Facades\Storage;
 beforeEach(function () {
     Storage::fake('public');
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->designer = createStoreUser($this->store, ['ad-view', 'ad-store', 'ad-update', 'ad-destroy'], 'Designer');
-    $this->actingAs($this->designer)->withSession(['current_store_id' => $this->store->id]);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->designer = createOrganizationUser($this->organization, ['ad-view', 'ad-store', 'ad-update', 'ad-destroy'], 'Designer');
+    $this->actingAs($this->designer)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 /** A box with the keys every element carries. */
@@ -112,7 +112,7 @@ test('three groups deep is allowed', function () {
 });
 
 test('the page writes a group as a wrapper its children sit inside, each against the group’s origin', function () {
-    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => groupedDocument()]);
+    $ad = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'document' => groupedDocument()]);
 
     $html = app(AdCompiler::class)->compile($ad);
 
@@ -146,7 +146,7 @@ test('a group’s box is the box around its children, rotated corners counted �
         // A square turned 45° reaches further than its box does.
         box('b', 'text', 400, 200, 100, 100, 2, ['parentId' => 'g', 'text' => 'b', 'rotation' => 45]),
     ]];
-    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => $document]);
+    $ad = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'document' => $document]);
 
     $html = app(AdCompiler::class)->compile($ad);
 
@@ -162,7 +162,7 @@ test('a hidden group takes everything inside it off the page, and an element nob
     // An orphan in a circle of its own: never reached from the top, so never written — and never a hang.
     $document['elements'][] = box('lost', 'text', 0, 0, 10, 10, 9, ['text' => 'lost', 'parentId' => 'nowhere']);
 
-    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => $document]);
+    $ad = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'document' => $document]);
 
     $html = app(AdCompiler::class)->compile($ad);
 
@@ -181,7 +181,7 @@ test('a design already stored with a circle of groups still compiles — and wri
         box('g2', 'group', 0, 0, 10, 10, 2, ['parentId' => 'g1']),
         box('inside', 'text', 0, 0, 10, 10, 3, ['parentId' => 'g1', 'text' => 'unreachable']),
     ]];
-    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => $document]);
+    $ad = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'document' => $document]);
 
     $html = app(AdCompiler::class)->compile($ad);
 
@@ -195,7 +195,7 @@ test('a group with nothing shown inside it writes nothing, not an empty wrapper'
     $document['elements'][2]['visible'] = false;
     $document['elements'][3]['visible'] = false;
 
-    $ad = BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => $document]);
+    $ad = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'document' => $document]);
 
     expect(app(AdCompiler::class)->compile($ad))->not->toContain('data-anim-id="row"');
 });
@@ -210,7 +210,7 @@ test('a child inside a group keeps its own animations on the page: it waits for 
         ],
     ];
 
-    $html = app(AdCompiler::class)->compile(BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => $document]));
+    $html = app(AdCompiler::class)->compile(BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'document' => $document]));
 
     // The entrance hides the child until it plays — inside the group as on the stage.
     expect($html)->toContain('class="ad-el ad-pending" data-anim-id="title"');
@@ -231,7 +231,7 @@ test('a group that neither fades, blends nor moves is no layer of its own; one t
         ],
     ];
 
-    $html = app(AdCompiler::class)->compile(BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => $plain]));
+    $html = app(AdCompiler::class)->compile(BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'document' => $plain]));
     $wrapper = preg_match('/data-anim-id="row" style="([^"]*)"/', $html, $match) === 1 ? $match[1] : null;
 
     // Pass-through: no z-index on the wrapper, so its child takes its place in the stage's order and its
@@ -243,7 +243,7 @@ test('a group that neither fades, blends nor moves is no layer of its own; one t
         $isolated = $plain;
         $isolated['elements'][0] = box('row', 'group', 100, 100, 600, 100, 0, $more);
 
-        $html = app(AdCompiler::class)->compile(BuilderAd::factory()->create(['store_id' => $this->store->id, 'document' => $isolated]));
+        $html = app(AdCompiler::class)->compile(BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'document' => $isolated]));
 
         expect($html)->toMatch('/data-anim-id="row" style="[^"]*z-index:1;/');
     }

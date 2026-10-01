@@ -1,6 +1,6 @@
 {{-- "Log in as" (ImpersonateController): while a super admin is viewing the app as somebody else, every
      page says so and offers the way back. Shared by both shells a signed-in person sees — the app layout
-     and the focused layout — because "Log in as" a member of several stores lands on the store picker
+     and the focused layout — because "Log in as" a member of several organizations lands on the organization picker
      first, and the way back has to be there too. --}}
 @if (session('impersonating_original_id'))
     {{-- Dark words on the amber: white on amber-500 was 2.1:1, on every page of the visit. --}}

@@ -27,13 +27,13 @@ use Illuminate\Support\Collection;
  * never plays.
  *
  * A CHANNEL line asks a different first question — is the channel on the air, with
- * ads running today? — and follows one extra rule, because a shop darkens its screen
+ * ads running today? — and follows one extra rule, because an organization darkens its screen
  * at night by scheduling its OWN files, not a channel it merely added:
  *
  *   channel line with a schedule of its own  → follows that schedule, like a file
- *   channel line with none                   → plays while at least one of the shop's
+ *   channel line with none                   → plays while at least one of the organization's
  *                                              own files is due, so it never lights up
- *                                              a screen the shop has left dark
+ *                                              a screen the organization has left dark
  *   …and when no file on the playlist is live at all, an unscheduled channel plays on
  *   its own: a screen given only channels, or whose own files are all drafts, is not a
  *   screen asking to be dark.
@@ -43,8 +43,8 @@ use Illuminate\Support\Collection;
  *
  *   empty playlist            → "No content", which is true and useful on a screen
  *                               that has just been paired
- *   nothing due, default set  → the shop's own holding picture
- *   nothing due, no default   → BLACK, with no message. Outside its hours a shop's
+ *   nothing due, default set  → the organization's own holding picture
+ *   nothing due, no default   → BLACK, with no message. Outside its hours an organization's
  *                               television should look switched off, not faulty.
  */
 class ScheduleResolver
@@ -104,7 +104,7 @@ class ScheduleResolver
         $liveFiles = $playlist->filter(fn (PlaylistItem $item) => $this->playable($item->media));
         $dueFileIds = $liveFiles->filter(fn (PlaylistItem $item) => $item->isDueAt($local))->pluck('id')->flip();
 
-        // An unscheduled channel rides along with the shop's own content — or plays by
+        // An unscheduled channel rides along with the organization's own content — or plays by
         // itself when there is no live file for it to ride along with.
         $channelsMayRideAlong = $dueFileIds->isNotEmpty() || $liveFiles->isEmpty();
 
@@ -181,7 +181,7 @@ class ScheduleResolver
             ->all();
     }
 
-    /** The holding picture, if the shop set one — never an Ad Builder page taken off the screens. */
+    /** The holding picture, if the organization set one — never an Ad Builder page taken off the screens. */
     private function fallbackFor(Screen $screen): ?Media
     {
         $media = $screen->defaultMedia;

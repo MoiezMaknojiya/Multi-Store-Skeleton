@@ -5,10 +5,10 @@ use App\Models\Campaign;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Models\Upload;
 use App\Services\DiskGuard;
-use App\Services\StoreStorage;
+use App\Services\OrganizationStorage;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Storage;
@@ -30,11 +30,11 @@ beforeEach(function () {
     Storage::fake('public');
     Storage::fake('uploads');
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->manager = createStoreUser($this->store, [
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->manager = createOrganizationUser($this->organization, [
         'media-view', 'media-store', 'channel-view', 'channel-update', 'ad-view', 'ad-store',
     ], 'Manager');
-    $this->actingAs($this->manager)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->manager)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 /** A real JPEG, $width wide, as a phone would send one. */
@@ -61,7 +61,7 @@ test('a file sent in chunks joins the library like one posted whole, and its upl
     $this->postJson('/media', ['upload' => $id])->assertOk()->assertJsonPath('media.title', 'Menu board');
 
     $media = Media::sole();
-    expect($media->store_id)->toBe($this->store->id)
+    expect($media->organization_id)->toBe($this->organization->id)
         ->and($media->size)->toBe(strlen($bytes))
         ->and($media->thumbnail_path)->not->toBeNull()
         ->and(Storage::disk('public')->get($media->path))->toBe($bytes)
@@ -70,7 +70,7 @@ test('a file sent in chunks joins the library like one posted whole, and its upl
 });
 
 test('every door takes a finished upload: a channel, the ads network and the Ad Builder shelf', function () {
-    $channel = Channel::factory()->create(['store_id' => $this->store->id]);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id]);
 
     $id = Tus::upload($this, jpegBytes(), ['name' => 'deal.jpg', 'purpose' => 'channel', 'channel' => $channel->id]);
     $this->postJson("/channels/{$channel->id}/ads", ['upload' => $id, 'seconds' => 8])->assertOk();
@@ -85,8 +85,8 @@ test('every door takes a finished upload: a channel, the ads network and the Ad 
         'is_active' => true, 'screen_ids' => [],
     ])->assertOk();
 
-    expect(ChannelAd::sole()->media->store_id)->toBe($this->store->id)
-        ->and(BuilderAsset::sole()->store_id)->toBe($this->store->id)
+    expect(ChannelAd::sole()->media->organization_id)->toBe($this->organization->id)
+        ->and(BuilderAsset::sole()->organization_id)->toBe($this->organization->id)
         ->and(Campaign::sole()->name)->toBe('Cola')
         ->and(Upload::count())->toBe(0);
 });
@@ -106,8 +106,8 @@ test('a video is measured from its bytes when it is added: one too long is refus
     expect(Media::sole()->duration_seconds)->toBe(12);
 });
 
-test("the shop's 512 MB counts the uploads still open: the one that would pass it is refused before a byte", function () {
-    Media::factory()->create(['store_id' => $this->store->id, 'size' => 500 * 1024 * 1024, 'thumbnail_path' => null]);
+test("the organization's 512 MB counts the uploads still open: the one that would pass it is refused before a byte", function () {
+    Media::factory()->create(['organization_id' => $this->organization->id, 'size' => 500 * 1024 * 1024, 'thumbnail_path' => null]);
 
     Tus::open($this, 10 * 1024 * 1024, ['name' => 'a.jpg', 'purpose' => 'media'])->assertCreated();
 
@@ -118,7 +118,7 @@ test("the shop's 512 MB counts the uploads still open: the one that would pass i
     Tus::open($this, 1024 * 1024, ['name' => 'c.jpg', 'purpose' => 'media'])->assertCreated();
 
     expect(Upload::count())->toBe(2)
-        ->and(app(StoreStorage::class)->used($this->store->id))->toBe(500 * 1024 * 1024);
+        ->and(app(OrganizationStorage::class)->used($this->organization->id))->toBe(500 * 1024 * 1024);
 });
 
 test('nothing is opened that the door would refuse, and each refusal says why', function () {
@@ -133,11 +133,11 @@ test('nothing is opened that the door would refuse, and each refusal says why', 
     Tus::open($this, 100, ['name' => 'a.jpg', 'purpose' => 'campaign'])->assertForbidden();
 
     // A channel out of reach is not found, like its door says.
-    $theirs = Channel::factory()->create(['store_id' => Store::factory()->create()->id]);
+    $theirs = Channel::factory()->create(['organization_id' => Organization::factory()->create()->id]);
     Tus::open($this, 100, ['name' => 'a.jpg', 'purpose' => 'channel', 'channel' => $theirs->id])->assertNotFound();
 
-    // A store's person with no store chosen has nowhere to put it.
-    $this->withSession(['current_store_id' => null]);
+    // An organization's person with no organization chosen has nowhere to put it.
+    $this->withSession(['current_organization_id' => null]);
     Tus::open($this, 100, ['name' => 'a.jpg', 'purpose' => 'media'])->assertForbidden();
 
     expect(Upload::count())->toBe(0);
@@ -199,10 +199,10 @@ test('an upload never finished goes after a day, and so does a part no upload na
     Tus::ask($this, $id)->assertNotFound();
 });
 
-test('a deleted shop takes the uploads still on their way into it', function () {
+test('a deleted organization takes the uploads still on their way into it', function () {
     $id = Tus::idOf(Tus::open($this, 10, ['name' => 'a.jpg', 'purpose' => 'media']));
 
-    $this->store->delete();
+    $this->organization->delete();
 
     expect(Upload::count())->toBe(0)->and(Storage::disk('uploads')->exists("{$id}.part"))->toBeFalse();
 });

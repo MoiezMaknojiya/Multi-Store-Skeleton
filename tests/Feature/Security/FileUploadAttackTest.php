@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Permission;
-use App\Models\Store;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\VideoFiles;
@@ -13,7 +13,7 @@ use Tests\Support\VideoFiles;
 |--------------------------------------------------------------------------
 |
 | A PHP file wearing a .jpg name, a 300 MB loop, a filename full of ../, a title the length of a book.
-| Nothing may land on the disk that the player cannot render, nothing may land outside its store's own
+| Nothing may land on the disk that the player cannot render, nothing may land outside its organization's own
 | folder, and nothing may keep the name the client chose.
 |
 */
@@ -21,9 +21,9 @@ use Tests\Support\VideoFiles;
 beforeEach(function () {
     Storage::fake('public');
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->uploader = createStoreUser($this->store, [...Permission::STORE], 'Uploader');
-    $this->actingAs($this->uploader)->withSession(['current_store_id' => $this->store->id]);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->uploader = createOrganizationUser($this->organization, [...Permission::ORGANIZATION], 'Uploader');
+    $this->actingAs($this->uploader)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 /**
@@ -97,15 +97,15 @@ test('the client never chooses where a file lands or what it is called', functio
     $this->postJson('/media', ['file' => $file, 'title' => 'Poster'])->assertOk();
 
     $media = Media::sole();
-    expect($media->store_id)->toBe($this->store->id)
-        ->and($media->path)->toStartWith("media/{$this->store->id}/")
+    expect($media->organization_id)->toBe($this->organization->id)
+        ->and($media->path)->toStartWith("media/{$this->organization->id}/")
         ->and($media->path)->not->toContain('..')
         ->and($media->path)->not->toContain('evil')
         ->and($media->disk)->toBe('public');
 
     Storage::disk('public')->assertExists($media->path);
     foreach (Storage::disk('public')->allFiles() as $path) {
-        expect($path)->toStartWith("media/{$this->store->id}/");
+        expect($path)->toStartWith("media/{$this->organization->id}/");
     }
 });
 
@@ -174,11 +174,11 @@ test('a video’s poster is stored only as a picture the server drew — never t
         ->and(getimagesizefromstring(Storage::disk('public')->get($thumbnail))[2])->toBe(IMAGETYPE_JPEG);
 });
 
-test('an upload with no store in the session is refused, not filed somewhere else', function () {
+test('an upload with no organization in the session is refused, not filed somewhere else', function () {
     $this->actingAs($this->uploader);
     $this->flushSession();
 
-    // Permissions are read through the membership of the store in the session: with no store there is
+    // Permissions are read through the membership of the organization in the session: with no organization there is
     // nothing to read, so the upload is refused before a byte reaches the disk.
     $status = $this->postJson('/media', ['file' => UploadedFile::fake()->image('poster.jpg')])->status();
 
@@ -187,9 +187,9 @@ test('an upload with no store in the session is refused, not filed somewhere els
         ->and(Storage::disk('public')->allFiles())->toBeEmpty();
 });
 
-test('another store’s file cannot be deleted, and deleting your own takes both files', function () {
-    $other = Store::factory()->create();
-    $theirs = Media::factory()->create(['store_id' => $other->id, 'path' => 'media/9/theirs.jpg', 'thumbnail_path' => 'media/9/thumbs/theirs.jpg']);
+test('another organization’s file cannot be deleted, and deleting your own takes both files', function () {
+    $other = Organization::factory()->create();
+    $theirs = Media::factory()->create(['organization_id' => $other->id, 'path' => 'media/9/theirs.jpg', 'thumbnail_path' => 'media/9/thumbs/theirs.jpg']);
     Storage::disk('public')->put($theirs->path, 'bytes');
     Storage::disk('public')->put($theirs->thumbnail_path, 'bytes');
 
@@ -197,7 +197,7 @@ test('another store’s file cannot be deleted, and deleting your own takes both
     Storage::disk('public')->assertExists($theirs->path);
 
     $this->postJson('/media', ['file' => UploadedFile::fake()->image('mine.jpg', 300, 200)])->assertOk();
-    $mine = Media::where('store_id', $this->store->id)->sole();
+    $mine = Media::where('organization_id', $this->organization->id)->sole();
 
     // A JPEG always gets a thumbnail of its own, so there really are two files to take.
     expect($mine->thumbnail_path)->not->toBeNull();

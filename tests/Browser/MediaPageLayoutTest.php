@@ -3,7 +3,7 @@
 namespace Tests\Browser;
 
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -26,14 +26,14 @@ class MediaPageLayoutTest extends DuskTestCase
 
     public function test_the_filters_and_the_search_share_one_line_and_nothing_jumps_as_the_list_arrives(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store);
-        Media::factory()->count(12)->create(['store_id' => $store->id, 'thumbnail_path' => null]);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization);
+        Media::factory()->count(12)->create(['organization_id' => $organization->id, 'thumbnail_path' => null]);
 
-        $this->browse(function (Browser $browser) use ($owner, $store) {
+        $this->browse(function (Browser $browser) use ($owner, $organization) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             foreach (self::WIDTHS as [$width, $height, $besideTheMeter, $oneLine]) {
                 $browser->resize($width, $height);
@@ -67,11 +67,11 @@ class MediaPageLayoutTest extends DuskTestCase
         });
     }
 
-    public function test_above_the_stores_the_library_joins_the_line_and_a_shops_storage_appears_with_it(): void
+    public function test_above_the_organizations_the_library_joins_the_line_and_a_organizations_storage_appears_with_it(): void
     {
         $admin = $this->seedSuperAdmin();
-        $alpha = Store::factory()->create(['name' => 'Alpha Mart']);
-        Media::factory()->create(['store_id' => $alpha->id, 'title' => 'Alpha poster', 'thumbnail_path' => null]);
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
+        Media::factory()->create(['organization_id' => $alpha->id, 'title' => 'Alpha poster', 'thumbnail_path' => null]);
 
         $this->browse(function (Browser $browser) use ($admin, $alpha) {
             $this->freshSession($browser);
@@ -84,7 +84,7 @@ class MediaPageLayoutTest extends DuskTestCase
             $this->assertFalse($line['meterShown']);
             $this->assertSame(1, $line['filterLines']);
 
-            // A shop's library: its storage, and an upload that would go there.
+            // An organization's library: its storage, and an upload that would go there.
             $browser->select('@media-filter-library', (string) $alpha->id)->waitForText('Alpha poster')
                 ->waitFor('@storage-meter')->assertSeeIn('@storage-meter-text', 'of 512 MB used');
             $this->assertSame(1, $this->line($browser, ['media-filter-library', 'media-filter-type', 'media-filter-orientation', 'media-sort', 'crud-search'])['filterLines']);

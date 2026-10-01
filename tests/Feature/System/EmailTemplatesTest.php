@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Invitation;
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\User;
 use App\Notifications\ConfirmNewEmailNotification;
 use App\Notifications\DiskAlmostFullNotification;
@@ -36,13 +36,13 @@ function renderedMail(object $notification, ?object $notifiable = null): string
 }
 
 test('the invitation email carries the link, who sent it, the role and when it expires', function () {
-    $store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $inviter = createStoreUser($store, ['member-invite'], 'Owner');
+    $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $inviter = createOrganizationUser($organization, ['member-invite'], 'Owner');
     $inviter->update(['first_name' => 'Moiez', 'last_name' => 'Ali']);
     $role = Role::owner();
 
     $invitation = Invitation::create([
-        'store_id' => $store->id,
+        'organization_id' => $organization->id,
         'email' => 'sara@example.com',
         'role_id' => $role->id,
         'invited_by' => $inviter->id,
@@ -72,10 +72,10 @@ test('the invitation email carries the link, who sent it, the role and when it e
 });
 
 test('an invitation with no inviter still reads as a sentence', function () {
-    $store = Store::factory()->create(['name' => 'Beta Store']);
+    $organization = Organization::factory()->create(['name' => 'Beta Organization']);
 
     $invitation = Invitation::create([
-        'store_id' => $store->id,
+        'organization_id' => $organization->id,
         'email' => 'owner@example.com',
         'role_id' => Role::owner()->id,
         'invited_by' => null,
@@ -85,7 +85,7 @@ test('an invitation with no inviter still reads as a sentence', function () {
 
     expect(renderedMail(new InvitationNotification($invitation, 'no-inviter')))
         ->toContain('You have been invited to join')
-        ->toContain('Beta Store');
+        ->toContain('Beta Organization');
 });
 
 test('the password reset email carries the link, the address and the minutes it lasts', function () {
@@ -107,9 +107,9 @@ test('the password reset email carries the link, the address and the minutes it 
 });
 
 test('both emails go out with a plain-text twin beside the HTML', function () {
-    $store = Store::factory()->create();
+    $organization = Organization::factory()->create();
     $invitation = Invitation::create([
-        'store_id' => $store->id,
+        'organization_id' => $organization->id,
         'email' => 'sara@example.com',
         'role_id' => Role::owner()->id,
         'invited_by' => null,
@@ -206,9 +206,9 @@ test('every plain-text twin prints its link and its words as they are, never HTM
     // A signed link carries "&" between its parameters: escaped, it reads "&amp;" and the link is broken.
     $user = User::factory()->unverified()->create(['first_name' => "Sa'ra", 'email' => 'sara@example.com']);
     $user->forceFill(['pending_email' => 'sara@newshop.com'])->save();
-    $store = Store::factory()->create(['name' => 'Ali & Sons']);
+    $organization = Organization::factory()->create(['name' => 'Ali & Sons']);
     $invitation = Invitation::create([
-        'store_id' => $store->id, 'email' => 'sara@example.com', 'role_id' => Role::owner()->id, 'invited_by' => null,
+        'organization_id' => $organization->id, 'email' => 'sara@example.com', 'role_id' => Role::owner()->id, 'invited_by' => null,
         'token_hash' => hash('sha256', 'text-twin'), 'expires_at' => now()->addDays(Invitation::LIFETIME_DAYS),
     ]);
 

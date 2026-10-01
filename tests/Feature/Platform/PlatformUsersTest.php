@@ -2,8 +2,8 @@
 
 use App\Models\ActivityLog;
 use App\Models\Invitation;
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\User;
 use App\Notifications\InvitationNotification;
 use Illuminate\Support\Facades\DB;
@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Notification;
 
 /*
 |--------------------------------------------------------------------------
-| Every account, from the platform's side (docs/STORE-ORGANIZATION-SPEC.md rules 13, 19, 21, 24)
+| Every account, from the platform's side (docs/ORGANIZATION-SPEC.md rules 13, 19, 21, 24)
 |--------------------------------------------------------------------------
 */
 
@@ -20,7 +20,7 @@ beforeEach(function () {
 
     // The first super admin ever made is the primary one.
     $this->primary = createSuperAdmin(['user-view', 'user-destroy']);
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
 });
 
 function usersFor(User $viewer)
@@ -29,23 +29,23 @@ function usersFor(User $viewer)
 }
 
 test('a super admin sees every account, with what each one can reach', function () {
-    $owner = createStoreMember($this->store, Role::OWNER);
+    $owner = createOrganizationMember($this->organization, Role::OWNER);
     $ops = createPlatformUser(['user-view'], 'Support');
 
     $rows = usersFor($this->primary);
 
-    expect($rows[$owner->id]['memberships'])->toBe([['store_id' => $this->store->id, 'store_name' => 'Alpha Mart', 'role_name' => 'Owner', 'role_key' => Role::OWNER]])
+    expect($rows[$owner->id]['memberships'])->toBe([['organization_id' => $this->organization->id, 'organization_name' => 'Alpha Mart', 'role_name' => 'Owner', 'role_key' => Role::OWNER]])
         ->and($rows[$owner->id]['sole_owner_of'])->toBe(['Alpha Mart'])
         ->and($rows[$ops->id]['platform_role'])->toBe('Support')
         ->and($rows[$this->primary->id]['is_you'])->toBeTrue()
         ->and($rows[$this->primary->id]['is_primary'])->toBeTrue()
-        ->and($rows[$owner->id]['can'])->toBe(['impersonate' => true, 'manage_stores' => true, 'remove_platform_role' => false, 'delete' => true])
-        // The platform team works above the stores: nobody there is put in one.
-        ->and($rows[$ops->id]['can']['manage_stores'])->toBeFalse();
+        ->and($rows[$owner->id]['can'])->toBe(['impersonate' => true, 'manage_organizations' => true, 'remove_platform_role' => false, 'delete' => true])
+        // The platform team works above the organizations: nobody there is put in one.
+        ->and($rows[$ops->id]['can']['manage_organizations'])->toBeFalse();
 });
 
 test('support sees customers only — never the platform team', function () {
-    $owner = createStoreMember($this->store, Role::OWNER);
+    $owner = createOrganizationMember($this->organization, Role::OWNER);
     $support = createPlatformUser(['user-view']);
 
     $ids = usersFor($support)->keys();
@@ -54,6 +54,8 @@ test('support sees customers only — never the platform team', function () {
 });
 
 test('a full name finds its account, as the list shows it', function () {
+    // A made-up name for the viewer could hold "ali" itself (Natalia, Alice …), so it gets one that never does.
+    $this->primary->update(['first_name' => 'Primary', 'last_name' => 'Admin', 'email' => 'primary@example.com']);
     $ali = User::factory()->create(['first_name' => 'Ali', 'last_name' => 'Khan', 'email' => 'ak@example.com']);
     User::factory()->create(['first_name' => 'Ali', 'last_name' => 'Raza', 'email' => 'ar@example.com']);
 
@@ -67,17 +69,17 @@ test('a full name finds its account, as the list shows it', function () {
     expect($found)->toHaveCount(2);
 });
 
-test('deleting an account removes the person from their stores and reports stores left without an owner', function () {
-    $owner = createStoreMember($this->store, Role::OWNER);
-    $staff = createStoreMember($this->store, Role::STAFF);
+test('deleting an account removes the person from their organizations and reports organizations left without an owner', function () {
+    $owner = createOrganizationMember($this->organization, Role::OWNER);
+    $staff = createOrganizationMember($this->organization, Role::STAFF);
 
     $this->actingAs($this->primary)->deleteJson("/users/{$owner->id}", ['password' => 'password'])
         ->assertOk()
-        ->assertJsonFragment(['ownerless_stores' => ['Alpha Mart']]);
+        ->assertJsonFragment(['ownerless_organizations' => ['Alpha Mart']]);
 
     expect(User::find($owner->id))->toBeNull()
-        ->and(Store::find($this->store->id))->not->toBeNull()
-        ->and(roleKeyIn($staff, $this->store))->toBe(Role::STAFF)
+        ->and(Organization::find($this->organization->id))->not->toBeNull()
+        ->and(roleKeyIn($staff, $this->organization))->toBe(Role::STAFF)
         ->and(ActivityLog::where('action', 'user.deleted')->latest('id')->value('description'))->toContain('left without an Owner: Alpha Mart');
 });
 
@@ -108,7 +110,7 @@ test('removing a platform role: super admins only, the primary protected, super 
     $ops = createPlatformUser(['user-view'], 'Ops');
 
     $this->actingAs($second)->deleteJson("/users/{$ops->id}/platform-role", ['password' => 'password'])->assertOk();
-    expect(DB::table('store_user')->where('user_id', $ops->id)->exists())->toBeFalse();
+    expect(DB::table('organization_user')->where('user_id', $ops->id)->exists())->toBeFalse();
 
     $this->actingAs($second)->deleteJson("/users/{$third->id}/platform-role")->assertForbidden();
     $this->actingAs($second)->deleteJson("/users/{$this->primary->id}/platform-role")->assertForbidden();
@@ -121,7 +123,7 @@ test('removing a platform role: super admins only, the primary protected, super 
     $this->actingAs($support)->deleteJson("/users/{$second->id}/platform-role")->assertForbidden();
 });
 
-test('a super admin invites platform staff; a store account cannot join the team', function () {
+test('a super admin invites platform staff; an organization account cannot join the team', function () {
     $supportRole = Role::create(['name' => 'Support', 'is_global' => true]);
 
     $this->actingAs($this->primary)->postJson('/users/invitations', ['email' => 'helper@example.com', 'role_id' => $supportRole->id])
@@ -131,11 +133,11 @@ test('a super admin invites platform staff; a store account cannot join the team
     expect($invitation->role_id)->toBe($supportRole->id);
     Notification::assertSentOnDemand(InvitationNotification::class);
 
-    $owner = createStoreMember($this->store, Role::OWNER);
+    $owner = createOrganizationMember($this->organization, Role::OWNER);
     $this->actingAs($this->primary)->postJson('/users/invitations', ['email' => $owner->email, 'role_id' => $supportRole->id])
         ->assertStatus(422)->assertJsonValidationErrors('email');
 
-    // A store role is not a platform role.
+    // An organization role is not a platform role.
     $this->actingAs($this->primary)->postJson('/users/invitations', ['email' => 'x@example.com', 'role_id' => Role::starter(Role::ADMIN)->id])
         ->assertStatus(422)->assertJsonValidationErrors('role_id');
 
@@ -169,26 +171,26 @@ test('the accounts listing runs a bounded number of queries however many rows th
         return count(DB::getQueryLog());
     };
 
-    createStoreMember($this->store, Role::OWNER);
+    createOrganizationMember($this->organization, Role::OWNER);
     $countQueries();   // warm-up: the first request also loads the viewer's own roles
     $few = $countQueries();
 
     foreach (range(1, 12) as $i) {
-        createStoreMember(Store::factory()->create(), $i % 2 ? Role::OWNER : Role::STAFF);
+        createOrganizationMember(Organization::factory()->create(), $i % 2 ? Role::OWNER : Role::STAFF);
     }
     $many = $countQueries();
 
     expect($many)->toBe($few);
 });
 
-test('a store left in a platform account’s session never takes its platform powers away', function () {
+test('an organization left in a platform account’s session never takes its platform powers away', function () {
     // Not a super admin: Gate::before would let one through whatever the session said. A support account's
-    // permissions come from its platform role alone, and a store id left in its session — where it is no
+    // permissions come from its platform role alone, and an organization id left in its session — where it is no
     // member, so it holds nothing — must not swap that role for the empty one.
     $support = createPlatformUser(['user-view'], 'Support');
-    $owner = createStoreMember($this->store, Role::OWNER);
+    $owner = createOrganizationMember($this->organization, Role::OWNER);
 
-    $ids = collect($this->actingAs($support)->withSession(['current_store_id' => $this->store->id])
+    $ids = collect($this->actingAs($support)->withSession(['current_organization_id' => $this->organization->id])
         ->getJson('/users/data')->assertOk()->json('users'))->pluck('id');
 
     expect($ids)->toContain($owner->id);

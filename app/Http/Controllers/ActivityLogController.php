@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\HandlesCrudData;
-use App\Http\Controllers\Concerns\ResolvesCurrentStore;
+use App\Http\Controllers\Concerns\ResolvesCurrentOrganization;
 use App\Models\ActivityLog;
 use App\Services\ActivityLogPartitioner;
 use Illuminate\Http\JsonResponse;
@@ -12,20 +12,20 @@ use Illuminate\Support\Carbon;
 use Illuminate\View\View;
 
 /**
- * The activity log, from where the person stands (owner's rules, 2026-09-16): above the stores, every
- * store's history and the platform's own; inside a store — a store's role carrying activity-view — that
- * store's entries alone (ActivityLog::record stamps the store). Yearly maintenance drops a year for every
- * store at once, so it and its storage panel stay above the stores (the routes' global-tier).
+ * The activity log, from where the person stands (owner's rules, 2026-09-16): above the organizations, every
+ * organization's history and the platform's own; inside an organization — an organization's role carrying activity-view — that
+ * organization's entries alone (ActivityLog::record stamps the organization). Yearly maintenance drops a year for every
+ * organization at once, so it and its storage panel stay above the organizations (the routes' global-tier).
  */
 class ActivityLogController extends Controller
 {
-    use HandlesCrudData, ResolvesCurrentStore;
+    use HandlesCrudData, ResolvesCurrentOrganization;
 
     /** Render the activity log page */
     public function index(Request $request): View
     {
         return view('activity.index', [
-            'store' => $request->user()->globalRole() !== null ? null : $this->currentStore(),
+            'organization' => $request->user()->globalRole() !== null ? null : $this->currentOrganization(),
         ]);
     }
 
@@ -71,9 +71,9 @@ class ActivityLogController extends Controller
 
         $query = ActivityLog::query()->latest('id');
 
-        // A store's people read their own store's history, and nothing logged before entries carried a store.
+        // An organization's people read their own organization's history, and nothing logged before entries carried an organization.
         if ($request->user()->globalRole() === null) {
-            $query->where('store_id', $this->currentStore()->id);
+            $query->where('organization_id', $this->currentOrganization()->id);
         }
 
         // Bounding by created_at is what makes the yearly partitions pay off:

@@ -6,9 +6,9 @@ use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\Daypart;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Services\AdPublisher;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -50,10 +50,10 @@ class OfflinePlayerTest extends DuskTestCase
     public function test_a_television_keeps_playing_from_its_cache_when_the_server_cannot_be_reached(): void
     {
         $timezone = $this->daytimeZone();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $screen = Screen::factory()->withToken('offline-token')->create(['store_id' => $store->id, 'name' => 'Counter TV', 'timezone' => $timezone]);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $screen = Screen::factory()->withToken('offline-token')->create(['organization_id' => $organization->id, 'name' => 'Counter TV', 'timezone' => $timezone]);
 
-        $holding = $this->picture($store, 'holding.png', [30, 30, 30]);
+        $holding = $this->picture($organization, 'holding.png', [30, 30, 30]);
         $screen->update(['default_media_id' => $holding->id]);
 
         // Two pictures whose lines play them until a minute of today: the first's window closes while the line is
@@ -62,8 +62,8 @@ class OfflinePlayerTest extends DuskTestCase
         $soonEnds = $this->wholeMinuteAfter($timezone, 60);
         $laterEnds = $soonEnds->addMinute();
 
-        $soon = $this->picture($store, 'soon.png', [200, 40, 40]);
-        $later = $this->picture($store, 'later.png', [40, 160, 60]);
+        $soon = $this->picture($organization, 'soon.png', [200, 40, 40]);
+        $later = $this->picture($organization, 'later.png', [40, 160, 60]);
 
         $this->playOnlyBetween(PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $soon->id, 'position' => 0, 'duration_seconds' => 6]),
             '00:00', $soonEnds->format('H:i'));
@@ -143,18 +143,18 @@ class OfflinePlayerTest extends DuskTestCase
     public function test_with_its_line_cut_a_television_plays_its_ad_page_and_everything_the_page_loads_from_its_cache(): void
     {
         $timezone = $this->daytimeZone();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $screen = Screen::factory()->withToken('line-token')->create(['store_id' => $store->id, 'name' => 'Window TV', 'timezone' => $timezone]);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $screen = Screen::factory()->withToken('line-token')->create(['organization_id' => $organization->id, 'name' => 'Window TV', 'timezone' => $timezone]);
 
         // An ad page with a picture of its own and an entrance, so the frame loads the picture AND the runtime.
-        $page = $this->publishedPage($store);
+        $page = $this->publishedPage($organization);
 
         // A picture whose line opens at a minute that comes while the line is down: only the timeline says when (§15).
-        $later = $this->picture($store, 'later.png', [40, 160, 60]);
+        $later = $this->picture($organization, 'later.png', [40, 160, 60]);
         $laterStarts = $this->wholeMinuteAfter($timezone, 100);
 
         // A file the next days bring — its line starts tomorrow — bigger than two pieces: warmed now, played by no one here.
-        $big = $this->bigFile($store, 'tomorrow.mp4', 2 * self::PART_BYTES + 123_456);
+        $big = $this->bigFile($organization, 'tomorrow.mp4', 2 * self::PART_BYTES + 123_456);
 
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->media_id, 'position' => 0, 'duration_seconds' => 6]);
         $this->playOnlyBetween(PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $later->id, 'position' => 1, 'duration_seconds' => 6]),
@@ -280,13 +280,13 @@ class OfflinePlayerTest extends DuskTestCase
      * A published ad page with a picture of its own and a headline that fades in — compiled at the second
      * server's address, so every picture and script in it is one the set fetches from there.
      */
-    private function publishedPage(Store $store): BuilderAd
+    private function publishedPage(Organization $organization): BuilderAd
     {
         $asset = BuilderAsset::factory()->create([
-            'store_id' => $store->id,
-            'title' => 'Shop front',
+            'organization_id' => $organization->id,
+            'title' => 'Organization front',
             'mime_type' => 'image/png',
-            'path' => $this->putImage("builder/{$store->id}/assets/shop-front.png", 200, 120, 40),
+            'path' => $this->putImage("builder/{$organization->id}/assets/organization-front.png", 200, 120, 40),
             'thumbnail_path' => null,
             'width' => 640,
             'height' => 360,
@@ -301,7 +301,7 @@ class OfflinePlayerTest extends DuskTestCase
                 'style' => ['fontSize' => 96, 'color' => '#ffffff'], 'animations' => ['in' => ['effect' => 'fade', 'duration' => 0.5]]],
         ];
 
-        $ad = BuilderAd::factory()->create(['store_id' => $store->id, 'name' => 'Open all weekend', 'document' => $document]);
+        $ad = BuilderAd::factory()->create(['organization_id' => $organization->id, 'name' => 'Open all weekend', 'document' => $document]);
 
         $diskUrl = config('filesystems.disks.public.url');
         URL::forceRootUrl(self::LINE_ORIGIN);
@@ -319,14 +319,14 @@ class OfflinePlayerTest extends DuskTestCase
         return $ad->fresh();
     }
 
-    /** A file of $bytes on the Dusk disk, in the store's library. */
-    private function bigFile(Store $store, string $file, int $bytes): Media
+    /** A file of $bytes on the Dusk disk, in the organization's library. */
+    private function bigFile(Organization $organization, string $file, int $bytes): Media
     {
-        $path = "media/{$store->id}/{$file}";
+        $path = "media/{$organization->id}/{$file}";
         Storage::disk('public')->put($path, str_repeat('signage ', intdiv($bytes, 8)).str_repeat('.', $bytes % 8));
 
         return Media::factory()->create([
-            'store_id' => $store->id,
+            'organization_id' => $organization->id,
             'title' => pathinfo($file, PATHINFO_FILENAME),
             'type' => Media::TYPE_VIDEO,
             'mime_type' => 'video/mp4',
@@ -408,15 +408,15 @@ class OfflinePlayerTest extends DuskTestCase
         return (int) (preg_match('/\s(\d{3})\s/', (string) ($headers[0] ?? ''), $match) ? $match[1] : 0);
     }
 
-    /** A real picture in the store's library, on the Dusk disk. */
-    private function picture(Store $store, string $file, array $rgb): Media
+    /** A real picture in the organization's library, on the Dusk disk. */
+    private function picture(Organization $organization, string $file, array $rgb): Media
     {
         return Media::factory()->create([
-            'store_id' => $store->id,
+            'organization_id' => $organization->id,
             'title' => pathinfo($file, PATHINFO_FILENAME),
             'type' => Media::TYPE_IMAGE,
             'mime_type' => 'image/png',
-            'path' => $this->putImage("media/{$store->id}/{$file}", ...$rgb),
+            'path' => $this->putImage("media/{$organization->id}/{$file}", ...$rgb),
             'thumbnail_path' => null,
         ]);
     }
@@ -424,7 +424,7 @@ class OfflinePlayerTest extends DuskTestCase
     /** A line's rule that plays it only between two clock times of its screen's day. */
     private function playOnlyBetween(PlaylistItem $line, string $start, string $end): void
     {
-        $daypart = Daypart::factory()->between($start, $end)->create(['store_id' => Screen::whereKey($line->screen_id)->value('store_id')]);
+        $daypart = Daypart::factory()->between($start, $end)->create(['organization_id' => Screen::whereKey($line->screen_id)->value('organization_id')]);
 
         $line->scheduleRules()->create(['daypart_id' => $daypart->id]);
     }

@@ -10,11 +10,11 @@ use App\Models\ChannelAd;
 use App\Models\Daypart;
 use App\Models\Invitation;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
@@ -35,7 +35,7 @@ use Tests\DuskTestCase;
  *
  * Each page is opened in a frame 375 px wide, so the page's own breakpoints are a phone's whatever the size of
  * the test's window, and every dialog is opened the way its page opens it (the `open-modal` event). The names
- * are as long as a real shop's, so a layout that only fits "Test" is found out.
+ * are as long as a real organization's, so a layout that only fits "Test" is found out.
  */
 class EveryPageFitsAPhoneTest extends DuskTestCase
 {
@@ -45,10 +45,10 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
 
     private const LAPTOP_WIDTH = 1280;
 
-    public function test_every_page_and_dialog_above_the_stores_fits_a_phone(): void
+    public function test_every_page_and_dialog_above_the_organizations_fits_a_phone(): void
     {
         $admin = $this->seedSuperAdmin();
-        [$alpha, $screen, $platformChannel] = $this->aBusyShop();
+        [$alpha, $screen, $platformChannel] = $this->aBusyOrganization();
 
         Invitation::factory()->forPlatform()->create([
             'email' => 'new.platform.colleague@example.com',
@@ -62,8 +62,8 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
 
             $this->assertEveryPageFits($browser, [
                 '/dashboard' => [],
-                '/users' => ['invite-platform-member', 'manage-stores', 'confirm-account-deletion', 'confirm-remove-platform-role', 'confirm-revoke-platform-invitation'],
-                '/stores' => ['store-form-modal', 'invite-store-owner', 'confirm-store-deletion', 'confirm-store-ads'],
+                '/users' => ['invite-platform-member', 'manage-organizations', 'confirm-account-deletion', 'confirm-remove-platform-role', 'confirm-revoke-platform-invitation'],
+                '/organizations' => ['organization-form-modal', 'invite-organization-owner', 'confirm-organization-deletion', 'confirm-organization-ads'],
                 '/roles' => ['role-form', 'role-permissions', 'confirm-role-deletion'],
                 '/permissions' => ['permission-form-modal', 'confirm-permission-deletion'],
                 '/activity' => ['confirm-activity-maintenance'],
@@ -81,22 +81,22 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
         });
     }
 
-    public function test_every_page_and_dialog_inside_a_store_fits_a_phone(): void
+    public function test_every_page_and_dialog_inside_a_organization_fits_a_phone(): void
     {
         $this->seedSuperAdmin();
-        [$alpha, $screen] = $this->aBusyShop();
+        [$alpha, $screen] = $this->aBusyOrganization();
 
-        // Everything a store's role may hold, so no page of the store is skipped for want of a permission.
-        $member = $this->storeMember($alpha, [
-            ...Permission::STORE, 'store-view', 'store-store', 'store-destroy',
+        // Everything an organization's role may hold, so no page of the organization is skipped for want of a permission.
+        $member = $this->organizationMember($alpha, [
+            ...Permission::ORGANIZATION, 'organization-view', 'organization-store', 'organization-destroy',
             'channel-view', 'channel-store', 'channel-update', 'channel-destroy', 'activity-view',
-        ], 'rukhsana.siddiqui.manager@example.com', 'Store Manager with every permission');
-        $ownChannel = Channel::factory()->create(['store_id' => $alpha->id, 'name' => 'Alpha Weekend Deals and Offers']);
+        ], 'rukhsana.siddiqui.manager@example.com', 'Organization Manager with every permission');
+        $ownChannel = Channel::factory()->create(['organization_id' => $alpha->id, 'name' => 'Alpha Weekend Deals and Offers']);
 
         $this->browse(function (Browser $browser) use ($member, $alpha, $screen, $ownChannel) {
             $this->freshSession($browser);
             $browser->loginAs($member);
-            $this->switchToStore($browser, $alpha);
+            $this->switchToOrganization($browser, $alpha);
 
             $this->assertEveryPageFits($browser, [
                 '/dashboard' => [],
@@ -108,41 +108,41 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
                 '/channels/'.$ownChannel->id => ['channel-ad-modal'],
                 '/builder' => ['new-ad-orientation', 'confirm-ad-deletion'],
                 '/builder/assets' => ['confirm-asset-deletion'],
-                '/members' => ['invite-member', 'change-member-role', 'remove-member', 'leave-store', 'revoke-invitation'],
+                '/members' => ['invite-member', 'change-member-role', 'remove-member', 'leave-organization', 'revoke-invitation'],
                 '/roles' => ['role-form', 'confirm-role-deletion'],
                 '/activity' => [],
-                '/settings/store' => ['open-store', 'confirm-store-deletion'],
+                '/settings/organization' => ['open-organization', 'confirm-organization-deletion'],
                 '/profile' => ['confirm-user-deletion'],
             ]);
         });
     }
 
-    public function test_the_store_picker_and_the_dashboard_of_somebody_in_no_store_fit_a_phone(): void
+    public function test_the_organization_picker_and_the_dashboard_of_somebody_in_no_organization_fit_a_phone(): void
     {
         $this->seedSuperAdmin();
-        $this->aBusyShop();
+        $this->aBusyOrganization();
 
-        // Muhammad Ali works in two shops, so he is asked which one first; a person just signed up is in none.
-        $inTwoShops = User::where('email', 'muhammad.ali.raza.khan@example.com')->firstOrFail();
-        $inNoShop = User::factory()->create(['first_name' => 'Newly Registered', 'last_name' => 'Team Member']);
+        // Muhammad Ali works in two organizations, so he is asked which one first; a person just signed up is in none.
+        $inTwoOrganizations = User::where('email', 'muhammad.ali.raza.khan@example.com')->firstOrFail();
+        $inNoOrganization = User::factory()->create(['first_name' => 'Newly Registered', 'last_name' => 'Team Member']);
 
-        $this->browse(function (Browser $browser) use ($inTwoShops, $inNoShop) {
+        $this->browse(function (Browser $browser) use ($inTwoOrganizations, $inNoOrganization) {
             $this->freshSession($browser);
-            $browser->loginAs($inTwoShops)->visit('/select-store')->assertPathIs('/select-store');
-            $this->assertEveryPageFits($browser, ['/select-store' => []]);
+            $browser->loginAs($inTwoOrganizations)->visit('/select-organization')->assertPathIs('/select-organization');
+            $this->assertEveryPageFits($browser, ['/select-organization' => []]);
 
             $this->freshSession($browser);
-            $browser->loginAs($inNoShop)->visit('/dashboard')->assertPathIs('/dashboard');
+            $browser->loginAs($inNoOrganization)->visit('/dashboard')->assertPathIs('/dashboard');
             $this->assertEveryPageFits($browser, ['/dashboard' => []]);
         });
     }
 
     public function test_the_doors_a_guest_comes_in_by_fit_a_phone(): void
     {
-        $alpha = Store::factory()->create(['name' => 'Alpha Mart Downtown Superstore']);
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart Downtown Superstore']);
         $token = str_repeat('k', 64);
         Invitation::factory()->withToken($token)->create([
-            'store_id' => $alpha->id,
+            'organization_id' => $alpha->id,
             'email' => 'invited.new.cashier@example.com',
             'role_id' => Role::starter(Role::STAFF)->id,
         ]);
@@ -163,11 +163,11 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
 
     public function test_the_pages_of_an_email_waiting_to_be_confirmed_fit_a_phone(): void
     {
-        $alpha = Store::factory()->create(['name' => 'Alpha Mart Downtown Superstore']);
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart Downtown Superstore']);
         // A signup that has not opened its link, and a colleague whose change of address is waiting for one.
-        $unconfirmed = $this->storeMember($alpha, Role::OWNER, 'a.very.long.customer.address@alpha-mart-downtown.example.com');
+        $unconfirmed = $this->organizationMember($alpha, Role::OWNER, 'a.very.long.customer.address@alpha-mart-downtown.example.com');
         $unconfirmed->forceFill(['email_verified_at' => null])->save();
-        $changing = $this->storeMember($alpha, Role::OWNER, 'cashier@example.com');
+        $changing = $this->organizationMember($alpha, Role::OWNER, 'cashier@example.com');
         $changing->forceFill(['pending_email' => 'the.new.and.much.longer.address.of.the.cashier@alpha-mart-downtown.example.com'])->save();
 
         $this->browse(function (Browser $browser) use ($unconfirmed, $changing, $alpha) {
@@ -181,7 +181,7 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
 
             $this->freshSession($browser);
             $browser->loginAs($changing);
-            $this->switchToStore($browser, $alpha);
+            $this->switchToOrganization($browser, $alpha);
 
             $this->assertEveryPageFits($browser, ['/profile' => ['confirm-user-deletion']]);
         });
@@ -190,13 +190,13 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
     public function test_on_a_phone_the_ad_builder_says_it_needs_a_wider_screen_and_on_a_desk_it_is_there(): void
     {
         $this->seedSuperAdmin();
-        $alpha = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember($alpha, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($alpha, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
 
         $this->browse(function (Browser $browser) use ($designer, $alpha) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $alpha);
+            $this->switchToOrganization($browser, $alpha);
             $browser->visit('/builder');
 
             $atPhone = $this->measure($browser, '/builder/create?orientation=landscape', [], self::PHONE_WIDTH, 'editor');
@@ -212,61 +212,61 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
     /* ── Helpers ─────────────────────────────────────────────────────── */
 
     /**
-     * A shop the way a real one looks: a long name, people with roles in two shops, a pending invitation, a
+     * An organization the way a real one looks: a long name, people with roles in two organizations, a pending invitation, a
      * screen with a playlist, files with long names and descriptions, a daypart, a published ad, the platform's
      * channel with an ad, and an activity log with something in it.
      *
-     * @return array{0: Store, 1: Screen, 2: Channel}
+     * @return array{0: Organization, 1: Screen, 2: Channel}
      */
-    private function aBusyShop(): array
+    private function aBusyOrganization(): array
     {
-        $alpha = Store::factory()->create(['name' => 'Alpha Mart Downtown Superstore', 'city' => 'San Antonio', 'state' => 'TX', 'zip_code' => '78205']);
-        $beta = Store::factory()->create(['name' => 'Beta Store Northside', 'city' => 'Fort Worth', 'state' => 'TX', 'zip_code' => '76102']);
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart Downtown Superstore', 'city' => 'San Antonio', 'state' => 'TX', 'zip_code' => '78205']);
+        $beta = Organization::factory()->create(['name' => 'Beta Organization Northside', 'city' => 'Fort Worth', 'state' => 'TX', 'zip_code' => '76102']);
 
         $owner = User::factory()->create(['first_name' => 'Muhammad Ali', 'last_name' => 'Raza Khan', 'email' => 'muhammad.ali.raza.khan@example.com']);
-        $owner->stores()->attach($alpha->id, ['role_id' => Role::owner()->id]);
-        $manager = Role::create(['name' => 'Assistant Store Manager', 'store_id' => $beta->id]);
-        $owner->stores()->attach($beta->id, ['role_id' => $manager->id]);
+        $owner->organizations()->attach($alpha->id, ['role_id' => Role::owner()->id]);
+        $manager = Role::create(['name' => 'Assistant Organization Manager', 'organization_id' => $beta->id]);
+        $owner->organizations()->attach($beta->id, ['role_id' => $manager->id]);
 
-        $cashier = Role::create(['name' => 'Weekend Cashier', 'store_id' => $alpha->id]);
+        $cashier = Role::create(['name' => 'Weekend Cashier', 'organization_id' => $alpha->id]);
         $cashier->permissions()->sync(Permission::whereIn('name', ['screen-view', 'media-view'])->pluck('id'));
 
         foreach ([['Bilal Ahmed', 'Siddiqui'], ['Fatima Zahra', 'Hussain'], ['Christopher', 'Montgomery-Wellington']] as $index => [$first, $last]) {
             User::factory()->create(['first_name' => $first, 'last_name' => $last, 'email' => 'cashier'.$index.'.alpha.mart@example.com'])
-                ->stores()->attach($alpha->id, ['role_id' => $cashier->id]);
+                ->organizations()->attach($alpha->id, ['role_id' => $cashier->id]);
         }
 
         Invitation::factory()->create([
-            'store_id' => $alpha->id,
+            'organization_id' => $alpha->id,
             'email' => 'pending.new.team.member@example.com',
             'role_id' => $cashier->id,
             'invited_by' => $owner->id,
         ]);
 
         $menu = Media::factory()->create([
-            'store_id' => $alpha->id,
+            'organization_id' => $alpha->id,
             'title' => 'Breakfast, Lunch and Dinner Specials Menu Board',
         ]);
         $video = Media::factory()->create([
-            'store_id' => $alpha->id,
+            'organization_id' => $alpha->id,
             'title' => '2_MinuteMaid-wobbler-Gama Adds September 2026',
             'type' => Media::TYPE_VIDEO,
             'mime_type' => 'video/mp4',
             'duration_seconds' => 30,
         ]);
 
-        $screen = Screen::factory()->create(['store_id' => $alpha->id, 'name' => 'Front Counter Menu Board Television']);
-        Screen::factory()->create(['store_id' => $alpha->id, 'name' => 'Drive-through Window Screen']);
+        $screen = Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Front Counter Menu Board Television']);
+        Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Drive-through Window Screen']);
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $menu->id, 'position' => 0, 'duration_seconds' => 10]);
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $video->id, 'position' => 1]);
 
-        Daypart::factory()->between('06:00', '11:30')->create(['store_id' => $alpha->id, 'name' => 'Breakfast Rush Hours']);
-        Daypart::factory()->overnight()->create(['store_id' => $alpha->id, 'name' => 'Late Night Takeaway Window']);
+        Daypart::factory()->between('06:00', '11:30')->create(['organization_id' => $alpha->id, 'name' => 'Breakfast Rush Hours']);
+        Daypart::factory()->overnight()->create(['organization_id' => $alpha->id, 'name' => 'Late Night Takeaway Window']);
 
-        BuilderAd::factory()->withText('Two for one')->published()->create(['store_id' => $alpha->id, 'name' => 'Weekend Special Two for One Burgers']);
+        BuilderAd::factory()->withText('Two for one')->published()->create(['organization_id' => $alpha->id, 'name' => 'Weekend Special Two for One Burgers']);
 
         $platformChannel = Channel::factory()->create(['name' => 'GAMA Wholesale Promotions Channel']);
-        $promo = Media::factory()->create(['store_id' => null, 'title' => 'Minute Maid Mango Summer Promotion']);
+        $promo = Media::factory()->create(['organization_id' => null, 'title' => 'Minute Maid Mango Summer Promotion']);
         ChannelAd::factory()->create(['channel_id' => $platformChannel->id, 'media_id' => $promo->id]);
 
         ActivityLog::record('media.uploaded', $menu, 'Uploaded Breakfast, Lunch and Dinner Specials Menu Board to the library', $owner);

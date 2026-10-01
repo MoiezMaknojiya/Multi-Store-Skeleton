@@ -14,13 +14,13 @@ use Illuminate\Support\Collection;
  * Four things must all be true before a brand's advert reaches a television, and
  * they are deliberately separate questions:
  *
- *   1. the SHOP agreed to carry advertising at all          stores.accepts_network_ads
+ *   1. the ORGANIZATION agreed to carry advertising at all          organizations.accepts_network_ads
  *   2. and THIS television does                             screens.accepts_network_ads
  *   3. and this campaign chose this screen                  campaign_screen
  *   4. and the campaign is live at this moment              its dates, and its own start/end time
  *
- * Consent (1 and 2) is a standing fact about the shop; targeting (3) is a decision
- * about one campaign. Both are off until somebody says otherwise, so a shop that was
+ * Consent (1 and 2) is a standing fact about the organization; targeting (3) is a decision
+ * about one campaign. Both are off until somebody says otherwise, so an organization that was
  * never asked never carries an advert.
  *
  * The result is ONE break, not several. Each pause and resume of a long video is a
@@ -125,12 +125,12 @@ class NetworkAdResolver
     /**
      * Has this television been cleared to carry advertising?
      *
-     * The shop's answer and the screen's answer are both required. A shop may agree
+     * The organization's answer and the screen's answer are both required. An organization may agree
      * in principle and still keep the set above the children's tables clean.
      */
     public function screenCarriesAds(Screen $screen): bool
     {
-        return $screen->accepts_network_ads && (bool) $screen->store?->accepts_network_ads;
+        return $screen->accepts_network_ads && (bool) $screen->organization?->accepts_network_ads;
     }
 
     /**

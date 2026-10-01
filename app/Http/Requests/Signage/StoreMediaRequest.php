@@ -13,7 +13,7 @@ class StoreMediaRequest extends FormRequest
     use TakesAFinishedUpload;
 
     /** Formats the player can actually render. Anything else is rejected here
-     *  rather than discovered on a TV in a shop. */
+     *  rather than discovered on a TV in an organization. */
     public const ALLOWED_MIMES = 'jpg,jpeg,png,gif,webp,mp4,webm';
 
     /** 250 MB — comfortably above a long 1080p loop, well below php.ini's 2G. */
@@ -58,9 +58,9 @@ class StoreMediaRequest extends FormRequest
             'height' => ['nullable', 'integer', 'min:1', 'max:16384'],
             'poster' => ['nullable', 'string', 'starts_with:data:image/', 'max:'.self::POSTER_MAX_CHARACTERS],
 
-            // The library it joins, said by the platform team only: a shop's id, or nothing for the platform's
-            // own. A store's person uploads to the store they stand in, and whatever they send here is not read.
-            'store_id' => ['nullable', 'integer', 'min:1'],
+            // The library it joins, said by the platform team only: an organization's id, or nothing for the platform's
+            // own. An organization's person uploads to the organization they stand in, and whatever they send here is not read.
+            'organization_id' => ['nullable', 'integer', 'min:1'],
         ];
     }
 

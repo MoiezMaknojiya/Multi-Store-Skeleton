@@ -86,7 +86,7 @@ class ScheduleRule extends Model
      *
      * The subtle part is which DAY the day-rule is tested against. With a window
      * that runs past midnight, half past midnight on Saturday belongs to Friday's
-     * window — the shop said "Friday night, 22:00 to 02:00" and meant it. So the
+     * window — the organization said "Friday night, 22:00 to 02:00" and meant it. So the
      * daypart is asked which day the currently-open window began on, and the day
      * rule is checked against THAT, not against the calendar date.
      */
@@ -250,7 +250,7 @@ class ScheduleRule extends Model
     private function monthlyDayCovers(CarbonImmutable $day, CarbonImmutable $anchor, int $interval): bool
     {
         // A 31st simply does not occur in a 30-day month. Clamping it to the 30th
-        // would put the item on a day the shop never asked for.
+        // would put the item on a day the organization never asked for.
         if ($day->day !== (int) $this->recurrence_monthday) {
             return false;
         }

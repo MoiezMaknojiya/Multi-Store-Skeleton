@@ -200,9 +200,9 @@ export function arrangePanel() {
 
         /**
          * Paste copies on top, a little further on each time, selected. An element whose picture is not on
-         * this shop's shelf is left out — it would be an empty box here, and the television would drop it.
-         * The shelf is the ad's own shop's, the same one the picker offers: above the stores the editor
-         * holds every shop's pictures, and another shop's is not this ad's to use.
+         * this organization's shelf is left out — it would be an empty box here, and the television would drop it.
+         * The shelf is the ad's own organization's, the same one the picker offers: above the organizations the editor
+         * holds every organization's pictures, and another organization's is not this ad's to use.
          */
         pasteClipboard() {
             const copied = readClipboard();

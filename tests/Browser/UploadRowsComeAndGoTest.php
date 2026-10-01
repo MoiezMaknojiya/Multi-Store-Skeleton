@@ -4,7 +4,7 @@ namespace Tests\Browser;
 
 use App\Models\BuilderAsset;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -20,13 +20,13 @@ class UploadRowsComeAndGoTest extends DuskTestCase
 
     public function test_added_rows_fade_after_eight_seconds_and_a_refused_one_stays(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization);
 
-        $this->browse(function (Browser $browser) use ($owner, $store) {
+        $this->browse(function (Browser $browser) use ($owner, $organization) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
             $browser->visit('/media');
             $this->waitForAlpine($browser);
             $browser->waitFor('@media-dropzone');
@@ -76,13 +76,13 @@ class UploadRowsComeAndGoTest extends DuskTestCase
     public function test_the_shelf_and_the_editors_picker_let_their_added_rows_go_too(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $designer = $this->storeMember($store, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($organization, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
 
-        $this->browse(function (Browser $browser) use ($designer, $store) {
+        $this->browse(function (Browser $browser) use ($designer, $organization) {
             $this->freshSession($browser);
             $browser->loginAs($designer);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             // The shelf.
             $browser->visit('/builder/assets');

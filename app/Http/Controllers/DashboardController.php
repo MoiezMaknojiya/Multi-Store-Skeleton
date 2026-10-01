@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use App\Services\DashboardSummary;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
@@ -14,12 +14,12 @@ class DashboardController extends Controller
     /**
      * Landing page after login. Three audiences:
      *  - Global users (Super-Admin / custom global role): the platform's summary;
-     *    they span every store and never pick one.
-     *  - Store users with a store in context: that ONE store's summary — what it has,
+     *    they span every organization and never pick one.
+     *  - Organization users with an organization in context: that ONE organization's summary — what it has,
      *    what needs doing and its first steps (DashboardSummary).
-     *  - Store users with no store chosen yet: smart default — a single store is
-     *    auto-selected, several stores send them to the selection page.
-     * A store the platform has paused shows why instead (EnsureStoreIsActive sends every page of it here).
+     *  - Organization users with no organization chosen yet: smart default — a single organization is
+     *    auto-selected, several organizations send them to the selection page.
+     * An organization the platform has paused shows why instead (EnsureOrganizationIsActive sends every page of it here).
      */
     public function index(DashboardSummary $summary): View|RedirectResponse
     {
@@ -32,43 +32,43 @@ class DashboardController extends Controller
             ]);
         }
 
-        $stores = $user->stores()->get();
+        $organizations = $user->organizations()->get();
 
-        if ($stores->isEmpty()) {
+        if ($organizations->isEmpty()) {
             return view('dashboard.index', ['view' => 'empty']);
         }
 
-        // Smart default: auto-select a single store; several stores need a pick. A flash that came
-        // here with a redirect ("Invitation declined.", a deleted store's goodbye) is kept for one
+        // Smart default: auto-select a single organization; several organizations need a pick. A flash that came
+        // here with a redirect ("Invitation declined.", a deleted organization's goodbye) is kept for one
         // more request, so the picker shows it instead of it vanishing on the way through.
-        $store = $this->resolveCurrentStore($stores);
+        $organization = $this->resolveCurrentOrganization($organizations);
 
-        if ($store === null) {
+        if ($organization === null) {
             session()->reflash();
 
-            return redirect()->route('stores.select');
+            return redirect()->route('organizations.select');
         }
 
-        if (! $store->is_active) {
+        if (! $organization->is_active) {
             return view('dashboard.index', [
                 'view' => 'paused',
-                'store' => $store,
-                'hasOtherStores' => $stores->count() > 1,
+                'organization' => $organization,
+                'hasOtherOrganizations' => $organizations->count() > 1,
             ]);
         }
 
         return view('dashboard.index', [
-            'view' => 'store',
-            'summary' => $summary->forStore($store, $user),
+            'view' => 'organization',
+            'summary' => $summary->forOrganization($organization, $user),
         ]);
     }
 
     /**
-     * Store selection page — every store the user belongs to, as cards. Global
-     * users have no store to pick (their context is always global) and store
-     * users with a single store never need this, so both are sent to the dashboard.
+     * Organization selection page — every organization the user belongs to, as cards. Global
+     * users have no organization to pick (their context is always global) and organization
+     * users with a single organization never need this, so both are sent to the dashboard.
      */
-    public function selectStore(): View|RedirectResponse
+    public function selectOrganization(): View|RedirectResponse
     {
         $user = auth()->user();
 
@@ -76,47 +76,47 @@ class DashboardController extends Controller
             return redirect()->route('dashboard');
         }
 
-        $stores = $user->stores()->get();
+        $organizations = $user->organizations()->get();
 
-        if ($stores->count() <= 1) {
+        if ($organizations->count() <= 1) {
             return redirect()->route('dashboard');
         }
 
-        $roleNames = Role::whereIn('id', $stores->pluck('pivot.role_id')->filter())->pluck('name', 'id');
+        $roleNames = Role::whereIn('id', $organizations->pluck('pivot.role_id')->filter())->pluck('name', 'id');
 
-        $myStores = $stores->map(fn (Store $store) => [
-            'id' => $store->id,
-            'name' => $store->name,
-            'city' => $store->city,
-            'state' => $store->state,
-            'role' => $roleNames[$store->pivot->role_id] ?? 'No role',
-            'is_active' => $store->is_active,
+        $myOrganizations = $organizations->map(fn (Organization $organization) => [
+            'id' => $organization->id,
+            'name' => $organization->name,
+            'city' => $organization->city,
+            'state' => $organization->state,
+            'role' => $roleNames[$organization->pivot->role_id] ?? 'No role',
+            'is_active' => $organization->is_active,
         ]);
 
-        return view('dashboard.select-store', ['myStores' => $myStores]);
+        return view('dashboard.select-organization', ['myOrganizations' => $myOrganizations]);
     }
 
     /**
-     * Resolve the store in session context, applying the smart default: a single
-     * store is auto-selected (and remembered) so the user never has to pick.
-     * Returns null only when several stores exist and none is chosen yet.
+     * Resolve the organization in session context, applying the smart default: a single
+     * organization is auto-selected (and remembered) so the user never has to pick.
+     * Returns null only when several organizations exist and none is chosen yet.
      *
-     * @param  Collection<int, Store>  $stores
+     * @param  Collection<int, Organization>  $organizations
      */
-    private function resolveCurrentStore(Collection $stores): ?Store
+    private function resolveCurrentOrganization(Collection $organizations): ?Organization
     {
-        $currentId = session('current_store_id');
+        $currentId = session('current_organization_id');
 
         if ($currentId) {
-            $match = $stores->firstWhere('id', (int) $currentId);
+            $match = $organizations->firstWhere('id', (int) $currentId);
             if ($match !== null) {
                 return $match;
             }
         }
 
-        if ($stores->count() === 1) {
-            $only = $stores->first();
-            session(['current_store_id' => $only->id]);
+        if ($organizations->count() === 1) {
+            $only = $organizations->first();
+            session(['current_organization_id' => $only->id]);
 
             return $only;
         }

@@ -23,16 +23,16 @@ class AdPublisher
 {
     public function __construct(
         private readonly AdCompiler $compiler,
-        private readonly StoreStorage $quota,
+        private readonly OrganizationStorage $quota,
         private readonly DiskGuard $disk,
     ) {}
 
     /**
      * Compile and publish; returns the media row a playlist plays.
      *
-     * A published page is a file in the shop's library, so it takes room like an upload (StoreStorage): what
+     * A published page is a file in the organization's library, so it takes room like an upload (OrganizationStorage): what
      * the page and its poster's copy add, less what the version before them held, has to fit — decided under
-     * the shop's lock, before anything is written. A shop with no room is told so, and its screens keep the
+     * the organization's lock, before anything is written. An organization with no room is told so, and its screens keep the
      * version they have.
      */
     public function publish(BuilderAd $ad, ?int $actorId = null): Media
@@ -40,7 +40,7 @@ class AdPublisher
         $disk = Storage::disk('public');
         $html = $this->compiler->compile($ad);
 
-        // The server's own disk has its reserve, whatever the shop's allowance says (DiskGuard).
+        // The server's own disk has its reserve, whatever the organization's allowance says (DiskGuard).
         $this->disk->assertRoomFor(strlen($html), 'publish');
         $path = $ad->storageDirectory().'/index.html';
         $media = $ad->media ?? new Media;
@@ -51,7 +51,7 @@ class AdPublisher
             ? (int) $media->size + ($media->thumbnail_path === $copy && $disk->exists($copy) ? (int) $disk->size($copy) : 0)
             : 0;
 
-        return $this->quota->withRoom($ad->store_id, strlen($html) + $poster - $before, fn () => $this->write($ad, $media, $path, $html, $actorId), 'publish');
+        return $this->quota->withRoom($ad->organization_id, strlen($html) + $poster - $before, fn () => $this->write($ad, $media, $path, $html, $actorId), 'publish');
     }
 
     /** The page on disk and its row, with the published version kept. */
@@ -71,7 +71,7 @@ class AdPublisher
         $now = now();
 
         $media->forceFill([
-            'store_id' => $ad->store_id,
+            'organization_id' => $ad->organization_id,
             'title' => $ad->name,
             'type' => Media::TYPE_HTML,
             'mime_type' => 'text/html',

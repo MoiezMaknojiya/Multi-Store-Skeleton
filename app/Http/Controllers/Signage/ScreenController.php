@@ -7,9 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\Daypart;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\ScheduleRule;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Services\DevicePairing;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -39,11 +39,11 @@ class ScreenController extends Controller
             'timezones' => $this->timezoneOptions(),
             // Only the advertising panel uses this, and only a super admin inside an
             // impersonated session ever sees that panel.
-            'storeAcceptsAds' => (bool) Store::find(session('current_store_id'))?->accepts_network_ads,
+            'organizationAcceptsAds' => (bool) Organization::find(session('current_organization_id'))?->accepts_network_ads,
         ]);
     }
 
-    /** Return paginated, searchable screens as JSON, scoped to the current store. */
+    /** Return paginated, searchable screens as JSON, scoped to the current organization. */
     public function data(Request $request): JsonResponse
     {
         // The count rides along so the listing can say which screens actually
@@ -80,8 +80,8 @@ class ScreenController extends Controller
      *
      * Its own endpoint gated by `screen-update` alone, so somebody who may edit a
      * screen does not also need `media-view` — a permission has to be enough for
-     * its own job. Scoped by the SCREEN's store, not the session's, so it stays
-     * right for a global user with no store context.
+     * its own job. Scoped by the SCREEN's organization, not the session's, so it stays
+     * right for a global user with no organization context.
      */
     public function mediaOptions(Request $request, Screen $screen): JsonResponse
     {
@@ -93,7 +93,7 @@ class ScreenController extends Controller
         $search = trim((string) ($validated['search'] ?? ''));
 
         // Never an Ad Builder page taken off the screens (unpublished): it plays nowhere until it is published again.
-        $media = Media::where('store_id', $screen->store_id)
+        $media = Media::where('organization_id', $screen->organization_id)
             ->withoutDrafts()
             ->when($search !== '', fn (Builder $q) => $q->where('title', 'like', "%{$search}%"))
             ->orderBy('title')
@@ -107,7 +107,7 @@ class ScreenController extends Controller
     /** The playlist page for one screen. */
     public function show(Screen $screen): View
     {
-        // Route middleware is not enough: the target has to be inside the store the
+        // Route middleware is not enough: the target has to be inside the organization the
         // actor is working in, or it does not exist for them (404, never 403).
         $screen = Screen::visibleTo(auth()->user())->findOrFail($screen->id);
 
@@ -128,7 +128,7 @@ class ScreenController extends Controller
      *
      * Two modes through one endpoint because they are the same handshake: the code
      * on the TV is exchanged for that screen's token. "new" makes the screen first;
-     * "replace" keeps the screen the shop already set up — its name, orientation
+     * "replace" keeps the screen the organization already set up — its name, orientation
      * and playlist — and only rotates which device answers for it.
      */
     public function pair(Request $request, DevicePairing $pairing): JsonResponse
@@ -155,17 +155,17 @@ class ScreenController extends Controller
             : $this->pairNewScreen($validated, $pairing);
     }
 
-    /** A screen the shop has not set up yet: make it, then hand it the token. */
+    /** A screen the organization has not set up yet: make it, then hand it the token. */
     private function pairNewScreen(array $validated, DevicePairing $pairing): JsonResponse
     {
-        $storeId = $this->currentStoreId();
+        $organizationId = $this->currentOrganizationId();
 
         // One transaction, because a code that turns out to be dead must leave no
-        // trace. Without it a bad code would still create the screen and the shop
+        // trace. Without it a bad code would still create the screen and the organization
         // would collect ghost rows every time somebody mistyped.
-        $screen = DB::transaction(function () use ($validated, $storeId, $pairing) {
+        $screen = DB::transaction(function () use ($validated, $organizationId, $pairing) {
             $screen = Screen::create([
-                'store_id' => $storeId,
+                'organization_id' => $organizationId,
                 'name' => $validated['name'],
                 'orientation' => $validated['orientation'],
                 'timezone' => $validated['timezone'] ?? Screen::DEFAULT_TIMEZONE,
@@ -226,8 +226,8 @@ class ScreenController extends Controller
         ]);
 
         // A foreign key a client could post any number into, so it is looked up
-        // through the store wall before it is trusted.
-        $this->assertBelongsToSameStore($screen, $validated['default_media_id'] ?? null,
+        // through the organization wall before it is trusted.
+        $this->assertBelongsToSameOrganization($screen, $validated['default_media_id'] ?? null,
             'default_media_id', 'That file is not in this organization\'s library.');
 
         $screen->update($validated);
@@ -243,23 +243,23 @@ class ScreenController extends Controller
     /**
      * A foreign key posted by a client is a claim, not a fact.
      *
-     * The store wall in the one place it is easiest to forget: without this, a screen could be made to hold
-     * another shop's file as its default.
+     * The organization wall in the one place it is easiest to forget: without this, a screen could be made to hold
+     * another organization's file as its default.
      */
-    private function assertBelongsToSameStore(Screen $screen, ?int $id, string $field, string $message): void
+    private function assertBelongsToSameOrganization(Screen $screen, ?int $id, string $field, string $message): void
     {
         if ($id === null) {
             return;
         }
 
-        if (! Media::where('id', $id)->where('store_id', $screen->store_id)->exists()) {
+        if (! Media::where('id', $id)->where('organization_id', $screen->organization_id)->exists()) {
             throw ValidationException::withMessages([$field => $message]);
         }
     }
 
     /**
-     * The dayparts a rule on this screen may name: the live ones of the SCREEN's store — never another
-     * store's, even for the platform team, who can see them all (the playlist would refuse one anyway) —
+     * The dayparts a rule on this screen may name: the live ones of the SCREEN's organization — never another
+     * organization's, even for the platform team, who can see them all (the playlist would refuse one anyway) —
      * plus any retired one a rule here still uses, marked `retired`. A retired daypart keeps working for
      * the rules that had it; left out of this list, such a rule read "All day" on the page.
      *
@@ -284,7 +284,7 @@ class ScreenController extends Controller
             ->select('daypart_id');
 
         return Daypart::visibleTo(auth()->user())
-            ->where('store_id', $screen->store_id)
+            ->where('organization_id', $screen->organization_id)
             ->where(fn (Builder $query) => $query->where('is_retired', false)->orWhereIn('id', $used))
             ->orderBy('name')
             ->get(['id', 'name', 'start_time', 'end_time', 'is_retired'])
@@ -315,7 +315,7 @@ class ScreenController extends Controller
 
         $screen->delete();
 
-        ActivityLog::record('screen.deleted', null, "Deleted screen {$name}", storeId: $screen->store_id);
+        ActivityLog::record('screen.deleted', null, "Deleted screen {$name}", organizationId: $screen->organization_id);
 
         return response()->json(['message' => 'Screen deleted successfully']);
     }
@@ -354,17 +354,17 @@ class ScreenController extends Controller
         return array_keys($dates);
     }
 
-    /** A screen belongs to a store, so pairing one needs a store context. */
-    private function currentStoreId(): int
+    /** A screen belongs to an organization, so pairing one needs an organization context. */
+    private function currentOrganizationId(): int
     {
-        $storeId = (int) session('current_store_id');
+        $organizationId = (int) session('current_organization_id');
 
-        if (! $storeId) {
+        if (! $organizationId) {
             throw ValidationException::withMessages([
                 'code' => 'Select an organization before pairing — a screen belongs to the organization it is paired in.',
             ]);
         }
 
-        return $storeId;
+        return $organizationId;
     }
 }

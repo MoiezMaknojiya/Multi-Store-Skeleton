@@ -41,7 +41,7 @@ kuch bhi due na ho to **default media**.
 | 3 | Gap mein **default media** chalti hai, **screen** par set hoti hai |
 | 4 | ~~Layer 1 (screen hours)~~ **+** Layer 2 (item window) **+** Layer 3 (recurrence) — §18 |
 | 5 | Schedule **har screen par alag** (`playlist_items` par), + copy button |
-| 6 | **Store-level hours nahi** — store khula reh sakta hai jab andar ka deli band ho |
+| 6 | **Organization-level hours nahi** — organization khula reh sakta hai jab andar ka deli band ho |
 | 7 | Rules na hon to item **24 ghante** chalta hai |
 | 8 | Kuch due na ho → default media; wo bhi na ho → **kaali screen** (§18) |
 | 9 | `Dayparts` ka sidebar mein apna page, + jahan choose karte ho wahin inline "New" |
@@ -77,7 +77,7 @@ Do usool:
 - **Exceptions** — base window har din chalti hai; jis din alag ho, us din ki row daal do.
   Row mein waqt khali chhoro = **us din bilkul band**.
 
-Daypart **store ki cheez** hai — `Media` ki tarah `visibleTo` sirf store par (creator par
+Daypart **organization ki cheez** hai — `Media` ki tarah `visibleTo` sirf organization par (creator par
 nahi), kyunki "Deli hours" dukan ka common asset hai, kisi ek shakhs ki milkiyat nahi.
 
 Daypart **delete nahi hota** jab tak koi playlist rule us par laga ho — `retire` karo.
@@ -192,8 +192,8 @@ to Rule B par `ends_on = 25 Mar` lagao: file ki apni koi date nahi hoti (2026-10
 | Column | Type | Note |
 |---|---|---|
 | `id` | id | |
-| `store_id` | FK stores, cascade | store ki cheez, nullable **nahi** |
-| `name` | string(100) | `unique(store_id, name)` |
+| `organization_id` | FK organizations, cascade | organization ki cheez, nullable **nahi** |
+| `name` | string(100) | `unique(organization_id, name)` |
 | `start_time` | time | |
 | `end_time` | time | `end < start` = aadhi raat cross |
 | `is_retired` | bool, default false | delete nahi, retire |
@@ -355,7 +355,7 @@ Asal action names (design ke `screen.hours_updated` / `playlist.schedule_updated
 | `screen.playlist_updated` | `PlaylistController::update` (rules isi ke saath) |
 | `screen.playlist_copied` | `PlaylistController::copy` |
 
-Jahan subject mit chuka ho (delete), entry ko store `storeId:` argument se milta hai —
+Jahan subject mit chuka ho (delete), entry ko organization `organizationId:` argument se milta hai —
 `screen.deleted` aur `daypart.deleted` aise hi likhe jate hain.
 
 ---
@@ -423,7 +423,7 @@ eligible nahi, wo greyed dikhe.
 - `monthly_day` chuna magar `monthday` 1–31 se bahar
 - `monthly_weekday` chuna magar ordinal ya weekday khali
 - `interval` 1–52 se bahar
-- daypart ka naam store mein pehle se maujood
+- daypart ka naam organization mein pehle se maujood
 - exception mein sirf ek waqt bhara (ya dono, ya dono khali)
 
 **Warnings** (save hoga, magar owner ko bataya jayega) — ye wo hain jo owner ne maange:
@@ -489,15 +489,15 @@ Do baatein jo yahan ahem hain:
 
 | File | Tests | Kya |
 |---|---|---|
-| `DaypartCrudTest` | 18 | store wall, unique name, retire, delete jab in-use ho |
+| `DaypartCrudTest` | 18 | organization wall, unique name, retire, delete jab in-use ho |
 | `DaypartWindowTest` | 10 | `end < start` ka aadhi raat cross · exceptions (Sunday alag waqt, Sunday bilkul band) |
 | `ScheduleRuleTest` | 16 | paanchon recurrence types, `occurrences()`, hard errors |
 | `ScheduleResolverTest` | 13 | boundary ke waqt, timezone, DST, "2 baje chalu hui TV" |
-| `PlaylistScheduleTest` | 15 | rules PUT ke saath · doosre store ka daypart refuse · reorder par rules na maren |
+| `PlaylistScheduleTest` | 15 | rules PUT ke saath · doosre organization ka daypart refuse · reorder par rules na maren |
 | `ScreenScheduleTest` | 12 | device manifest sahi filter kare · `blank` flag · default media |
 | `PlaylistConcurrencyTest` | 6 | rules badlein → fingerprint badle → 409; identical save conflict nahi |
 | `ChannelManifestTest` | 14 | channel line ka schedule, screen ke local date par (§19) |
-| `PlaylistChannelTest` | 20 | channel line save/read, store wall (§19) |
+| `PlaylistChannelTest` | 20 | channel line save/read, organization wall (§19) |
 
 **Dusk** — `tests/Browser/`
 
@@ -544,9 +544,9 @@ Har phase ke baad Pest + Dusk chalenge aur localhost par live verify hoga.
 | Migrations | `create_dayparts_table`, `create_daypart_exceptions_table` |
 | Models | `Daypart` (`coversAt`, `windowFor`, `crossesMidnight`, `syncExceptions`, `WEEKDAYS`), `DaypartException`, trait `Concerns\HasClockTimes` |
 | Request | `DaypartRequest` (create + update, ek hi rules) |
-| Controller | `DaypartController` (index · data · store · update · destroy) |
+| Controller | `DaypartController` (index · data · organization · update · destroy) |
 | Routes | `/dayparts` CRUD, har ek apni `can:daypart-*` ke peeche |
-| Permissions | `daypart-view/store/update/destroy` — migration `2026_09_16_110200` mein, starter roles ko (Owner aur Admin ko charon, Staff aur Viewer ko `daypart-view`) |
+| Permissions | `daypart-view/organization/update/destroy` — migration `2026_09_16_110200` mein, starter roles ko (Owner aur Admin ko charon, Staff aur Viewer ko `daypart-view`) |
 | UI | `dayparts/index.blade.php` + `dayparts-table.js` + sidebar link |
 | Tests | `DaypartCrudTest` (18) · `DaypartWindowTest` (10) · Dusk `DaypartUiTest` (2) |
 
@@ -653,7 +653,7 @@ hoti. Iske do test hain:
 ### Ek nateeja jo jaan lena chahiye
 
 Raat ko TV **khud** kaali nahi hoti — wo tab kaali honti hai jab us waqt ke liye kuch
-schedule na ho **aur** default media set na ho. Yaani agar shop din ke gap mein branding
+schedule na ho **aur** default media set na ho. Yaani agar organization din ke gap mein branding
 dikhana chahti hai **aur** raat ko kaala, to abhi dono ek saath nahi ho sakte: default
 media chabis ghante chalega. Zarurat pare to `Late night` jaisa daypart bana kar
 branding par ulta rule lagaya ja sakta hai — magar wo abhi banaya nahi gaya.
@@ -682,7 +682,7 @@ schedule ka poora system un par bhi lagta hai — isliye ye document channels ke
   | Channel line | Kab chalti hai |
   |---|---|
   | apna schedule rakhti hai | usi schedule par, bilkul file ki tarah |
-  | koi schedule nahi | jab shop ki **apni** koi file due ho — taake jo screen shop ne jaan kar kaali rakhi hai, channel use roshan na kar de |
+  | koi schedule nahi | jab organization ki **apni** koi file due ho — taake jo screen organization ne jaan kar kaali rakhi hai, channel use roshan na kar de |
   | koi schedule nahi **aur** playlist par koi file live hi nahi | phir bhi chalti hai — sirf channels wali screen kaali rakhne ko nahi kehti |
 
 - **Manifest mein ek entry jati hai**, item list ke andar (`DeviceController::channelEntry`):
@@ -698,7 +698,7 @@ schedule ka poora system un par bhi lagta hai — isliye ye document channels ke
   saari ads).
 - **Fingerprint mein channel line prefix hoti hai** — `Screen::playlistFingerprint()`
   `'ch'.$channel_id` likhta hai, warna channel 7 aur file 7 ek jaise parhe jate.
-- **Store wall wahi hai:** ek screen sirf platform ke channels aur apne hi store ke channels
+- **Organization wall wahi hai:** ek screen sirf platform ke channels aur apne hi organization ke channels
   utha sakti hai (`Channel::availableTo`, `PlaylistController::assertChannelsAreAvailable`,
   warna 422).
 
@@ -723,5 +723,5 @@ Is spec mein controller/request/JS ke naam chhote likhe hain; 2026-09-17 ke layo
 
 Schedule ke tests `tests/Feature/Signage/` mein hain (`ScheduleResolverTest`, `ScheduleRuleTest`, `PlaylistScheduleTest`,
 `ScreenScheduleTest`, `DaypartWindowTest`, `ChannelManifestTest`), aur playlist/media par hone wale hamle
-`tests/Feature/Security/` mein (`StoreWallAttackTest`, `InputAbuseAttackTest`, `FileUploadAttackTest`,
+`tests/Feature/Security/` mein (`OrganizationWallAttackTest`, `InputAbuseAttackTest`, `FileUploadAttackTest`,
 `DeviceApiAttackTest`). Naming aur folder ke usool `.claude/rules/02-project-conventions.md` mein likhe hain.

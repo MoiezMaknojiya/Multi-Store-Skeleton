@@ -6,7 +6,7 @@
        id    — the input id, also its dusk selector
        model — the Alpine property holding the password
        error — an Alpine expression for the message to show under the field (empty = none)
-       hint  — the line under the label: a removal that can be put back (a member, a store's access, a
+       hint  — the line under the label: a removal that can be put back (a member, an organization's access, a
                platform role) says only that it is you, not that it cannot be undone --}}
 @props(['id', 'model' => 'deletePassword', 'error' => 'deletePasswordError', 'hint' => 'This cannot be undone, so confirm it is you.'])
 

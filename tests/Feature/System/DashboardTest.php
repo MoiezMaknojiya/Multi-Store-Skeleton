@@ -1,7 +1,7 @@
 <?php
 
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -9,30 +9,30 @@ test('guests are redirected to login', function () {
     $this->get('/dashboard')->assertRedirect('/login');
 });
 
-test('super admin dashboard shows the real store count', function () {
-    Store::factory()->count(3)->create();
+test('super admin dashboard shows the real organization count', function () {
+    Organization::factory()->count(3)->create();
 
     $admin = createSuperAdmin();
 
     $response = $this->actingAs($admin)->get('/dashboard');
 
     $response->assertOk();
-    $response->assertViewHas('summary', fn (array $summary) => collect($summary['cards'])->firstWhere('key', 'stores')['value'] === 3);
-    // The number on the Stores card itself — a bare "3" turns up all over a page.
-    expect($response->getContent())->toMatch('/dusk="dashboard-card-stores"[^>]*>[\s\S]*?>\s*3\s*<\/div>\s*<div[^>]*>\s*Organizations\s*</');
+    $response->assertViewHas('summary', fn (array $summary) => collect($summary['cards'])->firstWhere('key', 'organizations')['value'] === 3);
+    // The number on the Organizations card itself — a bare "3" turns up all over a page.
+    expect($response->getContent())->toMatch('/dusk="dashboard-card-organizations"[^>]*>[\s\S]*?>\s*3\s*<\/div>\s*<div[^>]*>\s*Organizations\s*</');
 });
 
-test('the store selection page runs the same number of queries for ten stores as for two', function () {
+test('the organization selection page runs the same number of queries for ten organizations as for two', function () {
     $user = User::factory()->create();
-    $join = fn (int $count) => Store::factory()->count($count)->create()->each(
-        fn (Store $store) => $user->stores()->attach($store->id, ['role_id' => Role::owner()->id])
+    $join = fn (int $count) => Organization::factory()->count($count)->create()->each(
+        fn (Organization $organization) => $user->organizations()->attach($organization->id, ['role_id' => Role::owner()->id])
     );
 
     // A fresh instance each time, so both requests start with nothing remembered about the person.
     $queriesFor = function () use ($user): int {
         DB::flushQueryLog();
         DB::enableQueryLog();
-        $this->actingAs($user->fresh())->get('/select-store')->assertOk();
+        $this->actingAs($user->fresh())->get('/select-organization')->assertOk();
         DB::disableQueryLog();
 
         return count(DB::getQueryLog());
@@ -44,116 +44,116 @@ test('the store selection page runs the same number of queries for ten stores as
     $join(8);
     $ten = $queriesFor();
 
-    // Role names for every card come from one batched query, not one per store — so eight more
-    // stores cost nothing. A ceiling could not catch one query per store; only equality can.
-    expect($user->stores()->count())->toBe(10)
+    // Role names for every card come from one batched query, not one per organization — so eight more
+    // organizations cost nothing. A ceiling could not catch one query per organization; only equality can.
+    expect($user->organizations()->count())->toBe(10)
         ->and($two)->toBeGreaterThan(0)
         ->and($ten)->toBe($two);
 });
 
-test('a user with a custom global role sees the global stats dashboard, not the empty store list', function () {
-    Store::factory()->count(2)->create();
+test('a user with a custom global role sees the global stats dashboard, not the empty organization list', function () {
+    Organization::factory()->count(2)->create();
     $globalRole = Role::create(['name' => 'Global Admin', 'is_global' => true]);
     $user = User::factory()->create();
-    $user->stores()->attach(0, ['role_id' => $globalRole->id]);
+    $user->organizations()->attach(0, ['role_id' => $globalRole->id]);
 
     $response = $this->actingAs($user)->get('/dashboard');
 
     $response->assertOk();
-    $response->assertSee('dusk="dashboard-card-stores"', false);
-    $response->assertDontSee("You're not a member of any store yet", false);
+    $response->assertSee('dusk="dashboard-card-organizations"', false);
+    $response->assertDontSee("You're not a member of any organization yet", false);
 });
 
 test('a global user always gets the global stats dashboard — the global tier wins', function () {
-    // Tiers are meant to be exclusive; even if a stray store row exists, holding a
-    // global role keeps the user on the global stats view (never the store context
+    // Tiers are meant to be exclusive; even if a stray organization row exists, holding a
+    // global role keeps the user on the global stats view (never the organization context
     // or the selector).
-    $store = Store::factory()->create(['name' => 'Attached Store']);
+    $organization = Organization::factory()->create(['name' => 'Attached Organization']);
     $globalRole = Role::create(['name' => 'Global Admin', 'is_global' => true]);
-    $storeRole = Role::create(['name' => 'Manager']);
+    $organizationRole = Role::create(['name' => 'Manager']);
     $user = User::factory()->create();
-    $user->stores()->attach(0, ['role_id' => $globalRole->id]);
-    $user->stores()->attach($store->id, ['role_id' => $storeRole->id]);
+    $user->organizations()->attach(0, ['role_id' => $globalRole->id]);
+    $user->organizations()->attach($organization->id, ['role_id' => $organizationRole->id]);
 
     $response = $this->actingAs($user)->get('/dashboard');
 
     $response->assertOk();
     $response->assertViewHas('view', 'global');
-    $response->assertSee('dusk="dashboard-card-stores"', false);
+    $response->assertSee('dusk="dashboard-card-organizations"', false);
 });
 
-test('super admin dashboard reflects zero stores when none exist', function () {
+test('super admin dashboard reflects zero organizations when none exist', function () {
     $admin = createSuperAdmin();
 
     $response = $this->actingAs($admin)->get('/dashboard');
 
     $response->assertOk();
-    $response->assertViewHas('summary', fn (array $summary) => collect($summary['cards'])->firstWhere('key', 'stores')['value'] === 0);
+    $response->assertViewHas('summary', fn (array $summary) => collect($summary['cards'])->firstWhere('key', 'organizations')['value'] === 0);
 });
 
-test('a single-store user is auto-selected into that store (smart default)', function () {
-    $store = Store::factory()->create(['name' => 'My Store']);
-    $user = createStoreUser($store, []);
+test('a single-organization user is auto-selected into that organization (smart default)', function () {
+    $organization = Organization::factory()->create(['name' => 'My Organization']);
+    $user = createOrganizationUser($organization, []);
 
     $response = $this->actingAs($user)->get('/dashboard');
 
     $response->assertOk();
-    $response->assertViewHas('view', 'store');
-    // The single store was written into session context without any manual pick.
-    expect(session('current_store_id'))->toBe($store->id);
+    $response->assertViewHas('view', 'organization');
+    // The single organization was written into session context without any manual pick.
+    expect(session('current_organization_id'))->toBe($organization->id);
 });
 
-test('a multi-store user with no store chosen is sent to the selection page', function () {
+test('a multi-organization user with no organization chosen is sent to the selection page', function () {
     $user = User::factory()->create();
     $role = Role::create(['name' => 'Owner']);
-    $storeA = Store::factory()->create(['name' => 'First Store']);
-    $storeB = Store::factory()->create(['name' => 'Second Store']);
-    $user->stores()->attach($storeA->id, ['role_id' => $role->id]);
-    $user->stores()->attach($storeB->id, ['role_id' => $role->id]);
+    $organizationA = Organization::factory()->create(['name' => 'First Organization']);
+    $organizationB = Organization::factory()->create(['name' => 'Second Organization']);
+    $user->organizations()->attach($organizationA->id, ['role_id' => $role->id]);
+    $user->organizations()->attach($organizationB->id, ['role_id' => $role->id]);
 
-    $this->actingAs($user)->get('/dashboard')->assertRedirect(route('stores.select'));
+    $this->actingAs($user)->get('/dashboard')->assertRedirect(route('organizations.select'));
 
-    $response = $this->actingAs($user)->get('/select-store');
+    $response = $this->actingAs($user)->get('/select-organization');
     $response->assertOk();
-    $response->assertSee('First Store');
-    $response->assertSee('Second Store');
+    $response->assertSee('First Organization');
+    $response->assertSee('Second Organization');
 });
 
 test('the selection page redirects away when there is nothing to pick', function () {
-    // A single-store user does not need the picker.
-    $store = Store::factory()->create();
-    $single = createStoreUser($store, []);
-    $this->actingAs($single)->get('/select-store')->assertRedirect(route('dashboard'));
+    // A single-organization user does not need the picker.
+    $organization = Organization::factory()->create();
+    $single = createOrganizationUser($organization, []);
+    $this->actingAs($single)->get('/select-organization')->assertRedirect(route('dashboard'));
 
-    // A global user has no store to pick either.
+    // A global user has no organization to pick either.
     $globalRole = Role::create(['name' => 'Global Admin', 'is_global' => true]);
     $global = User::factory()->create();
-    $global->stores()->attach(0, ['role_id' => $globalRole->id]);
-    $this->actingAs($global)->get('/select-store')->assertRedirect(route('dashboard'));
+    $global->organizations()->attach(0, ['role_id' => $globalRole->id]);
+    $this->actingAs($global)->get('/select-organization')->assertRedirect(route('dashboard'));
 });
 
 test('a name that starts with a letter of more than one byte gives its avatar that whole letter', function () {
     // substr() cut the first BYTE of "علی", which is half a character: every page then carried an invalid
-    // UTF-8 byte in the header, the sidebar and the store picker (a "�" on screen).
-    $store = Store::factory()->create();
-    $person = createStoreUser($store, ['store-view'], 'Staff');
+    // UTF-8 byte in the header, the sidebar and the organization picker (a "�" on screen).
+    $organization = Organization::factory()->create();
+    $person = createOrganizationUser($organization, ['organization-view'], 'Staff');
     $person->update(['first_name' => 'علی', 'last_name' => 'Khan']);
 
     foreach (['/dashboard', '/profile'] as $page) {
-        $html = $this->actingAs($person->fresh())->withSession(['current_store_id' => $store->id])->get($page)->assertOk()->getContent();
+        $html = $this->actingAs($person->fresh())->withSession(['current_organization_id' => $organization->id])->get($page)->assertOk()->getContent();
 
         expect(mb_check_encoding($html, 'UTF-8'))->toBeTrue("{$page} is not valid UTF-8")
             ->and($html)->toContain('ع');
     }
 });
 
-test('above the stores the sidebar lists Users first and Stores after it (owner, 2026-09-30)', function () {
+test('above the organizations the sidebar lists Users first and Organizations after it (owner, 2026-09-30)', function () {
     $html = $this->actingAs(createSuperAdmin())->get('/dashboard')->assertOk()->getContent();
 
     $users = strpos($html, 'href="'.route('users.view').'"');
-    $stores = strpos($html, 'href="'.route('stores.view').'"');
+    $organizations = strpos($html, 'href="'.route('organizations.view').'"');
 
     expect($users)->not->toBeFalse()
-        ->and($stores)->not->toBeFalse()
-        ->and($users)->toBeLessThan($stores);
+        ->and($organizations)->not->toBeFalse()
+        ->and($users)->toBeLessThan($organizations);
 });

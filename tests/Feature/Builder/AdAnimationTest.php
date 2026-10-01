@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\BuilderAd;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Services\AdAnimations;
 use App\Services\AdCompiler;
 
@@ -17,16 +17,16 @@ use App\Services\AdCompiler;
 */
 
 beforeEach(function () {
-    $this->store = Store::factory()->create();
+    $this->organization = Organization::factory()->create();
 });
 
-/** Compile elements for this store. */
-function compileElements(Store $store, array $elements): string
+/** Compile elements for this organization. */
+function compileElements(Organization $organization, array $elements): string
 {
     $document = BuilderAd::blankDocument();
     $document['elements'] = $elements;
 
-    return app(AdCompiler::class)->compile(BuilderAd::factory()->create(['store_id' => $store->id, 'document' => $document]));
+    return app(AdCompiler::class)->compile(BuilderAd::factory()->create(['organization_id' => $organization->id, 'document' => $document]));
 }
 
 function textElement(string $id, mixed $animations = [], array $more = []): array
@@ -45,11 +45,11 @@ function animationsOf(string $html): ?array
 }
 
 test('a still advert loads nothing extra; one that moves loads Anime.js and the runtime', function () {
-    $still = compileElements($this->store, [textElement('a')]);
+    $still = compileElements($this->organization, [textElement('a')]);
 
     expect($still)->not->toContain('ad-runtime/')->not->toContain('ad-animations')->not->toContain('class="ad-el ad-pending"');
 
-    $moving = compileElements($this->store, [textElement('a', ['in' => ['effect' => 'fade']])]);
+    $moving = compileElements($this->organization, [textElement('a', ['in' => ['effect' => 'fade']])]);
 
     expect($moving)->toContain('<script type="application/json" id="ad-animations">')
         ->toMatch('#<script src="[^"]*/ad-runtime/anime\.min\.js\?v=[0-9a-f]{10}"></script>#')
@@ -70,7 +70,7 @@ test('a still advert loads nothing extra; one that moves loads Anime.js and the 
 });
 
 test('only an element with an entrance waits hidden for it — a loop alone starts in place', function () {
-    $html = compileElements($this->store, [
+    $html = compileElements($this->organization, [
         textElement('arrives', ['in' => ['effect' => 'slide']]),
         textElement('floats', ['loop' => ['effect' => 'float']]),
     ]);
@@ -80,7 +80,7 @@ test('only an element with an entrance waits hidden for it — a loop alone star
 });
 
 test('every slot reaches the page whole: the numbers it holds, and the defaults for the ones it does not', function () {
-    $html = compileElements($this->store, [textElement('cup', [
+    $html = compileElements($this->organization, [textElement('cup', [
         'in' => ['effect' => 'fade', 'duration' => 1],
         'loop' => ['effect' => 'float', 'axis' => 'y', 'amount' => 10, 'duration' => 2.4],
         'out' => ['effect' => 'zoom', 'at' => 12],
@@ -103,7 +103,7 @@ test('every slot reaches the page whole: the numbers it holds, and the defaults 
 });
 
 test('a bounce lands on a bounce ease unless the person chose another', function () {
-    $html = compileElements($this->store, [
+    $html = compileElements($this->organization, [
         textElement('a', ['in' => ['effect' => 'bounce']]),
         textElement('b', ['in' => ['effect' => 'bounce', 'ease' => 'elastic.out']]),
     ]);
@@ -113,7 +113,7 @@ test('a bounce lands on a bounce ease unless the person chose another', function
 });
 
 test('a curve from the Ease Visualizer is rebuilt from its four numbers, held inside what a handle may reach', function () {
-    $html = compileElements($this->store, [
+    $html = compileElements($this->organization, [
         textElement('a', ['in' => ['effect' => 'fade', 'ease' => 'cubic(0.25,0.1,0.6,1.3)']]),
         textElement('b', ['in' => ['effect' => 'fade', 'ease' => 'cubic(9,-9,-9,9)']]),
         textElement('c', ['in' => ['effect' => 'fade', 'ease' => 'cubic(1,2)']]),
@@ -129,7 +129,7 @@ test('a curve from the Ease Visualizer is rebuilt from its four numbers, held in
 });
 
 test('an effect, a direction or an ease nobody wrote reaches nothing', function () {
-    $html = compileElements($this->store, [
+    $html = compileElements($this->organization, [
         textElement('a', [
             'in' => ['effect' => 'explode', 'duration' => 1],
             'loop' => ['effect' => 'fade'],
@@ -146,7 +146,7 @@ test('an effect, a direction or an ease nobody wrote reaches nothing', function 
 });
 
 test('numbers are held inside AdAnimations::NUMBERS, whatever the document says', function () {
-    $html = compileElements($this->store, [textElement('a', [
+    $html = compileElements($this->organization, [textElement('a', [
         'in' => ['effect' => 'zoom', 'duration' => 0, 'delay' => 99999, 'scale' => -3, 'distance' => '1e9'],
         'loop' => ['effect' => 'shake', 'amount' => -99999, 'duration' => 'fast', 'yoyo' => 'no'],
         'out' => ['effect' => 'fade', 'at' => -5, 'duration' => 999],
@@ -160,7 +160,7 @@ test('numbers are held inside AdAnimations::NUMBERS, whatever the document says'
 });
 
 test('a hidden element does not move, and its animations never reach the page', function () {
-    $html = compileElements($this->store, [textElement('gone', ['in' => ['effect' => 'fade']], ['visible' => false])]);
+    $html = compileElements($this->organization, [textElement('gone', ['in' => ['effect' => 'fade']], ['visible' => false])]);
 
     expect($html)->not->toContain('data-anim-id="gone"')->not->toContain('ad-animations');
 });

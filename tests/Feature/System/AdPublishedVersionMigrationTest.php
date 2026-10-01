@@ -2,7 +2,7 @@
 
 use App\Models\BuilderAd;
 use App\Models\Media;
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -23,17 +23,17 @@ test('an ad published and unchanged keeps what it stores as its version; one cha
 
     expect(Schema::hasColumn('builder_ads', 'published_document'))->toBeFalse();
 
-    $store = Store::factory()->create();
-    $upToDate = BuilderAd::factory()->withText('On air')->create(['store_id' => $store->id, 'name' => 'On air']);
-    $changed = BuilderAd::factory()->withText('Edited since')->create(['store_id' => $store->id, 'name' => 'Edited since']);
-    $never = BuilderAd::factory()->withText('Never published')->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    $upToDate = BuilderAd::factory()->withText('On air')->create(['organization_id' => $organization->id, 'name' => 'On air']);
+    $changed = BuilderAd::factory()->withText('Edited since')->create(['organization_id' => $organization->id, 'name' => 'Edited since']);
+    $never = BuilderAd::factory()->withText('Never published')->create(['organization_id' => $organization->id]);
 
     DB::table('builder_ads')->where('id', $upToDate->id)->update([
-        'media_id' => Media::factory()->adPage()->create(['store_id' => $store->id])->id,
+        'media_id' => Media::factory()->adPage()->create(['organization_id' => $organization->id])->id,
         'published_at' => '2026-09-19 08:00:00', 'updated_at' => '2026-09-19 08:00:00',
     ]);
     DB::table('builder_ads')->where('id', $changed->id)->update([
-        'media_id' => Media::factory()->adPage()->create(['store_id' => $store->id])->id,
+        'media_id' => Media::factory()->adPage()->create(['organization_id' => $organization->id])->id,
         'published_at' => '2026-09-19 08:00:00', 'updated_at' => '2026-09-20 01:57:28',
     ]);
 

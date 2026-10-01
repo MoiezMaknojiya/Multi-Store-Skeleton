@@ -24,13 +24,13 @@ use Throwable;
  * LENGTH is read from the file itself (VideoDuration): the browser's is a number
  * anybody can write by hand.
  *
- * A shop's files are kept only while the shop has room for them (StoreStorage).
+ * An organization's files are kept only while the organization has room for them (OrganizationStorage).
  */
 class MediaStorage
 {
     public function __construct(
         private readonly VideoDuration $durations,
-        private readonly StoreStorage $quota,
+        private readonly OrganizationStorage $quota,
         private readonly DiskGuard $disk,
     ) {}
 
@@ -44,17 +44,17 @@ class MediaStorage
     private const POSTER_MAX_SIDE = 4096;
 
     /**
-     * Store the file in a library and return the attributes for a Media row: a shop's library
-     * (`media/{store}/`), or the platform's own when there is no shop (`media/platform/`).
+     * Store the file in a library and return the attributes for a Media row: an organization's library
+     * (`media/{organization}/`), or the platform's own when there is no organization (`media/platform/`).
      *
      * @param  array<string, mixed>  $clientMeta  browser-measured duration/width/height/poster
      * @return array<string, mixed>
      */
-    public function store(UploadedFile $file, ?int $storeId, array $clientMeta = []): array
+    public function store(UploadedFile $file, ?int $organizationId, array $clientMeta = []): array
     {
-        $folder = $storeId === null ? 'media/platform' : "media/{$storeId}";
+        $folder = $organizationId === null ? 'media/platform' : "media/{$organizationId}";
 
-        return ['store_id' => $storeId, ...$this->put($file, $folder, $clientMeta)];
+        return ['organization_id' => $organizationId, ...$this->put($file, $folder, $clientMeta)];
     }
 
     /**
@@ -63,59 +63,59 @@ class MediaStorage
      *
      * @param  array<string, mixed>  $clientMeta  browser-measured duration/width/height/poster
      */
-    public function addToLibrary(UploadedFile $file, ?int $storeId, array $clientMeta, ?string $typedTitle, ?int $createdBy): Media
+    public function addToLibrary(UploadedFile $file, ?int $organizationId, array $clientMeta, ?string $typedTitle, ?int $createdBy): Media
     {
         // The server's own disk first, whoever uploads (DiskGuard) — the platform's library included.
         $this->disk->assertRoomFor((int) $file->getSize());
 
-        // A full shop is told before its upload is even written. The platform's own library has no wall.
-        if ($storeId !== null) {
-            $this->quota->assertRoomFor($storeId, (int) $file->getSize());
+        // A full organization is told before its upload is even written. The platform's own library has no wall.
+        if ($organizationId !== null) {
+            $this->quota->assertRoomFor($organizationId, (int) $file->getSize());
         }
 
         $attributes = [
-            ...$this->store($file, $storeId, $clientMeta),
+            ...$this->store($file, $organizationId, $clientMeta),
             'title' => $this->titleFor($typedTitle, $file),
             'created_by' => $createdBy,
         ];
 
         /** @var Media */
-        return $this->keptWithinTheWall($storeId, $attributes, fn () => Media::create($attributes));
+        return $this->keptWithinTheWall($organizationId, $attributes, fn () => Media::create($attributes));
     }
 
     /**
-     * Put a file on an Ad Builder shelf and make its row: a shop's — its files count toward the shop's storage like
-     * the library's (the shelf is a way onto the disk as much as the Media page is) — or, with no shop, the shelf the
-     * platform shares with every shop, which has no wall of its own.
+     * Put a file on an Ad Builder shelf and make its row: an organization's — its files count toward the organization's storage like
+     * the library's (the shelf is a way onto the disk as much as the Media page is) — or, with no organization, the shelf the
+     * platform shares with every organization, which has no wall of its own.
      *
      * @param  array<string, mixed>  $clientMeta  browser-measured width/height/poster
      */
-    public function addBuilderAsset(UploadedFile $file, ?int $storeId, array $clientMeta, string $title, ?int $createdBy): BuilderAsset
+    public function addBuilderAsset(UploadedFile $file, ?int $organizationId, array $clientMeta, string $title, ?int $createdBy): BuilderAsset
     {
         $this->disk->assertRoomFor((int) $file->getSize());
 
-        if ($storeId !== null) {
-            $this->quota->assertRoomFor($storeId, (int) $file->getSize());
+        if ($organizationId !== null) {
+            $this->quota->assertRoomFor($organizationId, (int) $file->getSize());
         }
 
-        $stored = $this->storeBuilderAsset($file, $storeId, $clientMeta);
+        $stored = $this->storeBuilderAsset($file, $organizationId, $clientMeta);
 
         /** @var BuilderAsset */
-        return $this->keptWithinTheWall($storeId, $stored, fn () => BuilderAsset::fromStoredFile($storeId, $title, $stored, $createdBy));
+        return $this->keptWithinTheWall($organizationId, $stored, fn () => BuilderAsset::fromStoredFile($organizationId, $title, $stored, $createdBy));
     }
 
     /**
-     * Make the row for files just written: a shop's only while it has room for them and their preview — decided
-     * under the shop's lock (StoreStorage::withRoom) — and the platform's, which has no wall, at once. Refused, or
+     * Make the row for files just written: an organization's only while it has room for them and their preview — decided
+     * under the organization's lock (OrganizationStorage::withRoom) — and the platform's, which has no wall, at once. Refused, or
      * failed for any reason, the files go again: nothing is left on disk that no row names.
      *
      * @param  array<string, mixed>  $stored
      * @param  Closure(): Model  $create
      */
-    private function keptWithinTheWall(?int $storeId, array $stored, Closure $create): Model
+    private function keptWithinTheWall(?int $organizationId, array $stored, Closure $create): Model
     {
         try {
-            return $storeId === null ? $create() : $this->quota->withRoom($storeId, $this->bytesOf($stored), $create);
+            return $organizationId === null ? $create() : $this->quota->withRoom($organizationId, $this->bytesOf($stored), $create);
         } catch (Throwable $refused) {
             $this->deleteFiles((string) $stored['disk'], (string) $stored['path'], $stored['thumbnail_path']);
 
@@ -148,7 +148,7 @@ class MediaStorage
      * The typed title is already capped at 255 by the request. The FALLBACK is not, and it must be
      * treated as untrusted: a filename arrives in the multipart header and a client can put anything
      * of any length there, real filesystem limits or not. Left alone it reaches a varchar(255) column
-     * and a shop owner gets a 500 instead of a file in their library.
+     * and an organization owner gets a 500 instead of a file in their library.
      *
      * Two other shapes worth handling rather than storing: a title of nothing but spaces, and a file
      * called ".jpg", whose name-without-extension is empty. Both would otherwise leave a blank row that
@@ -188,16 +188,16 @@ class MediaStorage
     /**
      * The same pipeline for a picture or a video used INSIDE an ad built in the Ad Builder.
      *
-     * Its own shelf again (owner's decision, 2026-09-17): the store's media library is what a shop
+     * Its own shelf again (owner's decision, 2026-09-17): the organization's media library is what an organization
      * PLAYS, while this is raw material that only means something inside a design — a logo, a texture,
      * a looping background. Same thumbnailing and measuring, different folder.
      *
      * @param  array<string, mixed>  $clientMeta  browser-measured duration/width/height/poster
      * @return array<string, mixed>
      */
-    public function storeBuilderAsset(UploadedFile $file, ?int $storeId, array $clientMeta = []): array
+    public function storeBuilderAsset(UploadedFile $file, ?int $organizationId, array $clientMeta = []): array
     {
-        return $this->put($file, 'builder/'.($storeId ?? 'platform').'/assets', $clientMeta);
+        return $this->put($file, 'builder/'.($organizationId ?? 'platform').'/assets', $clientMeta);
     }
 
     /**
@@ -331,17 +331,17 @@ class MediaStorage
     }
 
     /**
-     * An image the BROWSER drew, handed over as a data URI, written to a path we choose — a shop's design's
-     * poster, kept only while the shop has room for it, in place of the poster it had.
+     * An image the BROWSER drew, handed over as a data URI, written to a path we choose — an organization's design's
+     * poster, kept only while the organization has room for it, in place of the poster it had.
      *
      * The Ad Builder's poster comes this way: an ad is HTML, and there is no headless browser on the
      * server to photograph it, so the editor captures its own stage and sends the picture along with the
      * save. Anything that is not a small PNG or JPEG data URI is quietly refused — a listing without a
      * poster is a nuisance, a listing with somebody's arbitrary bytes in it is a problem. A poster is a
-     * nicety, so a full shop keeps the one it had (or none) and the save goes on: nothing is ever refused
-     * for a photograph of a design (StoreStorage).
+     * nicety, so a full organization keeps the one it had (or none) and the save goes on: nothing is ever refused
+     * for a photograph of a design (OrganizationStorage).
      */
-    public function storePosterWithin(?int $storeId, string $target, ?string $dataUrl, Closure $record, string $disk = 'public'): ?string
+    public function storePosterWithin(?int $organizationId, string $target, ?string $dataUrl, Closure $record, string $disk = 'public'): ?string
     {
         $jpeg = $this->encodePoster($dataUrl);
 
@@ -351,7 +351,7 @@ class MediaStorage
 
         // Written and recorded ($record names it on its row) inside the lock, so the poster is counted from the
         // moment it exists.
-        return $this->quota->withRoomOrSkip($storeId, strlen($jpeg) - $this->sizeOnDisk($disk, $target), function () use ($disk, $target, $jpeg, $record) {
+        return $this->quota->withRoomOrSkip($organizationId, strlen($jpeg) - $this->sizeOnDisk($disk, $target), function () use ($disk, $target, $jpeg, $record) {
             Storage::disk($disk)->put($target, $jpeg);
             $record($target);
 
@@ -360,7 +360,7 @@ class MediaStorage
     }
 
     /**
-     * Decode a poster frame a browser drew — an uploaded video's first frame, an ad's stage — and store
+     * Decode a poster frame a browser drew — an uploaded video's first frame, an ad's stage — and organization
      * GD's own re-encoding of it, never the bytes that were sent.
      *
      * Whatever those bytes claimed to be, what lands on disk is then a JPEG GD drew, or nothing: a data URI

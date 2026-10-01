@@ -2,7 +2,7 @@
  * Choosing and measuring a file before it is uploaded.
  *
  * Used by the uploader every page that takes a file shares (upload-dropzone.js,
- * docs/UPLOADS-SPEC.md): the store's media library, the platform's advertising
+ * docs/UPLOADS-SPEC.md): the organization's media library, the platform's advertising
  * campaigns, a channel's ads and the Ad Builder's asset shelf all accept exactly the
  * same formats and all need a video's shape, length and a poster frame — because the
  * server has no ffmpeg, so the BROWSER measures them and sends the numbers along. The
@@ -80,7 +80,7 @@ export function videoLengthError(meta, maxSeconds = MAX_VIDEO_SECONDS, noun = 'A
     return `${noun} may be at most ${lengthInWords(maxSeconds)} long. This one is ${clock(seconds)}.`;
 }
 
-/** 1536 as "2 KB", 126 353 408 as "120.5 MB", 536 870 912 as "512 MB" — as App\Services\StoreStorage says it. */
+/** 1536 as "2 KB", 126 353 408 as "120.5 MB", 536 870 912 as "512 MB" — as App\Services\OrganizationStorage says it. */
 export function bytesInWords(bytes) {
     if (bytes <= 0) return '0 KB';
     if (bytes < 1024 * 1024) return `${Math.max(1, Math.ceil(bytes / 1024))} KB`;
@@ -91,7 +91,7 @@ export function bytesInWords(bytes) {
 }
 
 /**
- * Why a file will not fit its shop's storage, or null. `storage` is what the server said — {used, limit} —
+ * Why a file will not fit its organization's storage, or null. `storage` is what the server said — {used, limit} —
  * or null for a library with no wall (the platform's own). Only the file is counted here; the server counts
  * its preview too, and decides.
  */

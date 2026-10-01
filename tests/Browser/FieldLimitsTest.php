@@ -2,7 +2,7 @@
 
 namespace Tests\Browser;
 
-use App\Models\Store;
+use App\Models\Organization;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -46,13 +46,13 @@ class FieldLimitsTest extends DuskTestCase
 
     public function test_the_profile_phone_saves_the_ten_digits_it_shows(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization);
 
-        $this->browse(function (Browser $browser) use ($owner, $store) {
+        $this->browse(function (Browser $browser) use ($owner, $organization) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
             $browser->visit('/profile');
             $this->waitForAlpine($browser);
 
@@ -66,21 +66,21 @@ class FieldLimitsTest extends DuskTestCase
         });
     }
 
-    public function test_the_platform_store_form_zip_code_reaches_the_form_clean(): void
+    public function test_the_platform_organization_form_zip_code_reaches_the_form_clean(): void
     {
         $admin = $this->seedSuperAdmin();
 
         $this->browse(function (Browser $browser) use ($admin) {
             $this->freshSession($browser);
-            $browser->loginAs($admin)->visit('/stores');
+            $browser->loginAs($admin)->visit('/organizations');
             $this->waitForAlpine($browser);
-            $this->clickAndAwait($browser, '@add-store', fn (Browser $b) => $b->waitFor('@store-form', 3));
+            $this->clickAndAwait($browser, '@add-organization', fn (Browser $b) => $b->waitFor('@organization-form', 3));
 
-            $this->typeLikeAPerson($browser, '[dusk="store-zip"]', '12ab34-5678-90123');
-            $this->assertSame('1234567890', $browser->value('[dusk="store-zip"]'));
+            $this->typeLikeAPerson($browser, '[dusk="organization-zip"]', '12ab34-5678-90123');
+            $this->assertSame('1234567890', $browser->value('[dusk="organization-zip"]'));
 
             // What Alpine keeps — and so sends — is the clean value too.
-            $this->assertSame('1234567890', $browser->script("return Alpine.\$data(document.querySelector('[dusk=\"store-form\"]')).form.zip_code;")[0]);
+            $this->assertSame('1234567890', $browser->script("return Alpine.\$data(document.querySelector('[dusk=\"organization-form\"]')).form.zip_code;")[0]);
         });
     }
 

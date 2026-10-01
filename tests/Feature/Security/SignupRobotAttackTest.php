@@ -1,7 +1,7 @@
 <?php
 
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Crypt;
@@ -12,10 +12,10 @@ use Illuminate\Support\Facades\Notification;
 | Robots at the sign-up form (owner, 2026-09-30)
 |--------------------------------------------------------------------------
 |
-| Made-up names ("Wmkzprzh Ywgfqzw", stores like "dPyFetSjlZaDyeaHIESs") signed up on the live site all day,
+| Made-up names ("Wmkzprzh Ywgfqzw", organizations like "dPyFetSjlZaDyeaHIESs") signed up on the live site all day,
 | each one sending a confirmation email to somebody's real address. The form carries two traps
 | (components/auth/robot-trap.blade.php): a field no person sees, and the sealed moment it was opened. A robot
-| caught by either makes no account, no store, no log line and no email.
+| caught by either makes no account, no organization, no log line and no email.
 |
 */
 
@@ -33,7 +33,7 @@ function robotSignup(array $extra = []): array
         'email' => 'someone.real@example.com',
         'password' => 'password123',
         'password_confirmation' => 'password123',
-        'store_name' => 'dPyFetSjlZaDyeaHIESs',
+        'organization_name' => 'dPyFetSjlZaDyeaHIESs',
         'street' => '1 Main St',
         'city' => 'Nzqfqka',
         'state' => 'TX',
@@ -45,7 +45,7 @@ function robotSignup(array $extra = []): array
 function expectNothingWritten(): void
 {
     expect(User::where('email', 'someone.real@example.com')->exists())->toBeFalse()
-        ->and(Store::where('name', 'dPyFetSjlZaDyeaHIESs')->exists())->toBeFalse();
+        ->and(Organization::where('name', 'dPyFetSjlZaDyeaHIESs')->exists())->toBeFalse();
     test()->assertGuest();
     Notification::assertNothingSent();
 }

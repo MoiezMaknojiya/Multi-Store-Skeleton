@@ -1,7 +1,7 @@
 <?php
 
+use App\Models\Organization;
 use App\Models\Screen;
-use App\Models\Store;
 
 /*
 |--------------------------------------------------------------------------
@@ -13,7 +13,7 @@ use App\Models\Store;
 | and IP ONLY — the route is not in the key — so all of them counted into one
 | shared bucket per IP.
 |
-| A shop's screens and the owner's laptop sit behind one router, so they share
+| An organization's screens and the owner's laptop sit behind one router, so they share
 | one public IP. Each paired screen sends three requests a minute, which meant a
 | handful of TVs could exhaust the signup form's budget and stop a new screen
 | getting a pairing code, while the screens already playing carried on as normal
@@ -25,14 +25,14 @@ use App\Models\Store;
 |
 */
 
-test('a shop full of screens cannot spend the signup form\'s budget', function () {
-    $store = Store::factory()->create();
-    Screen::factory()->withToken('shop-tv')->create(['store_id' => $store->id]);
+test('an organization full of screens cannot spend the signup form\'s budget', function () {
+    $organization = Organization::factory()->create();
+    Screen::factory()->withToken('organization-tv')->create(['organization_id' => $organization->id]);
 
     // Well past signup's limit of 10 a minute, all from the same IP — exactly
-    // what a shop with a few TVs looks like from the outside.
+    // what an organization with a few TVs looks like from the outside.
     for ($i = 0; $i < 40; $i++) {
-        $this->withHeader('Authorization', 'Bearer shop-tv')
+        $this->withHeader('Authorization', 'Bearer organization-tv')
             ->getJson('/device/playlist')
             ->assertOk();
     }
@@ -42,9 +42,9 @@ test('a shop full of screens cannot spend the signup form\'s budget', function (
 });
 
 test('one screen hammering does not stop the screen next to it', function () {
-    $store = Store::factory()->create();
-    Screen::factory()->withToken('noisy-tv')->create(['store_id' => $store->id]);
-    Screen::factory()->withToken('quiet-tv')->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    Screen::factory()->withToken('noisy-tv')->create(['organization_id' => $organization->id]);
+    Screen::factory()->withToken('quiet-tv')->create(['organization_id' => $organization->id]);
 
     // The noisy one talks until it is cut off.
     $blocked = false;
@@ -57,7 +57,7 @@ test('one screen hammering does not stop the screen next to it', function () {
 
     expect($blocked)->toBeTrue('the per-device limit never engaged');
 
-    // The screen beside it, same shop, same IP, is untouched.
+    // The screen beside it, same organization, same IP, is untouched.
     $this->withHeader('Authorization', 'Bearer quiet-tv')
         ->getJson('/device/playlist')
         ->assertOk();
@@ -76,8 +76,8 @@ test('pairing screens each get their own budget, keyed on the device they claim 
 });
 
 test('a screen that keeps asking is eventually told to wait, and told for how long', function () {
-    $store = Store::factory()->create();
-    Screen::factory()->withToken('busy-tv')->create(['store_id' => $store->id]);
+    $organization = Organization::factory()->create();
+    Screen::factory()->withToken('busy-tv')->create(['organization_id' => $organization->id]);
 
     for ($i = 0; $i < 60; $i++) {
         $this->withHeader('Authorization', 'Bearer busy-tv')->getJson('/device/playlist');
@@ -113,12 +113,12 @@ test('registering is still capped per IP, since a new screen has nothing else to
 });
 
 test('every route that emails an address somebody typed counts into the invitations budget', function () {
-    // A new store for a customer and an owner for an ownerless store both send an Owner invitation — the
+    // A new organization for a customer and an owner for an ownerless organization both send an Owner invitation — the
     // same mail the Members page sends, so the same per-person cap. Before, these two had none.
     $routes = [
         'members.invitations.store', 'members.invitations.resend',
         'users.invitations.store', 'users.invitations.resend',
-        'stores.store', 'stores.owner-invitation',
+        'organizations.store', 'organizations.owner-invitation',
     ];
 
     foreach ($routes as $name) {

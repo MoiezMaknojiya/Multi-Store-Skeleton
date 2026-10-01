@@ -2,9 +2,9 @@
 
 namespace Tests\Browser;
 
+use App\Models\Organization;
 use App\Models\PairingRequest;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Services\DevicePairing;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Str;
@@ -45,8 +45,8 @@ class PlayerRestartTest extends DuskTestCase
      */
     public function test_a_tv_closed_between_the_owner_typing_the_code_and_collecting_the_token(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $screen = Screen::factory()->create(['store_id' => $store->id, 'name' => 'Counter TV']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $screen = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Counter TV']);
 
         $this->browse(function (Browser $tv) use ($screen) {
             // -- The TV asks to be adopted --------------------------------------
@@ -103,9 +103,9 @@ class PlayerRestartTest extends DuskTestCase
      */
     public function test_a_second_tab_does_not_undo_a_pairing_the_first_one_completed(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
         $screen = Screen::factory()->unpaired()->create([
-            'store_id' => $store->id, 'name' => 'Counter TV',
+            'organization_id' => $organization->id, 'name' => 'Counter TV',
         ]);
 
         $this->browse(function (Browser $tv) use ($screen) {
@@ -170,17 +170,17 @@ class PlayerRestartTest extends DuskTestCase
      * minutes, the server briefly answered from the wrong database, and the set
      * went back to showing a code.
      *
-     * The instruction on that screen decides what the shop owner does next. Told
+     * The instruction on that screen decides what the organization owner does next. Told
      * to "Add Screen" they make a SECOND screen and leave the real one stranded
      * with its whole playlist. Told to "Replace device" they put the new token on
      * the screen they already have and nothing is lost.
      */
     public function test_a_television_that_lost_only_its_token_is_sent_to_replace_device(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
         $uuid = '828739f6-8ae4-4099-821c-377b8a3f87bf';
         $screen = Screen::factory()->withToken('real-token')->create([
-            'store_id' => $store->id, 'name' => 'Counter TV', 'device_uuid' => $uuid,
+            'organization_id' => $organization->id, 'name' => 'Counter TV', 'device_uuid' => $uuid,
         ]);
 
         $this->browse(function (Browser $tv) use ($uuid, $screen) {
@@ -209,11 +209,11 @@ class PlayerRestartTest extends DuskTestCase
             // And not the 401's parting words either. "This screen was removed" is
             // true when it was, and plainly false here — the screen is sitting in
             // the panel with its playlist. Two lines contradicting each other on a
-            // wall in a shop is worse than either of them alone.
+            // wall in an organization is worse than either of them alone.
             $tv->assertDontSee('was removed');
             $tv->assertSee('playlist are safe');
 
-            // The device id is printed so a set in a shop can be matched against
+            // The device id is printed so a set in an organization can be matched against
             // its row — the last block only, which is what the panel shows beside
             // each screen. Safe on a wall: a uuid is an identity, never a way in.
             $tv->assertSeeIn('@pairing-uuid', Str::afterLast($uuid, '-'));
@@ -237,16 +237,16 @@ class PlayerRestartTest extends DuskTestCase
      * A kiosk browser that wipes site data between sessions.
      *
      * The token lives in localStorage, so this is the one restart the TV cannot
-     * recover from by itself — and the shop needs to be told what to do rather
+     * recover from by itself — and the organization needs to be told what to do rather
      * than left staring at a screen that will never come back. It must ask to be
      * adopted again, and the screen the owner already made must SURVIVE, so its
      * name, orientation and playlist are not lost with it.
      */
     public function test_a_tv_that_lost_its_storage_asks_to_be_adopted_again_and_its_screen_survives(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
         $screen = Screen::factory()->withToken('kiosk-token')->create([
-            'store_id' => $store->id, 'name' => 'Counter TV',
+            'organization_id' => $organization->id, 'name' => 'Counter TV',
         ]);
 
         $tokenHashBefore = $screen->token_hash;

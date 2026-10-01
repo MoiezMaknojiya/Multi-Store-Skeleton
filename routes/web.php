@@ -8,10 +8,13 @@ use App\Http\Controllers\Builder\BuilderController;
 use App\Http\Controllers\Builder\BuilderFontController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InvitationResponseController;
+use App\Http\Controllers\Organization\InvitationController;
+use App\Http\Controllers\Organization\MemberController;
+use App\Http\Controllers\Organization\OrganizationSettingsController;
 use App\Http\Controllers\Platform\ImpersonateController;
+use App\Http\Controllers\Platform\OrganizationController;
 use App\Http\Controllers\Platform\PermissionController;
 use App\Http\Controllers\Platform\PlatformInvitationController;
-use App\Http\Controllers\Platform\StoreController;
 use App\Http\Controllers\Platform\UserController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoleController;
@@ -21,9 +24,6 @@ use App\Http\Controllers\Signage\DaypartController;
 use App\Http\Controllers\Signage\MediaController;
 use App\Http\Controllers\Signage\PlaylistController;
 use App\Http\Controllers\Signage\ScreenController;
-use App\Http\Controllers\Store\InvitationController;
-use App\Http\Controllers\Store\MemberController;
-use App\Http\Controllers\Store\StoreSettingsController;
 use App\Http\Controllers\UploadController;
 use App\Http\Middleware\SpeaksTus;
 use Illuminate\Support\Facades\Route;
@@ -78,9 +78,9 @@ Route::prefix('invitations/{token}')
 // An account that has not confirmed its email (owner's rule, 2026-09-29) is sent to "Check your inbox" from here and
 // from every page below; only its profile, and the verification pages themselves (routes/auth.php), stay open.
 Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
-// Store selection page (auth only — it lists the person's OWN memberships, not the
-// stores module, so it is not gated by store-view).
-Route::get('/select-store', [DashboardController::class, 'selectStore'])->middleware(['auth', 'verified'])->name('stores.select');
+// Organization selection page (auth only — it lists the person's OWN memberships, not the
+// organizations module, so it is not gated by organization-view).
+Route::get('/select-organization', [DashboardController::class, 'selectOrganization'])->middleware(['auth', 'verified'])->name('organizations.select');
 
 // -----------------------------------------------------------------------
 // Profile  (all authenticated users)
@@ -92,8 +92,8 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     // Delete User Account
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-    // Leave one of your stores — any member, whatever their role (rule 10)
-    Route::delete('/profile/stores/{store}', [ProfileController::class, 'leaveStore'])->whereNumber('store')->name('profile.stores.leave');
+    // Leave one of your organizations — any member, whatever their role (rule 10)
+    Route::delete('/profile/organizations/{organization}', [ProfileController::class, 'leaveOrganization'])->whereNumber('organization')->name('profile.organizations.leave');
     // A changed email waiting for its link: sent again, or given up (the account keeps its address meanwhile)
     Route::post('/profile/email/resend', [ProfileController::class, 'resendNewEmail'])->name('profile.email.resend');
     Route::delete('/profile/email', [ProfileController::class, 'cancelNewEmail'])->name('profile.email.cancel');
@@ -102,20 +102,20 @@ Route::middleware('auth')->group(function () {
 // -----------------------------------------------------------------------
 // Admin Routes  (auth required on every group below; throttled per user)
 // -----------------------------------------------------------------------
-// A store the platform has paused is closed to its own people here (store.active: EnsureStoreIsActive) — the dashboard
+// An organization the platform has paused is closed to its own people here (organization.active: EnsureOrganizationIsActive) — the dashboard
 // says why, and its screens keep playing.
-Route::middleware(['auth', 'verified', 'store.active', 'throttle:admin'])->group(function () {
+Route::middleware(['auth', 'verified', 'organization.active', 'throttle:admin'])->group(function () {
 
     // -------------------------------------------------------------------
-    // Members  (the current store's team — docs/STORE-ORGANIZATION-SPEC.md)
+    // Members  (the current organization's team — docs/ORGANIZATION-SPEC.md)
     // Whether an action is allowed ON a particular member (hierarchy, the
-    // last Owner) is decided by StoreTeam; the gates here say only that the
-    // person may do this kind of thing in this store at all.
+    // last Owner) is decided by OrganizationTeam; the gates here say only that the
+    // person may do this kind of thing in this organization at all.
     // -------------------------------------------------------------------
     Route::prefix('members')->group(function () {
         Route::get('/', [MemberController::class, 'index'])->middleware('can:member-view')->name('members.view');
         Route::get('/data', [MemberController::class, 'data'])->middleware('can:member-view')->name('members.data');
-        // Anyone may leave a store they are in — except its last Owner.
+        // Anyone may leave an organization they are in — except its last Owner.
         Route::post('/leave', [MemberController::class, 'leave'])->name('members.leave');
         Route::post('/invitations', [InvitationController::class, 'store'])->middleware(['can:member-invite', 'throttle:invitations'])->name('members.invitations.store');
         Route::post('/invitations/{invitation}/resend', [InvitationController::class, 'resend'])->whereNumber('invitation')->middleware(['can:member-invite', 'throttle:invitations'])->name('members.invitations.resend');
@@ -125,22 +125,22 @@ Route::middleware(['auth', 'verified', 'store.active', 'throttle:admin'])->group
     });
 
     // -------------------------------------------------------------------
-    // Settings → Stores  (owner's rules, 2026-09-17): the store the person
-    // works in, and the stores they belong to. Plain forms, like Profile.
+    // Settings → Organizations  (owner's rules, 2026-09-17): the organization the person
+    // works in, and the organizations they belong to. Plain forms, like Profile.
     // A role does not matter, its permissions do: the tab opens with
-    // store-view, and every action asks its own permission.
+    // organization-view, and every action asks its own permission.
     // -------------------------------------------------------------------
-    Route::prefix('settings/store')->group(function () {
-        Route::get('/', [StoreSettingsController::class, 'edit'])->middleware('can:store-view')->name('store-settings.edit');
-        Route::put('/', [StoreSettingsController::class, 'update'])->middleware('can:store-update')->name('store-settings.update');
+    Route::prefix('settings/organization')->group(function () {
+        Route::get('/', [OrganizationSettingsController::class, 'edit'])->middleware('can:organization-view')->name('organization-settings.edit');
+        Route::put('/', [OrganizationSettingsController::class, 'update'])->middleware('can:organization-update')->name('organization-settings.update');
 
-        Route::post('/open', [StoreSettingsController::class, 'openStore'])->middleware('can:store-store')->name('store-settings.open');
-        Route::delete('/', [StoreSettingsController::class, 'destroy'])->middleware('can:store-destroy')->name('store-settings.destroy');
+        Route::post('/open', [OrganizationSettingsController::class, 'openOrganization'])->middleware('can:organization-store')->name('organization-settings.open');
+        Route::delete('/', [OrganizationSettingsController::class, 'destroy'])->middleware('can:organization-destroy')->name('organization-settings.destroy');
     });
 
     // -------------------------------------------------------------------
     // Users  (every account, from the platform's side — owner's rule,
-    // 2026-09-17: a store's people are its Members page)
+    // 2026-09-17: an organization's people are its Members page)
     // -------------------------------------------------------------------
     // Nobody is created or edited here — people join by invitation and manage
     // their own details. The whole page sits behind the `global-tier` lock; the
@@ -153,12 +153,12 @@ Route::middleware(['auth', 'verified', 'store.active', 'throttle:admin'])->group
         Route::delete('/{user}/platform-role', [UserController::class, 'removePlatformRole'])->whereNumber('user')->middleware('can:super-admin-tier')->name('users.platform-role.destroy');
         // Log in as this person — Super Admin only, checked in the controller.
         Route::post('/{user}/impersonate', [ImpersonateController::class, 'start'])->whereNumber('user')->name('users.impersonate');
-        // Manage stores: put a person in a store with a role, change it, take it away — super admins
+        // Manage organizations: put a person in an organization with a role, change it, take it away — super admins
         Route::middleware('can:super-admin-tier')->group(function () {
-            Route::get('/{user}/stores', [UserController::class, 'storeAccess'])->whereNumber('user')->name('users.stores');
-            Route::post('/{user}/stores', [UserController::class, 'assignToStore'])->whereNumber('user')->name('users.stores.store');
-            Route::put('/{user}/stores/{store}/role', [UserController::class, 'changeStoreRole'])->whereNumber(['user', 'store'])->name('users.store-role.update');
-            Route::delete('/{user}/stores/{store}', [UserController::class, 'removeFromStore'])->whereNumber(['user', 'store'])->name('users.stores.destroy');
+            Route::get('/{user}/organizations', [UserController::class, 'organizationAccess'])->whereNumber('user')->name('users.organizations');
+            Route::post('/{user}/organizations', [UserController::class, 'assignToOrganization'])->whereNumber('user')->name('users.organizations.store');
+            Route::put('/{user}/organizations/{organization}/role', [UserController::class, 'changeOrganizationRole'])->whereNumber(['user', 'organization'])->name('users.organization-role.update');
+            Route::delete('/{user}/organizations/{organization}', [UserController::class, 'removeFromOrganization'])->whereNumber(['user', 'organization'])->name('users.organizations.destroy');
         });
 
         // Invitations to the platform team
@@ -171,23 +171,23 @@ Route::middleware(['auth', 'verified', 'store.active', 'throttle:admin'])->group
     });
 
     // -------------------------------------------------------------------
-    // Stores
+    // Organizations
     // -------------------------------------------------------------------
-    // Switching between the stores a member belongs to — any member, no permission.
-    Route::post('/stores/switch', [StoreController::class, 'switch'])->name('store.switch');
+    // Switching between the organizations a member belongs to — any member, no permission.
+    Route::post('/organizations/switch', [OrganizationController::class, 'switch'])->name('organization.switch');
 
-    // Every store, from the platform's side. A store's own people change the
-    // store they work in from Settings → Stores instead (owner's rule,
-    // 2026-09-17), so the page and its writes stay above the stores.
-    Route::prefix('stores')->middleware('can:global-tier')->group(function () {
-        Route::get('/', [StoreController::class, 'index'])->middleware('can:store-view')->name('stores.view');
-        Route::get('/data', [StoreController::class, 'data'])->middleware('can:store-view')->name('stores.data');
-        // A new store for a customer, with an Owner invitation
-        Route::post('/', [StoreController::class, 'store'])->middleware(['can:store-store', 'throttle:invitations'])->name('stores.store');
-        Route::put('/{store}', [StoreController::class, 'update'])->whereNumber('store')->middleware('can:store-update')->name('stores.update');
-        Route::delete('/{store}', [StoreController::class, 'destroy'])->whereNumber('store')->middleware('can:store-destroy')->name('stores.destroy');
-        // An Owner for a store that has none: a member of it is made Owner at once, anybody else is invited
-        Route::post('/{store}/owner-invitation', [StoreController::class, 'inviteOwner'])->whereNumber('store')->middleware(['can:store-store', 'throttle:invitations'])->name('stores.owner-invitation');
+    // Every organization, from the platform's side. An organization's own people change the
+    // organization they work in from Settings → Organizations instead (owner's rule,
+    // 2026-09-17), so the page and its writes stay above the organizations.
+    Route::prefix('organizations')->middleware('can:global-tier')->group(function () {
+        Route::get('/', [OrganizationController::class, 'index'])->middleware('can:organization-view')->name('organizations.view');
+        Route::get('/data', [OrganizationController::class, 'data'])->middleware('can:organization-view')->name('organizations.data');
+        // A new organization for a customer, with an Owner invitation
+        Route::post('/', [OrganizationController::class, 'store'])->middleware(['can:organization-store', 'throttle:invitations'])->name('organizations.store');
+        Route::put('/{organization}', [OrganizationController::class, 'update'])->whereNumber('organization')->middleware('can:organization-update')->name('organizations.update');
+        Route::delete('/{organization}', [OrganizationController::class, 'destroy'])->whereNumber('organization')->middleware('can:organization-destroy')->name('organizations.destroy');
+        // An Owner for an organization that has none: a member of it is made Owner at once, anybody else is invited
+        Route::post('/{organization}/owner-invitation', [OrganizationController::class, 'inviteOwner'])->whereNumber('organization')->middleware(['can:organization-store', 'throttle:invitations'])->name('organizations.owner-invitation');
     });
 
     // -------------------------------------------------------------------
@@ -213,8 +213,8 @@ Route::middleware(['auth', 'verified', 'store.active', 'throttle:admin'])->group
         // The picker's options - gated by the playlist permission alone, so it is
         // self-sufficient and does not drag in media-view
         Route::get('/{screen}/available-media', [PlaylistController::class, 'availableMedia'])->middleware('can:screen-playlist')->name('screens.available-media');
-        // Every channel this screen can carry — the platform's and its own store's, never
-        // another store's. Gated by the playlist permission alone for the same reason as
+        // Every channel this screen can carry — the platform's and its own organization's, never
+        // another organization's. Gated by the playlist permission alone for the same reason as
         // the media picker above
         Route::get('/{screen}/available-channels', [PlaylistController::class, 'availableChannels'])->middleware('can:screen-playlist')->name('screens.available-channels');
         // The dayparts a schedule may name, read again when the page comes back into view — so a daypart made
@@ -251,13 +251,13 @@ Route::middleware(['auth', 'verified', 'store.active', 'throttle:admin'])->group
     // Network advertising  (the PLATFORM's own content, sold to a brand)
     //
     // `campaign-manage` is a hand-written gate, not a grantable permission row:
-    // a campaign has no store, so a store user holding it would see every
+    // a campaign has no organization, so an organization user holding it would see every
     // brand's contract across the whole network. See AppServiceProvider.
     // -------------------------------------------------------------------
     Route::prefix('campaigns')->middleware('can:campaign-manage')->group(function () {
         Route::get('/', [CampaignController::class, 'index'])->name('campaigns.view');
         Route::get('/data', [CampaignController::class, 'data'])->name('campaigns.data');
-        // Every screen a campaign could be pointed at, grouped by shop
+        // Every screen a campaign could be pointed at, grouped by organization
         Route::get('/screens', [CampaignController::class, 'screens'])->name('campaigns.screens');
         Route::post('/', [CampaignController::class, 'store'])->name('campaigns.store');
         // POST, not PUT: an edit may carry a replacement file, and PHP does not
@@ -267,29 +267,29 @@ Route::middleware(['auth', 'verified', 'store.active', 'throttle:admin'])->group
         Route::delete('/{campaign}', [CampaignController::class, 'destroy'])->name('campaigns.destroy');
     });
 
-    // Whether a shop and its screens carry advertising — the platform owner's deal, not the shopkeeper's:
-    // one shop at a time from inside it ("Log in as"), or whole shops from the Stores listing below.
+    // Whether an organization and its screens carry advertising — the platform owner's deal, not the organization's:
+    // one organization at a time from inside it ("Log in as"), or whole organizations from the Organizations listing below.
     Route::prefix('network-ads')->group(function () {
-        // Inside one shop, reached by "Log in as" — the only way a super admin gets in.
+        // Inside one organization, reached by "Log in as" — the only way a super admin gets in.
         Route::middleware('can:network-ads-toggle')->group(function () {
-            Route::put('/store', [NetworkAdsController::class, 'store'])->name('network-ads.store');
+            Route::put('/organization', [NetworkAdsController::class, 'organization'])->name('network-ads.organization');
             Route::put('/screens', [NetworkAdsController::class, 'screens'])->name('network-ads.screens');
         });
 
-        // Whole shops at once, from the stores listing. That page belongs to the
+        // Whole organizations at once, from the organizations listing. That page belongs to the
         // platform owner and is reached WITHOUT impersonating anybody, so it answers
         // to the plain super-admin ability instead.
-        Route::put('/stores', [NetworkAdsController::class, 'stores'])
-            ->middleware('can:campaign-manage')->name('network-ads.stores');
+        Route::put('/organizations', [NetworkAdsController::class, 'organizations'])
+            ->middleware('can:campaign-manage')->name('network-ads.organizations');
     });
 
     // -------------------------------------------------------------------
-    // Channels  (ads a shop may add to its screens — a wholesaler's
+    // Channels  (ads an organization may add to its screens — a wholesaler's
     // promotions, a season, a notice)
     //
-    // Above the stores: every channel, and one made there is offered to
-    // every shop. Inside a store, for a role carrying the channel
-    // permissions: the store's own channels, for its own screens alone —
+    // Above the organizations: every channel, and one made there is offered to
+    // every organization. Inside an organization, for a role carrying the channel
+    // permissions: the organization's own channels, for its own screens alone —
     // and the platform's, listed and opened to READ only. Every change
     // finds a channel only within reach (Channel::visibleTo), every look
     // within Channel::listableIn — anything else is 404.
@@ -337,11 +337,11 @@ Route::middleware(['auth', 'verified', 'store.active', 'throttle:admin'])->group
     //
     // Three tabs around one editor: Create draws a 1920×1080 advert, Ads
     // lists what has been saved, Assets holds the pictures and videos the
-    // designs are made of — the Builder's own shelf, not the store's media
+    // designs are made of — the Builder's own shelf, not the organization's media
     // library. Publishing an ad writes an HTML file and a `media` row of
     // type `html`, which is how it reaches a playlist and a television.
     //
-    // A store's people work on their own store's ads; the platform team
+    // An organization's people work on their own organization's ads; the platform team
     // works above them all (BuilderAd::visibleTo) — anything out of reach
     // is a 404, checked in the controller as well as here.
     // -------------------------------------------------------------------
@@ -354,7 +354,7 @@ Route::middleware(['auth', 'verified', 'store.active', 'throttle:admin'])->group
         Route::get('/assets', [BuilderAssetController::class, 'index'])->middleware('can:ad-view')->name('builder.assets');
         Route::get('/assets/data', [BuilderAssetController::class, 'data'])->middleware('can:ad-view')->name('builder.assets.data');
         Route::post('/assets', [BuilderAssetController::class, 'store'])->middleware('can:ad-store')->name('builder.assets.store');
-        // A shop's own file with Delete Ads; one shared with every shop only above the stores (the controller asks)
+        // An organization's own file with Delete Ads; one shared with every organization only above the organizations (the controller asks)
         Route::delete('/assets/{asset}', [BuilderAssetController::class, 'destroy'])->whereNumber('asset')->middleware('can:ad-destroy')->name('builder.assets.destroy');
 
         // The fonts the editor may set text in. Installing one fetches it from Google ONCE and
@@ -369,7 +369,7 @@ Route::middleware(['auth', 'verified', 'store.active', 'throttle:admin'])->group
         Route::get('/create', [BuilderController::class, 'create'])->middleware('can:ad-store')->name('builder.create');
 
         Route::post('/', [BuilderController::class, 'store'])->middleware('can:ad-store')->name('builder.store');
-        // An ad the platform shares with every shop is changed above the stores alone (the controller asks)
+        // An ad the platform shares with every organization is changed above the organizations alone (the controller asks)
         Route::get('/{ad}', [BuilderController::class, 'edit'])->whereNumber('ad')->middleware('can:ad-update')->name('builder.edit');
         Route::put('/{ad}', [BuilderController::class, 'update'])->whereNumber('ad')->middleware('can:ad-update')->name('builder.update');
         Route::post('/{ad}/duplicate', [BuilderController::class, 'duplicate'])->whereNumber('ad')->middleware('can:ad-store')->name('builder.duplicate');
@@ -383,7 +383,7 @@ Route::middleware(['auth', 'verified', 'store.active', 'throttle:admin'])->group
         // For ad-view or ad-update — "any of", so checked in BuilderController::preview
         Route::get('/{ad}/preview', [BuilderController::class, 'preview'])->whereNumber('ad')->name('builder.preview');
         // A big delete: the published copy goes with the design, so it asks for the password. One shared with every
-        // shop goes only above the stores (the controller asks).
+        // organization goes only above the organizations (the controller asks).
         Route::delete('/{ad}', [BuilderController::class, 'destroy'])->whereNumber('ad')->middleware('can:ad-destroy')->name('builder.destroy');
     });
 
@@ -408,9 +408,9 @@ Route::middleware(['auth', 'verified', 'store.active', 'throttle:admin'])->group
     // -------------------------------------------------------------------
     // Activity Log  (read-only audit trail)
     // -------------------------------------------------------------------
-    // Above the stores every store's history; inside a store, for a role carrying
-    // activity-view, that store's own entries (ActivityLogController). Yearly
-    // maintenance drops a whole year for every store at once, so it — and the
+    // Above the organizations every organization's history; inside an organization, for a role carrying
+    // activity-view, that organization's own entries (ActivityLogController). Yearly
+    // maintenance drops a whole year for every organization at once, so it — and the
     // storage panel's row counts — keep the `global-tier` lock: a permission of its
     // own (activity-destroy) that a super admin may delegate to a platform role.
     Route::prefix('activity')->group(function () {
@@ -451,7 +451,7 @@ Route::middleware(['auth', 'verified', 'store.active', 'throttle:admin'])->group
 // makes its row through its own route, with its own permission; these only carry bytes, and ask the same permission
 // before the first one.
 // -------------------------------------------------------------------
-Route::middleware(['auth', 'verified', 'store.active', 'throttle:uploads', SpeaksTus::class])->prefix('uploads')->group(function () {
+Route::middleware(['auth', 'verified', 'organization.active', 'throttle:uploads', SpeaksTus::class])->prefix('uploads')->group(function () {
     Route::options('/', [UploadController::class, 'options'])->name('uploads.options');
     Route::post('/', [UploadController::class, 'store'])->name('uploads.store');
     Route::match(['HEAD'], '/{upload}', [UploadController::class, 'show'])->whereUuid('upload')->name('uploads.show');

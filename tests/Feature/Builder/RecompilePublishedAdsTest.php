@@ -2,7 +2,7 @@
 
 use App\Models\ActivityLog;
 use App\Models\BuilderAd;
-use App\Models\Store;
+use App\Models\Organization;
 use App\Services\AdCompiler;
 use App\Services\AdPublisher;
 use Illuminate\Support\Facades\Storage;
@@ -21,13 +21,13 @@ use Illuminate\Support\Facades\Storage;
 beforeEach(function () {
     Storage::fake('public');
 
-    $this->store = Store::factory()->create();
+    $this->organization = Organization::factory()->create();
 });
 
 /** A published ad whose page was written by an older compiler (no policy), with a newer draft on top. */
-function publishedWithDraft(Store $store, string $published, string $draft): BuilderAd
+function publishedWithDraft(Organization $organization, string $published, string $draft): BuilderAd
 {
-    $ad = BuilderAd::factory()->withText($published)->create(['store_id' => $store->id, 'name' => 'Winter sale']);
+    $ad = BuilderAd::factory()->withText($published)->create(['organization_id' => $organization->id, 'name' => 'Winter sale']);
     $media = app(AdPublisher::class)->publish($ad);
 
     // What an older compiler left: the page with no policy in it.
@@ -42,7 +42,7 @@ function publishedWithDraft(Store $store, string $published, string $draft): Bui
 }
 
 test('every published page is written again from the version on the screens — never the draft', function () {
-    $ad = publishedWithDraft($this->store, 'Coats 40% off', 'Coats 60% off');
+    $ad = publishedWithDraft($this->organization, 'Coats 40% off', 'Coats 60% off');
     $key = $ad->media->cacheKey();
 
     $this->travel(5)->seconds();
@@ -65,11 +65,11 @@ test('every published page is written again from the version on the screens — 
 });
 
 test('an ad with no kept version is named and left alone; an unpublished one is not touched', function () {
-    $legacy = BuilderAd::factory()->withText('Old one')->published()->create(['store_id' => $this->store->id, 'name' => 'Legacy']);
+    $legacy = BuilderAd::factory()->withText('Old one')->published()->create(['organization_id' => $this->organization->id, 'name' => 'Legacy']);
     $legacy->forceFill(['published_document' => null])->save();
     Storage::disk('public')->put($legacy->media->path, 'as it was');
 
-    $draft = BuilderAd::factory()->withText('Never out')->published()->create(['store_id' => $this->store->id, 'name' => 'Pulled']);
+    $draft = BuilderAd::factory()->withText('Never out')->published()->create(['organization_id' => $this->organization->id, 'name' => 'Pulled']);
     $draft->forceFill(['published_at' => null])->save();
     Storage::disk('public')->put($draft->media->path, 'pulled page');
 
@@ -83,7 +83,7 @@ test('an ad with no kept version is named and left alone; an unpublished one is 
 });
 
 test('a page names the compiler that wrote it', function () {
-    $ad = BuilderAd::factory()->withText('Hello')->create(['store_id' => $this->store->id]);
+    $ad = BuilderAd::factory()->withText('Hello')->create(['organization_id' => $this->organization->id]);
     $page = app(AdCompiler::class)->compile($ad);
 
     expect($page)->toContain('<meta name="ad-compiler" content="'.AdCompiler::VERSION.'">')
@@ -93,8 +93,8 @@ test('a page names the compiler that wrote it', function () {
 });
 
 test('--outdated writes only the pages an older compiler wrote, and leaves the rest as they are', function () {
-    $old = publishedWithDraft($this->store, 'Old page', 'Old draft');
-    $fresh = BuilderAd::factory()->withText('Fresh page')->create(['store_id' => $this->store->id, 'name' => 'Fresh']);
+    $old = publishedWithDraft($this->organization, 'Old page', 'Old draft');
+    $fresh = BuilderAd::factory()->withText('Fresh page')->create(['organization_id' => $this->organization->id, 'name' => 'Fresh']);
     app(AdPublisher::class)->publish($fresh);
     $fresh->refresh();
 
@@ -119,7 +119,7 @@ test('--outdated writes only the pages an older compiler wrote, and leaves the r
 });
 
 test('--outdated writes a published page that is missing from the disk', function () {
-    $ad = BuilderAd::factory()->withText('Lost page')->create(['store_id' => $this->store->id, 'name' => 'Lost']);
+    $ad = BuilderAd::factory()->withText('Lost page')->create(['organization_id' => $this->organization->id, 'name' => 'Lost']);
     $media = app(AdPublisher::class)->publish($ad);
     Storage::disk('public')->delete($media->path);
 
@@ -141,8 +141,8 @@ test('every deploy writes the out-of-date pages again — after the site has swi
 });
 
 test('--ad names the ads to write; the rest stay as they are', function () {
-    $first = publishedWithDraft($this->store, 'First', 'First draft');
-    $second = publishedWithDraft($this->store, 'Second', 'Second draft');
+    $first = publishedWithDraft($this->organization, 'First', 'First draft');
+    $second = publishedWithDraft($this->organization, 'Second', 'Second draft');
 
     $this->artisan('builder:recompile', ['--ad' => [$second->id]])->assertSuccessful();
 

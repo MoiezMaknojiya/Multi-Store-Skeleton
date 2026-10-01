@@ -13,8 +13,8 @@ use Illuminate\Validation\ValidationException;
  * Picking a family in the editor runs this once: the stylesheet is fetched from Google, every font file
  * it points at is downloaded, and a stylesheet of our own is written beside them pointing at the local
  * copies. After that the editor loads the font from this server, and every published advert carries the
- * files it needs inside its own page (AdFontEmbedder, which reads this stylesheet) — a television in a
- * shop with no internet still shows the right typeface, which is the whole reason for not simply
+ * files it needs inside its own page (AdFontEmbedder, which reads this stylesheet) — a television in an
+ * organization with no internet still shows the right typeface, which is the whole reason for not simply
  * linking to fonts.googleapis.com.
  *
  * Only families named in `config/fonts.php` can be installed: the list is ours, so nobody can make the

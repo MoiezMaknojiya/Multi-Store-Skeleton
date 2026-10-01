@@ -9,9 +9,9 @@ window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
    sign in. */
 let sessionEnded = false;
 
-/* A store paused while one of its pages was open (EnsureStoreIsActive): every request answers 403 with `paused`. Said
+/* An organization paused while one of its pages was open (EnsureOrganizationIsActive): every request answers 403 with `paused`. Said
    once, in the server's words, and the dashboard — which says why and what still works — is opened. */
-let storePaused = false;
+let organizationPaused = false;
 
 window.axios.interceptors.response.use((response) => response, (error) => {
     if ([401, 419].includes(error.response?.status) && !sessionEnded) {
@@ -20,8 +20,8 @@ window.axios.interceptors.response.use((response) => response, (error) => {
         setTimeout(() => window.location.reload(), 1500);
     }
 
-    if (error.response?.status === 403 && error.response.data?.paused === true && !storePaused) {
-        storePaused = true;
+    if (error.response?.status === 403 && error.response.data?.paused === true && !organizationPaused) {
+        organizationPaused = true;
         window.toast?.(error.response.data.message);
         setTimeout(() => window.location.assign('/dashboard'), 1500);
     }

@@ -6,9 +6,9 @@ use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Models\User;
 use App\Services\AdPublisher;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -17,7 +17,7 @@ use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
 
 /**
- * A shop putting a channel on a screen, and the screen playing it.
+ * An organization putting a channel on a screen, and the screen playing it.
  *
  * The part worth proving in a real browser is the television: that a channel line
  * plays exactly where it stands, that a channel playing one ad per pass takes the NEXT
@@ -28,31 +28,31 @@ class PlaylistChannelUiTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    /** A shop owner who builds their own playlists. */
-    private function owner(Store $store): User
+    /** An organization owner who builds their own playlists. */
+    private function owner(Organization $organization): User
     {
         $this->seedSuperAdmin();
 
-        return $this->storeMember($store, ['screen-view', 'screen-playlist']);
+        return $this->organizationMember($organization, ['screen-view', 'screen-playlist']);
     }
 
-    public function test_a_shop_owner_adds_a_channel_and_puts_it_where_they_want(): void
+    public function test_a_organization_owner_adds_a_channel_and_puts_it_where_they_want(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->owner($store);
-        $screen = Screen::factory()->create(['store_id' => $store->id, 'name' => 'Counter TV']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->owner($organization);
+        $screen = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Counter TV']);
 
-        $poster = Media::factory()->create(['store_id' => $store->id, 'title' => 'Burger deal', 'thumbnail_path' => null]);
+        $poster = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Burger deal', 'thumbnail_path' => null]);
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $poster->id, 'position' => 0, 'duration_seconds' => 10]);
 
         $gama = Channel::factory()->perPass(1)->create(['name' => 'GAMA']);
         ChannelAd::factory()->lasting(10)->showing(['thumbnail_path' => null])->create(['channel_id' => $gama->id, 'title' => 'Monster', 'position' => 0]);
         ChannelAd::factory()->lasting(15)->showing(['thumbnail_path' => null])->create(['channel_id' => $gama->id, 'title' => 'Coke', 'position' => 1]);
 
-        $this->browse(function (Browser $browser) use ($owner, $store, $screen, $gama) {
+        $this->browse(function (Browser $browser) use ($owner, $organization, $screen, $gama) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/screens/'.$screen->id);
             $this->waitForAlpine($browser);
@@ -126,12 +126,12 @@ class PlaylistChannelUiTest extends DuskTestCase
      */
     public function test_the_tv_plays_the_channel_in_place_and_rotates_its_ads(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $screen = Screen::factory()->withToken('channel-token')->create(['store_id' => $store->id, 'name' => 'Counter TV']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $screen = Screen::factory()->withToken('channel-token')->create(['organization_id' => $organization->id, 'name' => 'Counter TV']);
 
         $poster = Media::factory()->create([
-            'store_id' => $store->id, 'title' => 'Burger', 'mime_type' => 'image/png', 'thumbnail_path' => null,
-            'path' => $this->putImage("media/{$store->id}/burger.png", 200, 120, 30),
+            'organization_id' => $organization->id, 'title' => 'Burger', 'mime_type' => 'image/png', 'thumbnail_path' => null,
+            'path' => $this->putImage("media/{$organization->id}/burger.png", 200, 120, 30),
         ]);
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $poster->id, 'position' => 0, 'duration_seconds' => 6]);
 
@@ -188,22 +188,22 @@ class PlaylistChannelUiTest extends DuskTestCase
      */
     public function test_a_channel_plays_a_picture_and_an_ad_page_and_a_republished_ad_reaches_the_screen(): void
     {
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $screen = Screen::factory()->withToken('channel-page-token')->create(['store_id' => $store->id, 'name' => 'Counter TV']);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $screen = Screen::factory()->withToken('channel-page-token')->create(['organization_id' => $organization->id, 'name' => 'Counter TV']);
 
         $poster = Media::factory()->create([
-            'store_id' => $store->id, 'title' => 'Burger', 'mime_type' => 'image/png', 'thumbnail_path' => null,
-            'path' => $this->putImage("media/{$store->id}/burger.png", 200, 120, 30),
+            'organization_id' => $organization->id, 'title' => 'Burger', 'mime_type' => 'image/png', 'thumbnail_path' => null,
+            'path' => $this->putImage("media/{$organization->id}/burger.png", 200, 120, 30),
         ]);
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $poster->id, 'position' => 0, 'duration_seconds' => 6]);
 
-        // The shop's own channel: a picture of its library, then an ad its Ad Builder published into that library.
-        $deals = Channel::factory()->create(['name' => 'Alpha Deals', 'store_id' => $store->id]);
+        // The organization's own channel: a picture of its library, then an ad its Ad Builder published into that library.
+        $deals = Channel::factory()->create(['name' => 'Alpha Deals', 'organization_id' => $organization->id]);
         ChannelAd::factory()->lasting(6)->showing([
-            'mime_type' => 'image/png', 'thumbnail_path' => null, 'path' => $this->putImage("media/{$store->id}/monster.png", 30, 200, 60),
+            'mime_type' => 'image/png', 'thumbnail_path' => null, 'path' => $this->putImage("media/{$organization->id}/monster.png", 30, 200, 60),
         ])->create(['channel_id' => $deals->id, 'title' => 'Monster', 'position' => 0]);
 
-        $design = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $store->id, 'name' => 'Winter sale']);
+        $design = BuilderAd::factory()->withText('Winter sale')->create(['organization_id' => $organization->id, 'name' => 'Winter sale']);
         $page = app(AdPublisher::class)->publish($design);
         // The page plays for its own length (six seconds, its design's default), so the ad keeps no seconds.
         ChannelAd::factory()->create(['channel_id' => $deals->id, 'media_id' => $page->id, 'title' => 'Winter sale', 'position' => 1, 'duration_seconds' => null]);
@@ -225,7 +225,7 @@ class PlaylistChannelUiTest extends DuskTestCase
                 return picture ? 'picture ' + picture.src.split('/').pop().split('?')[0] : '';
             JS)[0];
 
-            // -- In turn: the shop's poster, the channel's picture, the channel's ad page ------
+            // -- In turn: the organization's poster, the channel's picture, the channel's ad page ------
             $seen = [];
             $tv->waitUsing(45, 100, function () use ($showing, &$seen) {
                 $now = $showing();

@@ -2,10 +2,10 @@
 
 use App\Models\Daypart;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\ScheduleRule;
 use App\Models\Screen;
-use App\Models\Store;
 use App\Services\DevicePairing;
 use Illuminate\Support\Carbon;
 
@@ -25,15 +25,15 @@ use Illuminate\Support\Carbon;
 */
 
 beforeEach(function () {
-    $this->store = Store::factory()->create();
-    $this->actor = createStoreUser($this->store, ['screen-view', 'screen-update']);
-    $this->screen = Screen::factory()->create(['store_id' => $this->store->id, 'name' => 'Deli TV']);
+    $this->organization = Organization::factory()->create();
+    $this->actor = createOrganizationUser($this->organization, ['screen-view', 'screen-update']);
+    $this->screen = Screen::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Deli TV']);
     $this->hours = Daypart::factory()->between('07:00', '20:00')->create([
-        'store_id' => $this->store->id, 'name' => 'Deli hours',
+        'organization_id' => $this->organization->id, 'name' => 'Deli hours',
     ]);
-    $this->welcome = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Welcome']);
+    $this->welcome = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Welcome']);
 
-    $this->actingAs($this->actor)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->actor)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 test('a screen keeps its clock and its holding picture', function () {
@@ -51,12 +51,12 @@ test('a screen keeps its clock and its holding picture', function () {
 });
 
 test('a newly paired screen carries a sensible clock and nothing else', function () {
-    // Paired the way a shop really adds one — the code on the television, typed into the panel — so
+    // Paired the way an organization really adds one — the code on the television, typed into the panel — so
     // what is checked is what pairing leaves behind. The factory sets a timezone of its own.
-    $installer = createStoreUser($this->store, ['screen-store'], 'Installer Role');
+    $installer = createOrganizationUser($this->organization, ['screen-store'], 'Installer Role');
     $code = app(DevicePairing::class)->register()['code'];
 
-    $id = $this->actingAs($installer)->withSession(['current_store_id' => $this->store->id])
+    $id = $this->actingAs($installer)->withSession(['current_organization_id' => $this->organization->id])
         ->postJson('/screens/pair', ['code' => $code, 'mode' => 'new', 'name' => 'Till TV', 'orientation' => 'landscape'])
         ->assertOk()
         ->json('screen.id');
@@ -93,8 +93,8 @@ test('renaming a screen leaves everything the schedule added alone', function ()
     expect($fresh->default_media_id)->toBe($this->welcome->id);
 });
 
-test('a screen cannot hold another store\'s file as its default', function () {
-    $theirFile = Media::factory()->create(['store_id' => Store::factory()->create()->id]);
+test('a screen cannot hold another organization\'s file as its default', function () {
+    $theirFile = Media::factory()->create(['organization_id' => Organization::factory()->create()->id]);
 
     $this->putJson("/screens/{$this->screen->id}", [
         'name' => 'Deli TV', 'orientation' => 'landscape', 'default_media_id' => $theirFile->id,
@@ -110,7 +110,7 @@ test('a timezone the server does not know is refused', function () {
 });
 
 test('a daypart in use by a playlist rule cannot be deleted — it has to be retired', function () {
-    $owner = createStoreUser($this->store, ['daypart-destroy', 'daypart-update'], 'Hours Role');
+    $owner = createOrganizationUser($this->organization, ['daypart-destroy', 'daypart-update'], 'Hours Role');
     $item = PlaylistItem::create([
         'screen_id' => $this->screen->id, 'media_id' => $this->welcome->id,
         'position' => 0, 'duration_seconds' => 10,
@@ -119,7 +119,7 @@ test('a daypart in use by a playlist rule cannot be deleted — it has to be ret
 
     // The foreign key is nullOnDelete, so this would not error — it would quietly set
     // a lunchtime poster playing all day, with nothing to show why.
-    $this->actingAs($owner)->withSession(['current_store_id' => $this->store->id])
+    $this->actingAs($owner)->withSession(['current_organization_id' => $this->organization->id])
         ->deleteJson("/dayparts/{$this->hours->id}")
         ->assertStatus(422)
         ->assertJsonValidationErrors('name');
@@ -129,9 +129,9 @@ test('a daypart in use by a playlist rule cannot be deleted — it has to be ret
 });
 
 test('a daypart nothing points at can still be deleted', function () {
-    $owner = createStoreUser($this->store, ['daypart-destroy'], 'Hours Role');
+    $owner = createOrganizationUser($this->organization, ['daypart-destroy'], 'Hours Role');
 
-    $this->actingAs($owner)->withSession(['current_store_id' => $this->store->id])
+    $this->actingAs($owner)->withSession(['current_organization_id' => $this->organization->id])
         ->deleteJson("/dayparts/{$this->hours->id}")
         ->assertOk();
 
@@ -146,7 +146,7 @@ test('a daypart nothing points at can still be deleted', function () {
 
 test('an hour nothing is scheduled for tells the television to go black', function () {
     $screen = Screen::factory()->withToken('tok')->create([
-        'store_id' => $this->store->id, 'timezone' => 'America/Chicago',
+        'organization_id' => $this->organization->id, 'timezone' => 'America/Chicago',
     ]);
     $item = PlaylistItem::create([
         'screen_id' => $screen->id, 'media_id' => $this->welcome->id,
@@ -180,23 +180,23 @@ test('a television switched on at two in the afternoon is handed the two-o\'cloc
     // what to show, and the answer is for the moment it asked — the morning menu is
     // simply not in it.
     $screen = Screen::factory()->withToken('tok')->create([
-        'store_id' => $this->store->id, 'timezone' => 'America/Chicago',
+        'organization_id' => $this->organization->id, 'timezone' => 'America/Chicago',
     ]);
-    $breakfast = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Breakfast menu']);
-    $lunch = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Lunch menu']);
+    $breakfast = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Breakfast menu']);
+    $lunch = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Lunch menu']);
 
     $morning = PlaylistItem::create([
         'screen_id' => $screen->id, 'media_id' => $breakfast->id, 'position' => 0, 'duration_seconds' => 10,
     ]);
     $morning->scheduleRules()->create([
-        'daypart_id' => Daypart::factory()->between('07:00', '11:00')->create(['store_id' => $this->store->id])->id,
+        'daypart_id' => Daypart::factory()->between('07:00', '11:00')->create(['organization_id' => $this->organization->id])->id,
     ]);
 
     $afternoon = PlaylistItem::create([
         'screen_id' => $screen->id, 'media_id' => $lunch->id, 'position' => 1, 'duration_seconds' => 10,
     ]);
     $afternoon->scheduleRules()->create([
-        'daypart_id' => Daypart::factory()->between('11:00', '16:00')->create(['store_id' => $this->store->id])->id,
+        'daypart_id' => Daypart::factory()->between('11:00', '16:00')->create(['organization_id' => $this->organization->id])->id,
     ]);
 
     // Nine in the morning, Chicago. The set is showing breakfast, then switched off.
@@ -216,9 +216,9 @@ test('a television switched on at two in the afternoon is handed the two-o\'cloc
 
 test('an item outside its schedule never reaches the device at all', function () {
     $screen = Screen::factory()->withToken('tok')->create([
-        'store_id' => $this->store->id, 'timezone' => 'America/Chicago',
+        'organization_id' => $this->organization->id, 'timezone' => 'America/Chicago',
     ]);
-    $lunch = Daypart::factory()->between('11:00', '15:00')->create(['store_id' => $this->store->id]);
+    $lunch = Daypart::factory()->between('11:00', '15:00')->create(['organization_id' => $this->organization->id]);
 
     $item = PlaylistItem::create([
         'screen_id' => $screen->id, 'media_id' => $this->welcome->id,
@@ -243,9 +243,9 @@ test('an item outside its schedule never reaches the device at all', function ()
 });
 
 test('a gap in the schedule shows the holding picture rather than a black rectangle', function () {
-    $holding = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Shop branding']);
+    $holding = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Organization branding']);
     $screen = Screen::factory()->withToken('tok')->create([
-        'store_id' => $this->store->id,
+        'organization_id' => $this->organization->id,
         'timezone' => 'America/Chicago',
         'default_media_id' => $holding->id,
     ]);
@@ -270,17 +270,17 @@ test('a gap in the schedule shows the holding picture rather than a black rectan
     expect($manifest->json('items.0.id'))->toBe(0);
 });
 
-test('the schedule editor offers the screen’s own store’s dayparts, and names a retired one still in use', function () {
-    // The platform sees every store's dayparts on their own page, but a rule on THIS screen can only use
-    // this screen's store's (the playlist refuses the rest), so only those are offered.
-    Daypart::factory()->create(['store_id' => Store::factory()->create()->id, 'name' => 'Another shop’s hours']);
+test('the schedule editor offers the screen’s own organization’s dayparts, and names a retired one still in use', function () {
+    // The platform sees every organization's dayparts on their own page, but a rule on THIS screen can only use
+    // this screen's organization's (the playlist refuses the rest), so only those are offered.
+    Daypart::factory()->create(['organization_id' => Organization::factory()->create()->id, 'name' => 'Another organization’s hours']);
 
     // Retired, and still used by a rule here: it keeps working, so the page must say what it is —
     // left out, the rule read "All day".
     $lunch = Daypart::factory()->between('11:00', '15:00')->create([
-        'store_id' => $this->store->id, 'name' => 'Old lunch', 'is_retired' => true,
+        'organization_id' => $this->organization->id, 'name' => 'Old lunch', 'is_retired' => true,
     ]);
-    Daypart::factory()->create(['store_id' => $this->store->id, 'name' => 'Old breakfast', 'is_retired' => true]);
+    Daypart::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Old breakfast', 'is_retired' => true]);
 
     $line = PlaylistItem::create(['screen_id' => $this->screen->id, 'media_id' => $this->welcome->id, 'position' => 0, 'duration_seconds' => 10]);
     $line->scheduleRules()->create(['recurrence_type' => ScheduleRule::DAILY, 'recurrence_interval' => 1, 'daypart_id' => $lunch->id]);
@@ -301,37 +301,37 @@ test('the schedule editor offers the screen’s own store’s dayparts, and name
 });
 
 test('the dayparts listing says which one a playlist uses, so the page can say "retire it" before a delete', function () {
-    $viewer = createStoreUser($this->store, ['daypart-view'], 'Hours Viewer');
-    Daypart::factory()->between('11:00', '14:00')->create(['store_id' => $this->store->id, 'name' => 'Lunch']);
+    $viewer = createOrganizationUser($this->organization, ['daypart-view'], 'Hours Viewer');
+    Daypart::factory()->between('11:00', '14:00')->create(['organization_id' => $this->organization->id, 'name' => 'Lunch']);
     $item = PlaylistItem::create([
         'screen_id' => $this->screen->id, 'media_id' => $this->welcome->id, 'position' => 0, 'duration_seconds' => 10,
     ]);
     $item->scheduleRules()->create(['daypart_id' => $this->hours->id]);
 
-    $rows = collect($this->actingAs($viewer)->withSession(['current_store_id' => $this->store->id])
+    $rows = collect($this->actingAs($viewer)->withSession(['current_organization_id' => $this->organization->id])
         ->getJson('/dayparts/data')->assertOk()->json('dayparts'))->keyBy('name');
 
     expect((bool) $rows['Deli hours']['in_use'])->toBeTrue()
         ->and((bool) $rows['Lunch']['in_use'])->toBeFalse();
 });
 
-test('the playlist page reads its dayparts again: a new one is offered without reloading, another store\'s never', function () {
-    $editor = createStoreUser($this->store, ['screen-view', 'screen-playlist'], 'Playlist Editor');
-    $this->actingAs($editor)->withSession(['current_store_id' => $this->store->id]);
+test('the playlist page reads its dayparts again: a new one is offered without reloading, another organization\'s never', function () {
+    $editor = createOrganizationUser($this->organization, ['screen-view', 'screen-playlist'], 'Playlist Editor');
+    $this->actingAs($editor)->withSession(['current_organization_id' => $this->organization->id]);
 
-    Daypart::factory()->between('11:00', '14:00')->create(['store_id' => $this->store->id, 'name' => 'Lunch']);
-    Daypart::factory()->between('06:00', '09:00')->create(['store_id' => $this->store->id, 'name' => 'Old breakfast', 'is_retired' => true]);
-    $other = Store::factory()->create();
-    Daypart::factory()->between('06:00', '09:00')->create(['store_id' => $other->id, 'name' => 'Elsewhere']);
+    Daypart::factory()->between('11:00', '14:00')->create(['organization_id' => $this->organization->id, 'name' => 'Lunch']);
+    Daypart::factory()->between('06:00', '09:00')->create(['organization_id' => $this->organization->id, 'name' => 'Old breakfast', 'is_retired' => true]);
+    $other = Organization::factory()->create();
+    Daypart::factory()->between('06:00', '09:00')->create(['organization_id' => $other->id, 'name' => 'Elsewhere']);
 
     expect(collect($this->getJson("/screens/{$this->screen->id}/daypart-options")->assertOk()->json('dayparts'))->pluck('name')->all())
         ->toBe(['Deli hours', 'Lunch']);
 
-    // Another store's screen is not there at all; without the playlist permission, the list is not offered.
-    $foreign = Screen::factory()->create(['store_id' => $other->id]);
+    // Another organization's screen is not there at all; without the playlist permission, the list is not offered.
+    $foreign = Screen::factory()->create(['organization_id' => $other->id]);
     $this->getJson("/screens/{$foreign->id}/daypart-options")->assertNotFound();
 
-    $looker = createStoreUser($this->store, ['screen-view'], 'Looker');
-    $this->actingAs($looker)->withSession(['current_store_id' => $this->store->id])
+    $looker = createOrganizationUser($this->organization, ['screen-view'], 'Looker');
+    $this->actingAs($looker)->withSession(['current_organization_id' => $this->organization->id])
         ->getJson("/screens/{$this->screen->id}/daypart-options")->assertForbidden();
 });

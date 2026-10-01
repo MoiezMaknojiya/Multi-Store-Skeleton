@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Invitation;
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -11,20 +11,20 @@ use Illuminate\Support\Facades\DB;
 | Invitation links, attacked on purpose
 |--------------------------------------------------------------------------
 |
-| The link is the one door into a store, so every way of pushing at it: a token that was tampered with,
+| The link is the one door into an organization, so every way of pushing at it: a token that was tampered with,
 | one that expired, one already used, one opened by the wrong person, and one that would cross the wall
-| between the platform team and a store.
+| between the platform team and an organization.
 |
 */
 
 beforeEach(function () {
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->other = Store::factory()->create(['name' => 'Beta Deli']);
-    $this->owner = createStoreMember($this->store, Role::OWNER);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->other = Organization::factory()->create(['name' => 'Beta Deli']);
+    $this->owner = createOrganizationMember($this->organization, Role::OWNER);
 });
 
 test('a token that was guessed, tampered with or truncated opens nothing', function () {
-    [$invitation, $token] = Invitation::open($this->store, 'new@example.com', Role::starter(Role::STAFF), $this->owner);
+    [$invitation, $token] = Invitation::open($this->organization, 'new@example.com', Role::starter(Role::STAFF), $this->owner);
 
     $attempts = [
         'wrong length' => 'abc',
@@ -53,11 +53,11 @@ test('a token that was guessed, tampered with or truncated opens nothing', funct
 
     expect(User::where('email', 'new@example.com')->exists())->toBeFalse()
         ->and(Invitation::find($invitation->id))->not->toBeNull()
-        ->and(DB::table('store_user')->where('store_id', $this->store->id)->count())->toBe(1);
+        ->and(DB::table('organization_user')->where('organization_id', $this->organization->id)->count())->toBe(1);
 });
 
 test('an expired link cannot be used, and the account it was for is never created', function () {
-    [$invitation, $token] = Invitation::open($this->store, 'late@example.com', Role::starter(Role::STAFF), $this->owner);
+    [$invitation, $token] = Invitation::open($this->organization, 'late@example.com', Role::starter(Role::STAFF), $this->owner);
     $invitation->update(['expires_at' => now()->subDay()]);
 
     $this->get("/invitations/{$token}")->assertViewIs('invitations.invalid');
@@ -67,11 +67,11 @@ test('an expired link cannot be used, and the account it was for is never create
     ]);
 
     expect(User::where('email', 'late@example.com')->exists())->toBeFalse()
-        ->and(DB::table('store_user')->where('store_id', $this->store->id)->count())->toBe(1);
+        ->and(DB::table('organization_user')->where('organization_id', $this->organization->id)->count())->toBe(1);
 });
 
 test('one link is used exactly once, however many times it is replayed', function () {
-    [, $token] = Invitation::open($this->store, 'joiner@example.com', Role::starter(Role::STAFF), $this->owner);
+    [, $token] = Invitation::open($this->organization, 'joiner@example.com', Role::starter(Role::STAFF), $this->owner);
 
     $this->post("/invitations/{$token}/register", [
         'first_name' => 'Jo', 'last_name' => 'Iner', 'phone' => '5550000000',
@@ -79,7 +79,7 @@ test('one link is used exactly once, however many times it is replayed', functio
     ])->assertRedirect();
 
     $joiner = User::where('email', 'joiner@example.com')->sole();
-    expect(DB::table('store_user')->where('user_id', $joiner->id)->count())->toBe(1);
+    expect(DB::table('organization_user')->where('user_id', $joiner->id)->count())->toBe(1);
 
     // Replay it: the row is gone, so the link is simply invalid now.
     auth()->logout();
@@ -91,17 +91,17 @@ test('one link is used exactly once, however many times it is replayed', functio
     ]);
 
     expect(User::where('email', 'joiner@example.com')->count())->toBe(1)
-        ->and(DB::table('store_user')->where('user_id', $joiner->id)->count())->toBe(1);
+        ->and(DB::table('organization_user')->where('user_id', $joiner->id)->count())->toBe(1);
 });
 
 test('a link is not a way to join as somebody else', function () {
-    $stranger = createStoreMember($this->other, Role::STAFF);
-    [$invitation, $token] = Invitation::open($this->store, 'wanted@example.com', Role::starter(Role::STAFF), $this->owner);
+    $stranger = createOrganizationMember($this->other, Role::STAFF);
+    [$invitation, $token] = Invitation::open($this->organization, 'wanted@example.com', Role::starter(Role::STAFF), $this->owner);
 
     // Signed in with another address: told so, and nothing happens.
     $this->actingAs($stranger)->post("/invitations/{$token}/accept");
 
-    expect(DB::table('store_user')->where('user_id', $stranger->id)->where('store_id', $this->store->id)->exists())->toBeFalse()
+    expect(DB::table('organization_user')->where('user_id', $stranger->id)->where('organization_id', $this->organization->id)->exists())->toBeFalse()
         ->and(Invitation::find($invitation->id))->not->toBeNull();
 
     // And the register form cannot be used to claim it while signed in as somebody else.
@@ -117,34 +117,34 @@ test('the two tiers cannot be crossed with an invitation', function () {
     $primary = createSuperAdmin();
     $platformRole = Role::create(['name' => 'Support', 'is_global' => true]);
 
-    // A store member cannot be invited to the platform team…
-    $member = createStoreMember($this->store, Role::STAFF);
+    // An organization member cannot be invited to the platform team…
+    $member = createOrganizationMember($this->organization, Role::STAFF);
     $this->actingAs($primary)->postJson('/users/invitations', ['email' => $member->email, 'role_id' => $platformRole->id])
         ->assertStatus(422);
 
-    // …and a platform account cannot be invited into a store.
+    // …and a platform account cannot be invited into an organization.
     $support = createPlatformUser(['user-view'], 'Support Staff');
-    $this->actingAs($this->owner)->withSession(['current_store_id' => $this->store->id])
+    $this->actingAs($this->owner)->withSession(['current_organization_id' => $this->organization->id])
         ->postJson('/members/invitations', ['email' => $support->email, 'role_id' => Role::starter(Role::STAFF)->id])
         ->assertStatus(422);
 
-    // A platform role cannot be offered from inside a store, nor a store role from the platform's form.
-    $this->actingAs($this->owner)->withSession(['current_store_id' => $this->store->id])
+    // A platform role cannot be offered from inside an organization, nor an organization role from the platform's form.
+    $this->actingAs($this->owner)->withSession(['current_organization_id' => $this->organization->id])
         ->postJson('/members/invitations', ['email' => 'x@example.com', 'role_id' => $platformRole->id])
         ->assertStatus(422);
     $this->actingAs($primary)->postJson('/users/invitations', ['email' => 'y@example.com', 'role_id' => Role::starter(Role::STAFF)->id])
         ->assertStatus(422);
 
-    expect(DB::table('store_user')->where('user_id', $member->id)->where('store_id', 0)->exists())->toBeFalse()
-        ->and(DB::table('store_user')->where('user_id', $support->id)->where('store_id', $this->store->id)->exists())->toBeFalse()
+    expect(DB::table('organization_user')->where('user_id', $member->id)->where('organization_id', 0)->exists())->toBeFalse()
+        ->and(DB::table('organization_user')->where('user_id', $support->id)->where('organization_id', $this->organization->id)->exists())->toBeFalse()
         ->and(Invitation::whereIn('email', ['x@example.com', 'y@example.com'])->exists())->toBeFalse();
 });
 
-test('an invitation cannot be reached, resent or revoked from another store', function () {
-    $theirs = Invitation::factory()->create(['store_id' => $this->other->id]);
-    $attacker = createStoreUser($this->store, ['member-view', 'member-invite'], 'Nosy');
+test('an invitation cannot be reached, resent or revoked from another organization', function () {
+    $theirs = Invitation::factory()->create(['organization_id' => $this->other->id]);
+    $attacker = createOrganizationUser($this->organization, ['member-view', 'member-invite'], 'Nosy');
 
-    $this->actingAs($attacker)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($attacker)->withSession(['current_organization_id' => $this->organization->id]);
 
     $this->deleteJson("/members/invitations/{$theirs->id}")->assertNotFound();
     $this->postJson("/members/invitations/{$theirs->id}/resend")->assertNotFound();

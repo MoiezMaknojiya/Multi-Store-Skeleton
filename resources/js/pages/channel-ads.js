@@ -38,7 +38,7 @@ export function registerChannelAds(Alpine) {
 
         maxImageSeconds: config.maxImageSeconds ?? 300,
         adsPerPass: config.adsPerPass ?? null,
-        // Above the stores, the platform's channel may take any shop's files: [{id, name}], else empty.
+        // Above the organizations, the platform's channel may take any organization's files: [{id, name}], else empty.
         libraries: config.libraries ?? [],
         uploadsJoin: config.uploadsJoin ?? 'your media library',
 
@@ -265,7 +265,7 @@ export function registerChannelAds(Alpine) {
             if (this.picker.search.trim() !== '') return 'Nothing here matches that search.';
 
             if (this.source === 'ads') {
-                // An ad publishes into its shop's library, and one made for every shop into the platform's own.
+                // An ad publishes into its organization's library, and one made for every organization into the platform's own.
                 return this.libraries.length > 0 && this.picker.library === 'platform'
                     ? 'No ad for every organization is published yet. Publish one in the Ad Builder, or choose an organization above.'
                     : 'No published ads here yet. Publish one in the Ad Builder, then choose it here.';

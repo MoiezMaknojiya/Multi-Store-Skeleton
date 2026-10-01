@@ -20,12 +20,12 @@
                 </div>
             </div>
 
-            {{-- The stores this person belongs to — here only while Settings has no Stores tab for them (no View Stores
-                 where they work, or no store chosen), so anybody can still leave. The platform team is never a member. --}}
-            @if (auth()->user()->globalRole() === null && ! auth()->user()->hasStoresTab())
+            {{-- The organizations this person belongs to — here only while Settings has no Organizations tab for them (no View Organizations
+                 where they work, or no organization chosen), so anybody can still leave. The platform team is never a member. --}}
+            @if (auth()->user()->globalRole() === null && ! auth()->user()->hasOrganizationsTab())
                 <div class="card p-4 sm:p-8">
                     <div class="max-w-2xl">
-                        @include('profile.partials.store-memberships')
+                        @include('profile.partials.organization-memberships')
                     </div>
                 </div>
             @endif

@@ -18,9 +18,9 @@ export function registerBuilderAssetsTable(Alpine) {
         extraState: {
             // Several files arriving together refresh the list once.
             refreshTimer: null,
-            /* Above the stores: one shop (its id), or All shops (''), where an upload is shared with every shop. */
-            filterStore: '',
-            /* How full the shop on the shelf is ({used, limit}): its own inside a store, the one chosen above. The page
+            /* Above the organizations: one organization (its id), or All organizations (''), where an upload is shared with every organization. */
+            filterOrganization: '',
+            /* How full the organization on the shelf is ({used, limit}): its own inside an organization, the one chosen above. The page
              * brings the first answer, so the meter is there at once. */
             storage: config.storage ?? null,
         },
@@ -28,7 +28,7 @@ export function registerBuilderAssetsTable(Alpine) {
         extraMethods: {
             /* ── Listing filters ───────────────────────────────────────── */
             extraParams() {
-                return this.filterStore ? { store_id: this.filterStore } : {};
+                return this.filterOrganization ? { organization_id: this.filterOrganization } : {};
             },
 
             applyFilters() {
@@ -84,13 +84,13 @@ export function registerBuilderAssetsTable(Alpine) {
                 return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round((asset.size ?? 0) / 1024))} KB`;
             },
 
-            /** Named by any ad — this shop's, or another shop's or the platform's for a file shared with every shop. */
+            /** Named by any ad — this organization's, or another organization's or the platform's for a file shared with every organization. */
             isUsed(asset) {
                 return (asset.used_by ?? []).length > 0 || Number(asset.used_elsewhere ?? 0) > 0 || Number(asset.used_by_platform ?? 0) > 0;
             },
 
             /**
-             * "Used by Winter sale, Eid offer" — or nothing at all, which is why it can be deleted. Another shop's ads
+             * "Used by Winter sale, Eid offer" — or nothing at all, which is why it can be deleted. Another organization's ads
              * and the platform's using a shared file are counted, never named.
              */
             usageLabel(asset) {

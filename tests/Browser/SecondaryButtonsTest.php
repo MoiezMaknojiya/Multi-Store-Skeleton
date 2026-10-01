@@ -5,11 +5,11 @@ namespace Tests\Browser;
 use App\Models\ActivityLog;
 use App\Models\Invitation;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -18,7 +18,7 @@ use Tests\DuskTestCase;
  * The buttons a flow test walks past: the Cancel of each modal, the two warnings the copy box shows
  * before it replaces anything, the empty-state Invite, and the platform confirmations nothing else
  * presses. Small buttons, but a dead Cancel traps somebody in a modal and a missing warning replaces
- * a shop's playlist without saying so.
+ * an organization's playlist without saying so.
  */
 class SecondaryButtonsTest extends DuskTestCase
 {
@@ -27,21 +27,21 @@ class SecondaryButtonsTest extends DuskTestCase
     public function test_the_playlist_modals_can_be_dismissed_and_the_copy_box_warns_first(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store, Role::OWNER);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization, Role::OWNER);
 
-        $here = Screen::factory()->create(['store_id' => $store->id, 'name' => 'Deli TV']);
-        $there = Screen::factory()->create(['store_id' => $store->id, 'name' => 'Counter TV']);
-        $media = Media::factory()->create(['store_id' => $store->id, 'title' => 'Opening Poster']);
+        $here = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Deli TV']);
+        $there = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Counter TV']);
+        $media = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Opening Poster']);
 
         // Both screens already play something, so copying would replace what is on the other one.
         PlaylistItem::create(['screen_id' => $here->id, 'media_id' => $media->id, 'position' => 0, 'duration_seconds' => 10]);
         PlaylistItem::create(['screen_id' => $there->id, 'media_id' => $media->id, 'position' => 0, 'duration_seconds' => 10]);
 
-        $this->browse(function (Browser $browser) use ($owner, $store, $here, $there) {
+        $this->browse(function (Browser $browser) use ($owner, $organization, $here, $there) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/screens/'.$here->id);
             $this->waitForAlpine($browser);
@@ -68,17 +68,17 @@ class SecondaryButtonsTest extends DuskTestCase
         });
     }
 
-    public function test_a_store_with_one_screen_is_told_there_is_nowhere_to_copy_to(): void
+    public function test_a_organization_with_one_screen_is_told_there_is_nowhere_to_copy_to(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Solo Shop']);
-        $owner = $this->storeMember($store, Role::OWNER);
-        $only = Screen::factory()->create(['store_id' => $store->id, 'name' => 'The Only TV']);
+        $organization = Organization::factory()->create(['name' => 'Solo Organization']);
+        $owner = $this->organizationMember($organization, Role::OWNER);
+        $only = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'The Only TV']);
 
-        $this->browse(function (Browser $browser) use ($owner, $store, $only) {
+        $this->browse(function (Browser $browser) use ($owner, $organization, $only) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/screens/'.$only->id);
             $this->waitForAlpine($browser);
@@ -93,13 +93,13 @@ class SecondaryButtonsTest extends DuskTestCase
     public function test_the_invitations_tab_offers_invite_from_its_empty_state(): void
     {
         $this->seedSuperAdmin();
-        $store = Store::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->storeMember($store, Role::OWNER);
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization, Role::OWNER);
 
-        $this->browse(function (Browser $browser) use ($owner, $store) {
+        $this->browse(function (Browser $browser) use ($owner, $organization) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
-            $this->switchToStore($browser, $store);
+            $this->switchToOrganization($browser, $organization);
 
             $browser->visit('/members');
             $this->waitForAlpine($browser);

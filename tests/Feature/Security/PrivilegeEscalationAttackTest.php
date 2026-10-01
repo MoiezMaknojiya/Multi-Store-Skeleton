@@ -1,8 +1,8 @@
 <?php
 
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -13,24 +13,24 @@ use Illuminate\Support\Facades\DB;
 |
 | Every way a person might try to end up with more than they were given: a role that holds what its
 | maker does not, a name that passes for Super-Admin, a flag smuggled through a form, a platform page
-| opened from inside a store, "Log in as" pointed at somebody stronger.
+| opened from inside an organization, "Log in as" pointed at somebody stronger.
 |
 */
 
 beforeEach(function () {
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->other = Store::factory()->create(['name' => 'Beta Deli']);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->other = Organization::factory()->create(['name' => 'Beta Deli']);
 
-    // A member trusted with the store's roles and its team, and nothing else.
-    $this->maker = createStoreUser($this->store, ['role-view', 'role-store', 'role-update', 'role-destroy', 'member-view', 'member-invite', 'member-update', 'screen-view'], 'Role Maker');
-    $this->owner = createStoreMember($this->store, Role::OWNER);
-    $this->staff = createStoreMember($this->store, Role::STAFF);
+    // A member trusted with the organization's roles and its team, and nothing else.
+    $this->maker = createOrganizationUser($this->organization, ['role-view', 'role-store', 'role-update', 'role-destroy', 'member-view', 'member-invite', 'member-update', 'screen-view'], 'Role Maker');
+    $this->owner = createOrganizationMember($this->organization, Role::OWNER);
+    $this->staff = createOrganizationMember($this->organization, Role::STAFF);
 
-    $this->actingAs($this->maker)->withSession(['current_store_id' => $this->store->id]);
+    $this->actingAs($this->maker)->withSession(['current_organization_id' => $this->organization->id]);
 });
 
 test('a custom role cannot be given a single permission its maker does not hold', function () {
-    foreach (['media-view', 'daypart-view', 'store-destroy', 'channel-view', 'activity-view'] as $beyond) {
+    foreach (['media-view', 'daypart-view', 'organization-destroy', 'channel-view', 'activity-view'] as $beyond) {
         $this->postJson('/roles', [
             'name' => 'Climber '.$beyond,
             'permissions' => Permission::whereIn('name', ['screen-view', $beyond])->pluck('id')->all(),
@@ -40,7 +40,7 @@ test('a custom role cannot be given a single permission its maker does not hold'
     expect(Role::where('name', 'like', 'Climber%')->exists())->toBeFalse();
 });
 
-test('a store’s role can never carry the accounts, the catalogue or the yearly log maintenance', function () {
+test('an organization’s role can never carry the accounts, the catalogue or the yearly log maintenance', function () {
     foreach (['user-view', 'user-destroy', 'activity-destroy', 'permission-view', 'permission-update'] as $never) {
         $this->postJson('/roles', [
             'name' => 'Overreach',
@@ -62,14 +62,14 @@ test('permission ids that do not exist, or are not ids at all, are refused rathe
     expect(Role::where('name', 'Nonsense')->exists())->toBeFalse();
 });
 
-test('flags smuggled through the role form are ignored: no global role, no Owner key, no other store', function () {
+test('flags smuggled through the role form are ignored: no global role, no Owner key, no other organization', function () {
     $this->postJson('/roles', [
         'name' => 'Smuggler',
         'permissions' => Permission::whereIn('name', ['screen-view'])->pluck('id')->all(),
         // None of these are part of the form.
         'is_global' => true,
         'key' => Role::OWNER,
-        'store_id' => $this->other->id,
+        'organization_id' => $this->other->id,
         'created_by' => $this->owner->id,
         'id' => 1,
         'type' => 'platform',
@@ -78,7 +78,7 @@ test('flags smuggled through the role form are ignored: no global role, no Owner
     $role = Role::firstWhere('name', 'Smuggler');
     expect($role->is_global)->toBeFalse()
         ->and($role->key)->toBeNull()
-        ->and($role->store_id)->toBe($this->store->id)
+        ->and($role->organization_id)->toBe($this->organization->id)
         ->and($role->permissions->pluck('name')->all())->toBe(['screen-view']);
 });
 
@@ -94,9 +94,9 @@ test('nothing may be named like Super-Admin, however it is spelled', function ()
             $role = Role::firstWhere('name', $name);
             expect($role->isSuperAdmin())->toBeFalse("{$name} passed for the Super-Admin role")
                 ->and($role->is_global)->toBeFalse()
-                ->and($role->store_id)->toBe($this->store->id);
+                ->and($role->organization_id)->toBe($this->organization->id);
             $holder = User::factory()->create();
-            $holder->stores()->attach($this->store->id, ['role_id' => $role->id]);
+            $holder->organizations()->attach($this->organization->id, ['role_id' => $role->id]);
             expect($holder->fresh()->isSuperAdmin())->toBeFalse("{$name} made its holder a super admin");
         } else {
             expect($status)->toBe(422, "{$name} answered {$status}");
@@ -104,7 +104,7 @@ test('nothing may be named like Super-Admin, however it is spelled', function ()
     }
 });
 
-test('the Super-Admin role and the Owner role cannot be edited or deleted from inside a store', function () {
+test('the Super-Admin role and the Owner role cannot be edited or deleted from inside an organization', function () {
     $superAdminRole = Role::firstOrCreate(['name' => Role::SUPER_ADMIN], ['is_global' => true]);
     $ownerRole = Role::owner();
 
@@ -127,17 +127,17 @@ test('nobody promotes themselves, or hands out a role that holds more than they 
     // An invitation to a role beyond their reach
     $this->postJson('/members/invitations', ['email' => 'boss@example.com', 'role_id' => Role::starter(Role::OWNER)->id])->assertStatus(422);
 
-    expect(roleKeyIn($this->maker, $this->store))->toBeNull()   // still their custom role
-        ->and(roleKeyIn($this->staff, $this->store))->toBe(Role::STAFF)
+    expect(roleKeyIn($this->maker, $this->organization))->toBeNull()   // still their custom role
+        ->and(roleKeyIn($this->staff, $this->organization))->toBe(Role::STAFF)
         ->and(DB::table('invitations')->count())->toBe(0);
 });
 
-test('the platform’s own pages stay shut to a store member, whatever they hold there', function () {
+test('the platform’s own pages stay shut to an organization member, whatever they hold there', function () {
     foreach ([
         fn () => $this->get('/users'),
         fn () => $this->getJson('/users/data'),
-        fn () => $this->getJson("/users/{$this->staff->id}/stores"),
-        fn () => $this->postJson("/users/{$this->staff->id}/stores", ['store_id' => $this->other->id, 'role_id' => Role::starter(Role::STAFF)->id]),
+        fn () => $this->getJson("/users/{$this->staff->id}/organizations"),
+        fn () => $this->postJson("/users/{$this->staff->id}/organizations", ['organization_id' => $this->other->id, 'role_id' => Role::starter(Role::STAFF)->id]),
         fn () => $this->deleteJson("/users/{$this->staff->id}", ['password' => 'password']),
         fn () => $this->deleteJson("/users/{$this->staff->id}/platform-role", ['password' => 'password']),
         fn () => $this->postJson("/users/{$this->staff->id}/impersonate"),
@@ -145,28 +145,28 @@ test('the platform’s own pages stay shut to a store member, whatever they hold
         fn () => $this->postJson('/users/invitations', ['email' => 'x@example.com', 'role_id' => 1]),
         fn () => $this->get('/permissions'),
         fn () => $this->postJson('/permissions', ['name' => 'mine-view']),
-        fn () => $this->get('/stores'),
-        fn () => $this->getJson('/stores/data'),
-        fn () => $this->postJson('/stores', ['name' => 'Mine']),
+        fn () => $this->get('/organizations'),
+        fn () => $this->getJson('/organizations/data'),
+        fn () => $this->postJson('/organizations', ['name' => 'Mine']),
         fn () => $this->get('/campaigns'),
         fn () => $this->getJson('/activity/partitions'),
         fn () => $this->postJson('/activity/partitions/maintain'),
-        fn () => $this->putJson('/network-ads/stores', ['store_ids' => [$this->other->id], 'accepts' => true]),
+        fn () => $this->putJson('/network-ads/organizations', ['organization_ids' => [$this->other->id], 'accepts' => true]),
     ] as $i => $attempt) {
         $status = $attempt()->status();
         expect($status)->toBeIn([403, 404], "platform attempt #{$i} answered {$status}");
     }
 
     expect(Permission::where('name', 'mine-view')->exists())->toBeFalse()
-        ->and(Store::where('name', 'Mine')->exists())->toBeFalse()
+        ->and(Organization::where('name', 'Mine')->exists())->toBeFalse()
         ->and($this->other->fresh()->accepts_network_ads)->toBeFalse();
 });
 
-test('platform support cannot reach what the Super-Admin keeps, and cannot enter a store', function () {
-    $support = createPlatformUser(['user-view', 'store-view', 'channel-view', 'activity-view'], 'Support');
+test('platform support cannot reach what the Super-Admin keeps, and cannot enter an organization', function () {
+    $support = createPlatformUser(['user-view', 'organization-view', 'channel-view', 'activity-view'], 'Support');
     $primary = createSuperAdmin();
 
-    // No store in the session to start with, so the refused "switch" below is the only thing that
+    // No organization in the session to start with, so the refused "switch" below is the only thing that
     // could ever have put one there.
     $this->actingAs($support);
     $this->flushSession();
@@ -176,11 +176,11 @@ test('platform support cannot reach what the Super-Admin keeps, and cannot enter
         fn () => $this->postJson('/permissions', ['name' => 'support-view']),
         fn () => $this->getJson('/users/invitations'),
         fn () => $this->postJson('/users/invitations', ['email' => 'mate@example.com', 'role_id' => Role::superAdminId()]),
-        fn () => $this->getJson("/users/{$primary->id}/stores"),
+        fn () => $this->getJson("/users/{$primary->id}/organizations"),
         fn () => $this->postJson("/users/{$primary->id}/impersonate"),
         fn () => $this->deleteJson("/users/{$primary->id}", ['password' => 'password']),
         fn () => $this->deleteJson("/users/{$primary->id}/platform-role", ['password' => 'password']),
-        fn () => $this->post('/stores/switch', ['store_id' => $this->store->id]),
+        fn () => $this->post('/organizations/switch', ['organization_id' => $this->organization->id]),
         fn () => $this->postJson('/roles', ['name' => 'Support Made This', 'type' => 'platform', 'permissions' => []]),
     ] as $i => $attempt) {
         $status = $attempt()->status();
@@ -189,14 +189,14 @@ test('platform support cannot reach what the Super-Admin keeps, and cannot enter
 
     expect(User::find($primary->id))->not->toBeNull()
         ->and($primary->fresh()->isSuperAdmin())->toBeTrue()
-        ->and(session('current_store_id'))->toBeNull()
+        ->and(session('current_organization_id'))->toBeNull()
         ->and(Role::where('name', 'Support Made This')->exists())->toBeFalse();
 });
 
 test('"Log in as" never reaches a super admin, the primary, or the person themself', function () {
     $primary = createSuperAdmin();          // the first Super-Admin membership: the primary
     $second = createSuperAdmin();
-    $member = createStoreMember($this->store, Role::STAFF);
+    $member = createOrganizationMember($this->organization, Role::STAFF);
 
     $this->actingAs($second);
     expect($this->postJson("/users/{$primary->id}/impersonate")->status())->toBe(403)

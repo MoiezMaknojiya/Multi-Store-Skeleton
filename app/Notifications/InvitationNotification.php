@@ -29,7 +29,7 @@ class InvitationNotification extends Notification
         $role = $this->invitation->role->name;
         $place = $this->invitation->isForPlatform()
             ? 'the '.config('app.name').' team'
-            : $this->invitation->store->name;
+            : $this->invitation->organization->name;
 
         // The app's own template rather than Laravel's stock one, with a plain-text twin beside it: an email
         // with both parts is read by every client and is trusted further by the filters in between.

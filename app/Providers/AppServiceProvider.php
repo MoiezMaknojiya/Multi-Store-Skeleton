@@ -31,7 +31,7 @@ class AppServiceProvider extends ServiceProvider
         try {
             Permission::all()->each(function (Permission $permission) {
                 Gate::define($permission->name, function (User $user) use ($permission) {
-                    return $user->hasPermissionInCurrentStore($permission->name);
+                    return $user->hasPermissionInCurrentOrganization($permission->name);
                 });
             });
         } catch (\Exception) {
@@ -44,8 +44,8 @@ class AppServiceProvider extends ServiceProvider
         // A super admin holds every permission, whatever the role rows say (owner's rule, 2026-09-16:
         // "sab matlab sab") — a permission made later on the Permissions page, or one renamed, included.
         // It answers permission checks only: rules that are not permissions still stand (the primary
-        // super admin's protection, Super-Admin and the Owner role never deleted, a store's last
-        // Owner). `network-ads-toggle` is a place, not a permission — "inside a shop, while logged in
+        // super admin's protection, Super-Admin and the Owner role never deleted, an organization's last
+        // Owner). `network-ads-toggle` is a place, not a permission — "inside an organization, while logged in
         // as one of its people" — so it keeps its own test.
         Gate::before(function (User $user, string $ability) {
             if ($ability === 'network-ads-toggle') {
@@ -70,20 +70,20 @@ class AppServiceProvider extends ServiceProvider
      * The two abilities behind network advertising.
      *
      * Written by hand rather than seeded as permission rows, and deliberately so. A
-     * permission row can be handed to any role, including a store's own — and a
-     * campaign has no store, so a store user holding `campaign-view` would see every
+     * permission row can be handed to any role, including an organization's own — and a
+     * campaign has no organization, so an organization user holding `campaign-view` would see every
      * brand's contract across the whole network. That is the one wall this app never
      * breaks, so these two are simply not grantable.
      */
     private function registerNetworkAdGates(): void
     {
-        // Campaigns belong to the platform, not to any shop.
+        // Campaigns belong to the platform, not to any organization.
         Gate::define('campaign-manage', fn (User $user) => $user->isSuperAdmin());
 
         /**
-         * Whether a shop and its screens carry advertising is the PLATFORM owner's
-         * setting, agreed in the deal — not something a shopkeeper flips on a Tuesday.
-         * A super admin cannot enter a store directly (only "Log in as" does that), so
+         * Whether an organization and its screens carry advertising is the PLATFORM owner's
+         * setting, agreed in the deal — not something an organization member flips on a Tuesday.
+         * A super admin cannot enter an organization directly (only "Log in as" does that), so
          * the control appears exactly where they can reach it: inside an impersonated
          * session, to nobody else.
          *
@@ -103,22 +103,22 @@ class AppServiceProvider extends ServiceProvider
     /**
      * The tiers behind the platform's own pages — the second lock on their routes.
      *
-     * `global-tier` is acting ABOVE the stores: a super admin, or a user holding a global
-     * role. It guards what only works across every shop at once: the activity log's yearly
-     * maintenance and storage panel (a year is dropped for every shop together), giving a
-     * store an owner, every account, "Log in as" and the platform team. `super-admin-tier`
+     * `global-tier` is acting ABOVE the organizations: a super admin, or a user holding a global
+     * role. It guards what only works across every organization at once: the activity log's yearly
+     * maintenance and storage panel (a year is dropped for every organization together), giving an
+     * organization an owner, every account, "Log in as" and the platform team. `super-admin-tier`
      * guards the permission catalogue, which the owner keeps with the Super-Admin role alone,
      * the platform team's own management (invitations, taking a platform role away) and
-     * putting people in stores from the Users page.
+     * putting people in organizations from the Users page.
      *
-     * Channels and the activity log themselves are NOT tier-locked: a store's role may carry
-     * those permissions (Permission::STORE_SCOPED), and their controllers then answer for that
-     * one store only. The Stores page and the accounts pages are: a store's own people change
-     * their store in Settings → Stores and see each other on the Members page (owner's rules,
-     * 2026-09-17). What a store's role may never carry, RoleController refuses; these gates stand
+     * Channels and the activity log themselves are NOT tier-locked: an organization's role may carry
+     * those permissions (Permission::ORGANIZATION_SCOPED), and their controllers then answer for that
+     * one organization only. The Organizations page and the accounts pages are: an organization's own people change
+     * their organization in Settings → Organizations and see each other on the Members page (owner's rules,
+     * 2026-09-17). What an organization's role may never carry, RoleController refuses; these gates stand
      * on the routes themselves, so a row that somehow reached the wrong role still opens
      * nothing. They also close the door during
-     * "Log in as", where the person acting is a store member.
+     * "Log in as", where the person acting is an organization member.
      */
     private function registerTierGates(): void
     {
@@ -135,7 +135,7 @@ class AppServiceProvider extends ServiceProvider
      * from the DOMAIN AND IP ONLY — the route is not part of it — so every such
      * route on the site counts into the SAME counter for that visitor.
      *
-     * That is not academic here. A shop's TVs and the owner's laptop sit behind
+     * That is not academic here. An organization's TVs and the owner's laptop sit behind
      * one router, so they share one public IP. Each paired screen sends three
      * requests a minute (two playlist polls plus a heartbeat), and all of them
      * used to land in the same counter as the signup form: about four screens
@@ -145,7 +145,7 @@ class AppServiceProvider extends ServiceProvider
      *
      * Every limiter below therefore states its key explicitly, prefixed with its
      * own name so two limiters can never collide, and the screen endpoints count
-     * PER DEVICE rather than per IP: one TV misbehaving must not take the shop's
+     * PER DEVICE rather than per IP: one TV misbehaving must not take the organization's
      * other screens down with it.
      */
     private function registerRateLimiters(): void
@@ -153,14 +153,14 @@ class AppServiceProvider extends ServiceProvider
         // A screen asking for a pairing code has nothing to identify it yet, so
         // this is the one device limiter that has to key on the IP. A screen only
         // registers once per code (the code is cached for its 15-minute life), so
-        // 30 a minute is far above any honest shop and still caps table-filling.
+        // 30 a minute is far above any honest organization and still caps table-filling.
         RateLimiter::for('device-register', fn (Request $request) => Limit::perMinute(30)
             ->by('device-register:'.$request->ip()));
 
         // Waiting to be claimed, a screen polls every 30 seconds — 2 a minute,
         // plus one extra the moment a player page is reopened. 60 leaves room for
         // a TV that is restarted repeatedly during setup without punishing the
-        // shop next door on the same IP; the second limit is the ceiling for the
+        // organization next door on the same IP; the second limit is the ceiling for the
         // whole building.
         RateLimiter::for('device-pair', function (Request $request) {
             // A limiter runs BEFORE the endpoint's validation, so it has to survive any shape a

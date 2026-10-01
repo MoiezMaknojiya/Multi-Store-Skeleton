@@ -5,10 +5,10 @@ use App\Models\Campaign;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\ScheduleRule;
 use App\Models\Screen;
-use App\Models\Store;
 
 /*
 |--------------------------------------------------------------------------
@@ -25,14 +25,14 @@ use App\Models\Store;
 */
 
 beforeEach(function () {
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->screen = Screen::factory()->withToken('tok')->create(['store_id' => $this->store->id]);
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->screen = Screen::factory()->withToken('tok')->create(['organization_id' => $this->organization->id]);
 });
 
-/** A picture in the store's library, playable from now unless told otherwise. */
-function picture(Store $store, string $title, array $more = []): Media
+/** A picture in the organization's library, playable from now unless told otherwise. */
+function picture(Organization $organization, string $title, array $more = []): Media
 {
-    return Media::factory()->create(['store_id' => $store->id, 'title' => $title, 'type' => Media::TYPE_IMAGE, ...$more]);
+    return Media::factory()->create(['organization_id' => $organization->id, 'title' => $title, 'type' => Media::TYPE_IMAGE, ...$more]);
 }
 
 function line(Screen $screen, Media|Channel $what, int $position, ?array $rule = null): PlaylistItem
@@ -59,7 +59,7 @@ function manifestOf($test): array
 
 test('a file item carries no dates of its own: when it plays is its line\'s, worked out on the server', function () {
     // A file keeps its name alone (owner, 2026-10-01); the timeline says what each moment shows.
-    line($this->screen, picture($this->store, 'Logo'), 0);
+    line($this->screen, picture($this->organization, 'Logo'), 0);
 
     $item = manifestOf($this)['items'][0];
 
@@ -68,9 +68,9 @@ test('a file item carries no dates of its own: when it plays is its line\'s, wor
 });
 
 test('the holding picture travels alongside the items, so a set can fall back to it by itself', function () {
-    $holding = picture($this->store, 'Holding');
+    $holding = picture($this->organization, 'Holding');
     $this->screen->update(['default_media_id' => $holding->id]);
-    line($this->screen, picture($this->store, 'Menu'), 0);
+    line($this->screen, picture($this->organization, 'Menu'), 0);
 
     $manifest = manifestOf($this);
 
@@ -95,14 +95,14 @@ function timelineUrls(array $manifest): array
 }
 
 test('the timeline names every file the next days may play — and nothing further off, and no draft', function () {
-    $now = picture($this->store, 'Now');
-    $tomorrow = picture($this->store, 'Tomorrow only');
-    $nextYear = picture($this->store, 'Next year');
-    $holding = picture($this->store, 'Holding');
-    $draft = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id, 'name' => 'Draft page']);
+    $now = picture($this->organization, 'Now');
+    $tomorrow = picture($this->organization, 'Tomorrow only');
+    $nextYear = picture($this->organization, 'Next year');
+    $holding = picture($this->organization, 'Holding');
+    $draft = BuilderAd::factory()->withText()->published()->create(['organization_id' => $this->organization->id, 'name' => 'Draft page']);
     $draft->update(['published_at' => null]);   // unpublished: its page is on no screen
-    $channel = Channel::factory()->create(['store_id' => $this->store->id]);
-    $channelPicture = picture($this->store, 'Channel ad');
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id]);
+    $channelPicture = picture($this->organization, 'Channel ad');
     ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $channelPicture->id]);
 
     $this->screen->update(['default_media_id' => $holding->id]);
@@ -128,11 +128,11 @@ test('the timeline names every file the next days may play — and nothing furth
 });
 
 test('a network advert rides in the break and in the timeline, under the campaign’s own cache key', function () {
-    $this->store->update(['accepts_network_ads' => true]);
+    $this->organization->update(['accepts_network_ads' => true]);
     $this->screen->update(['accepts_network_ads' => true]);
     $campaign = Campaign::factory()->create(['name' => 'Cola']);
     $campaign->screens()->attach($this->screen);
-    line($this->screen, picture($this->store, 'Menu'), 0);
+    line($this->screen, picture($this->organization, 'Menu'), 0);
 
     $manifest = manifestOf($this);
     $advert = collect($manifest['timeline']['lines'])->firstWhere('url', $campaign->url);
@@ -142,12 +142,12 @@ test('a network advert rides in the break and in the timeline, under the campaig
 });
 
 test('neither the fallback nor tomorrow’s files move the version: it is what plays now that does', function () {
-    line($this->screen, picture($this->store, 'Menu'), 0);
+    line($this->screen, picture($this->organization, 'Menu'), 0);
     $before = manifestOf($this)['version'];
 
-    $holding = picture($this->store, 'Holding');
+    $holding = picture($this->organization, 'Holding');
     $this->screen->update(['default_media_id' => $holding->id]);
-    line($this->screen, picture($this->store, 'Tomorrow'), 1, ['recurrence_type' => ScheduleRule::DAILY, 'starts_on' => now()->addDay()->toDateString(), 'position' => 1]);
+    line($this->screen, picture($this->organization, 'Tomorrow'), 1, ['recurrence_type' => ScheduleRule::DAILY, 'starts_on' => now()->addDay()->toDateString(), 'position' => 1]);
 
     $after = manifestOf($this);
 
@@ -159,7 +159,7 @@ test('neither the fallback nor tomorrow’s files move the version: it is what p
 /* ── What moves a cache key: the bytes, and nothing else ────────────────── */
 
 test('a picture keeps its cache key through a new title — only a new file moves it', function () {
-    $poster = picture($this->store, 'Poster', ['path' => 'media/1/01J8X0000000000000000000AA.jpg', 'size' => 1000]);
+    $poster = picture($this->organization, 'Poster', ['path' => 'media/1/01J8X0000000000000000000AA.jpg', 'size' => 1000]);
     $key = $poster->cacheKey();
 
     $this->travel(5)->minutes();
@@ -173,7 +173,7 @@ test('a picture keeps its cache key through a new title — only a new file move
 });
 
 test('a video keeps its cache key through a new title too', function () {
-    $video = picture($this->store, 'Promo', ['type' => Media::TYPE_VIDEO, 'mime_type' => 'video/mp4', 'path' => 'media/1/01J8X0000000000000000000CC.mp4']);
+    $video = picture($this->organization, 'Promo', ['type' => Media::TYPE_VIDEO, 'mime_type' => 'video/mp4', 'path' => 'media/1/01J8X0000000000000000000CC.mp4']);
     $key = $video->cacheKey();
 
     $this->travel(5)->minutes();
@@ -183,8 +183,8 @@ test('a video keeps its cache key through a new title too', function () {
 });
 
 test('a channel ad is kept under its file’s own key: one file on a playlist and in a channel is one copy on the set', function () {
-    $picture = picture($this->store, 'Shared');
-    $channel = Channel::factory()->create(['store_id' => $this->store->id]);
+    $picture = picture($this->organization, 'Shared');
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id]);
     $ad = ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $picture->id]);
 
     line($this->screen, $picture, 0);

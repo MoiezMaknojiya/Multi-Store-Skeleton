@@ -15,7 +15,7 @@ use Illuminate\Support\Str;
  * that fades in and then floats 10 px up and down for ever), and a CTA that blinks. Not among them: a
  * video, an exit, a custom curve, and the shake and Ken Burns loops.
  *
- * The pictures are ExampleArtwork's; `$assets` maps each piece to its row on the store's shelf.
+ * The pictures are ExampleArtwork's; `$assets` maps each piece to its row on the organization's shelf.
  */
 class ExampleAds
 {
@@ -26,21 +26,21 @@ class ExampleAds
     }
 
     /**
-     * @param  array<string, int>  $assets  artwork piece => asset id on the store's shelf
+     * @param  array<string, int>  $assets  artwork piece => asset id on the organization's shelf
      * @return array<string, array<string, mixed>> ad name => document
      */
-    public function designs(array $assets, string $storeName): array
+    public function designs(array $assets, string $organizationName): array
     {
         return [
-            'Example · Winter Sale' => $this->winterSale($assets, $storeName),
+            'Example · Winter Sale' => $this->winterSale($assets, $organizationName),
             'Example · Fresh Coffee' => $this->freshCoffee($assets),
             'Example · Grand Opening' => $this->grandOpening($assets),
-            'Example · Burger Deal (Urdu)' => $this->burgerDeal($assets, $storeName),
+            'Example · Burger Deal (Urdu)' => $this->burgerDeal($assets, $organizationName),
         ];
     }
 
     /** Stacked layers behind a framed photograph, a pulsing badge and snow drifting over everything. */
-    private function winterSale(array $assets, string $storeName): array
+    private function winterSale(array $assets, string $organizationName): array
     {
         $badgeMotion = [
             'in' => $this->in('rotate', 0.9, 1.3, ['degrees' => -180, 'ease' => 'back.out']),
@@ -93,7 +93,7 @@ class ExampleAds
             $this->shape('ws_strip', 'Strip', [0, 960, 1920, 120], ['shape' => 'rect', 'fill' => 'rgba(255,255,255,0.12)'], [
                 'in' => $this->in('wipe', 0.8, 1.6, ['direction' => 'right']),
             ]),
-            $this->text('ws_strip_text', "{$storeName}  •  Sale ends Sunday", [0, 960, 1920, 120], $this->type('Poppins', 600, 42, '#ffffff', [
+            $this->text('ws_strip_text', "{$organizationName}  •  Sale ends Sunday", [0, 960, 1920, 120], $this->type('Poppins', 600, 42, '#ffffff', [
                 'align' => 'center', 'verticalAlign' => 'center', 'letterSpacing' => 2,
             ]), [
                 'in' => $this->in('fade', 0.6, 1.9),
@@ -217,7 +217,7 @@ class ExampleAds
     }
 
     /** Urdu, right to left, in Nastaliq: a burger that drops in and bounces, then floats; a spinning-in price badge. */
-    private function burgerDeal(array $assets, string $storeName): array
+    private function burgerDeal(array $assets, string $organizationName): array
     {
         $badgeMotion = [
             'in' => $this->in('rotate', 0.9, 1.1, ['degrees' => -180, 'ease' => 'back.out']),
@@ -256,7 +256,7 @@ class ExampleAds
             $this->text('bd_price', "صرف 999\nروپے", [1400, 560, 380, 380], $this->type('Noto Nastaliq Urdu', 700, 64, '#9d0208', [
                 'align' => 'center', 'verticalAlign' => 'center', 'lineHeight' => 1.7,
             ]), $badgeMotion),
-            $this->text('bd_strip', "Burger Deal  •  {$storeName}  •  Today only", [0, 985, 1920, 95], $this->type('Poppins', 600, 40, '#ffffff', [
+            $this->text('bd_strip', "Burger Deal  •  {$organizationName}  •  Today only", [0, 985, 1920, 95], $this->type('Poppins', 600, 40, '#ffffff', [
                 'align' => 'center', 'verticalAlign' => 'center', 'background' => 'rgba(0,0,0,0.28)',
             ]), [
                 'in' => $this->in('wipe', 0.8, 1.6, ['direction' => 'right']),

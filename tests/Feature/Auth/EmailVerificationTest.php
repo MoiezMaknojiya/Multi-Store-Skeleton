@@ -2,8 +2,8 @@
 
 use App\Models\ActivityLog;
 use App\Models\Invitation;
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\User;
 use App\Notifications\VerifyEmailNotification;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\URL;
 |--------------------------------------------------------------------------
 |
 | Owner's rule, 2026-09-29 ("we will do email verification when anyone will create account"): public signup
-| creates the account and its store as before, and sends a link to the address. Until the link is opened the
+| creates the account and its organization as before, and sends a link to the address. Until the link is opened the
 | account can open "Check your inbox" and its profile — nothing that uses the server's space. Every account
 | made before the rule counts as confirmed; an invitation's link confirms too, since it came to that inbox.
 |
@@ -28,7 +28,7 @@ function newCustomer(array $overrides = []): array
 {
     return array_replace([
         'first_name' => 'Sana', 'last_name' => 'Owner', 'phone' => '3213214321', 'email' => 'sana@example.com',
-        'password' => 'password123', 'password_confirmation' => 'password123', 'store_name' => 'Sana Superstore',
+        'password' => 'password123', 'password_confirmation' => 'password123', 'organization_name' => 'Sana Superstore',
         'street' => '7 High St', 'suite' => null, 'city' => 'Austin', 'state' => 'TX', 'zip_code' => '73301',
     ], $overrides);
 }
@@ -51,7 +51,7 @@ test('signing up sends the link, and opens nothing but the page that says so and
     Notification::assertSentTo($user, VerifyEmailNotification::class);
 
     // Every page of the panel sends it back to "Check your inbox" — and a request that wants JSON is refused.
-    foreach (['/dashboard', '/select-store', '/media', '/screens', '/builder', '/channels', '/members'] as $page) {
+    foreach (['/dashboard', '/select-organization', '/media', '/screens', '/builder', '/channels', '/members'] as $page) {
         $this->get($page)->assertRedirect(route('verification.notice'));
     }
     $this->postJson('/media', [])->assertForbidden();
@@ -153,10 +153,10 @@ test('an account made before the rule, or through an invitation, counts as confi
     $migration->up();
 
     // An invitation's link came to the inbox itself: accepting it confirms the account's address.
-    $store = Store::factory()->create(['name' => 'Beta Deli']);
+    $organization = Organization::factory()->create(['name' => 'Beta Deli']);
     $signedUp = User::factory()->unverified()->create(['email' => 'sara@example.com']);
     Invitation::create([
-        'store_id' => $store->id, 'email' => 'sara@example.com', 'role_id' => Role::owner()->id,
+        'organization_id' => $organization->id, 'email' => 'sara@example.com', 'role_id' => Role::owner()->id,
         'token_hash' => Invitation::hashToken($token = str_repeat('b', 64)), 'expires_at' => now()->addDays(7),
     ]);
 

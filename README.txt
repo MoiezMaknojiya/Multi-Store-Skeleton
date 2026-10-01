@@ -18,8 +18,8 @@ npm run build
 <!-- Uploaded media/channel files are served from the public disk: required on every fresh install -->
 php artisan storage:link
 
-<!-- Ad Builder: four finished example ads in one store (safe to run again; --no-fonts works offline) -->
-php artisan builder:examples {store_id}
+<!-- Ad Builder: four finished example ads in one organization (safe to run again; --no-fonts works offline) -->
+php artisan builder:examples {organization_id}
 
 <!-- Tests: backend (816) then browser (106). Dusk swaps .env — never run both at once, and close every player tab on localhost:8000 first -->
 php artisan test --parallel --compact

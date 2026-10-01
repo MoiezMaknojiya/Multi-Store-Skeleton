@@ -4,7 +4,7 @@
 > channel's **Upload**, a campaign's advert, the Ad Builder's shelf and — through the shelf's own door — the Ad
 > Builder editor's picker (2026-09-30). The owner asked on 2026-09-29 for "drag and
 > drop, chunking, a good progress bar", a professional look in the panel's own design, and free software only.
-> What a file may be — its formats, size and length, the shop's 512 MB, the server's reserve — is still ruled by
+> What a file may be — its formats, size and length, the organization's 512 MB, the server's reserve — is still ruled by
 > `.claude/rules/02-project-conventions.md` (**Upload limits**), and nothing here loosens it.
 >
 > **Status: built, 2026-09-29.**
@@ -18,20 +18,20 @@
 | The library in the browser | **Uppy 6, its engine only**: `@uppy/core` and `@uppy/tus` (MIT, free, no account). Uppy's own Dashboard is not used: what a person sees is the panel's own Blade, Alpine and Tailwind (`<x-upload-dropzone>`). |
 | How a file travels | **The tus protocol 1.0** (creation + termination): 5 MB chunks, each its own request. A dropped connection retries by itself and carries on from the last chunk the server has; the browser going offline waits for it to come back and carries on the moment it does; a connection that hangs without a word is noticed and sent again; the same file chosen again after a reload carries on too. Nothing reloads the page, and nothing is chosen again. |
 | The server side | **No package**: the tus endpoints are the app's own (`UploadController`, `App\Services\ChunkedUploads`). `ankitpokhrel/tus-php` has had no release since February 2024 and would stop Laravel at Symfony 7, and every rule of this app must be asked before the first byte. |
-| When a finished file joins its place | **Through the same door as before**: the form posts `upload` (the upload's id) instead of `file`, and the Form Request turns the finished upload into the `file` every existing rule already checks — formats read from the bytes, the video's length read from the file, the shop's room decided under its lock, the server's reserve. |
+| When a finished file joins its place | **Through the same door as before**: the form posts `upload` (the upload's id) instead of `file`, and the Form Request turns the finished upload into the `file` every existing rule already checks — formats read from the bytes, the video's length read from the file, the organization's room decided under its lock, the server's reserve. |
 | The Media page and the shelf | **Several files at once**, each added to its place as soon as it arrives. A file's title is its name, changed later with Rename (on the Media page, the one thing a file keeps of its own since 2026-10-01). The box is on the page itself, never in a dialog (owner, 2026-09-30), and an "Added" row goes by itself after eight seconds, as a notification does. |
-| The Ad Builder editor's picker | **The shelf's upload inside the picker** (owner, 2026-09-30): the file joins this ad's shelf — the shop worked in, or above the stores the ad's own shop, which a new ad names first — and is on the picker's grid the moment it is in. |
+| The Ad Builder editor's picker | **The shelf's upload inside the picker** (owner, 2026-09-30): the file joins this ad's shelf — the organization worked in, or above the organizations the ad's own organization, which a new ad names first — and is on the picker's grid the moment it is in. |
 | A channel's Upload and a campaign's advert | **One file**, sent as soon as it is chosen; Save waits until it has arrived. |
 | A page left mid-upload | The browser asks first (its own words). |
 
 ## 1. The flow
 
 1. A file is dropped on the box, or chosen with it (click, Enter or Space). The browser checks what it can before
-   a byte leaves: the format and size (`fileError`), the shop's room (`storageError`), and a video's length, shape and
+   a byte leaves: the format and size (`fileError`), the organization's room (`storageError`), and a video's length, shape and
    poster frame (`readVideoMeta`, `videoLengthError`). A refusal is said on the file's own row, in the server's words.
 2. `POST /uploads` opens an upload with its size and what it is for. The server refuses here, before any byte, what
-   it would refuse at the end: the permission, the place (a shop the person works in, a channel within reach), the
-   format by name, the size, the shop's room **counting every upload still open for that shop**, and the server's
+   it would refuse at the end: the permission, the place (an organization the person works in, a channel within reach), the
+   format by name, the size, the organization's room **counting every upload still open for that organization**, and the server's
    reserve counting every open upload's missing bytes.
 3. `PATCH /uploads/{id}` carries each 5 MB chunk at its offset; `HEAD` says how far it got; `DELETE` gives it up.
 4. With every byte in, the page posts the form it always posted, with `upload` in place of `file`. The row is
@@ -43,7 +43,7 @@
 | --- | --- |
 | `OPTIONS /uploads` | 204, `Tus-Version: 1.0.0`, `Tus-Extension: creation,termination`, `Tus-Max-Size` |
 | `POST /uploads` | 201 and `Location`; 413 too large; 415 a format that is not taken; 422 a refusal with its reason; 429 too many open |
-| `HEAD /uploads/{id}` | 200, `Upload-Offset`, `Upload-Length`, `Cache-Control: no-store`; 404 for anybody else's |
+| `HEAD /uploads/{id}` | 200, `Upload-Offset`, `Upload-Length`, `Cache-Control: no-organization`; 404 for anybody else's |
 | `PATCH /uploads/{id}` | 204 and the new `Upload-Offset`; 409 at the wrong offset; 415 not `application/offset+octet-stream`; 413 past the end |
 | `DELETE /uploads/{id}` | 204 |
 
@@ -51,7 +51,7 @@ Every answer carries `Tus-Resumable: 1.0.0`. The routes sit behind `auth`, `veri
 `uploads` (a chunk is a request, and 5 MB chunks on a fast line are many), and keep CSRF: the browser sends the page's
 token with every request.
 
-**`uploads`** (a row per open upload, `App\Models\Upload`): a random uuid, the user, the shop it will count to (NULL for
+**`uploads`** (a row per open upload, `App\Models\Upload`): a random uuid, the user, the organization it will count to (NULL for
 the platform's library and the ads network; the foreign key cascades), `purpose` (`media`, `channel`, `campaign`,
 `asset`), the file's name and claimed type, its `size` and the bytes `received`, and `expires_at` — 24 hours. The bytes
 are `{id}.part` on the `uploads` disk (config/filesystems.php): `storage/app/private/uploads`, private, never under
@@ -70,7 +70,7 @@ one database names none of another's.
 | A row that has sent nothing says "Connection trouble…" | after 6 seconds |
 | …and its request is given up and sent again | after 30 seconds (a connection that died without a word would otherwise wait for the system's own timeout) |
 
-A shop that is deleted takes its open uploads (`Store::purgeContents`); an account that is deleted loses its rows
+An organization that is deleted takes its open uploads (`Organization::purgeContents`); an account that is deleted loses its rows
 through the foreign key, and the next prune takes their parts.
 
 ## 3. The four doors

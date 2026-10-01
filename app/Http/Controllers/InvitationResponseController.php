@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ActivityLog;
 use App\Models\Invitation;
 use App\Models\User;
-use App\Services\StoreTeam;
+use App\Services\OrganizationTeam;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -15,7 +15,7 @@ use Illuminate\Validation\Rules\Password;
 use Illuminate\View\View;
 
 /**
- * The other end of an invitation: the link in the email (docs/STORE-ORGANIZATION-SPEC.md rule 16).
+ * The other end of an invitation: the link in the email (docs/ORGANIZATION-SPEC.md rule 16).
  *
  * Possessing the link is what proves the inbox, so an account created here is marked verified.
  * An account that already exists always signs in with its own password first — the link alone
@@ -23,7 +23,7 @@ use Illuminate\View\View;
  */
 class InvitationResponseController extends Controller
 {
-    public function __construct(private StoreTeam $team) {}
+    public function __construct(private OrganizationTeam $team) {}
 
     public function show(string $token): View
     {
@@ -70,14 +70,14 @@ class InvitationResponseController extends Controller
             ActivityLog::record('account.verified', $user, "Confirmed their email {$user->email} by an invitation's link");
         }
 
-        if (! $invitation->isForPlatform() && $this->team->isMember($user, $invitation->store)) {
+        if (! $invitation->isForPlatform() && $this->team->isMember($user, $invitation->organization)) {
             $invitation->delete();
-            session(['current_store_id' => $invitation->store_id]);
+            session(['current_organization_id' => $invitation->organization_id]);
 
-            ActivityLog::record('invitation.accepted', $invitation->store,
-                "{$user->name} ({$user->email}) used an invitation to {$invitation->store->name}, where they were already a member", $user);
+            ActivityLog::record('invitation.accepted', $invitation->organization,
+                "{$user->name} ({$user->email}) used an invitation to {$invitation->organization->name}, where they were already a member", $user);
 
-            return redirect()->route('dashboard')->with('status', "You are already a member of {$invitation->store->name}.");
+            return redirect()->route('dashboard')->with('status', "You are already a member of {$invitation->organization->name}.");
         }
 
         if ($reason = $this->whyCannotJoin($invitation, $user)) {
@@ -156,7 +156,7 @@ class InvitationResponseController extends Controller
 
             // A guest holding the emailed link speaks for that inbox, like a password-reset link:
             // name the account behind it when there is one, rather than "System".
-            ActivityLog::record('invitation.declined', $invitation->store,
+            ActivityLog::record('invitation.declined', $invitation->organization,
                 "{$invitation->email} declined the invitation to ".$this->placeName($invitation),
                 auth()->user() ?? $this->accountFor($invitation));
         }
@@ -167,14 +167,14 @@ class InvitationResponseController extends Controller
     /** The invitation behind a link while it can still be used; null when it is gone or expired. */
     private function openInvitation(string $token): ?Invitation
     {
-        $invitation = Invitation::findByToken($token)?->load(['store', 'role', 'inviter']);
+        $invitation = Invitation::findByToken($token)?->load(['organization', 'role', 'inviter']);
 
         if ($invitation === null || $invitation->isExpired() || $invitation->role === null) {
             return null;
         }
 
-        // A store invitation whose store was deleted is as dead as an expired one.
-        if (! $invitation->isForPlatform() && $invitation->store === null) {
+        // An organization invitation whose organization was deleted is as dead as an expired one.
+        if (! $invitation->isForPlatform() && $invitation->organization === null) {
             return null;
         }
 
@@ -186,7 +186,7 @@ class InvitationResponseController extends Controller
         return User::whereRaw('lower(email) = ?', [$invitation->email])->first();
     }
 
-    /** Platform and store tiers never mix (rule 3). */
+    /** Platform and organization tiers never mix (rule 3). */
     private function whyCannotJoin(Invitation $invitation, User $user): ?string
     {
         if ($invitation->isForPlatform()) {
@@ -194,8 +194,8 @@ class InvitationResponseController extends Controller
                 return 'You are already on the platform team.';
             }
 
-            // stores() joins real stores, so the platform row (store_id = 0) is never among them.
-            return $user->stores()->exists()
+            // organizations() joins real organizations, so the platform row (organization_id = 0) is never among them.
+            return $user->organizations()->exists()
                 ? 'Your account is a member of one or more organizations. An organization account cannot join the platform team.'
                 : null;
         }
@@ -234,9 +234,9 @@ class InvitationResponseController extends Controller
     /** The membership the invitation promised, and the invitation used up. */
     private function addMembership(Invitation $invitation, User $user): void
     {
-        DB::table('store_user')->insert([
+        DB::table('organization_user')->insert([
             'user_id' => $user->id,
-            'store_id' => $invitation->store_id ?? 0,
+            'organization_id' => $invitation->organization_id ?? 0,
             'role_id' => $invitation->role_id,
             'created_at' => now(),
             'updated_at' => now(),
@@ -248,12 +248,12 @@ class InvitationResponseController extends Controller
     private function afterJoining(Invitation $invitation, User $user): void
     {
         if ($invitation->isForPlatform()) {
-            session()->forget('current_store_id');
+            session()->forget('current_organization_id');
         } else {
-            session(['current_store_id' => $invitation->store_id]);
+            session(['current_organization_id' => $invitation->organization_id]);
         }
 
-        ActivityLog::record('invitation.accepted', $invitation->store ?? $user,
+        ActivityLog::record('invitation.accepted', $invitation->organization ?? $user,
             "{$user->name} ({$user->email}) joined ".$this->placeName($invitation)." as {$invitation->role->name}", $user);
     }
 
@@ -262,9 +262,9 @@ class InvitationResponseController extends Controller
         return 'Welcome to '.$this->placeName($invitation).'!';
     }
 
-    /** Where the invitation leads — the store, or the platform team. The page's heading says it too. */
+    /** Where the invitation leads — the organization, or the platform team. The page's heading says it too. */
     private function placeName(Invitation $invitation): string
     {
-        return $invitation->isForPlatform() ? 'the '.config('app.name').' team' : $invitation->store->name;
+        return $invitation->isForPlatform() ? 'the '.config('app.name').' team' : $invitation->organization->name;
     }
 }

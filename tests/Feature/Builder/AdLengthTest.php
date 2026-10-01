@@ -4,9 +4,9 @@ use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
-use App\Models\Store;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 
@@ -26,18 +26,18 @@ use Illuminate\Support\Facades\Storage;
 beforeEach(function () {
     Storage::fake('public');
 
-    $this->store = Store::factory()->create(['name' => 'Alpha Mart']);
-    $this->designer = createStoreUser($this->store, [
+    $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $this->designer = createOrganizationUser($this->organization, [
         'ad-view', 'ad-store', 'ad-update', 'screen-view', 'screen-playlist', 'media-view', 'channel-view', 'channel-update',
     ], 'Designer');
-    $this->actingAs($this->designer)->withSession(['current_store_id' => $this->store->id]);
-    $this->screen = Screen::factory()->withToken('length-token')->create(['store_id' => $this->store->id]);
+    $this->actingAs($this->designer)->withSession(['current_organization_id' => $this->organization->id]);
+    $this->screen = Screen::factory()->withToken('length-token')->create(['organization_id' => $this->organization->id]);
 });
 
 /** A design with text on it, lasting $seconds, published through the endpoint. */
 function adLasting(int $seconds, string $name = 'Winter sale'): BuilderAd
 {
-    $ad = BuilderAd::factory()->withText($name)->create(['store_id' => test()->store->id, 'name' => $name]);
+    $ad = BuilderAd::factory()->withText($name)->create(['organization_id' => test()->organization->id, 'name' => $name]);
     $ad->update(['document' => [...$ad->document, 'duration' => $seconds]]);
     test()->postJson("/builder/{$ad->id}/publish")->assertOk();
 
@@ -104,7 +104,7 @@ test('a length is read as the editor reads it: a whole number held between six a
 
 test('publishing puts the length on the library row, and every screen plays the ad that long', function () {
     $ad = adLasting(8);
-    $picture = Media::factory()->create(['store_id' => $this->store->id, 'title' => 'Menu']);
+    $picture = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Menu']);
 
     expect($ad->media->duration_seconds)->toBe(8)->and($ad->media->ownLength())->toBe(8);
 
@@ -143,7 +143,7 @@ test('a changed length reaches the screens only when it is published, and Discar
 
 test('a channel plays an ad page for its own length, and asks no seconds for it', function () {
     $ad = adLasting(8);
-    $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'GHRA Ware House']);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => 'GHRA Ware House']);
 
     // Seconds written by hand are thrown away, as a video's are.
     $this->postJson("/channels/{$channel->id}/ads", ['media_id' => $ad->media_id, 'seconds' => 99])->assertOk()
@@ -161,7 +161,7 @@ test('a page published before designs had a length keeps the seconds it is given
     savePlaylist([['media_id' => $ad->media_id, 'duration_seconds' => 15]]);
     expect(secondsOnTheTelevision())->toBe(['html' => 15]);
 
-    $channel = Channel::factory()->create(['store_id' => $this->store->id]);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id]);
     $other = adLasting(8, 'Spring sale');
     $other->media->update(['duration_seconds' => null]);
 
@@ -198,7 +198,7 @@ test("builder:recompile writes the published version's length, never the draft's
 
 test("a design made before designs had a length keeps each line's seconds, published again or not, until it is given one", function () {
     // The brute-force round, 2026-09-29: a typo fixed and published re-timed a 15 s ad to 6 on every screen.
-    $ad = BuilderAd::factory()->withText('Old sale')->create(['store_id' => $this->store->id, 'name' => 'Old sale']);
+    $ad = BuilderAd::factory()->withText('Old sale')->create(['organization_id' => $this->organization->id, 'name' => 'Old sale']);
     $earlier = collect($ad->document)->except('duration')->all();
     BuilderAd::withoutTimestamps(fn () => $ad->forceFill(['document' => $earlier])->save());
 

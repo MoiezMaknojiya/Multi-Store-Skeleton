@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Invitation;
+use App\Models\Organization;
 use App\Models\Role;
-use App\Models\Store;
 use App\Models\User;
 
 /*
@@ -31,10 +31,10 @@ test('an account waiting for its email is told so in the tab too', function () {
 });
 
 test('an invitation names the place it invites to, and a dead link says it is one', function () {
-    $store = Store::factory()->create(['name' => 'Alpha Mart']);
+    $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
     $token = str_repeat('k', 64);
     Invitation::factory()->withToken($token)->create([
-        'store_id' => $store->id,
+        'organization_id' => $organization->id,
         'email' => 'new.cashier@example.com',
         'role_id' => Role::starter(Role::STAFF)->id,
     ]);
