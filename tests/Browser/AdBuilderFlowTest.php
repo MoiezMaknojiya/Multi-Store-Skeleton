@@ -241,8 +241,8 @@ class AdBuilderFlowTest extends DuskTestCase
 
     /**
      * A picture uploaded straight from the editor's picker (owner, 2026-09-30) joins the shop's shelf and is there to
-     * pick the moment it is in; without Create Ads the picker takes no file; and above the stores somebody who may not
-     * make an ad for every shop names its shop first, since the file goes to that shop's shelf.
+     * pick the moment it is in; without Create Ads the picker takes no file; and above the stores a new ad is for All
+     * shops, so a platform designer's file goes to the shelf shared with every shop, with no shop to choose first.
      */
     public function test_a_picture_is_uploaded_from_the_editors_picker_and_placed_at_once(): void
     {
@@ -252,7 +252,7 @@ class AdBuilderFlowTest extends DuskTestCase
         $editor = $this->storeMember($store, ['ad-view', 'ad-update'], 'editor@example.com', 'Editor');
         $saved = BuilderAd::factory()->create(['store_id' => $store->id, 'name' => 'Old poster']);
 
-        // A platform designer without Update Shared Ads: their new ad is for one shop, chosen first.
+        // A platform designer: a platform role holding the ordinary Ad Builder permissions.
         $platformDesigner = User::factory()->create(['email' => 'platform-designer@example.com']);
         $platformRole = Role::create(['name' => 'Platform Designer', 'is_global' => true]);
         $platformRole->permissions()->sync(Permission::whereIn('name', ['ad-view', 'ad-store', 'ad-update'])->pluck('id'));
@@ -297,16 +297,19 @@ class AdBuilderFlowTest extends DuskTestCase
             $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
             $browser->waitFor('@pick-asset-'.$asset->id)->assertMissing('@picker-upload');
 
-            // Above the stores, without Update Shared Ads, a new ad names its shop first: a file dropped before that is
-            // refused, and nothing is sent.
+            // Above the stores a new ad is for All shops (owner, 2026-10-01): the file goes to the shelf shared with
+            // every shop at once, and nothing asks for a shop first.
             $this->freshSession($browser);
             $browser->loginAs($platformDesigner)->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
             $browser->waitFor('@ad-stage');
             $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
-            $browser->attach('@picker-file', $this->fixtureImage('Too soon.png'))
-                ->waitForTextIn('@picker-upload', 'Choose the shop this ad is for first, at the top.');
-            $this->assertSame(1, BuilderAsset::count());
+            $this->uploadThrough($browser, 'picker', $this->fixtureImage('Shared logo.png'));
+
+            $browser->waitUsing(20, 250, fn () => BuilderAsset::whereNull('store_id')->exists());
+            $shared = BuilderAsset::whereNull('store_id')->sole();
+            $this->assertSame('Shared logo', $shared->title);
+            $browser->waitFor('@pick-asset-'.$shared->id)->assertDontSee('Choose the shop this ad is for first');
         });
     }
 

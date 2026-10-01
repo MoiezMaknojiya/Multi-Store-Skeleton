@@ -40,7 +40,6 @@ class AppServiceProvider extends ServiceProvider
 
         $this->registerNetworkAdGates();
         $this->registerTierGates();
-        $this->registerBuilderGates();
 
         // A super admin holds every permission, whatever the role rows say (owner's rule, 2026-09-16:
         // "sab matlab sab") — a permission made later on the Permissions page, or one renamed, included.
@@ -126,21 +125,6 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('global-tier', fn (User $user) => $user->globalRole() !== null);
 
         Gate::define('super-admin-tier', fn (User $user) => $user->isSuperAdmin());
-    }
-
-    /**
-     * What the Ad Builder's routes ask: a shop's own ad or file with the ordinary permissions, what the platform shares
-     * with every shop with the shared ones (owner, 2026-09-29 and 2026-10-01). A route's `can:` names one ability, so
-     * the route asks one of these — either permission — and the controller asks the one the ad or the file needs.
-     */
-    private function registerBuilderGates(): void
-    {
-        $either = fn (string $own, string $shared) => fn (User $user) => $user->hasPermissionInCurrentStore($own)
-            || $user->hasPermissionInCurrentStore($shared);
-
-        Gate::define('update-builder-ads', $either('ad-update', 'ad-shared-update'));
-        Gate::define('delete-builder-ads', $either('ad-destroy', 'ad-shared-destroy'));
-        Gate::define('delete-builder-assets', $either('ad-destroy', 'ad-shared-asset-destroy'));
     }
 
     /**

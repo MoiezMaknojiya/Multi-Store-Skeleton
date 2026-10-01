@@ -15,8 +15,7 @@
  *    and `upload-busy` while bytes are still going, so the form can hold its Save.
  *
  * `context` is kept up to date by the page (the component's x-effect): where the file goes (library, store, channel),
- * the fields its door needs besides, and the shop's storage ({used, limit}) for the check before a byte is sent. Where a
- * shop must be chosen first (the shelf, above the stores), `needsStore` is what to say when none is.
+ * the fields its door needs besides, and the shop's storage ({used, limit}) for the check before a byte is sent.
  */
 import axios from 'axios';
 import { bytesInWords, clock, fileError, MAX_VIDEO_SECONDS, readVideoMeta, storageError, videoLengthError } from './media-file.js';
@@ -94,7 +93,6 @@ export function registerUploadDropzone(Alpine) {
             addUrl: config.addUrl ?? null,
             maxVideoSeconds: config.maxVideoSeconds ?? MAX_VIDEO_SECONDS,
             videoNoun: config.videoNoun ?? 'A video',
-            needsStore: config.needsStore ?? null,
 
             /* Set by the page: {library|store|channel, fields, storage}. */
             context: {},
@@ -189,8 +187,7 @@ export function registerUploadDropzone(Alpine) {
                 const item = this.uploads[this.uploads.length - 1];
                 this.announceBusy();
 
-                const refused = fileError(file) ?? storageError(file, this.roomLeft(item))
-                    ?? (this.needsStore && ! this.context.store ? this.needsStore : null);
+                const refused = fileError(file) ?? storageError(file, this.roomLeft(item));
 
                 if (refused) return this.refuse(item, refused);
 

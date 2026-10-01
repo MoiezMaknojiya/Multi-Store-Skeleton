@@ -22,12 +22,12 @@ use Tests\TestCase;
 | Ads for every shop (owner, 2026-10-01)
 |--------------------------------------------------------------------------
 |
-| "Mein all shop k liya ads kese banao? Jese asset mein ha woo ads sub ko dikhe aur woo copy kar sake ... sub khel
-| permission ka honga, mein duga toh woo mera kaam bhi delete kar sakte ha." Above the stores an ad with no shop chosen
-| — All shops — is the platform's, shared with every shop: it uses the shared files alone, publishes into the
-| platform's own library, and every shop sees it once it is published ("publish ke baad") — as it was published,
-| never its unfinished changes — and copies it into its own Ads. Changing it takes Update Shared Ads, deleting it
-| Delete Shared Ads, and the shared files keep Delete Shared Assets ("teen alag"), wherever the person stands.
+| "Mein all shop k liya ads kese banao? Jese asset mein ha woo ads sub ko dikhe aur woo copy kar sake." Above the
+| stores an ad with no shop chosen — All shops — is the platform's, shared with every shop: it uses the shared files
+| alone, publishes into the platform's own library, and every shop sees it once it is published ("publish ke baad") —
+| as it was published, never its unfinished changes — and copies it into its own Ads. A shop's people see it, use it
+| and copy it, and nothing more, whatever their role holds ("srif delete nahi kar sakta ha ... permission hata do"):
+| only above the stores is it changed (Update Ads) or deleted (Delete Ads).
 |
 */
 
@@ -194,22 +194,22 @@ test('a shop copies the platform\'s ad into its own Ads: the published version, 
         ->and($ad->fresh()->published_name)->toBe('Winter sale');
 });
 
-test('without the shared permissions a shop\'s person changes nothing of the platform\'s ad, and never sees its draft', function () {
+test('a shop\'s people see, use and copy the platform\'s ad, and nothing more — whatever their role holds', function () {
     $ad = makeForEveryShop($this);
     $draft = makeForEveryShop($this, 'Spring sale', publish: false);
 
+    // Every permission a shop's role may carry for its ads (owner, 2026-10-01: "srif delete nahi kar sakta ha").
     $this->actingAs($this->designer)->withSession(['current_store_id' => $this->store->id]);
 
-    // Update Ads and Delete Ads are for the shop's own: the platform's ad says what it needs.
     $this->get("/builder/{$ad->id}")->assertForbidden();
     $this->putJson("/builder/{$ad->id}", ['name' => 'Mine', 'document' => everyShopDocument('Mine')])
-        ->assertForbidden()->assertJsonPath('message', 'Changing an ad shared with every shop needs the Update Shared Ads permission.');
+        ->assertForbidden()->assertJsonPath('message', 'An ad for every shop is the platform\'s: copy it to change it.');
     $this->postJson("/builder/{$ad->id}/publish")->assertForbidden();
     $this->postJson("/builder/{$ad->id}/unpublish")->assertForbidden();
     $this->postJson("/builder/{$ad->id}/discard")->assertForbidden();
     $this->postJson("/builder/{$ad->id}/in-playlists", ['in_playlists' => true])->assertForbidden();
     $this->deleteJson("/builder/{$ad->id}", ['password' => 'password'])
-        ->assertForbidden()->assertJsonPath('message', 'Deleting an ad shared with every shop needs the Delete Shared Ads permission.');
+        ->assertForbidden()->assertJsonPath('message', 'An ad for every shop is the platform\'s: only the platform deletes it.');
 
     // The draft is not there at all.
     $this->get("/builder/{$draft->id}")->assertNotFound();
@@ -224,87 +224,68 @@ test('without the shared permissions a shop\'s person changes nothing of the pla
         ->and(BuilderAd::where('store_id', $this->store->id)->count())->toBe(0);
 });
 
-test('with Update Shared Ads a shop\'s person works on the platform\'s ads, drafts included, and the log names the shop', function () {
+test('above the stores the platform\'s ads are changed with Update Ads and deleted with Delete Ads, and copies stay', function () {
     $ad = makeForEveryShop($this);
     $draft = makeForEveryShop($this, 'Spring sale', publish: false);
-
-    $editor = createStoreUser($this->store, ['ad-view', 'ad-shared-update'], 'Template editor');
-    $seen = adsSeenIn($this, $editor, $this->store);
-
-    expect($seen->keys()->sort()->values()->all())->toBe(collect([$ad->id, $draft->id])->sort()->values()->all())
-        ->and($seen[$ad->id]['can'])->toBe(['update' => true, 'copy' => false, 'delete' => false]);
-
-    $this->get("/builder/{$ad->id}")->assertOk()->assertSee('From the platform');
-    $this->putJson("/builder/{$ad->id}", ['name' => 'Winter sale', 'document' => everyShopDocument('Twenty percent off')])->assertOk();
-    $this->postJson("/builder/{$ad->id}/publish")->assertOk()->assertJsonPath('message', 'Published — every shop sees it now and can copy it');
-
-    $ad->refresh();
-    expect($ad->store_id)->toBeNull()
-        ->and($ad->published_document['elements'][0]['text'])->toBe('Twenty percent off')
-        ->and(ActivityLog::where('action', 'ad.updated')->sole()->store_id)->toBe($this->store->id)
-        ->and(ActivityLog::where('action', 'ad.published')->latest('id')->first()->store_id)->toBe($this->store->id);
-
-    // Its page plays only in the platform's channels: no tick opens it to a shop's playlist.
-    $this->postJson("/builder/{$ad->id}/in-playlists", ['in_playlists' => true])->assertStatus(422)
-        ->assertJsonValidationErrors(['in_playlists' => 'An ad for every shop plays only in the platform\'s channels. A shop copies it to put it on its playlists.']);
-
-    // Taking it off says so, and shops stop seeing it.
-    $this->postJson("/builder/{$ad->id}/unpublish")->assertOk()->assertJsonPath('message', 'Unpublished — it is a draft again. Shops no longer see it');
-    expect(adsSeenIn($this, $this->designer, $this->store)->all())->toBe([]);
-
-    // Update Shared Ads is not Update Ads: the shop's own ads stay shut to it.
-    $own = BuilderAd::factory()->create(['store_id' => $this->store->id]);
-    $this->actingAs($editor)->withSession(['current_store_id' => $this->store->id]);
-    $this->putJson("/builder/{$own->id}", ['name' => 'X', 'document' => everyShopDocument('X')])
-        ->assertForbidden()->assertJsonPath('message', 'Changing an ad needs the Update Ads permission.');
-});
-
-test('with Delete Shared Ads a shop\'s person deletes the platform\'s ad from every shop — never while a channel shows it — and copies stay', function () {
-    $ad = makeForEveryShop($this);
 
     // Beta Deli copied it before.
     $this->actingAs(createStoreUser($this->other, ['ad-view', 'ad-store'], 'Beta designer'))->withSession(['current_store_id' => $this->other->id]);
     $copyId = $this->postJson("/builder/{$ad->id}/duplicate")->assertOk()->json('ad.id');
 
-    // The platform's channel shows it.
-    $channelAd = ChannelAd::factory()->create(['channel_id' => Channel::factory()->create()->id, 'media_id' => $ad->media_id]);
+    $platform = createPlatformUser(['ad-view', 'ad-store', 'ad-update', 'ad-destroy'], 'Platform designer');
+    $this->actingAs($platform);
+    $this->flushSession();
 
-    $keeper = createStoreUser($this->store, ['ad-view', 'ad-shared-destroy'], 'Ad keeper');
-    $this->actingAs($keeper)->withSession(['current_store_id' => $this->store->id]);
+    $seen = collect($this->getJson('/builder/data')->assertOk()->json('ads'))->keyBy('id');
+    expect($seen[$ad->id])->toMatchArray(['owner_label' => 'Every shop', 'can' => ['update' => true, 'copy' => true, 'delete' => true]])
+        ->and($seen->has($draft->id))->toBeTrue();
+
+    $this->get("/builder/{$ad->id}")->assertOk()->assertSee('Every shop');
+    $this->putJson("/builder/{$ad->id}", ['name' => 'Winter sale', 'document' => everyShopDocument('Twenty percent off')])->assertOk()
+        ->assertJsonPath('message', 'Changes saved — shops keep the published version until you publish them');
+    $this->postJson("/builder/{$ad->id}/publish")->assertOk()->assertJsonPath('message', 'Published — every shop sees it now and can copy it');
+
+    expect($ad->fresh()->published_document['elements'][0]['text'])->toBe('Twenty percent off')
+        ->and(ActivityLog::where('action', 'ad.updated')->sole()->store_id)->toBeNull();
+
+    // Its page plays only in the platform's channels: no tick opens it to a shop's playlist.
+    $this->postJson("/builder/{$ad->id}/in-playlists", ['in_playlists' => true])->assertStatus(422)
+        ->assertJsonValidationErrors(['in_playlists' => 'An ad for every shop plays only in the platform\'s channels. A shop copies it to put it on its playlists.']);
+
+    // Taken off, it leaves every shop's Ads until it is published again.
+    $this->postJson("/builder/{$ad->id}/unpublish")->assertOk()->assertJsonPath('message', 'Unpublished — it is a draft again. Shops no longer see it');
+    expect(adsSeenIn($this, $this->designer, $this->store)->all())->toBe([]);
+
+    // A channel showing it keeps it; out of the channel it goes — and Beta Deli's copy stays theirs.
+    $this->actingAs($platform);
+    $this->flushSession();
+    $this->postJson("/builder/{$ad->id}/publish")->assertOk();
+    $channelAd = ChannelAd::factory()->create(['channel_id' => Channel::factory()->create()->id, 'media_id' => $ad->media_id]);
 
     $this->deleteJson("/builder/{$ad->id}", ['password' => 'password'])->assertStatus(422)->assertJsonValidationErrors('name');
     $channelAd->delete();
-
     $this->deleteJson("/builder/{$ad->id}", ['password' => 'password'])->assertOk();
 
     expect(BuilderAd::find($ad->id))->toBeNull()
         ->and(Media::find($ad->media_id))->toBeNull()
-        ->and(BuilderAd::find($copyId)?->store_id)->toBe($this->other->id);
+        ->and(BuilderAd::find($copyId)?->store_id)->toBe($this->other->id)
+        ->and(ActivityLog::where('action', 'ad.deleted')->sole()->description)->toBe('Deleted ad Winter sale, shared with every shop');
     Storage::disk('public')->assertMissing("builder/platform/ads/{$ad->id}/index.html");
-
-    $entry = ActivityLog::where('action', 'ad.deleted')->sole();
-    expect($entry->store_id)->toBe($this->store->id)->and($entry->description)->toBe('Deleted ad Winter sale, shared with every shop');
-
-    // Delete Shared Ads is not Delete Ads, nor Delete Shared Assets.
-    $own = BuilderAd::factory()->create(['store_id' => $this->store->id]);
-    $sharedFile = BuilderAsset::factory()->create(['store_id' => null]);
-    $this->deleteJson("/builder/{$own->id}", ['password' => 'password'])->assertForbidden();
-    $this->deleteJson("/builder/assets/{$sharedFile->id}")->assertForbidden();
 });
 
-test('above the stores a copy of the platform\'s ad stays the platform\'s, and every step asks for the shared permissions', function () {
+test('above the stores a copy of the platform\'s ad stays the platform\'s; without Update Ads a platform role only looks', function () {
     $ad = makeForEveryShop($this);
 
     $copyId = $this->postJson("/builder/{$ad->id}/duplicate")->assertOk()->assertJsonPath('message', 'Ad duplicated')->json('ad.id');
     expect(BuilderAd::find($copyId))->store_id->toBeNull()->name->toBe('Winter sale (copy)');
 
-    $this->actingAs(createPlatformUser(['ad-view', 'ad-store', 'ad-update', 'ad-destroy'], 'Platform designer'));
+    $this->actingAs(createPlatformUser(['ad-view'], 'Platform viewer'));
+    $this->flushSession();
 
     expect(collect($this->getJson('/builder/data')->assertOk()->json('ads'))->firstWhere('id', $ad->id))
         ->toMatchArray(['owner_label' => 'Every shop', 'can' => ['update' => false, 'copy' => false, 'delete' => false]]);
 
-    $this->postJson("/builder/{$ad->id}/duplicate")->assertForbidden()
-        ->assertJsonPath('message', 'Making an ad for every shop needs the Update Shared Ads permission.');
+    $this->postJson("/builder/{$ad->id}/duplicate")->assertForbidden();
     $this->putJson("/builder/{$ad->id}", ['name' => 'X', 'document' => everyShopDocument('X')])->assertForbidden();
     $this->deleteJson("/builder/{$ad->id}", ['password' => 'password'])->assertForbidden();
 
@@ -350,19 +331,20 @@ test('a shared file an ad for every shop uses stays, and a shop is told so witho
     $file = BuilderAsset::factory()->create(['store_id' => null, 'title' => 'Brand logo']);
     BuilderAd::factory()->create(['store_id' => null, 'name' => 'Secret launch', 'document' => everyShopDocument('Soon', $file->id)]);
 
-    $this->actingAs(createStoreUser($this->store, ['ad-view', 'ad-shared-asset-destroy'], 'Shelf keeper'))->withSession(['current_store_id' => $this->store->id]);
-
-    $answer = $this->deleteJson("/builder/assets/{$file->id}")->assertStatus(422)
-        ->assertJsonValidationErrors(['title' => 'Still used by an ad the platform shares, so it stays: it can go once no shop\'s ad uses it.']);
-    expect((string) $answer->getContent())->not->toContain('Secret launch');
+    // A shop's shelf counts the platform's ad that uses it, never naming it — and offers no delete.
+    $this->actingAs($this->designer)->withSession(['current_store_id' => $this->store->id]);
 
     $row = collect($this->getJson('/builder/assets/data')->json('assets'))->firstWhere('id', $file->id);
-    expect($row)->toMatchArray(['used_by' => [], 'used_elsewhere' => 0, 'used_by_platform' => 1]);
+    expect($row)->toMatchArray(['used_by' => [], 'used_elsewhere' => 0, 'used_by_platform' => 1, 'can_delete' => false])
+        ->and(json_encode($row))->not->toContain('Secret launch');
 
-    // Above the stores the ad is named, as an ad for every shop.
+    // Above the stores the ad is named, as an ad for every shop, and the file stays while it uses it.
     $this->actingAs(createSuperAdmin());
     $this->flushSession();
+
     expect(collect($this->getJson('/builder/assets/data')->json('assets'))->firstWhere('id', $file->id)['used_by'])->toBe(['Secret launch (every shop)']);
+    $this->deleteJson("/builder/assets/{$file->id}")->assertStatus(422)
+        ->assertJsonValidationErrors(['title' => 'Still used by Secret launch (every shop). Take it out of those ads first, and publish the ones whose screens still show it.']);
 });
 
 test('a deleted shop leaves the platform\'s ads', function () {
@@ -374,41 +356,32 @@ test('a deleted shop leaves the platform\'s ads', function () {
     Storage::disk('public')->assertExists($ad->media->path);
 });
 
-test('Update Shared Ads, Delete Shared Ads and Delete Shared Assets are three platform permissions a shop\'s role may carry', function () {
-    $permissions = ['ad-shared-update' => 'Update Shared Ads', 'ad-shared-destroy' => 'Delete Shared Ads', 'ad-shared-asset-destroy' => 'Delete Shared Assets'];
+test('no permission lets a shop change or delete what the platform shares: the three shared permissions are gone', function () {
+    $removed = ['ad-shared-update' => 'Update Shared Ads', 'ad-shared-destroy' => 'Delete Shared Ads', 'ad-shared-asset-destroy' => 'Delete Shared Assets'];
 
-    foreach ($permissions as $name => $label) {
-        expect(Permission::belongsToStores($name))->toBeTrue()
-            ->and(Permission::PLATFORM)->toContain($name)
-            ->and(Permission::STORE_SCOPED)->toContain($name)
-            ->and(Permission::LABELS[$name])->toBe($label)
-            ->and(DB::table('permissions')->where('name', $name)->value('label'))->toBe($label);
+    foreach (array_keys($removed) as $name) {
+        expect(Permission::LABELS)->not->toHaveKey($name)
+            ->and(Permission::PLATFORM)->not->toContain($name)
+            ->and(Permission::STORE_SCOPED)->not->toContain($name)
+            ->and(DB::table('permissions')->where('name', $name)->exists())->toBeFalse();
     }
 
-    // A test's database has no Super-Admin while its migrations run, so the migration runs again once there is one —
-    // it is written to be run twice. The new two go to Super-Admin alone; no starter role holds any of the three.
+    // Going back brings the three, held by Super-Admin alone, as the migration before it left them; forward again,
+    // they are gone with every hold on them.
     $superAdmin = Role::firstOrCreate(['name' => Role::SUPER_ADMIN], ['is_global' => true]);
-    $migration = require database_path('migrations/2026_10_01_110100_insert_the_shared_ads_permissions.php');
-    $migration->up();
-    $migration->up();
+    $migration = require database_path('migrations/2026_10_01_120000_remove_the_shared_permissions.php');
+    $migration->down();
 
-    foreach (['ad-shared-update', 'ad-shared-destroy'] as $name) {
+    expect(Permission::whereIn('name', array_keys($removed))->pluck('label', 'name')->sortKeys()->all())->toBe(collect($removed)->sortKeys()->all());
+
+    foreach (array_keys($removed) as $name) {
         expect(Permission::where('name', $name)->sole()->roles()->pluck('roles.id')->all())->toBe([$superAdmin->id]);
     }
 
-    expect(Role::owner()->permissions()->whereIn('name', array_keys($permissions))->count())->toBe(0);
-
-    // Going back gives the files' delete its old name and takes the new two away; forward again, the same row.
-    $files = Permission::where('name', 'ad-shared-asset-destroy')->value('id');
-    $migration->down();
-
-    expect(Permission::whereIn('name', ['ad-shared-update', 'ad-shared-asset-destroy'])->count())->toBe(0)
-        ->and(Permission::where('name', 'ad-shared-destroy')->value('id'))->toBe($files);
-
     $migration->up();
 
-    expect(Permission::where('name', 'ad-shared-asset-destroy')->value('id'))->toBe($files)
-        ->and(Permission::where('name', 'ad-shared-destroy')->value('label'))->toBe('Delete Shared Ads');
+    expect(Permission::whereIn('name', array_keys($removed))->count())->toBe(0)
+        ->and(DB::table('role_has_permissions')->where('role_id', $superAdmin->id)->count())->toBe(0);
 });
 
 test('the migration that lets an ad be shared goes back down, taking the shared ads, their pages and their files', function () {

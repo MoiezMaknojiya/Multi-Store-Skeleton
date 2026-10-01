@@ -111,26 +111,21 @@ test('another store’s asset cannot be deleted by its id, and the shelf lists t
     expect($titles->all())->toBe(['Our logo']);
 });
 
-test('a shop’s person never makes a file shared, and never deletes a shared one without Delete Shared Assets', function () {
+test('a shop’s person never makes a file shared, and never deletes a shared one', function () {
     // Whatever the request says, a store's person's upload is their shop's own.
     $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png'), 'store_id' => ''])->assertOk();
     expect(BuilderAsset::sole()->store_id)->toBe($this->store->id);
 
     $shared = BuilderAsset::factory()->create(['store_id' => null, 'title' => 'Brand kit', 'path' => 'builder/platform/assets/brand.png']);
 
-    // Delete Ads is not Delete Shared Assets.
+    // Delete Ads deletes the shop's own; a shared file is the platform's alone to delete (owner, 2026-10-01).
     $this->deleteJson("/builder/assets/{$shared->id}")->assertForbidden();
 
-    // And a shared file another shop's ad uses stays, with nothing of that shop said.
-    $keeper = createStoreUser($this->store, ['ad-view', 'ad-shared-asset-destroy'], 'Shelf keeper');
-    $this->actingAs($keeper)->withSession(['current_store_id' => $this->store->id]);
-
+    // And what the shelf says of a shared file another shop's ad uses names nothing of that shop.
     $document = attackDocument([['id' => 'a', 'type' => 'image', 'x' => 0, 'y' => 0, 'w' => 100, 'h' => 100, 'z' => 0, 'assetId' => $shared->id]]);
     BuilderAd::factory()->create(['store_id' => $this->other->id, 'name' => 'Beta private launch', 'document' => $document]);
 
-    $answer = $this->deleteJson("/builder/assets/{$shared->id}")->assertStatus(422);
-
-    expect((string) $answer->getContent())->not->toContain('Beta private launch')->not->toContain('Beta')
+    expect(json_encode($this->getJson('/builder/assets/data')->assertOk()->json()))->not->toContain('Beta private launch')
         ->and(BuilderAsset::find($shared->id))->not->toBeNull();
 });
 
@@ -145,11 +140,8 @@ test('naming another shop in the listings’ filter finds nothing of it', functi
 
 /* ── The platform's ads for every shop (owner, 2026-10-01) ──────────────── */
 
-test('a shop’s person never makes an ad for every shop, whatever the payload or the permission says', function () {
-    // Even with Update Shared Ads: inside a shop a new ad, and a copy, are the shop's own.
-    $editor = createStoreUser($this->store, ['ad-view', 'ad-store', 'ad-update', 'ad-shared-update'], 'Template editor');
-    $this->actingAs($editor)->withSession(['current_store_id' => $this->store->id]);
-
+test('a shop’s person never makes an ad for every shop, whatever the payload says', function () {
+    // Inside a shop a new ad, and a copy, are the shop's own.
     $id = $this->postJson('/builder', ['name' => 'For everyone?', 'document' => attackDocument(), 'store_id' => null])->assertOk()->json('ad.id');
     expect(BuilderAd::find($id)->store_id)->toBe($this->store->id);
 

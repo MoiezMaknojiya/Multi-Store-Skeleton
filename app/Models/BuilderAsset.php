@@ -19,8 +19,9 @@ use Illuminate\Support\Facades\Storage;
  * (`builder/{store}/assets/…`).
  *
  * An asset with no shop (`store_id` NULL, `builder/platform/assets/…`) is the platform's, shared with every shop
- * (owner, 2026-09-29): every shop's designs may use it, it counts to no shop's 512 MB, and it is deleted with Delete
- * Shared Assets — from every shop's shelf at once, and never while any shop's ad uses it.
+ * (owner, 2026-09-29): every shop's designs may use it, it counts to no shop's 512 MB, and it is deleted above the
+ * stores alone, with Delete Ads (owner, 2026-10-01: a shop sees and uses it, "srif delete nahi kar sakta ha") — from
+ * every shop's shelf at once, and never while any shop's ad, or the platform's, uses it.
  *
  * @property int|null $store_id
  */

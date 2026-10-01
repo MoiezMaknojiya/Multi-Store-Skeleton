@@ -26,7 +26,7 @@ use Illuminate\View\View;
  * Its own shelf, not the store's media library — the library is what a shop PLAYS, this is raw material
  * that only means something inside a design. Same store wall as everything else — and above it, the shelf the
  * platform shares with every shop (owner, 2026-09-29): an upload with no shop chosen goes there, every shop's
- * designs may use it, and it is deleted with Delete Shared Assets.
+ * designs may use it, and it is deleted above the stores alone (owner, 2026-10-01).
  */
 class BuilderAssetController extends Controller
 {
@@ -136,14 +136,14 @@ class BuilderAssetController extends Controller
     /**
      * Take a file off the shelf — refused while an ad still uses it, and the refusal says which ads, so
      * nobody has to hunt for the one design that breaks (the same courtesy a held role gets). A shared file
-     * goes from every shop's shelf, so it takes Delete Shared Assets, and any shop's ad keeps it.
+     * goes from every shop's shelf, so only the platform deletes it, and any shop's ad keeps it.
      */
     public function destroy(BuilderAsset $asset): JsonResponse
     {
         $asset = BuilderAsset::visibleTo(auth()->user())->findOrFail($asset->id);
 
-        abort_unless($this->mayDelete($asset), 403, $asset->isShared()
-            ? 'Deleting a file shared with every shop needs the Delete Shared Assets permission.'
+        abort_unless($this->mayDelete($asset), 403, $asset->isShared() && ! $this->aboveTheStores()
+            ? 'A file shared with every shop is the platform\'s: only the platform deletes it.'
             : 'Deleting a file needs the Delete Ads permission.');
 
         $usage = $this->usageFor(collect([$asset]))[$asset->id] ?? null;
@@ -273,10 +273,10 @@ class BuilderAssetController extends Controller
             : "Still used by {$named}. Take it out of those ads first, and publish the ones whose screens still show it.";
     }
 
-    /** A shop's own file with Delete Ads; one shared with every shop with Delete Shared Assets. */
+    /** Delete Ads — and, for a file shared with every shop, standing above the stores. */
     private function mayDelete(BuilderAsset $asset): bool
     {
-        return Gate::allows($asset->isShared() ? 'ad-shared-asset-destroy' : 'ad-destroy');
+        return Gate::allows('ad-destroy') && (! $asset->isShared() || $this->aboveTheStores());
     }
 
     /** Whose file this is, in the words of the person looking: above the stores its shop or "Every shop", inside one the platform's. */

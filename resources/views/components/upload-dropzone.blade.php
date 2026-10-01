@@ -15,7 +15,6 @@
     'hint' => null,
     'maxVideoSeconds' => \App\Models\Media::MAX_VIDEO_SECONDS,
     'videoNoun' => 'A video',
-    'needsStore' => null,
 ])
 
 <div x-data="uploadDropzone({{ Js::from([
@@ -25,7 +24,6 @@
         'addUrl' => $addUrl,
         'maxVideoSeconds' => (int) $maxVideoSeconds,
         'videoNoun' => $videoNoun,
-        'needsStore' => $needsStore,
     ]) }})"
      x-effect="context = ({{ $context }})"
      {{ $attributes->merge(['class' => 'space-y-3']) }}

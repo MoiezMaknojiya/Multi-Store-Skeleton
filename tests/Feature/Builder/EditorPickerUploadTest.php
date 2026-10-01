@@ -9,8 +9,8 @@ use App\Models\Store;
 |--------------------------------------------------------------------------
 |
 | The box is in the picker for whoever may add to the shelf — Create Ads, as the shelf's own upload asks — and not
-| for anybody else; above the stores a new ad names its shop before a file can go anywhere; and only the editor's
-| page asks for the editor's script.
+| for anybody else; above the stores a new ad is for All shops until a shop is chosen, so a file goes to the shared
+| shelf at once; and only the editor's page asks for the editor's script.
 |
 */
 
@@ -50,7 +50,7 @@ test('a store\'s designer finds the box in the picker; somebody who may only cha
     $html = editorPage($designer, $store);
     expect($html)->toContain('dusk="picker-upload"')->toContain('dusk="picker-dropzone"')
         ->and(alpineConfig($html, 'uploadDropzone', 'picker-dropzone'))
-        ->toMatchArray(['purpose' => 'asset', 'mode' => 'add', 'addUrl' => '/builder/assets', 'maxVideoSeconds' => 30, 'needsStore' => null])
+        ->toMatchArray(['purpose' => 'asset', 'mode' => 'add', 'addUrl' => '/builder/assets', 'maxVideoSeconds' => 30])
         ->and(alpineConfig($html, 'adEditor')['canUpload'] ?? null)->toBeTrue();
 
     // Changing an ad needs no new file: without Create Ads there is no box.
@@ -59,22 +59,17 @@ test('a store\'s designer finds the box in the picker; somebody who may only cha
         ->and(alpineConfig($html, 'adEditor')['canUpload'] ?? null)->toBeFalse();
 });
 
-test('above the stores a new ad is for every shop at once, or names its shop first for somebody who may not make one', function () {
-    // With Update Shared Ads the Shop list starts at All shops (owner, 2026-10-01): a file dropped into the picker goes
-    // to the shelf shared with every shop at once — the error the owner met ("Choose the shop this ad is for first")
-    // is not said.
-    $html = editorPage(createSuperAdmin(), null);
+test('above the stores a new ad is for every shop at once: the picker takes a file with no shop chosen first', function () {
+    // The Shop list starts at All shops (owner, 2026-10-01), so a file dropped into the picker goes to the shelf shared
+    // with every shop at once — the error the owner met ("Choose the shop this ad is for first") is never said.
+    foreach ([createSuperAdmin(), createPlatformUser(['ad-view', 'ad-store', 'ad-update'], 'Platform designer')] as $person) {
+        $html = editorPage($person, null);
 
-    expect(alpineConfig($html, 'uploadDropzone', 'picker-dropzone')['needsStore'] ?? null)->toBeNull()
-        ->and(alpineConfig($html, 'adEditor'))->toMatchArray(['canUpload' => true, 'canShare' => true, 'storeId' => null])
-        ->and($html)->toContain('<option value="">All shops</option>');
-
-    // Without it a shop comes first, as before.
-    $html = editorPage(createPlatformUser(['ad-view', 'ad-store', 'ad-update'], 'Platform designer'), null);
-
-    expect(alpineConfig($html, 'uploadDropzone', 'picker-dropzone')['needsStore'] ?? null)->toBe('Choose the shop this ad is for first, at the top.')
-        ->and(alpineConfig($html, 'adEditor'))->toMatchArray(['canUpload' => true, 'canShare' => false])
-        ->and($html)->toContain('<option value="">Choose a shop…</option>');
+        expect(alpineConfig($html, 'uploadDropzone', 'picker-dropzone'))->not->toHaveKey('needsStore')
+            ->and(alpineConfig($html, 'adEditor'))->toMatchArray(['canUpload' => true, 'choosesShop' => true, 'storeId' => null])
+            ->and($html)->toContain('<option value="">All shops</option>')
+            ->not->toContain('Choose the shop this ad is for first');
+    }
 });
 
 test('only the editor\'s page asks for the editor\'s script', function () {

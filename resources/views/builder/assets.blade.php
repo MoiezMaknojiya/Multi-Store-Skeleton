@@ -92,9 +92,9 @@
                                           x-bind:dusk="'asset-details-' + item.id" x-text="assetDetails(item)"></span>
                                 </div>
 
-                                {{-- A shop's own file with Delete Ads, a shared one with Delete Shared Assets: the row says which
-                                     this person holds (can_delete), the route asks again. --}}
-                                @can('delete-builder-assets')
+                                {{-- A shop's own file with Delete Ads; a shared one only above the stores: the row says
+                                     which this person may (can_delete), the controller asks again. --}}
+                                @can('ad-destroy')
                                     <button type="button" x-show="item.can_delete" x-cloak @click="askToDelete(item)"
                                             x-bind:aria-label="'Delete ' + item.title" title="Delete"
                                             x-bind:dusk="'delete-asset-' + item.id"

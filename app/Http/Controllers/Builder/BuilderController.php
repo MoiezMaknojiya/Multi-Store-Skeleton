@@ -36,9 +36,9 @@ use Illuminate\View\View;
  * An ad belongs to a store, like everything else a shop makes, and the platform works above them all:
  * `BuilderAd::visibleTo` decides which, so a store's person never sees another shop's design and a super
  * admin sees every one with the shop's name beside it. The platform may also make an ad for every shop (owner,
- * 2026-10-01): every shop sees it once it is published and copies it into its own Ads, and it is changed with
- * Update Shared Ads and deleted with Delete Shared Ads — the routes let either permission through and each action
- * here asks the one the ad needs (mayUpdate, mayDelete).
+ * 2026-10-01): every shop sees it once it is published and copies it into its own Ads, and only above the stores is
+ * it changed or deleted — with the ordinary Update Ads and Delete Ads there; a shop's people see, use and copy it,
+ * nothing more ("srif delete nahi kar sakta ha"). Each action asks it of the ad (mayUpdate, mayDelete).
  */
 class BuilderController extends Controller
 {
@@ -135,7 +135,7 @@ class BuilderController extends Controller
     public function edit(BuilderAd $ad): View
     {
         // Route middleware is not enough: the target has to be inside the store the actor is working in,
-        // or it does not exist for them (404, never 403) — and a shared one is opened with Update Shared Ads.
+        // or it does not exist for them (404, never 403) — and a shared one opens above the stores alone.
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
         $this->authorizeChange($ad);
 
@@ -219,16 +219,12 @@ class BuilderController extends Controller
      * Inside a shop a copy is that shop's own, whichever ad it was made from — the platform's shared ones included
      * (owner, 2026-10-01: "woo copy kar sake"), and then it is of what the shop was shown: the version the platform
      * published, never its unfinished changes, under that name while the shop has no ad called so. Above the stores a
-     * copy stays where its original is; a shared ad's copy is shared too, so it is made with Update Shared Ads, as every
-     * ad for every shop is.
+     * copy stays where its original is: a shared ad's copy is shared too, as every ad made there with no shop is.
      */
     public function duplicate(BuilderAd $ad): JsonResponse
     {
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
         $storeId = $this->aboveTheStores() ? $ad->store_id : $this->standingStoreId();
-
-        abort_unless($this->mayCopy($ad), 403, 'Making an ad for every shop needs the Update Shared Ads permission.');
-
         $fromThePlatform = $ad->isShared() && $storeId !== null;
         $published = $fromThePlatform && $ad->isPublished() && $ad->published_document !== null;
         $name = $published ? ($ad->published_name ?? $ad->name) : $ad->name;
@@ -281,7 +277,7 @@ class BuilderController extends Controller
     public function preview(Request $request, BuilderAd $ad, AdCompiler $compiler): Response
     {
         // Whoever may look at the ads, and whoever may change this one: previewing is part of designing.
-        abort_unless(auth()->user()->canAny(['ad-view', 'ad-update', 'ad-shared-update']), 403);
+        abort_unless(auth()->user()->canAny(['ad-view', 'ad-update']), 403);
 
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
 
@@ -457,9 +453,9 @@ class BuilderController extends Controller
     {
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
 
-        // A shared ad goes from every shop at once, so it takes Delete Shared Ads (owner, 2026-10-01).
-        abort_unless($this->mayDelete($ad), 403, $ad->isShared()
-            ? 'Deleting an ad shared with every shop needs the Delete Shared Ads permission.'
+        // A shared ad goes from every shop at once: the platform's alone to delete (owner, 2026-10-01).
+        abort_unless($this->mayDelete($ad), 403, $ad->isShared() && ! $this->aboveTheStores()
+            ? 'An ad for every shop is the platform\'s: only the platform deletes it.'
             : 'Deleting an ad needs the Delete Ads permission.');
 
         // Its published page is a library row; a channel showing it would lose the ad without anybody
@@ -504,39 +500,36 @@ class BuilderController extends Controller
             ->toArray();
     }
 
-    /** A shop's own ad with Update Ads; one the platform shares with every shop with Update Shared Ads. */
+    /** Update Ads — and, for an ad the platform shares with every shop, standing above the stores. */
     private function mayUpdate(BuilderAd $ad): bool
     {
-        return Gate::allows($ad->isShared() ? 'ad-shared-update' : 'ad-update');
+        return Gate::allows('ad-update') && (! $ad->isShared() || $this->aboveTheStores());
     }
 
-    /** A shop's own ad with Delete Ads; one the platform shares with every shop with Delete Shared Ads. */
+    /** Delete Ads — and, for an ad the platform shares with every shop, standing above the stores. */
     private function mayDelete(BuilderAd $ad): bool
     {
-        return Gate::allows($ad->isShared() ? 'ad-shared-destroy' : 'ad-destroy');
+        return Gate::allows('ad-destroy') && (! $ad->isShared() || $this->aboveTheStores());
     }
 
-    /** Create Ads — and, above the stores, Update Shared Ads to copy a shared ad, whose copy is shared too. */
+    /** Create Ads: inside a shop the copy is the shop's own, above the stores it stays where its original is. */
     private function mayCopy(BuilderAd $ad): bool
     {
-        return Gate::allows('ad-store') && (! ($ad->isShared() && $this->aboveTheStores()) || Gate::allows('ad-shared-update'));
+        return Gate::allows('ad-store');
     }
 
-    /** Changing, publishing and taking an ad off: refused with the permission it needs, never as a bare 403. */
+    /** Changing, publishing and taking an ad off: refused with the reason, never as a bare 403. */
     private function authorizeChange(BuilderAd $ad): void
     {
-        abort_unless($this->mayUpdate($ad), 403, $ad->isShared()
-            ? 'Changing an ad shared with every shop needs the Update Shared Ads permission.'
+        abort_unless($this->mayUpdate($ad), 403, $ad->isShared() && ! $this->aboveTheStores()
+            ? 'An ad for every shop is the platform\'s: copy it to change it.'
             : 'Changing an ad needs the Update Ads permission.');
     }
 
-    /**
-     * Whether a shop's person is shown the version the platform published rather than its draft: everybody in a shop
-     * but whoever may change the platform's ads, who works on the draft as the platform does.
-     */
+    /** Whether a shop's person is shown the version the platform published rather than its draft: always, inside a shop. */
     private function showsPublishedVersion(BuilderAd $ad): bool
     {
-        return $ad->isShared() && $ad->isPublished() && ! $this->aboveTheStores() && ! Gate::allows('ad-shared-update');
+        return $ad->isShared() && $ad->isPublished() && ! $this->aboveTheStores();
     }
 
     /** Whose ad this is, for a shared one: above the stores "Every shop", inside a shop "From the platform". */
@@ -658,8 +651,8 @@ class BuilderController extends Controller
      *
      * A store's person builds in the store they are working in — there is nothing to choose. The platform
      * team stands in no store at all (the tiers are exclusive), so they say which shop the ad is for, and
-     * the answer has to be a store that exists; or, with Update Shared Ads, no shop at all — All shops, the
-     * editor's first choice (owner, 2026-10-01) — and the ad is shared with every shop.
+     * the answer has to be a store that exists; or no shop at all — All shops, the editor's first choice
+     * (owner, 2026-10-01) — and the ad is shared with every shop.
      *
      * @param  array<string, mixed>  $validated
      */
@@ -668,14 +661,8 @@ class BuilderController extends Controller
         if ($this->aboveTheStores()) {
             $storeId = (int) ($validated['store_id'] ?? 0);
 
-            if ($storeId === 0 && Gate::allows('ad-shared-update')) {
-                return null;
-            }
-
             if ($storeId === 0) {
-                throw ValidationException::withMessages([
-                    'store_id' => 'Choose the shop this ad is for.',
-                ]);
+                return null;
             }
 
             if (! Store::whereKey($storeId)->exists()) {

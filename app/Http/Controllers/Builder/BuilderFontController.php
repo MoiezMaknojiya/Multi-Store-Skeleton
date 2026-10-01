@@ -21,12 +21,12 @@ class BuilderFontController extends Controller
 {
     /**
      * The picker's whole list: the system faces, then ours, each saying whether it is ready to use. For
-     * whoever may look at the ads or open the editor (Create Ads, Update Ads, Update Shared Ads) — the editor
-     * needs the list whether or not its designer also holds View Ads.
+     * whoever may look at the ads or open the editor (Create Ads, Update Ads) — the editor needs the list
+     * whether or not its designer also holds View Ads.
      */
     public function index(Request $request): JsonResponse
     {
-        abort_unless($request->user()->canAny(['ad-view', 'ad-store', 'ad-update', 'ad-shared-update']), 403);
+        abort_unless($request->user()->canAny(['ad-view', 'ad-store', 'ad-update']), 403);
 
         $installed = BuilderFont::orderBy('family')->get()->keyBy('family');
 
@@ -60,12 +60,12 @@ class BuilderFontController extends Controller
      * that was installed, and the second pays nothing for it.
      *
      * Whoever may design may install: the picker sits in the editor, which a person opens to make an ad
-     * (`ad-store`) or to change one (`ad-update`, or `ad-shared-update` for one shared with every shop), and
-     * each needs the fonts — asked here, because a route's `can:` names one permission only.
+     * (`ad-store`) or to change one (`ad-update`), and either needs the fonts — asked here, because a
+     * route's `can:` names one permission only.
      */
     public function store(Request $request, GoogleFontInstaller $installer): JsonResponse
     {
-        abort_unless($request->user()->canAny(['ad-store', 'ad-update', 'ad-shared-update']), 403);
+        abort_unless($request->user()->canAny(['ad-store', 'ad-update']), 403);
 
         $validated = $request->validate([
             // No longer than an ad's text may name a font (BuilderAdRequest: `style.fontFamily` max:100), so a font

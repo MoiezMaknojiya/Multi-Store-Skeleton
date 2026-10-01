@@ -354,9 +354,8 @@ Route::middleware(['auth', 'verified', 'store.active', 'throttle:admin'])->group
         Route::get('/assets', [BuilderAssetController::class, 'index'])->middleware('can:ad-view')->name('builder.assets');
         Route::get('/assets/data', [BuilderAssetController::class, 'data'])->middleware('can:ad-view')->name('builder.assets.data');
         Route::post('/assets', [BuilderAssetController::class, 'store'])->middleware('can:ad-store')->name('builder.assets.store');
-        // A shop's own file with Delete Ads, a shared one with Delete Shared Assets: the gate lets either through
-        // and the controller asks the one the file needs.
-        Route::delete('/assets/{asset}', [BuilderAssetController::class, 'destroy'])->whereNumber('asset')->middleware('can:delete-builder-assets')->name('builder.assets.destroy');
+        // A shop's own file with Delete Ads; one shared with every shop only above the stores (the controller asks)
+        Route::delete('/assets/{asset}', [BuilderAssetController::class, 'destroy'])->whereNumber('asset')->middleware('can:ad-destroy')->name('builder.assets.destroy');
 
         // The fonts the editor may set text in. Installing one fetches it from Google ONCE and
         // keeps it here, so a television with no internet still shows the right typeface.
@@ -370,25 +369,24 @@ Route::middleware(['auth', 'verified', 'store.active', 'throttle:admin'])->group
         Route::get('/create', [BuilderController::class, 'create'])->middleware('can:ad-store')->name('builder.create');
 
         Route::post('/', [BuilderController::class, 'store'])->middleware('can:ad-store')->name('builder.store');
-        // A shop's own ad with Update Ads, one the platform shares with every shop with Update Shared Ads (owner,
-        // 2026-10-01): the gate lets either through and the controller asks the one the ad needs.
-        Route::get('/{ad}', [BuilderController::class, 'edit'])->whereNumber('ad')->middleware('can:update-builder-ads')->name('builder.edit');
-        Route::put('/{ad}', [BuilderController::class, 'update'])->whereNumber('ad')->middleware('can:update-builder-ads')->name('builder.update');
+        // An ad the platform shares with every shop is changed above the stores alone (the controller asks)
+        Route::get('/{ad}', [BuilderController::class, 'edit'])->whereNumber('ad')->middleware('can:ad-update')->name('builder.edit');
+        Route::put('/{ad}', [BuilderController::class, 'update'])->whereNumber('ad')->middleware('can:ad-update')->name('builder.update');
         Route::post('/{ad}/duplicate', [BuilderController::class, 'duplicate'])->whereNumber('ad')->middleware('can:ad-store')->name('builder.duplicate');
         // Compile the design into a page and put it in the library, where a playlist can reach it
-        Route::post('/{ad}/publish', [BuilderController::class, 'publish'])->whereNumber('ad')->middleware('can:update-builder-ads')->name('builder.publish');
+        Route::post('/{ad}/publish', [BuilderController::class, 'publish'])->whereNumber('ad')->middleware('can:ad-update')->name('builder.publish');
         // The rest of the draft/publish model (docs/AD-BUILDER-SPEC.md §9): take a published ad off the screens,
         // or throw away the changes the screens do not show yet — both changes to a saved ad, like Publish.
-        Route::post('/{ad}/unpublish', [BuilderController::class, 'unpublish'])->whereNumber('ad')->middleware('can:update-builder-ads')->name('builder.unpublish');
-        Route::post('/{ad}/discard', [BuilderController::class, 'discard'])->whereNumber('ad')->middleware('can:update-builder-ads')->name('builder.discard');
+        Route::post('/{ad}/unpublish', [BuilderController::class, 'unpublish'])->whereNumber('ad')->middleware('can:ad-update')->name('builder.unpublish');
+        Route::post('/{ad}/discard', [BuilderController::class, 'discard'])->whereNumber('ad')->middleware('can:ad-update')->name('builder.discard');
         // May a shop's own playlist play this ad, or is it for channels only (owner's rule, 2026-09-22)?
-        Route::post('/{ad}/in-playlists', [BuilderController::class, 'showInPlaylists'])->whereNumber('ad')->middleware('can:update-builder-ads')->name('builder.in-playlists');
+        Route::post('/{ad}/in-playlists', [BuilderController::class, 'showInPlaylists'])->whereNumber('ad')->middleware('can:ad-update')->name('builder.in-playlists');
         // The saved design as a television would show it, full screen, before it reaches one (§10a).
         // For ad-view or ad-update — "any of", so checked in BuilderController::preview
         Route::get('/{ad}/preview', [BuilderController::class, 'preview'])->whereNumber('ad')->name('builder.preview');
-        // A big delete: the published copy goes with the design, so it asks for the password. A shop's own ad with
-        // Delete Ads, a shared one with Delete Shared Ads.
-        Route::delete('/{ad}', [BuilderController::class, 'destroy'])->whereNumber('ad')->middleware('can:delete-builder-ads')->name('builder.destroy');
+        // A big delete: the published copy goes with the design, so it asks for the password. One shared with every
+        // shop goes only above the stores (the controller asks).
+        Route::delete('/{ad}', [BuilderController::class, 'destroy'])->whereNumber('ad')->middleware('can:ad-destroy')->name('builder.destroy');
     });
 
     // -------------------------------------------------------------------

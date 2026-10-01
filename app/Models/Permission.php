@@ -33,7 +33,6 @@ class Permission extends Model
         'store-view', 'store-store', 'store-destroy',
         'channel-view', 'channel-store', 'channel-update', 'channel-destroy',
         'activity-view', 'activity-destroy',
-        'ad-shared-update', 'ad-shared-destroy', 'ad-shared-asset-destroy',
     ];
 
     /**
@@ -44,21 +43,18 @@ class Permission extends Model
      *    (owner's rule, 2026-09-17: turning View Stores off hides it), a new store they open there and own,
      *    and deleting that store;
      *  - channel-* — the store's own channels, for its own screens;
-     *  - activity-view — this store's history;
-     *  - ad-shared-update, ad-shared-destroy, ad-shared-asset-destroy — the ones that reach past the store, by the
-     *    owner's choice (2026-09-29: "agar permission du toh woo delete bhi kar sake"; 2026-10-01: "sub khel permission
-     *    ka honga", three of them): changing or deleting an ad the platform shares with every shop, and deleting a
-     *    picture or a video it shares with every shop's Ad Builder, act on every shop at once. No store role starts
-     *    with them; a file any shop's ad uses stays.
+     *  - activity-view — this store's history.
      *
      * Not among them: user-view and user-destroy (accounts are the platform's; a store's people are its Members
-     * page), and activity-destroy (yearly maintenance drops a whole year of every store's history).
+     * page), and activity-destroy (yearly maintenance drops a whole year of every store's history). Nor is there any
+     * permission to change or delete what the platform shares with every shop's Ad Builder — its ads and its files:
+     * a shop sees them, uses them and copies the ads, and only above the stores are they changed or deleted (owner,
+     * 2026-10-01: "srif delete nahi kar sakta ha ... permission hata do").
      */
     public const STORE_SCOPED = [
         'store-view', 'store-store', 'store-destroy',
         'channel-view', 'channel-store', 'channel-update', 'channel-destroy',
         'activity-view',
-        'ad-shared-update', 'ad-shared-destroy', 'ad-shared-asset-destroy',
     ];
 
     /**
@@ -109,9 +105,6 @@ class Permission extends Model
         'channel-destroy' => 'Delete Channels',
         'activity-view' => 'View Activity Log',
         'activity-destroy' => 'Delete Old Activity Logs',
-        'ad-shared-update' => 'Update Shared Ads',
-        'ad-shared-destroy' => 'Delete Shared Ads',
-        'ad-shared-asset-destroy' => 'Delete Shared Assets',
         'permission-view' => 'View Permissions',
         'permission-store' => 'Create Permissions',
         'permission-update' => 'Update Permissions',

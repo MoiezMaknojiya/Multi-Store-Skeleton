@@ -23,7 +23,8 @@ use Illuminate\Support\Facades\Storage;
  * 2026-10-01: "all shop k liya ads ... woo ads sub ko dikhe aur woo copy kar sake"). A shared ad uses the files the
  * platform shares (BuilderAsset::onShelfOf), lives under `builder/platform/ads/`, publishes into the platform's own
  * library — so only the platform's channels play it — and every shop sees it once it is published and copies it into
- * its own Ads. It is changed with Update Shared Ads and deleted with Delete Shared Ads, wherever the person stands.
+ * its own Ads. Only above the stores is it changed or deleted (owner, 2026-10-01: a shop's people see, use and copy
+ * it, "srif delete nahi kar sakta ha"), with Update Ads and Delete Ads there.
  *
  * @property int|null $store_id
  */
@@ -124,10 +125,10 @@ class BuilderAd extends Model
 
     /**
      * The ads a person sees from where they stand: above the stores, every store's and the shared ones (each row
-     * saying whose it is); inside a store, that store's own and the ones the platform shares with every shop — once
-     * published (owner, 2026-10-01: an unfinished design stays the platform's), or every one for somebody there who
-     * may change or delete them. Never another shop's own; with no store selected, none at all. What may be DONE to
-     * one is the controller's to ask (a shared one is changed and deleted with its own permissions).
+     * saying whose it is); inside a store, that store's own and the ones the platform shares with every shop once
+     * they are published (owner, 2026-10-01: an unfinished design stays the platform's). Never another shop's own;
+     * with no store selected, none at all. What may be DONE to one is the controller's to ask: a shared one is only
+     * ever seen, used and copied inside a shop.
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
@@ -141,11 +142,8 @@ class BuilderAd extends Model
             return $query->whereRaw('0 = 1');
         }
 
-        $seesDrafts = $user->hasPermissionInCurrentStore('ad-shared-update') || $user->hasPermissionInCurrentStore('ad-shared-destroy');
-
         return $query->where(fn (Builder $query) => $query->where('store_id', $storeId)
-            ->orWhere(fn (Builder $shared) => $shared->whereNull('store_id')
-                ->when(! $seesDrafts, fn (Builder $published) => $published->whereNotNull('media_id')->whereNotNull('published_at'))));
+            ->orWhere(fn (Builder $shared) => $shared->whereNull('store_id')->whereNotNull('media_id')->whereNotNull('published_at')));
     }
 
     /** The platform's, made for every shop — no shop's own. */

@@ -77,20 +77,17 @@ export function registerAdEditor(Alpine) {
             }),
             assets: config.assets ?? [],
             storeId: config.storeId ?? null,
-            /* The platform team making a NEW ad says which shop it is for — or All shops, with Update Shared Ads;
-             * until they have, no shelf is this ad's, so nothing from any shop can be placed and then lost when
-             * the ad is saved there. */
+            /* The platform team making a NEW ad says which shop it is for — All shops first, an ad for every
+             * shop (owner, 2026-10-01) — and the shelf follows the choice, so nothing from another shop can be
+             * placed and then lost when the ad is saved. */
             choosesShop: config.choosesShop ?? false,
-            canShare: config.canShare ?? false,
-            /* Made for every shop (owner, 2026-10-01): its shelf is the files shared with every shop alone. */
+            /* Made for every shop: its shelf is the files shared with every shop alone. */
             shared: config.shared ?? false,
 
             /* What this person may do here, as the routes decide it: a saved ad is changed and published
-             * with Update Ads — one shared with every shop with Update Shared Ads — and a font is fetched by
-             * whoever may create or change an ad. The page asks the server, so nothing is offered that a click
-             * would only have refused. */
+             * with Update Ads, and a font is fetched by whoever may create or change an ad. The page asks
+             * the server, so nothing is offered that a click would only have refused. */
             canUpdate: config.canUpdate ?? false,
-            canUpdateShared: config.canUpdateShared ?? false,
             canInstallFonts: config.canInstallFonts ?? false,
             canUpload: config.canUpload ?? false,
 
@@ -588,12 +585,7 @@ export function registerAdEditor(Alpine) {
 
             /** Made for every shop: a saved ad as the server says, a new one while All shops is chosen. */
             isShared() {
-                return this.adId ? this.shared : (this.choosesShop && this.canShare && !this.storeId);
-            },
-
-            /** May this person change this ad after its first save — and publish it: Update Ads, or Update Shared Ads. */
-            mayChange() {
-                return this.isShared() ? this.canUpdateShared : this.canUpdate;
+                return this.adId ? this.shared : (this.choosesShop && !this.storeId);
             },
 
             /**
@@ -1344,15 +1336,10 @@ export function registerAdEditor(Alpine) {
             async save({ auto = false } = {}) {
                 if (this.saving) return false;
 
-                // Changing a saved ad is Update Ads, or Update Shared Ads for one made for every shop (the controller's
-                // own question). Somebody who may create ads but not change them has created this one, and is told so
-                // here rather than refused by the server.
-                if (this.adId && !this.mayChange()) {
-                    if (!auto) {
-                        window.toast(this.isShared()
-                            ? 'This ad is saved. Changing an ad for every shop needs the Update Shared Ads permission, which you do not have.'
-                            : 'This ad is saved. Changing a saved ad needs the Update Ads permission, which you do not have.');
-                    }
+                // Changing a saved ad is Update Ads (the route's own lock). Somebody who may create ads but
+                // not change them has created this one, and is told so here rather than refused by the server.
+                if (this.adId && !this.canUpdate) {
+                    if (!auto) window.toast('This ad is saved. Changing a saved ad needs the Update Ads permission, which you do not have.');
 
                     return false;
                 }
@@ -1396,7 +1383,7 @@ export function registerAdEditor(Alpine) {
                         this.adId = data.ad.id;
                         this.shared = data.ad.shared ?? false;
 
-                        if (this.mayChange()) window.history.replaceState({}, '', `/builder/${this.adId}`);
+                        if (this.canUpdate) window.history.replaceState({}, '', `/builder/${this.adId}`);
                     }
 
                     // Only what was sent is saved: a change made while the request was on its way stays unsaved.
@@ -1433,7 +1420,7 @@ export function registerAdEditor(Alpine) {
              * whole ad plays. Returns whether it saved (the browser tests call it directly).
              */
             autosaveTick() {
-                if (!this.autosave || !this.adId || !this.dirty || !this.mayChange()) return false;
+                if (!this.autosave || !this.adId || !this.dirty || !this.canUpdate) return false;
                 if (this.saving || this.publishing || this.gesture || this.editingTextId || this.previewing === 'all') return false;
 
                 this.save({ auto: true });

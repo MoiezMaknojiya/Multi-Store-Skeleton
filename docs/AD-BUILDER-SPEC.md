@@ -130,10 +130,11 @@ Shop list offers All shops and each shop: an upload with a shop chosen is that s
 ha" — one option, not two saying the same). Every shop's shelf lists the shared files beside its own,
 marked "From the platform", and the editor's picker offers them for any shop (`BuilderAsset::onShelfOf`,
 `AdCompiler::assetsFor`, `onThisShelf`). A shared file counts to no shop's 512 MB (the server's reserve still holds),
-and a deleted shop takes its own files, never the shared ones. It is deleted with **Delete Shared Assets**
-(`ad-shared-destroy`, §4) — from every shop's shelf at once — and never while an ad of ANY shop uses it: the refusal
-names the ads of the person's own shop and only counts the others' ("Still used by 2 ads of other shops, so it
-stays…"), so one shop never learns another's designs.
+and a deleted shop takes its own files, never the shared ones. Only the platform deletes it — above the stores,
+with Delete Ads (owner, 2026-10-01: a shop sees and uses it, "srif delete nahi kar sakta ha"; the Delete Shared
+Assets permission of 2026-09-29 is gone, §4) — from every shop's shelf at once, and never while an ad of ANY shop,
+or the platform's, uses it. A shop's shelf counts the other shops' ads using a shared file and never names them, so
+one shop never learns another's designs.
 
 ---
 
@@ -152,11 +153,12 @@ A migration of its own inserts them, grants all four to Super-Admin, and grants 
 Admin starter roles by key. A shop's own assets have no separate permission: uploading one is part of creating an
 ad (`ad-store`), removing one part of `ad-destroy` — a permission has to be enough for its own job.
 
-A fifth, `ad-shared-destroy` **Delete Shared Assets** (2026-09-29), takes off the shelf a file the platform shares
-with every shop (§3). It is in `Permission::PLATFORM` and `STORE_SCOPED`: a shop's role may carry it, and there it
-reaches past the shop by the owner's choice — the file goes from every shop. Only Super-Admin starts with it; the
-super admin gives it to the roles they choose. The delete route asks `delete-builder-assets` (either permission, a
-hand-written gate) and the controller the one the file needs, and each row says `can_delete`.
+There is no fifth. What the platform shares with every shop — its files (§3) and its ads (the 2026-10-01 addenda)
+— is changed and deleted above the stores alone, with these same four; a shop's people see it, use it and copy the
+ads. (A Delete Shared Assets permission, `ad-shared-destroy`, let a shop's role delete a shared file from 2026-09-29;
+the owner took it away on 2026-10-01, with the two made for shared ads that morning — migration `2026_10_01_120000`.)
+The delete route asks `ad-destroy`, the controller also whether the person stands above the stores for a shared file,
+and each row says `can_delete`.
 
 ---
 
@@ -182,7 +184,7 @@ Inside the `['auth', 'throttle:admin']` group, sidebar group **Ad Builder** (gat
 | DELETE | `/builder/{ad}` | `builder.destroy` | `ad-destroy` (password) |
 | GET | `/builder/assets/data` | `builder.assets.data` | `ad-view` |
 | POST | `/builder/assets` | `builder.assets.store` | `ad-store` |
-| DELETE | `/builder/assets/{asset}` | `builder.assets.destroy` | `delete-builder-assets`: `ad-destroy` for a shop's own file, `ad-shared-destroy` for a shared one (in the controller) |
+| DELETE | `/builder/assets/{asset}` | `builder.assets.destroy` | `ad-destroy` — a shared file above the stores only (in the controller) |
 | GET | `/builder/fonts` | `builder.fonts` | `ad-view`, `ad-store` or `ad-update` (in the controller) |
 | POST | `/builder/fonts` | `builder.fonts.store` | `ad-store` or `ad-update` (in the controller) + `throttle:font-install` |
 
@@ -1055,3 +1057,22 @@ baad"; asked how to split the permissions, "teen alag".
   makes one, a draft is nothing to a shop, another shop's copy stays theirs), `EditorPickerUploadTest` (All shops
   needs no shop first), `AdBuilderFlowTest` in the browser (the owner's own steps: an ad for All shops with a file from
   the picker, published, copied by a shop).
+
+## Addendum — 2026-10-01, later: what the platform shares is the platform's
+
+The owner, the same day: "mere se ek galti ho gae ... store walay mera asset dekh sakta ha aur use kar sakta ha aur ads
+bhi use kar sakta ha aur dekh sakta ha, srif delete nahi kar sakta ha, toh delete shared ads aur delete shared asset ki
+permission hata do aur update shared ad ki bhi."
+
+- **Gone:** Update Shared Ads, Delete Shared Ads and Delete Shared Assets (migration `2026_10_01_120000`, whose `down()`
+  brings the three back held by Super-Admin, the only role that ever held them). No permission lets a shop's people
+  change or delete an ad or a file the platform shares with every shop, whatever their role holds: they see it, use it
+  (a shared file in their designs) and copy it (a shared ad into their own Ads). A shared ad's draft is never theirs to
+  see.
+- **Above the stores** the ordinary permissions look after the platform's own, as they do its library and its
+  channels: Create Ads makes an ad for All shops (the editor's Shop list starts there for every platform designer, so
+  the "Choose the shop this ad is for first" refusal and the uploader's `needsStore` are gone), Update Ads changes,
+  publishes and takes one off, Delete Ads deletes one, and a shared file.
+- Refusals say why: "An ad for every shop is the platform's: copy it to change it.", "… only the platform deletes it.",
+  "A file shared with every shop is the platform's: only the platform deletes it." The routes are back on `ad-update`
+  and `ad-destroy`; the either-permission gates are gone.
