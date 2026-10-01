@@ -2,9 +2,9 @@
 
 namespace Tests\Browser;
 
+use App\Models\Organization;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Organization;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -101,7 +101,7 @@ class NetworkAdsBulkOrganizationsTest extends DuskTestCase
      * An organization switched on whose televisions are not all switched on must not look the
      * same as one that is — that difference is the whole point of the column.
      */
-    public function test_a_organization_with_a_screen_held_back_reads_differently(): void
+    public function test_an_organization_with_a_screen_held_back_reads_differently(): void
     {
         $admin = $this->seedSuperAdmin();
         $organization = $this->organizationWithTwoScreens('Gamma Grill');

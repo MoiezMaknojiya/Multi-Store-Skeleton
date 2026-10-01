@@ -67,7 +67,7 @@ class MediaPageLayoutTest extends DuskTestCase
         });
     }
 
-    public function test_above_the_organizations_the_library_joins_the_line_and_a_organizations_storage_appears_with_it(): void
+    public function test_above_the_organizations_the_library_joins_the_line_and_an_organizations_storage_appears_with_it(): void
     {
         $admin = $this->seedSuperAdmin();
         $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);

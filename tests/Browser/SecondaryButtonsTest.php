@@ -68,7 +68,7 @@ class SecondaryButtonsTest extends DuskTestCase
         });
     }
 
-    public function test_a_organization_with_one_screen_is_told_there_is_nowhere_to_copy_to(): void
+    public function test_an_organization_with_one_screen_is_told_there_is_nowhere_to_copy_to(): void
     {
         $this->seedSuperAdmin();
         $organization = Organization::factory()->create(['name' => 'Solo Organization']);

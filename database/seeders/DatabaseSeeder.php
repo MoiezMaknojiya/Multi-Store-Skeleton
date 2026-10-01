@@ -31,7 +31,7 @@ class DatabaseSeeder extends Seeder
         $superAdminRole->permissions()->sync(Permission::pluck('id'));
 
         // 3. The Owner role — the organization role whose holders own their organization; public signup needs it. The
-        //    migrations create all four starter roles (2026_09_16_110200_insert_permissions_and_starter_roles); this only puts the Owner role back
+        //    migrations create all four starter roles (2026_10_01_202300_insert_permissions_and_starter_roles); this only puts the Owner role back
         //    should it be missing, because its name and permissions are the super admin's to change (Roles
         //    page) and a re-seed must never undo that. The other starters are ordinary organization roles, so a
         //    re-seed never brings back one the super admin deleted.

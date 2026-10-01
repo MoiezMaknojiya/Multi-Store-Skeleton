@@ -81,7 +81,7 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
         });
     }
 
-    public function test_every_page_and_dialog_inside_a_organization_fits_a_phone(): void
+    public function test_every_page_and_dialog_inside_an_organization_fits_a_phone(): void
     {
         $this->seedSuperAdmin();
         [$alpha, $screen] = $this->aBusyOrganization();

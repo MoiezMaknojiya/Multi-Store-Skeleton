@@ -206,7 +206,7 @@ class ChannelAdminTest extends DuskTestCase
      * Inside an organization, the platform's channel is listed and opened to look at (owner, 2026-09-19) — nothing on
      * it offers a change — while the organization's own channel keeps every button.
      */
-    public function test_inside_a_organization_the_platforms_channel_is_there_to_look_at(): void
+    public function test_inside_an_organization_the_platforms_channel_is_there_to_look_at(): void
     {
         $this->seedSuperAdmin();
         $organization = Organization::factory()->create(['name' => 'Alpha Mart']);

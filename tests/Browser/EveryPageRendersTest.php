@@ -55,7 +55,7 @@ class EveryPageRendersTest extends DuskTestCase
         });
     }
 
-    public function test_every_page_inside_a_organization_renders_with_a_clean_console(): void
+    public function test_every_page_inside_an_organization_renders_with_a_clean_console(): void
     {
         $this->seedSuperAdmin();
         $organization = Organization::factory()->create(['name' => 'Alpha Mart']);

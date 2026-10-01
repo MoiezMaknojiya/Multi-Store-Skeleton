@@ -10,7 +10,7 @@ return new class extends Migration
      * Run the migrations.
      *
      * An account is a login and nothing more: nobody owns it, and it gives no power by itself — that comes from
-     * memberships (store_user).
+     * memberships (organization_user).
      */
     public function up(): void
     {
@@ -20,6 +20,11 @@ return new class extends Migration
             $table->string('last_name');
             $table->string('phone');
             $table->string('email')->unique();
+            // A changed address waits here until the link sent to it is opened; the old one stands meanwhile, so a
+            // typo can never lock anybody out.
+            $table->string('pending_email')->nullable();
+            // Set by the link a new account opens — or by an invitation accepted or a password reset completed, which
+            // prove the inbox too. Until then the account stands behind `verified`.
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->rememberToken();

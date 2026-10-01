@@ -2,8 +2,8 @@
 
 namespace Tests\Browser;
 
-use App\Models\Role;
 use App\Models\Organization;
+use App\Models\Role;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
 use Laravel\Dusk\Browser;
@@ -52,7 +52,7 @@ class OrganizationSettingsFlowTest extends DuskTestCase
         });
     }
 
-    public function test_a_member_allowed_to_create_a_organization_opens_one_and_owns_it_at_once(): void
+    public function test_a_member_allowed_to_create_an_organization_opens_one_and_owns_it_at_once(): void
     {
         $this->seedSuperAdmin();
         $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
@@ -100,7 +100,7 @@ class OrganizationSettingsFlowTest extends DuskTestCase
         });
     }
 
-    public function test_a_member_leaves_a_organization_from_the_members_page(): void
+    public function test_a_member_leaves_an_organization_from_the_members_page(): void
     {
         $this->seedSuperAdmin();
         $organization = Organization::factory()->create(['name' => 'Alpha Mart']);

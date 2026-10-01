@@ -56,7 +56,8 @@ organizations) is out of scope; these rules stay the same if it is added later.
   its own channels, and its Ad Builder designs and assets. It was called a **store** (and on some pages a shop) until
   2026-10-01, when the owner made it an organization everywhere — the screens, the code and the database — because the
   app is sold to hospitals, schools and other institutes as well as shops (see `.claude/rules/02-project-conventions.md`,
-  "Organization, everywhere"; the rename is `2026_10_01_150000_call_stores_organizations_in_the_database`).
+  "Organization, everywhere": the databases that existed were renamed in place that day, and the migrations say
+  organization from their first line since).
 - **Membership** — an `organization_user` row `(user_id, organization_id > 0, role_id)`. One role per person per organization.
 - **Platform membership** — an `organization_user` row with `organization_id = 0` holding a global role (unchanged sentinel).
 - **Organization role** — a role the super admin makes for the organizations: offered in every organization, the same everywhere.
@@ -151,7 +152,7 @@ An installation starts with these organization roles (`Role::STARTERS`) — a st
 | **Staff** | `screen-view`, `screen-playlist`, `media-view`, `media-store`, `media-update`, `media-destroy`, `daypart-view` |
 | **Viewer** | `screen-view`, `media-view`, `daypart-view` |
 
-One migration inserts the permission catalogue and all four roles (`2026_09_16_110200_insert_permissions_and_starter_roles`);
+One migration inserts the permission catalogue and all four roles (`2026_10_01_202300_insert_permissions_and_starter_roles`);
 the seeder repairs the labels, makes the Super-Admin role and the admin account, and only puts the Owner role back
 should it be missing.
 Neither touches an existing role, so a re-seed never undoes the super admin's changes or brings back a role they deleted.
@@ -399,15 +400,14 @@ type replaced them); `/users/{user}/organization-roles` and the Roles page's `?o
 **`organizations`:** no `deleted_at` — a deleted organization goes for good. **`roles.organization_id`:** cascades on delete, so a custom
 role never outlives its organization.
 
-**What a fresh install gets** (24 migrations: the 21 squashed on 2026-09-17 — the conversion migrations that upgraded
-the owner's own database are gone, and with them the only upgrade path from the old model — and the Ad Builder's three,
-added since): the tables above in their final shape, plus two data migrations. The baseline
-(`2026_09_16_110200_insert_permissions_and_starter_roles`) inserts 37 permissions with their labels and the four starter
-organization roles — Owner (every organization permission, `organization-view`, `organization-destroy`), Admin (every organization permission,
-`organization-view`), Staff (7) and Viewer (3); the Ad Builder's `2026_09_17_140100_insert_ad_permissions` adds `ad-view`,
-`ad-store`, `ad-update` and `ad-destroy` and grants them to Owner and Admin by key — the 41 of `Permission::LABELS` in
-all. `db:seed` then adds the Super-Admin role holding the whole catalogue and the admin account. A permission added later
-ships a migration of its own; that baseline file is never edited.
+**What a fresh install gets** (26 migrations, one per table since 2026-10-01 — the conversion migrations that upgraded
+the owner's own database went on 2026-09-17, and every later change was folded into its table's file on 2026-10-01,
+so there is no upgrade path from the old model): the tables above in their final shape, plus one data migration. The
+baseline (`2026_10_01_202300_insert_permissions_and_starter_roles`) inserts the 41 permissions of `Permission::LABELS`
+with their labels and the four starter organization roles — Owner (every organization permission, `organization-view`,
+`organization-destroy`), Admin (every organization permission, `organization-view`), Staff (7) and Viewer (3). `db:seed`
+then adds the Super-Admin role holding the whole catalogue and the admin account. A permission added later ships a
+migration of its own; that baseline file is never edited — a database that has its catalogue skips it.
 
 ## 8. UI
 

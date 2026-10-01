@@ -6,9 +6,7 @@ use App\Models\Organization;
 use App\Models\Role;
 use App\Models\User;
 use App\Notifications\VerifyEmailNotification;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 
 /*
@@ -134,24 +132,7 @@ test('a mail server that refuses is said on the page; the signup stands', functi
     $this->get('/verify-email')->assertSee('The email could not be sent just now.');
 });
 
-test('an account made before the rule, or through an invitation, counts as confirmed', function () {
-    // Made before 2026-09-29: the migration marks it, with a stamp its down() can find again.
-    $migration = require database_path('migrations/2026_09_29_100000_verify_accounts_and_hold_new_emails.php');
-    $migration->down();
-    expect(Schema::hasColumn('users', 'pending_email'))->toBeFalse();
-
-    $before = User::factory()->unverified()->create();
-    $confirmed = User::factory()->create(['email_verified_at' => '2026-09-01 10:00:00']);
-    $migration->up();
-
-    expect($before->fresh()->hasVerifiedEmail())->toBeTrue()
-        ->and($confirmed->fresh()->email_verified_at->toDateTimeString())->toBe('2026-09-01 10:00:00');
-
-    $migration->down();
-    expect(DB::table('users')->where('id', $before->id)->value('email_verified_at'))->toBeNull()
-        ->and($confirmed->fresh()->email_verified_at->toDateTimeString())->toBe('2026-09-01 10:00:00');
-    $migration->up();
-
+test('an account made through an invitation counts as confirmed', function () {
     // An invitation's link came to the inbox itself: accepting it confirms the account's address.
     $organization = Organization::factory()->create(['name' => 'Beta Deli']);
     $signedUp = User::factory()->unverified()->create(['email' => 'sara@example.com']);

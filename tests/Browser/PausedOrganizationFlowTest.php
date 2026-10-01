@@ -2,8 +2,8 @@
 
 namespace Tests\Browser;
 
-use App\Models\Role;
 use App\Models\Organization;
+use App\Models\Role;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -61,7 +61,7 @@ class PausedOrganizationFlowTest extends DuskTestCase
         });
     }
 
-    public function test_the_platform_pauses_a_organization_from_its_page_and_sees_it_said(): void
+    public function test_the_platform_pauses_an_organization_from_its_page_and_sees_it_said(): void
     {
         $admin = $this->seedSuperAdmin();
         $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);

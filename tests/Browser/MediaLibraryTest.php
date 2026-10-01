@@ -20,7 +20,7 @@ class MediaLibraryTest extends DuskTestCase
      * An organization owner uploads a file, renames it, and deletes it — the whole library
      * loop through the real UI, inside one organization.
      */
-    public function test_a_organization_user_uploads_renames_and_deletes_a_file(): void
+    public function test_an_organization_user_uploads_renames_and_deletes_a_file(): void
     {
         $this->seedSuperAdmin();
         $organization = Organization::factory()->create(['name' => 'Alpha Mart']);

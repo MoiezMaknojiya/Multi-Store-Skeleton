@@ -23,7 +23,7 @@ class PruneUnverifiedAccounts extends Command
     protected $description = 'Remove accounts never confirmed within '.User::UNVERIFIED_DAYS.' days, with the empty organizations they made';
 
     /** What an organization may hold, table by table (each with an organization_id): an organization holding any of it is not empty. */
-    private const WHAT_A_ORGANIZATION_HOLDS = ['media', 'screens', 'dayparts', 'channels', 'builder_ads', 'builder_assets', 'invitations', 'roles'];
+    private const WHAT_AN_ORGANIZATION_HOLDS = ['media', 'screens', 'dayparts', 'channels', 'builder_ads', 'builder_assets', 'invitations', 'roles'];
 
     public function handle(): int
     {
@@ -87,7 +87,7 @@ class PruneUnverifiedAccounts extends Command
             return 'an organization of theirs has other people in it';
         }
 
-        $holding = collect(self::WHAT_A_ORGANIZATION_HOLDS)
+        $holding = collect(self::WHAT_AN_ORGANIZATION_HOLDS)
             ->first(fn (string $table) => DB::table($table)->whereIn('organization_id', $organizationIds)->exists());
 
         return $holding !== null ? "an organization of theirs is not empty ({$holding})" : null;

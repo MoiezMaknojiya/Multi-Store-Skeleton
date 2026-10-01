@@ -6,7 +6,6 @@ use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Screen;
-use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /*
@@ -114,40 +113,5 @@ test('the pages inside an organization say organization', function () {
         '/dashboard', '/screens', '/screens/'.$screen->id, '/media', '/dayparts', '/channels', '/channels/'.$channel->id,
         '/builder', '/builder/assets', '/builder/create?orientation=landscape', '/members', '/roles', '/activity',
         '/settings/organization', '/profile',
-    ]);
-});
-
-test('the four permissions about organizations are labelled so, and a label the super admin retyped is kept', function () {
-    $labels = fn (string $prefix) => DB::table('permissions')
-        ->whereIn('name', ["{$prefix}-update", "{$prefix}-view", "{$prefix}-store", "{$prefix}-destroy"])
-        ->pluck('label', 'name')->all();
-
-    // A fresh install: the baseline inserts the words of its day, the label migration and the rename bring them to what
-    // the code ships.
-    expect($labels('organization'))->toEqual([
-        'organization-update' => Permission::LABELS['organization-update'],
-        'organization-view' => Permission::LABELS['organization-view'],
-        'organization-store' => Permission::LABELS['organization-store'],
-        'organization-destroy' => Permission::LABELS['organization-destroy'],
-    ])->and(Permission::LABELS['organization-view'])->toBe('View Organizations');
-
-    // The label migration ran while the permissions were still called store-…: the rename goes back first.
-    $rename = require database_path('migrations/2026_10_01_150000_call_stores_organizations_in_the_database.php');
-    $relabel = require database_path('migrations/2026_10_01_140000_say_organization_in_the_permission_labels.php');
-    $rename->down();
-    $relabel->down();
-
-    expect($labels('store'))->toEqual([
-        'store-update' => 'Update Store Details', 'store-view' => 'View Stores', 'store-store' => 'Create Stores', 'store-destroy' => 'Delete Stores',
-    ]);
-
-    // The super admin retyped one on the Permissions page meanwhile, in other capitals: theirs stays.
-    DB::table('permissions')->where('name', 'store-view')->update(['label' => 'view stores']);
-    $relabel->up();
-    $rename->up();
-
-    expect($labels('organization'))->toEqual([
-        'organization-update' => 'Update Organization Details', 'organization-view' => 'view stores',
-        'organization-store' => 'Create Organizations', 'organization-destroy' => 'Delete Organizations',
     ]);
 });

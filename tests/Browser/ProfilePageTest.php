@@ -89,7 +89,7 @@ class ProfilePageTest extends DuskTestCase
      * organization. An organization's only Owner — on the Organizations tab of Settings — is told why they cannot, instead of being
      * offered a button that fails.
      */
-    public function test_a_member_without_a_team_page_leaves_a_organization_from_the_profile(): void
+    public function test_a_member_without_a_team_page_leaves_an_organization_from_the_profile(): void
     {
         $this->seedSuperAdmin();
         $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);

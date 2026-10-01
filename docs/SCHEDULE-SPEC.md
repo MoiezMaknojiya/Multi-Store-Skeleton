@@ -137,8 +137,8 @@ Sirf ek cheez rule ke haan kehne par bhi nahi chalti: Ad Builder ka woh page jo 
 
 > **2026-10-01 se file ki apni koi date nahi** (owner: "srif naam rakho"). Pehle `media.starts_at` /
 > `media.expires_at` bhi poocha jata tha; ab Media Library mein file ka sirf naam hai (Rename), aur kab
-> chalegi ye sirf playlist line ke rules batate hain. Migration `2026_10_01_100000_take_the_dates_and_description_off_media`
-> ne dono dates aur description ke columns hata diye.
+> chalegi ye sirf playlist line ke rules batate hain. Dono dates aur description ke columns usi din hata diye gaye
+> (`2026_10_01_200800_create_media_table` mein ab hain hi nahi).
 
 Sab resolve **server par** hota hai, `DeviceController::playlist` mein — hamare maujooda
 usool ke mutabiq, taake sasti TV ki ghalat ghari se farq na pare. Device sirf wo list dekhta
@@ -218,12 +218,11 @@ to Rule B par `ends_on = 25 Mar` lagao: file ki apni koi date nahi hoti (2026-10
 | `default_media_id` | FK media, nullOnDelete, nullable | `null` = kaali |
 
 > *As built:* ye alag "add columns" migration mein nahi hain — squash ke baad dono
-> `2026_09_07_100000_create_screens_table` ke andar hi bante hain.
+> `2026_10_01_200900_create_screens_table` ke andar hi bante hain.
 
 ### `playlist_items` (schedule ka doosra malik — §19)
 
-Ek line ya **file** hai (`media_id` + `duration_seconds`) ya **channel** (`channel_id`;
-`channel_id` `2026_09_15_100000_create_channels_tables` mein add hota hai). Dono mein se
+Ek line ya **file** hai (`media_id` + `duration_seconds`) ya **channel** (`channel_id`; table `channels` ke baad banta hai, `2026_10_01_201300_create_playlist_items_table` mein). Dono mein se
 theek ek set hota hai, aur rules **line** par lagte hain — file ho ya channel.
 
 ### `schedule_rules` (nayi)
@@ -546,7 +545,7 @@ Har phase ke baad Pest + Dusk chalenge aur localhost par live verify hoga.
 | Request | `DaypartRequest` (create + update, ek hi rules) |
 | Controller | `DaypartController` (index · data · organization · update · destroy) |
 | Routes | `/dayparts` CRUD, har ek apni `can:daypart-*` ke peeche |
-| Permissions | `daypart-view/organization/update/destroy` — migration `2026_09_16_110200` mein, starter roles ko (Owner aur Admin ko charon, Staff aur Viewer ko `daypart-view`) |
+| Permissions | `daypart-view/store/update/destroy` — migration `2026_10_01_202300_insert_permissions_and_starter_roles` mein, starter roles ko (Owner aur Admin ko charon, Staff aur Viewer ko `daypart-view`) |
 | UI | `dayparts/index.blade.php` + `dayparts-table.js` + sidebar link |
 | Tests | `DaypartCrudTest` (18) · `DaypartWindowTest` (10) · Dusk `DaypartUiTest` (2) |
 
@@ -669,7 +668,7 @@ schedule ka poora system un par bhi lagta hai — isliye ye document channels ke
 
 - **Line do shakl ki hoti hai.** `playlist_items` par ya `media_id` + `duration_seconds`
   set hai (file), ya `channel_id` (channel) — theek ek. `channel_id`
-  `2026_09_15_100000_create_channels_tables` mein add hota hai, aur channel line ke paas
+  `2026_10_01_201300_create_playlist_items_table` mein hai, aur channel line ke paas
   seconds nahi hote: wo utni der chalti hai jitni us din ki ads.
 - **Rules line par lagte hain, file ho ya channel.** `schedule_rules` ka malik
   `playlist_item_id` hai, isliye §4 ka poora rule builder channel line par waise hi chalta

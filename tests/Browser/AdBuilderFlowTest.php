@@ -318,7 +318,7 @@ class AdBuilderFlowTest extends DuskTestCase
      * goes to the shelf shared with every organization at once — no "choose the organization first" — and once the ad is published an
      * organization's designer finds it "From the platform", copies it, and opens the copy as their own.
      */
-    public function test_the_platform_makes_an_ad_for_every_organization_and_a_organization_copies_it(): void
+    public function test_the_platform_makes_an_ad_for_every_organization_and_an_organization_copies_it(): void
     {
         $admin = $this->seedSuperAdmin();
         $organization = Organization::factory()->create(['name' => 'Alpha Mart']);

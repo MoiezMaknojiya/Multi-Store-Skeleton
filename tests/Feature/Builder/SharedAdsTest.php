@@ -8,12 +8,10 @@ use App\Models\ChannelAd;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\Permission;
-use App\Models\Role;
 use App\Models\User;
 use App\Services\OrganizationStorage;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -359,46 +357,4 @@ test('no permission lets an organization change or delete what the platform shar
             ->and(Permission::ORGANIZATION_SCOPED)->not->toContain($name)
             ->and(DB::table('permissions')->where('name', $name)->exists())->toBeFalse();
     }
-
-    // Going back brings the three, held by Super-Admin alone, as the migration before it left them; forward again,
-    // they are gone with every hold on them.
-    $superAdmin = Role::firstOrCreate(['name' => Role::SUPER_ADMIN], ['is_global' => true]);
-    $migration = require database_path('migrations/2026_10_01_120000_remove_the_shared_permissions.php');
-    $migration->down();
-
-    expect(Permission::whereIn('name', array_keys($removed))->pluck('label', 'name')->sortKeys()->all())->toBe(collect($removed)->sortKeys()->all());
-
-    foreach (array_keys($removed) as $name) {
-        expect(Permission::where('name', $name)->sole()->roles()->pluck('roles.id')->all())->toBe([$superAdmin->id]);
-    }
-
-    $migration->up();
-
-    expect(Permission::whereIn('name', array_keys($removed))->count())->toBe(0)
-        ->and(DB::table('role_has_permissions')->where('role_id', $superAdmin->id)->count())->toBe(0);
-});
-
-test('the migration that lets an ad be shared goes back down, taking the shared ads, their pages and their files', function () {
-    $ad = makeForEveryOrganization($this);
-    $own = BuilderAd::factory()->create(['organization_id' => $this->organization->id]);
-    $files = [$ad->thumbnail_path, $ad->media->path, $ad->media->thumbnail_path];
-
-    withTheNamesOfTheirDay(function () use ($ad, $own, $files) {
-        $migration = require database_path('migrations/2026_10_01_110000_share_builder_ads_with_every_shop.php');
-        $migration->down();
-
-        expect(DB::table('builder_ads')->where('id', $ad->id)->exists())->toBeFalse()
-            ->and(DB::table('media')->where('id', $ad->media_id)->exists())->toBeFalse()
-            ->and(DB::table('builder_ads')->where('id', $own->id)->exists())->toBeTrue()
-            ->and(collect(Schema::getColumns('builder_ads'))->firstWhere('name', 'store_id')['nullable'])->toBeFalse();
-
-        foreach ($files as $file) {
-            Storage::disk('public')->assertMissing($file);
-        }
-
-        $migration->up();
-    });
-
-    expect(collect(Schema::getColumns('builder_ads'))->firstWhere('name', 'organization_id')['nullable'])->toBeTrue()
-        ->and(BuilderAd::factory()->create(['organization_id' => null])->isShared())->toBeTrue();
 });

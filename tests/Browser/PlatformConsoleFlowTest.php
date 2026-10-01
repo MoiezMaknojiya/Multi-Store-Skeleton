@@ -18,7 +18,7 @@ class PlatformConsoleFlowTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    public function test_the_platform_creates_a_organization_and_its_owner_accepts_from_the_email(): void
+    public function test_the_platform_creates_an_organization_and_its_owner_accepts_from_the_email(): void
     {
         $admin = $this->seedSuperAdmin();
 
@@ -180,7 +180,7 @@ class PlatformConsoleFlowTest extends DuskTestCase
      * From the Users page the super admin puts anybody in any organization with a role — straight in, nobody invited —
      * and the organization's only Owner is never taken out.
      */
-    public function test_the_super_admin_puts_a_person_in_a_organization_with_a_role(): void
+    public function test_the_super_admin_puts_a_person_in_an_organization_with_a_role(): void
     {
         $admin = $this->seedSuperAdmin(); // SEED_ADMIN_PASSWORD is "test" (phpunit.dusk.xml)
         $beta = Organization::factory()->create(['name' => 'Beta Deli']);
@@ -356,7 +356,7 @@ class PlatformConsoleFlowTest extends DuskTestCase
     }
 
     /** Somebody in no organization yet is told how to get in — and offered nothing else. */
-    public function test_an_account_without_a_organization_sees_how_to_join(): void
+    public function test_an_account_without_an_organization_sees_how_to_join(): void
     {
         $this->seedSuperAdmin();
         $loner = User::factory()->create(['email' => 'loner@example.com']);

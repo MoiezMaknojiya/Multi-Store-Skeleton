@@ -100,7 +100,7 @@ class FormGuardTest extends DuskTestCase
     }
 
     /** A rule only the server knows must still reach the person, under the field it is about. */
-    public function test_a_organization_role_name_is_refused_with_the_reason_shown(): void
+    public function test_an_organization_role_name_is_refused_with_the_reason_shown(): void
     {
         $this->seedSuperAdmin();
 

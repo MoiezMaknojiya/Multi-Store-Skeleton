@@ -69,12 +69,12 @@ channel_ads
 - **Reading an ad** goes through the media row (`type`, `mime_type`, `url`, `thumbnail_url`, the video's own
   length, `cacheKey()`), so a re-published ad moves the checksum and the television fetches it again.
   `ChannelAd`'s existing accessors keep their names; only their insides change.
-- **Migration** (`2026_09_21_100100_let_channels_take_their_ads_from_the_library`; one row on the owner's
-  database): a media row for each channel ad — the channel's organization, or the platform for a platform channel —
+- **Migration** (history: `2026_09_21_100100_let_channels_take_their_ads_from_the_library`, folded into the
+  one-per-table files on 2026-10-01 once every database had run it; one row on the owner's database): a media row for each channel ad — the channel's organization, or the platform for a platform channel —
   naming its file **where it already lies** (`channels/{id}/…`): a folder name is only a folder name, the row is
   what says whose file it is, and a migration that touches no file cannot lose one. Then the ad points at the
   row and the file columns go. `down()` copies them back and deletes the rows it made. The platform's
-  library itself is `2026_09_21_100000_let_the_platform_keep_a_media_library`, whose `down()` makes
+  library itself was `2026_09_21_100000_let_the_platform_keep_a_media_library` (folded in the same day), whose `down()` made
   `organization_id` NOT NULL again only while the platform holds no file (and otherwise leaves the column open —
   neither deleting a library nor stopping the rollbacks behind it). A JSON backup of the owner's database is
   taken first and the owner says go.

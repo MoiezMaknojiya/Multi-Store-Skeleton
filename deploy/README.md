@@ -232,3 +232,7 @@ Ubuntu's and MySQL's security updates install themselves daily. Two things still
   `scp -i ~/.ssh/signage_deploy root@SERVER_IP:/var/backups/signage/db-YYYY-MM-DD.sql.gz .`
   Restoring one **replaces the live database** — as root:
   `gunzip < /var/backups/signage/db-YYYY-MM-DD.sql.gz | mysql signage`
+  A dump from before 2026-10-01 22:39 UTC (the pre-deploy `db-2026-10-01-before-0eb3740.sql.gz` and the nightly ones
+  before it) still says `stores` and `store_id`: the app no longer reads those names, and its migrations — one file
+  per table since — would make empty `organizations` tables beside them rather than rename anything. Bring such a
+  dump forward with the code of commit `0eb3740` (`php artisan migrate` there renames it), then deploy the latest.

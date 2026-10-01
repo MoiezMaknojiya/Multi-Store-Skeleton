@@ -94,7 +94,7 @@ class EveryButtonWorksTest extends DuskTestCase
         });
     }
 
-    public function test_every_button_inside_a_organization_works(): void
+    public function test_every_button_inside_an_organization_works(): void
     {
         $this->seedSuperAdmin();
         [$alpha, $screen] = $this->aOrganization();

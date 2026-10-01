@@ -36,7 +36,7 @@ class PlaylistChannelUiTest extends DuskTestCase
         return $this->organizationMember($organization, ['screen-view', 'screen-playlist']);
     }
 
-    public function test_a_organization_owner_adds_a_channel_and_puts_it_where_they_want(): void
+    public function test_an_organization_owner_adds_a_channel_and_puts_it_where_they_want(): void
     {
         $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
         $owner = $this->owner($organization);

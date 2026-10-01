@@ -4,6 +4,12 @@
 > (2026-09-17). This file is what gets built and why; `docs/ORGANIZATION-SPEC.md` still rules who
 > may do it, and `.claude/rules/02-project-conventions.md` still rules how the code is written.
 
+> **Migrations named in this document.** The files of 2026-09-17 → 2026-10-01 it cites (`2026_09_21_120000`,
+> `2026_09_22_100000`, `2026_09_23_100000`, `2026_09_29_130000`/`130100`, `2026_10_01_110000`–`130000`) were folded into
+> the one-per-table migrations on 2026-10-01, once every database had run them: `builder_ads` and `builder_assets` are
+> made in their final shape by `2026_10_01_201900_create_builder_ads_table` and `2026_10_01_202000_create_builder_assets_table`.
+> What each one did, and what its `down()` undid, is told here as history.
+
 ---
 
 ## 0. Decisions already taken (owner, 2026-09-17)
