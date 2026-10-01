@@ -161,29 +161,6 @@ test('an unpublished Ad Builder page never reaches a television, however its lin
     expect($manifest['items'])->toBe([]);
 });
 
-test('an ad kept for channels cannot be smuggled onto a playlist, or made the holding picture', function () {
-    // Owner, 2026-09-22: the same ad in a channel and on the playlist carrying it plays twice in one pass.
-    // The pickers never offer one — and the playlist behind them refuses the line, whoever posts it.
-    $ad = BuilderAd::factory()->withText()->published()->create([
-        'store_id' => $this->store->id, 'name' => 'Channel promo', 'in_playlists' => false,
-    ]);
-    $screen = Screen::factory()->withToken('smuggler-token')->create(['store_id' => $this->store->id]);
-    $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
-
-    $this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => [
-        ['media_id' => $ad->media_id, 'duration_seconds' => 10],
-    ]])->assertStatus(422)->assertJsonValidationErrors('items');
-
-    // Nor through the screen's own form, which takes its holding picture from the same narrowed list.
-    $this->putJson("/screens/{$screen->id}", [
-        'name' => $screen->name, 'orientation' => $screen->orientation, 'timezone' => $screen->timezone,
-        'default_media_id' => $ad->media_id,
-    ])->assertStatus(422)->assertJsonValidationErrors('default_media_id');
-
-    expect($screen->fresh()->default_media_id)->toBeNull()
-        ->and($this->getJson('/device/playlist', ['Authorization' => 'Bearer smuggler-token'])->json('items'))->toBe([]);
-});
-
 test('a file one picker leaves out cannot be forced past it by id, either way round', function () {
     // Owner, 2026-09-26: a file plays from playlists or from channels, never both — in a channel AND on the
     // playlist carrying that channel it would play twice. Each side's picker leaves out the other's files; this
@@ -228,7 +205,7 @@ test("an ad is on screen for its design's length alone: no document, line or cha
     // Owner, 2026-09-28: the design owns its length — a whole number of seconds from six to BuilderAd::MAX_SECONDS —
     // and every screen and channel plays the ad that long. Text, a truth value or a fraction is no length the editor
     // would show, so the server takes none either; and the seconds a line or a channel ad posts are not the ad's.
-    $ad = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id, 'name' => 'Short one', 'in_playlists' => true]);
+    $ad = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id, 'name' => 'Short one']);
     $forChannel = BuilderAd::factory()->withText()->create(['store_id' => $this->store->id, 'name' => 'Channel one']);
 
     foreach (['8', '8 seconds', true, 8.5, -8, 0, 5, 301, PHP_INT_MAX, ['8'], ['seconds' => 8]] as $duration) {

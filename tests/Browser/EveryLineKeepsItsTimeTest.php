@@ -175,7 +175,7 @@ class EveryLineKeepsItsTimeTest extends DuskTestCase
 
         $ad = BuilderAd::create([
             'store_id' => $store->id, 'name' => $name, 'orientation' => BuilderAd::LANDSCAPE,
-            'document' => $document, 'in_playlists' => true, 'created_by' => $owner->id,
+            'document' => $document, 'created_by' => $owner->id,
         ]);
 
         return app(AdPublisher::class)->publish($ad, $owner->id);

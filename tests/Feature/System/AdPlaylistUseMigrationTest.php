@@ -1,39 +1,37 @@
 <?php
 
 use App\Models\BuilderAd;
-use App\Models\Media;
 use App\Models\Store;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /*
 |--------------------------------------------------------------------------
-| Where an ad may play, on a database made before the tick existed
+| The playlist tick goes, and would come back unharmed (owner, 2026-10-01)
 |--------------------------------------------------------------------------
 |
-| Owner, 2026-09-22: an ad is for channels only until "Show in playlists" is ticked. The rule must not take
-| anything off a television that is already showing one, so every ad ALREADY published is ticked by the
-| migration — it is what the pickers offer today — while a draft starts where a new ad starts: unticked.
+| Publish alone decides where an ad may be chosen, so `builder_ads.in_playlists` — the "Show in playlists" tick of
+| 2026-09-22 — is dropped. Going back must take nothing off a picker or a television: every ad published by then
+| comes back ticked, and a draft unticked, as a new ad started.
 |
 */
 
-test('every ad already published may still be played from a playlist; a draft starts channels-only', function () {
-    $migration = require database_path('migrations/2026_09_22_100000_let_an_ad_say_whether_playlists_may_use_it.php');
-    $migration->down();
-
+test('the tick column goes, and going back ticks every published ad and leaves a draft unticked', function () {
     expect(Schema::hasColumn('builder_ads', 'in_playlists'))->toBeFalse();
 
     $store = Store::factory()->create();
-    $onScreens = BuilderAd::factory()->withText()->create(['store_id' => $store->id, 'name' => 'On air']);
+    $published = BuilderAd::factory()->withText()->published()->create(['store_id' => $store->id, 'name' => 'On air']);
     $draft = BuilderAd::factory()->withText()->create(['store_id' => $store->id, 'name' => 'Not published']);
 
-    DB::table('builder_ads')->where('id', $onScreens->id)->update([
-        'media_id' => Media::factory()->adPage()->create(['store_id' => $store->id])->id,
-        'published_at' => '2026-09-20 08:00:00',
-    ]);
+    $migration = require database_path('migrations/2026_10_01_130000_take_the_playlist_tick_off_ads.php');
+    $migration->down();
+
+    expect(Schema::hasColumn('builder_ads', 'in_playlists'))->toBeTrue()
+        ->and((bool) DB::table('builder_ads')->where('id', $published->id)->value('in_playlists'))->toBeTrue()
+        ->and((bool) DB::table('builder_ads')->where('id', $draft->id)->value('in_playlists'))->toBeFalse();
 
     $migration->up();
 
-    expect(BuilderAd::find($onScreens->id)->in_playlists)->toBeTrue()
-        ->and(BuilderAd::find($draft->id)->in_playlists)->toBeFalse();
+    expect(Schema::hasColumn('builder_ads', 'in_playlists'))->toBeFalse()
+        ->and(BuilderAd::find($published->id)->name)->toBe('On air');
 });

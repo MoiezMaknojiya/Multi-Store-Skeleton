@@ -133,10 +133,6 @@ class AdOrientationFlowTest extends DuskTestCase
             $this->assertSame('portrait', $media->orientation, 'the library row says which way the page is');
             $this->assertSame([1080, 1920], [$media->width, $media->height]);
 
-            $this->clickAndAwait($panel, '@ad-publish-menu', fn (Browser $b) => $b->waitFor('@ad-in-playlists', 3));
-            $this->jsClick($panel, '@ad-in-playlists');
-            $panel->waitUsing(15, 250, fn () => (bool) $ad->fresh()->in_playlists);
-
             /* ── 6. On the upright screen's playlist: the picker says portrait, and nothing warns ── */
             $panel->visit('/screens/'.$screen->id);
             $this->waitForAlpine($panel);

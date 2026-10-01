@@ -171,7 +171,6 @@ test('a shop copies the platform\'s ad into its own Ads: the published version, 
         ->and($copy->name)->toBe('Winter sale')
         ->and($copy->document['elements'][0]['text'])->toBe('Winter sale')
         ->and($copy->isPublished())->toBeFalse()
-        ->and($copy->in_playlists)->toBeFalse()
         ->and($copy->thumbnail_path)->toBe("builder/{$this->store->id}/ads/{$copy->id}/poster.jpg")
         ->and(Storage::disk('public')->get($copy->thumbnail_path))->toBe(Storage::disk('public')->get($ad->media->thumbnail_path))
         ->and(app(StoreStorage::class)->summary($this->store->id)['used'])->toBeGreaterThan($before);
@@ -207,7 +206,6 @@ test('a shop\'s people see, use and copy the platform\'s ad, and nothing more â€
     $this->postJson("/builder/{$ad->id}/publish")->assertForbidden();
     $this->postJson("/builder/{$ad->id}/unpublish")->assertForbidden();
     $this->postJson("/builder/{$ad->id}/discard")->assertForbidden();
-    $this->postJson("/builder/{$ad->id}/in-playlists", ['in_playlists' => true])->assertForbidden();
     $this->deleteJson("/builder/{$ad->id}", ['password' => 'password'])
         ->assertForbidden()->assertJsonPath('message', 'An ad for every shop is the platform\'s: only the platform deletes it.');
 
@@ -247,10 +245,6 @@ test('above the stores the platform\'s ads are changed with Update Ads and delet
 
     expect($ad->fresh()->published_document['elements'][0]['text'])->toBe('Twenty percent off')
         ->and(ActivityLog::where('action', 'ad.updated')->sole()->store_id)->toBeNull();
-
-    // Its page plays only in the platform's channels: no tick opens it to a shop's playlist.
-    $this->postJson("/builder/{$ad->id}/in-playlists", ['in_playlists' => true])->assertStatus(422)
-        ->assertJsonValidationErrors(['in_playlists' => 'An ad for every shop plays only in the platform\'s channels. A shop copies it to put it on its playlists.']);
 
     // Taken off, it leaves every shop's Ads until it is published again.
     $this->postJson("/builder/{$ad->id}/unpublish")->assertOk()->assertJsonPath('message', 'Unpublished â€” it is a draft again. Shops no longer see it');

@@ -282,7 +282,7 @@ class NetworkAdBreakTest extends DuskTestCase
         ]];
         $ad = BuilderAd::create([
             'store_id' => $store->id, 'name' => 'Back from the break', 'orientation' => BuilderAd::LANDSCAPE,
-            'document' => $document, 'in_playlists' => true,
+            'document' => $document,
         ]);
         $page = app(AdPublisher::class)->publish($ad);
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->id, 'position' => 0, 'duration_seconds' => null]);

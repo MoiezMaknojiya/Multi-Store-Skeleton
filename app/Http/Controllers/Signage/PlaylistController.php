@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Signage;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
-use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Daypart;
@@ -64,11 +63,10 @@ class PlaylistController extends Controller
         $search = trim((string) ($validated['search'] ?? ''));
 
         // Never an Ad Builder page taken off the screens (unpublished): nobody picks one until it is published
-        // again — nor one its designer keeps for channels (owner's rule, 2026-09-22), nor any file a channel
-        // shows (owner's rule, 2026-09-26): either would play twice on a screen that also carries the channel.
+        // again — nor any file a channel shows, an ad included (owner's rule, 2026-09-26): it would play twice on a
+        // screen that also carries the channel. Publish alone decides the rest (owner, 2026-10-01).
         $media = Media::where('store_id', $screen->store_id)
             ->withoutDrafts()
-            ->withoutChannelOnly()
             ->inNoChannel()
             ->when($search !== '', fn (Builder $q) => $q->where('title', 'like', "%{$search}%"))
             ->orderByDesc('created_at')
@@ -159,7 +157,6 @@ class PlaylistController extends Controller
         $items = $validated['items'];
         $this->assertEachLineIsAFileOrAChannel($items);
         $this->assertMediaBelongsToTheSameStore($screen, $items);
-        $this->assertAdsMayBeOnAPlaylist($items);
         $this->assertFilesAreInNoChannel($items);
         $this->assertPicturesStayUpLongEnough($items);
         $this->assertChannelsAreAvailable($screen, $items);
@@ -367,30 +364,6 @@ class PlaylistController extends Controller
         if ($allowed !== $ids->count()) {
             throw ValidationException::withMessages([
                 'items' => 'One of those files is not in this store\'s library.',
-            ]);
-        }
-    }
-
-    /**
-     * An Ad Builder page its designer keeps for channels belongs on no playlist (owner's rule, 2026-09-22) —
-     * the picker never offers one, and this is the wall behind the picker. A line that is merely a DRAFT is
-     * left alone on purpose: it keeps its place and plays again from the next publish.
-     */
-    private function assertAdsMayBeOnAPlaylist(array $items): void
-    {
-        $ids = collect($items)->pluck('media_id')->reject(fn (int|string|null $id) => $id === null)->unique();
-
-        if ($ids->isEmpty()) {
-            return;
-        }
-
-        $channelOnly = BuilderAd::whereIn('media_id', $ids)->where('in_playlists', false)->orderBy('name')->pluck('name');
-
-        if ($channelOnly->isNotEmpty()) {
-            throw ValidationException::withMessages([
-                'items' => $channelOnly->count() === 1
-                    ? "The ad {$channelOnly->first()} is for channels only. Tick \"Show in playlists\" in the Ad Builder to put it on a screen."
-                    : 'These ads are for channels only: '.$channelOnly->join(', ').'. Tick "Show in playlists" in the Ad Builder to put one on a screen.',
             ]);
         }
     }

@@ -105,21 +105,6 @@ class Media extends Model
     }
 
     /**
-     * Without the Ad Builder pages their designer keeps for channels (owner's rule, 2026-09-22): the same ad
-     * inside a channel AND on the playlist that carries that channel plays twice in one pass. So a playlist's
-     * pickers — and the playlist itself — take only the ads whose "Show in playlists" is ticked, while a
-     * channel's pickers go on offering every published one. An uploaded picture or video has no such switch;
-     * what keeps any file, ticked ad included, off a playlist once a channel shows it is scopeInNoChannel().
-     */
-    public function scopeWithoutChannelOnly(Builder $query): Builder
-    {
-        return $query->whereNotExists(fn (QueryBuilder $design) => $design->selectRaw('1')
-            ->from('builder_ads')
-            ->whereColumn('builder_ads.media_id', 'media.id')
-            ->where('builder_ads.in_playlists', false));
-    }
-
-    /**
      * Without the files a channel shows (owner's rule, 2026-09-26: "agar koi bhi file channel k ander assign ha
      * toh woo playlist mein nahi dikhe warna woo 2 bar ho jayegi"): a file in a channel AND on the playlist that
      * carries that channel plays twice in one pass. So a file plays from playlists or from channels, never both:
@@ -265,11 +250,7 @@ class Media extends Model
             : "Still used by the channels {$listed}. Take it out of those channels first.";
     }
 
-    /**
-     * The screens whose playlist still carries this file, worded the same way — the refusal that stops an Ad
-     * Builder ad being turned back to channels only while a television is playing it from a playlist
-     * (BuilderController::showInPlaylists). Nothing is ever pulled off a screen behind somebody's back.
-     */
+    /** The screens whose playlist still carries this file, worded the same way — what keptOutOfChannelsMessage() says. */
     public function stillOnScreensMessage(): ?string
     {
         $names = Screen::whereIn('id', PlaylistItem::where('media_id', $this->id)->select('screen_id'))

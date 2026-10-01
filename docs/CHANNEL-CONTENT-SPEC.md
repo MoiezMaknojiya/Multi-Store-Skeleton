@@ -200,8 +200,8 @@ plays twice in one pass, so:
   (`PlaylistController::assertFilesAreInNoChannelUnderLock`, `ChannelAdController::refuseAFileAPlaylistHolds`).
 - Taken out of every channel — or off every playlist — a file is the other side's to choose again.
 - The holding picture is neither a playlist line nor a channel's ad and keeps its own list.
-- An Ad Builder ad ticked "Show in playlists" follows the same rule: while a channel shows it, the playlist's
-  picker leaves it out.
+- An Ad Builder ad follows the same rule as soon as it is published: while a channel shows it, the playlist's
+  picker leaves it out (the "Show in playlists" tick it once needed is gone since 2026-10-01).
 
 ## 8b. A channel's Upload is held to the library's limits (owner, 2026-09-28)
 

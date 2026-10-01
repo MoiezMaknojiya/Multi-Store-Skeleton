@@ -37,7 +37,7 @@ beforeEach(function () {
 /** A design with text on it, lasting $seconds, published through the endpoint. */
 function adLasting(int $seconds, string $name = 'Winter sale'): BuilderAd
 {
-    $ad = BuilderAd::factory()->withText($name)->create(['store_id' => test()->store->id, 'name' => $name, 'in_playlists' => true]);
+    $ad = BuilderAd::factory()->withText($name)->create(['store_id' => test()->store->id, 'name' => $name]);
     $ad->update(['document' => [...$ad->document, 'duration' => $seconds]]);
     test()->postJson("/builder/{$ad->id}/publish")->assertOk();
 
@@ -198,7 +198,7 @@ test("builder:recompile writes the published version's length, never the draft's
 
 test("a design made before designs had a length keeps each line's seconds, published again or not, until it is given one", function () {
     // The brute-force round, 2026-09-29: a typo fixed and published re-timed a 15 s ad to 6 on every screen.
-    $ad = BuilderAd::factory()->withText('Old sale')->create(['store_id' => $this->store->id, 'name' => 'Old sale', 'in_playlists' => true]);
+    $ad = BuilderAd::factory()->withText('Old sale')->create(['store_id' => $this->store->id, 'name' => 'Old sale']);
     $earlier = collect($ad->document)->except('duration')->all();
     BuilderAd::withoutTimestamps(fn () => $ad->forceFill(['document' => $earlier])->save());
 

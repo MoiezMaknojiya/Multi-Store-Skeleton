@@ -84,7 +84,6 @@ builder_ads
   published_document json|null  -- the design as last published: changes are measured against it, and
   published_name  string|null   --   Discard changes goes back to it (NULL for an ad published before 2026-09-21
                                 --   and changed since — kept again at its next Publish)
-  in_playlists    bool (false)  -- may a shop's own playlist play it, or is it for channels only (§9)?
   created_by, updated_by → users (nullOnDelete)
   timestamps, index (store_id, updated_at)
 
@@ -179,7 +178,6 @@ Inside the `['auth', 'throttle:admin']` group, sidebar group **Ad Builder** (gat
 | POST | `/builder/{ad}/publish` | `builder.publish` | `ad-update` |
 | POST | `/builder/{ad}/unpublish` | `builder.unpublish` | `ad-update` |
 | POST | `/builder/{ad}/discard` | `builder.discard` | `ad-update` |
-| POST | `/builder/{ad}/in-playlists` | `builder.in-playlists` | `ad-update` |
 | GET | `/builder/{ad}/preview` | `builder.preview` | `ad-view` or `ad-update` (in the controller) |
 | DELETE | `/builder/{ad}` | `builder.destroy` | `ad-destroy` (password) |
 | GET | `/builder/assets/data` | `builder.assets.data` | `ad-view` |
@@ -460,20 +458,15 @@ rewrite what is already there and are not asked.
     place — the panel draws the line faded, "Draft — not playing until it is published in the Ad Builder", the
     channel's ad reads "Draft · not playing" — and the next Publish, which refreshes the same row, brings it back
     everywhere at once. One confirmation, no password: it deletes nothing.
-  - **Where an ad may play — "Show in playlists"** (`builder_ads.in_playlists`, owner's rule, 2026-09-22: "agar
-    woh same ad channel mein hui aur playlist mein toh masla hoga"). An ad inside a channel AND on the playlist
-    that carries that channel plays twice in one pass, so **an ad is for channels only until it is ticked**: a
-    new ad starts unticked, and publishing does not change that (every ad published before the tick existed was
-    ticked by its migration — nothing came off a television). Ticked, it joins the shop's own pickers — the
-    playlist's (`PlaylistController::availableMedia`) and the holding picture's (`ScreenController::mediaOptions`),
-    both through `Media::scopeWithoutChannelOnly` — and the walls behind them let it through
-    (`PlaylistController::assertAdsMayBeOnAPlaylist`, `ScreenController::assertMayPlayByItself`; 422 naming the ad
-    otherwise). A channel's pickers never narrow: every published ad is offered there, ticked or not. The tick
-    itself is `POST /builder/{ad}/in-playlists` (Update Ads), **refused while a screen still carries the ad**,
-    naming the screens (`Media::stillOnScreensMessage`) — nothing is pulled off a television behind somebody's
-    back — and it is not a change to the design (written without touching `updated_at`, like a poster). It lives
-    in the editor's Publish ▾ menu; the listing shows it beside the status badge as **Playlists** or **Channels
-    only** (a draft shows neither). `builder:examples` ticks the examples it publishes: they exist to be played.
+  - **Where an ad may be chosen — Publish alone decides** (owner, 2026-10-01: "agar publish honga toh hi content
+    library aur channel mein show honga warna nahi honga, aur channel mein add ha toh content library mein show
+    naah ho usko"). A published ad is offered to the shop's own pickers — the playlist's
+    (`PlaylistController::availableMedia`, the Content library) and the holding picture's
+    (`ScreenController::mediaOptions`) — and to a channel's alike; a draft to none. The rule every file follows
+    (2026-09-26: a file plays from playlists or from channels, never both) keeps an ad a channel shows off the
+    playlist's picker and one a playlist holds off the channel's, which is what the "Show in playlists" tick of
+    2026-09-22 (`builder_ads.in_playlists`) was for; so the tick, its endpoint and its column went (migration
+    `2026_10_01_130000`, whose `down()` ticks every ad published by then).
   - **The editor's bar** says where the ad stands — "Published", "Changes not published", "Draft · not on screens"
     (the whole sentence in its tooltip) — and the Publish button says what it will do: Publish, **Publish
     changes**, Publish again. Its ▾ holds Discard changes and Unpublish, each confirmed. The listing's badge
@@ -704,7 +697,7 @@ portrait poster is 360 × 640; the Ads page keeps its 16:9 tiles and draws a por
 
 **Not changed.** The device manifest (the page fits itself, so `{type: 'html', url, checksum}` is still all a
 television needs), schedules, channels (a channel plays on any screen; its ads say their orientation in the
-pickers), the store wall, the draft/publish model and "Show in playlists".
+pickers), the store wall and the draft/publish model.
 
 ---
 
@@ -1076,3 +1069,19 @@ permission hata do aur update shared ad ki bhi."
 - Refusals say why: "An ad for every shop is the platform's: copy it to change it.", "… only the platform deletes it.",
   "A file shared with every shop is the platform's: only the platform deletes it." The routes are back on `ad-update`
   and `ad-destroy`; the either-permission gates are gone.
+
+## Addendum — 2026-10-01, evening: Publish alone decides where an ad may be chosen
+
+The owner: "agar publish honga toh hi content library aur channel mein show honga warna nahi honga, aur channel mein
+add ha toh content library mein show naah ho usko. Yeh tick wala kaam shayad hat jayega."
+
+- A published ad is offered to a screen's Content library, its holding picture and a channel's picker alike; a draft
+  to none. The rule every file follows since 2026-09-26 — a file plays from playlists or from channels, never both —
+  keeps an ad a channel shows out of the Content library and one a playlist holds out of the channel's picker.
+- So the "Show in playlists" tick of 2026-09-22 is gone: its column (`builder_ads.in_playlists`, migration
+  `2026_10_01_130000`), its endpoint (`POST /builder/{ad}/in-playlists`), the Publish menu's checkbox, the gallery's
+  Playlists / Channels only pill, `Media::scopeWithoutChannelOnly`, `PlaylistController::assertAdsMayBeOnAPlaylist` and
+  `ScreenController::assertMayPlayByItself`. `builder:examples` no longer ticks what it publishes. The migration's
+  `down()` ticks every ad published by then, so going back takes nothing off any picker or screen.
+- Tests: `AdPlaylistUseTest` now holds the new rule (draft nowhere, published in both pickers, the channel rule both
+  ways, no tick left), `AdPlaylistUseMigrationTest` the migration both ways.

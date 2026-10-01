@@ -488,21 +488,9 @@ class AdBuilderFlowTest extends DuskTestCase
 
             $this->assertSame($media->id, $ad->fresh()->media_id, 'the ad now has a copy in the library');
 
-            /* ── 4. A published ad is for channels only until it is ticked ─ */
-            // Owner's rule, 2026-09-22: the same ad in a channel and on the playlist carrying that channel
-            // would play twice in one pass, so the shop's own picker does not offer one until "Show in
-            // playlists" is ticked, beside Publish.
-            $panel->visit('/screens/'.$screen->id);
-            $this->waitForAlpine($panel);
-            $panel->waitFor('@media-picker')->assertMissing('@playlist-add-'.$media->id);
-
-            $panel->visit('/builder/'.$ad->id);
-            $this->waitForAlpine($panel);
-            $this->clickAndAwait($panel, '@ad-publish-menu', fn (Browser $b) => $b->waitFor('@ad-in-playlists', 3));
-            $this->jsClick($panel, '@ad-in-playlists');
-            $panel->waitUsing(15, 250, fn () => (bool) $ad->fresh()->in_playlists);
-
-            /* ── 5. Put it on the screen, like any other file ───────────── */
+            /* ── 4. Published, it is in the screen's Content library at once, like any other file ── */
+            // Owner, 2026-10-01: publishing alone puts an ad in the Content library and in the channels' pickers —
+            // there is no tick — and a channel showing it would keep it off the playlist (2026-09-26).
             $panel->visit('/screens/'.$screen->id);
             $this->waitForAlpine($panel);
             $panel->waitForText('Winter sale');          // the picker lists the published ad

@@ -75,7 +75,7 @@ class AdLengthOnScreenTest extends DuskTestCase
             ]];
             $ad = BuilderAd::create([
                 'store_id' => $store->id, 'name' => 'Eight seconds', 'orientation' => BuilderAd::LANDSCAPE,
-                'document' => $document, 'in_playlists' => true, 'created_by' => $owner->id,
+                'document' => $document, 'created_by' => $owner->id,
             ]);
 
             // The editor says the length in its Stage panel, and Publish takes it along.

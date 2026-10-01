@@ -68,8 +68,8 @@ test("the playlist's picker leaves out every file a channel shows, and offers it
     expect(offeredIn($this, $picker))->toEqualCanonicalizing([$free->id, $inOwnChannel->id]);
 });
 
-test('an Ad Builder ad a channel shows stays off the playlist, "Show in playlists" or not', function () {
-    $ad = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id, 'in_playlists' => true]);
+test('an Ad Builder ad a channel shows stays off the playlist like any other file', function () {
+    $ad = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id]);
     $picker = "/screens/{$this->screen->id}/available-media";
 
     expect(offeredIn($this, $picker))->toContain($ad->media_id);

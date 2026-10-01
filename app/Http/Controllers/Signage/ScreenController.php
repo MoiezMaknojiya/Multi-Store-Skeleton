@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Signage;
 use App\Http\Controllers\Concerns\HandlesCrudData;
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
-use App\Models\BuilderAd;
 use App\Models\Daypart;
 use App\Models\Media;
 use App\Models\ScheduleRule;
@@ -93,11 +92,9 @@ class ScreenController extends Controller
         $validated = $request->validate(['search' => ['nullable', 'string', 'max:255']]);
         $search = trim((string) ($validated['search'] ?? ''));
 
-        // Never an Ad Builder page taken off the screens (unpublished), nor one kept for channels only: a
-        // holding picture is this screen playing the ad by itself, exactly what that tick refuses.
+        // Never an Ad Builder page taken off the screens (unpublished): it plays nowhere until it is published again.
         $media = Media::where('store_id', $screen->store_id)
             ->withoutDrafts()
-            ->withoutChannelOnly()
             ->when($search !== '', fn (Builder $q) => $q->where('title', 'like', "%{$search}%"))
             ->orderBy('title')
             ->limit(100)
@@ -232,7 +229,6 @@ class ScreenController extends Controller
         // through the store wall before it is trusted.
         $this->assertBelongsToSameStore($screen, $validated['default_media_id'] ?? null,
             'default_media_id', 'That file is not in this store\'s library.');
-        $this->assertMayPlayByItself($validated['default_media_id'] ?? null);
 
         $screen->update($validated);
 
@@ -258,26 +254,6 @@ class ScreenController extends Controller
 
         if (! Media::where('id', $id)->where('store_id', $screen->store_id)->exists()) {
             throw ValidationException::withMessages([$field => $message]);
-        }
-    }
-
-    /**
-     * A holding picture is this screen playing a file by itself, so an Ad Builder page kept for channels
-     * belongs here no more than on a playlist (owner's rule, 2026-09-22). The picker already leaves it out;
-     * this is the wall behind it, for a foreign key posted by hand.
-     */
-    private function assertMayPlayByItself(?int $id): void
-    {
-        if ($id === null) {
-            return;
-        }
-
-        $ad = BuilderAd::where('media_id', $id)->where('in_playlists', false)->first();
-
-        if ($ad !== null) {
-            throw ValidationException::withMessages([
-                'default_media_id' => "The ad {$ad->name} is for channels only. Tick \"Show in playlists\" in the Ad Builder to put it on a screen.",
-            ]);
         }
     }
 

@@ -76,8 +76,6 @@ function changedDesign(BuilderAd $ad, string $text): array
 test('a changed published ad keeps its published version on its screens until the changes are published', function (string $from) {
     $ad = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $this->store->id, 'name' => 'Winter sale']);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
-    // A published ad is for channels only until it is opened to the shop's own playlists (2026-09-22).
-    $this->postJson("/builder/{$ad->id}/in-playlists", ['in_playlists' => true])->assertOk();
     $page = Media::sole();
 
     // It plays from a playlist line or from a channel's ad — never both, or it would play twice (2026-09-26).
@@ -175,7 +173,6 @@ test('there is nothing to discard on an ad never published, up to date, or publi
 test('unpublishing takes the page off its screens, channel, pickers and library — and publishing brings it back', function (string $from) {
     $ad = BuilderAd::factory()->withText('Winter sale')->create(['store_id' => $this->store->id, 'name' => 'Winter sale']);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
-    $this->postJson("/builder/{$ad->id}/in-playlists", ['in_playlists' => true])->assertOk();
     $page = Media::sole();
 
     // On a screen from a playlist line, or from a channel the screen carries — never both, or it would play
@@ -259,7 +256,7 @@ test('unpublishing takes the page off its screens, channel, pickers and library 
 
 test('a page on a line AND in a channel — as a playlist could hold before 2026-09-26 — is counted in both', function () {
     $ad = BuilderAd::factory()->withText('Winter sale')->published()->create([
-        'store_id' => $this->store->id, 'name' => 'Winter sale', 'in_playlists' => true,
+        'store_id' => $this->store->id, 'name' => 'Winter sale',
     ]);
     $screen = Screen::factory()->create(['store_id' => $this->store->id]);
     $channel = Channel::factory()->create(['store_id' => $this->store->id, 'name' => 'Deals']);

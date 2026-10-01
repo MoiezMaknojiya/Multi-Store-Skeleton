@@ -76,7 +76,7 @@ class BuilderAd extends Model
 
     protected $fillable = [
         'store_id', 'name', 'orientation', 'document', 'thumbnail_path', 'media_id', 'published_at',
-        'in_playlists', 'created_by', 'updated_by',
+        'created_by', 'updated_by',
     ];
 
     /** A row made before the column existed, or a model not yet saved, is landscape. */
@@ -92,10 +92,6 @@ class BuilderAd extends Model
             'document' => 'array',
             'published_at' => 'datetime',
             'published_document' => 'array',
-            // May a shop's own playlist play this ad, or is it for channels only (owner's rule, 2026-09-22)?
-            // Off until somebody ticks it, so an ad written for a channel cannot also be added to the
-            // playlist that carries that channel and play twice in one pass.
-            'in_playlists' => 'boolean',
         ];
     }
 

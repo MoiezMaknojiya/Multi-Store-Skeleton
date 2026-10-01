@@ -374,53 +374,6 @@ class BuilderController extends Controller
         ]);
     }
 
-    /**
-     * "Show in playlists" (owner's rule, 2026-09-22): may a shop's own playlist play this ad, or is it for
-     * channels only? An ad written for a channel, added to the playlist that also carries that channel,
-     * plays twice in one pass — so an ad starts channel-only and this is the tick that opens it to playlists.
-     *
-     * Taking the tick off is refused while a screen still carries the ad, naming the screens: nothing is
-     * ever pulled off a television behind somebody's back (the same refusal a file in a channel gets).
-     */
-    public function showInPlaylists(Request $request, BuilderAd $ad): JsonResponse
-    {
-        $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
-        $this->authorizeChange($ad);
-
-        $validated = $request->validate(['in_playlists' => ['required', 'boolean']]);
-        $wanted = (bool) $validated['in_playlists'];
-
-        // Its page is in the platform's library, which no shop's playlist reaches: a shop plays it from its own copy.
-        if ($ad->isShared()) {
-            throw ValidationException::withMessages([
-                'in_playlists' => 'An ad for every shop plays only in the platform\'s channels. A shop copies it to put it on its playlists.',
-            ]);
-        }
-
-        if (! $wanted && ($stillPlaying = $ad->media?->stillOnScreensMessage()) !== null) {
-            throw ValidationException::withMessages(['in_playlists' => $stillPlaying]);
-        }
-
-        // A tick is not a change to the design: it must not move updated_at, which would read as changes the
-        // screens do not show yet (BuilderAd::hasUnpublishedChanges() — the same reason a poster does not).
-        BuilderAd::withoutTimestamps(fn () => $ad->update(['in_playlists' => $wanted]));
-
-        ActivityLog::record(
-            'ad.playlists_changed',
-            $ad,
-            $wanted
-                ? "Ad {$ad->name} may now be played from a playlist"
-                : "Ad {$ad->name} is now for channels only"
-        );
-
-        return response()->json([
-            'message' => $wanted
-                ? 'Playlists can use this ad now'
-                : 'Channels only — a playlist cannot pick this ad',
-            'ad' => $this->summary($ad->fresh()),
-        ]);
-    }
-
     /** Discard changes: back to the version the screens show (AdPublisher::discardChanges). */
     public function discard(BuilderAd $ad, AdPublisher $publisher): JsonResponse
     {
@@ -584,9 +537,6 @@ class BuilderController extends Controller
             // draft | published | changed — changed: on the screens, with saved changes they do not show yet.
             'status' => $ad->status(),
             'has_published_version' => $ad->hasPublishedVersion(),
-
-            // May a shop's own playlist play it, or is it for channels only (showInPlaylists)?
-            'in_playlists' => (bool) $ad->in_playlists,
             // Made for every shop, by the platform (owner, 2026-10-01)?
             'shared' => $ad->isShared(),
             'updated_at' => $ad->updated_at?->toIso8601String(),

@@ -92,8 +92,8 @@ test('a video is not held to it: a three-second clip plays its three seconds', f
 });
 
 test('an ad page with a length of its own is not asked; one published before lengths is timed like a picture', function () {
-    $ad = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id, 'name' => 'Sale', 'in_playlists' => true]);
-    $earlier = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id, 'name' => 'Old sale', 'in_playlists' => true]);
+    $ad = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id, 'name' => 'Sale']);
+    $earlier = BuilderAd::factory()->withText()->published()->create(['store_id' => $this->store->id, 'name' => 'Old sale']);
     $earlier->media->update(['duration_seconds' => null]);
 
     putLines([['media_id' => $ad->media_id, 'duration_seconds' => 3]])->assertOk();

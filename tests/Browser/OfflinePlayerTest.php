@@ -301,7 +301,7 @@ class OfflinePlayerTest extends DuskTestCase
                 'style' => ['fontSize' => 96, 'color' => '#ffffff'], 'animations' => ['in' => ['effect' => 'fade', 'duration' => 0.5]]],
         ];
 
-        $ad = BuilderAd::factory()->create(['store_id' => $store->id, 'name' => 'Open all weekend', 'document' => $document, 'in_playlists' => true]);
+        $ad = BuilderAd::factory()->create(['store_id' => $store->id, 'name' => 'Open all weekend', 'document' => $document]);
 
         $diskUrl = config('filesystems.disks.public.url');
         URL::forceRootUrl(self::LINE_ORIGIN);
