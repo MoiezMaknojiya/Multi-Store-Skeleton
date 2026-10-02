@@ -2,8 +2,8 @@
 
 namespace Tests\Browser;
 
-use App\Models\Role;
 use App\Models\Organization;
+use App\Models\Role;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
 use Laravel\Dusk\Browser;

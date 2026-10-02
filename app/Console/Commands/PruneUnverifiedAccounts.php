@@ -23,7 +23,7 @@ class PruneUnverifiedAccounts extends Command
     protected $description = 'Remove accounts never confirmed within '.User::UNVERIFIED_DAYS.' days, with the empty organizations they made';
 
     /** What an organization may hold, table by table (each with an organization_id): an organization holding any of it is not empty. */
-    private const WHAT_AN_ORGANIZATION_HOLDS = ['media', 'screens', 'dayparts', 'channels', 'builder_ads', 'builder_assets', 'invitations', 'roles'];
+    private const WHAT_AN_ORGANIZATION_HOLDS = ['media', 'screens', 'channels', 'builder_ads', 'builder_assets', 'invitations', 'roles'];
 
     public function handle(): int
     {

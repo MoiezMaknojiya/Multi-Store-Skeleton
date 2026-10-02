@@ -4,7 +4,6 @@ namespace Tests\Browser;
 
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
-use App\Models\Daypart;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\PlaylistItem;
@@ -424,9 +423,7 @@ class OfflinePlayerTest extends DuskTestCase
     /** A line's rule that plays it only between two clock times of its screen's day. */
     private function playOnlyBetween(PlaylistItem $line, string $start, string $end): void
     {
-        $daypart = Daypart::factory()->between($start, $end)->create(['organization_id' => Screen::whereKey($line->screen_id)->value('organization_id')]);
-
-        $line->scheduleRules()->create(['daypart_id' => $daypart->id]);
+        $line->scheduleRules()->create(['start_time' => $start, 'end_time' => $end]);
     }
 
     /**
@@ -438,7 +435,7 @@ class OfflinePlayerTest extends DuskTestCase
         return now('UTC')->hour >= 2 && now('UTC')->hour <= 21 ? 'UTC' : 'Asia/Tokyo';
     }
 
-    /** The first whole minute at least $seconds from now, on that timezone's clock: a daypart is said in minutes. */
+    /** The first whole minute at least $seconds from now, on that timezone's clock: a schedule's hours are said in minutes. */
     private function wholeMinuteAfter(string $timezone, int $seconds): CarbonImmutable
     {
         return CarbonImmutable::now($timezone)->addSeconds($seconds)->startOfMinute()->addMinute();

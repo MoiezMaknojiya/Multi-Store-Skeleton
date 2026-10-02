@@ -27,7 +27,7 @@ beforeEach(function () {
     $this->organization = Organization::factory()->create(['name' => 'Alpha Mart']);
     $this->keeper = createOrganizationUser($this->organization, [
         'screen-view', 'screen-playlist', 'media-view', 'media-store', 'channel-view', 'channel-store', 'channel-update',
-        'ad-view', 'ad-store', 'ad-update', 'daypart-view', 'daypart-store',
+        'ad-view', 'ad-store', 'ad-update',
     ], 'Keeper');
     $this->actingAs($this->keeper)->withSession(['current_organization_id' => $this->organization->id]);
 });
@@ -119,12 +119,21 @@ test("an ad's length is refused in the editor's words", function (mixed $seconds
     'under six' => [5, 'An ad stays on screen for at least 6 seconds.'],
 ]);
 
-test('a daypart\'s other hours are refused in the words the row points to', function () {
-    $this->postJson('/dayparts', [
-        'name' => 'Lunch', 'start_time' => '11:00', 'end_time' => '15:00',
-        'exceptions' => [['weekday' => 5, 'start_time' => '12:00', 'end_time' => null]],
-    ])->assertStatus(422)->assertJsonValidationErrors(['exceptions.0.end_time' => 'Give both a start and an end time, or choose "is closed".']);
-});
+test('a schedule\'s hours are refused in the words its window says', function (array $times, string $field, string $words) {
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
+    $file = Media::factory()->create(['organization_id' => $this->organization->id]);
+    $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
+
+    $this->putJson("/screens/{$screen->id}/playlist", [
+        'version' => $version,
+        'items' => [['media_id' => $file->id, 'duration_seconds' => 10, 'rules' => [$times]]],
+    ])->assertStatus(422)->assertJsonValidationErrors(["items.0.rules.0.{$field}" => $words]);
+})->with([
+    'a start with no end' => [['start_time' => '11:00'], 'end_time', 'Time: give both a start and an end, or choose All day.'],
+    'an end with no start' => [['end_time' => '15:00'], 'start_time', 'Time: give both a start and an end, or choose All day.'],
+    'the same time twice' => [['start_time' => '11:00', 'end_time' => '11:00'], 'end_time', 'Time: the start and the end cannot be the same. To run past midnight, set an end earlier than the start.'],
+    'a time typed in part' => [['start_time' => '11', 'end_time' => '15:00'], 'start_time', 'Time: enter the whole time, or choose All day.'],
+]);
 
 test('an upload is refused in the words its form shows', function () {
     $this->postJson('/media', ['file' => UploadedFile::fake()->image('menu.jpg'), 'title' => str_repeat('a', 256)])

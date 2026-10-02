@@ -5,7 +5,6 @@ use App\Models\BuilderAsset;
 use App\Models\Campaign;
 use App\Models\Channel;
 use App\Models\ChannelAd;
-use App\Models\Daypart;
 use App\Models\Invitation;
 use App\Models\Media;
 use App\Models\Organization;
@@ -68,7 +67,6 @@ function sweepFixtures(): array
     $media = Media::factory()->create(['organization_id' => $organization->id]);
     // A line on the playlist, so the playlist routes have something to read, copy and preview.
     PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $media->id, 'position' => 0, 'duration_seconds' => 10]);
-    $daypart = Daypart::factory()->create(['organization_id' => $organization->id]);
     $channel = Channel::factory()->create(['organization_id' => $organization->id]);
     $channelAd = ChannelAd::factory()->create(['channel_id' => $channel->id]);
     $design = BuilderAd::factory()->withText()->create(['organization_id' => $organization->id]);
@@ -103,7 +101,6 @@ function sweepFixtures(): array
             'invitation' => $invitation->id,
             'screen' => $screen->id,
             'media' => $media->id,
-            'daypart' => $daypart->id,
             'channel' => $channel->id,
             // An ad inside a channel, and a design in the Ad Builder.
             'ad' => ['channels' => $channelAd->id, 'builder' => $design->id],
@@ -206,7 +203,7 @@ function sweepCounts(): array
 {
     return collect([
         'organizations', 'users', 'organization_user', 'roles', 'role_has_permissions', 'permissions', 'invitations',
-        'screens', 'playlist_items', 'media', 'dayparts', 'channels', 'channel_ads', 'campaigns',
+        'screens', 'playlist_items', 'schedule_rules', 'media', 'channels', 'channel_ads', 'campaigns',
         'builder_ads', 'builder_assets', 'builder_fonts', 'uploads',
     ])->mapWithKeys(fn (string $table) => [$table => DB::table($table)->count()])->all();
 }
@@ -357,8 +354,8 @@ test('no write endpoint answers with a server error, however misshapen the body'
         'name', 'title', 'label', 'description', 'email', 'search', 'password', 'password_confirmation',
         'current_password', 'confirm_name', 'first_name', 'last_name', 'phone', 'role_id', 'organization_id',
         'organization_ids', 'media_id', 'channel_id', 'screen_id', 'screen_ids', 'target_screen_ids', 'default_media_id',
-        'daypart_id', 'ad_ids', 'permissions', 'items', 'rules', 'exceptions', 'version', 'code', 'mode',
-        'device_uuid', 'poll_secret', 'per_page', 'page', 'sort', 'from', 'to', 'type', 'is_active', 'is_retired',
+        'ad_ids', 'permissions', 'items', 'rules', 'version', 'code', 'mode',
+        'device_uuid', 'poll_secret', 'per_page', 'page', 'sort', 'from', 'to', 'type', 'is_active',
         'accepts', 'accepts_network_ads', 'timezone', 'orientation', 'start_time', 'end_time', 'duration_seconds',
         'expires_at', 'starts_at', 'starts_on', 'ends_on', 'days', 'ads_per_pass', 'seconds', 'advertiser_name',
         'street', 'suite', 'city', 'state', 'zip_code', 'country', 'owner_email',

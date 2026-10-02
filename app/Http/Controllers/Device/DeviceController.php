@@ -24,7 +24,7 @@ class DeviceController extends Controller
 {
     /**
      * How far ahead a manifest says what the screen should show (docs/AD-BUILDER-SPEC.md §15): a weekend
-     * with the organization's line down still follows its dayparts; after that, the last answer plays on.
+     * with the organization's line down still follows its schedules; after that, the last answer plays on.
      */
     public const TIMELINE_HOURS = 72;
 
@@ -121,7 +121,7 @@ class DeviceController extends Controller
                 'items' => $adBreak->map(fn (Campaign $campaign) => $this->campaignItem($campaign))->values()->all(),
             ],
             // What this screen should show at every moment its answer changes over the next few days, so a
-            // television whose line drops keeps following its dayparts and dates from memory (§15) — and so
+            // television whose line drops keeps following its hours and dates from memory (§15) — and so
             // it knows every file those days may play, to hold before the line goes, and nothing further off:
             // a file outside its window never reaches the device. Moved by none of the version: it is a change
             // to what plays NOW that must.
@@ -157,7 +157,7 @@ class DeviceController extends Controller
 
     /**
      * The next TIMELINE_HOURS of this screen, from memory's point of view (docs/AD-BUILDER-SPEC.md §15):
-     * the answer at now and at every moment it can change after — a daypart opening or closing, a new day,
+     * the answer at now and at every moment it can change after — a schedule's hours opening or closing, a new day,
      * a file starting or expiring, a campaign's window — each only when it differs from the one before.
      *
      * Entries name their items by key into one `lines` map, so the same line is sent once however many

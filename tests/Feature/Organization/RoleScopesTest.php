@@ -2,9 +2,9 @@
 
 use App\Models\ActivityLog;
 use App\Models\Invitation;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
-use App\Models\Organization;
 use App\Models\User;
 
 /*

@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Signage;
 use App\Http\Controllers\Concerns\HandlesCrudData;
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
-use App\Models\Daypart;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\ScheduleRule;
@@ -114,10 +113,7 @@ class ScreenController extends Controller
         return view('screens.show', [
             'screen' => $screen,
             'orientations' => Screen::ORIENTATIONS,
-            // The schedule editor picks a window from these; "New daypart" on the
-            // Dayparts page is the way to add one.
-            'dayparts' => $this->daypartOptions($screen),
-            'weekdays' => Daypart::WEEKDAYS,
+            'weekdays' => ScheduleRule::WEEKDAYS,
             'recurrenceTypes' => ScheduleRule::TYPES,
             'ordinals' => ScheduleRule::ORDINALS,
         ]);
@@ -255,46 +251,6 @@ class ScreenController extends Controller
         if (! Media::where('id', $id)->where('organization_id', $screen->organization_id)->exists()) {
             throw ValidationException::withMessages([$field => $message]);
         }
-    }
-
-    /**
-     * The dayparts a rule on this screen may name: the live ones of the SCREEN's organization — never another
-     * organization's, even for the platform team, who can see them all (the playlist would refuse one anyway) —
-     * plus any retired one a rule here still uses, marked `retired`. A retired daypart keeps working for
-     * the rules that had it; left out of this list, such a rule read "All day" on the page.
-     *
-     * The times go out as stored — 24-hour "HH:MM" — and the browser turns them into
-     * AM/PM. Building the label here too would mean two places that decide how a clock
-     * reads, and one of them would eventually drift.
-     *
-     * @return list<array{id: int, name: string, start_time: string, end_time: string, retired: bool}>
-     */
-    /** The same list as JSON, for the playlist page to read again (screens.daypart-options). */
-    public function daypartOptionsFor(Screen $screen): JsonResponse
-    {
-        $screen = Screen::visibleTo(auth()->user())->findOrFail($screen->id);
-
-        return response()->json(['dayparts' => $this->daypartOptions($screen)]);
-    }
-
-    private function daypartOptions(Screen $screen): array
-    {
-        $used = ScheduleRule::whereIn('playlist_item_id', $screen->playlistItems()->select('id'))
-            ->whereNotNull('daypart_id')
-            ->select('daypart_id');
-
-        return Daypart::visibleTo(auth()->user())
-            ->where('organization_id', $screen->organization_id)
-            ->where(fn (Builder $query) => $query->where('is_retired', false)->orWhereIn('id', $used))
-            ->orderBy('name')
-            ->get(['id', 'name', 'start_time', 'end_time', 'is_retired'])
-            ->map(fn (Daypart $daypart) => [
-                'id' => $daypart->id,
-                'name' => $daypart->name,
-                'start_time' => $daypart->start_time,
-                'end_time' => $daypart->end_time,
-                'retired' => $daypart->is_retired,
-            ])->all();
     }
 
     /** Every timezone this server knows, so a screen can be told where it stands. */

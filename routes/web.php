@@ -20,7 +20,6 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\Signage\ChannelAdController;
 use App\Http\Controllers\Signage\ChannelController;
-use App\Http\Controllers\Signage\DaypartController;
 use App\Http\Controllers\Signage\MediaController;
 use App\Http\Controllers\Signage\PlaylistController;
 use App\Http\Controllers\Signage\ScreenController;
@@ -217,9 +216,6 @@ Route::middleware(['auth', 'verified', 'organization.active', 'throttle:admin'])
         // another organization's. Gated by the playlist permission alone for the same reason as
         // the media picker above
         Route::get('/{screen}/available-channels', [PlaylistController::class, 'availableChannels'])->middleware('can:screen-playlist')->name('screens.available-channels');
-        // The dayparts a schedule may name, read again when the page comes back into view — so a daypart made
-        // in another tab ("New daypart") is there without losing the playlist's unsaved changes
-        Route::get('/{screen}/daypart-options', [ScreenController::class, 'daypartOptionsFor'])->middleware('can:screen-playlist')->name('screens.daypart-options');
         // The default-media picker's options, gated by the screen permission that
         // needs them for the same reason
         Route::get('/{screen}/media-options', [ScreenController::class, 'mediaOptions'])->middleware('can:screen-update')->name('screens.media-options');
@@ -314,22 +310,6 @@ Route::middleware(['auth', 'verified', 'organization.active', 'throttle:admin'])
         // multipart bodies on PUT (the same as campaigns)
         Route::post('/{channel}/ads/{ad}', [ChannelAdController::class, 'update'])->whereNumber(['channel', 'ad'])->scopeBindings()->middleware('can:channel-update')->name('channels.ads.update');
         Route::delete('/{channel}/ads/{ad}', [ChannelAdController::class, 'destroy'])->whereNumber(['channel', 'ad'])->scopeBindings()->middleware('can:channel-update')->name('channels.ads.destroy');
-    });
-
-    // -------------------------------------------------------------------
-    // Dayparts  (named windows of time, reused by the schedule rules on playlists)
-    // -------------------------------------------------------------------
-    Route::prefix('dayparts')->group(function () {
-        // Show Dayparts Page
-        Route::get('/', [DaypartController::class, 'index'])->middleware('can:daypart-view')->name('dayparts.view');
-        // Get Paginated Dayparts Data (AJAX)
-        Route::get('/data', [DaypartController::class, 'data'])->middleware('can:daypart-view')->name('dayparts.data');
-        // Create A New Daypart (with its exceptions)
-        Route::post('/', [DaypartController::class, 'store'])->middleware('can:daypart-store')->name('dayparts.store');
-        // Rename / Re-time / Retire
-        Route::put('/{daypart}', [DaypartController::class, 'update'])->middleware('can:daypart-update')->name('dayparts.update');
-        // Delete A Daypart
-        Route::delete('/{daypart}', [DaypartController::class, 'destroy'])->middleware('can:daypart-destroy')->name('dayparts.destroy');
     });
 
     // -------------------------------------------------------------------

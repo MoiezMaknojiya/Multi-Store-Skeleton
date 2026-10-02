@@ -4,7 +4,6 @@ use App\Http\Controllers\Device\DeviceController;
 use App\Models\Campaign;
 use App\Models\Channel;
 use App\Models\ChannelAd;
-use App\Models\Daypart;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\PlaylistItem;
@@ -27,8 +26,9 @@ use Illuminate\Support\Carbon;
 beforeEach(function () {
     $this->organization = Organization::factory()->create();
     $this->screen = Screen::factory()->withToken('tok')->create(['organization_id' => $this->organization->id, 'timezone' => 'America/Chicago']);
-    $this->breakfast = Daypart::factory()->between('06:00', '11:00')->create(['organization_id' => $this->organization->id, 'name' => 'Breakfast']);
-    $this->lunch = Daypart::factory()->between('11:30', '15:00')->create(['organization_id' => $this->organization->id, 'name' => 'Lunch']);
+    // The hours a line keeps, as its rule says them.
+    $this->breakfast = ['start_time' => '06:00', 'end_time' => '11:00'];
+    $this->lunch = ['start_time' => '11:30', 'end_time' => '15:00'];
 });
 
 afterEach(fn () => Carbon::setTestNow());
@@ -42,13 +42,13 @@ function localNow(string $moment): CarbonImmutable
     return $at;
 }
 
-function scheduledPicture(Organization $organization, Screen $screen, string $title, int $position, ?Daypart $daypart = null, array $media = []): Media
+function scheduledPicture(Organization $organization, Screen $screen, string $title, int $position, ?array $rule = null, array $media = []): Media
 {
     $picture = Media::factory()->create(['organization_id' => $organization->id, 'title' => $title, 'type' => Media::TYPE_IMAGE, ...$media]);
     $line = PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $picture->id, 'position' => $position, 'duration_seconds' => 10]);
 
-    if ($daypart) {
-        $line->scheduleRules()->create(['daypart_id' => $daypart->id, 'position' => 0]);
+    if ($rule) {
+        $line->scheduleRules()->create([...$rule, 'position' => 0]);
     }
 
     return $picture;
@@ -67,7 +67,7 @@ function timelineOf($test, array $titles): array
     ])->all();
 }
 
-test('a menu board follows its dayparts for three days, one entry at each change and none in between', function () {
+test('a menu board follows its hours for three days, one entry at each change and none in between', function () {
     localNow('2026-09-24 09:15');   // a Thursday, during breakfast
 
     $eggs = scheduledPicture($this->organization, $this->screen, 'Eggs', 0, $this->breakfast);
@@ -139,10 +139,10 @@ test('a line that ends today, or starts tomorrow, changes the timeline at the sc
     ]);
 });
 
-test('a window that runs past midnight closes on the next day, and a closed weekday is simply dark', function () {
+test('hours that run past midnight close on the next day, and a weekday the rule leaves out is simply dark', function () {
     localNow('2026-09-24 21:00');   // Thursday
-    $late = Daypart::factory()->overnight()->create(['organization_id' => $this->organization->id, 'name' => 'Late']);   // 22:00 – 02:00
-    $late->syncExceptions([['weekday' => 5, 'start_time' => null, 'end_time' => null]]);             // closed Fridays
+    // 22:00 – 02:00, every night but Friday's.
+    $late = ['start_time' => '22:00', 'end_time' => '02:00', 'recurrence_type' => 'weekly', 'recurrence_weekdays' => [1, 2, 3, 4, 6, 7]];
     $night = scheduledPicture($this->organization, $this->screen, 'Night', 0, $late);
 
     $entries = timelineOf($this, [$night->url => 'Night']);
@@ -150,7 +150,7 @@ test('a window that runs past midnight closes on the next day, and a closed week
     expect(array_slice($entries, 0, 5))->toBe([
         ['2026-09-24 21:00', true, []],
         ['2026-09-24 22:00', false, ['Night']],
-        ['2026-09-25 02:00', true, []],             // Thursday's window closes on Friday
+        ['2026-09-25 02:00', true, []],             // Thursday's hours close on Friday
         ['2026-09-26 22:00', false, ['Night']],     // no Friday night at all
         ['2026-09-27 02:00', true, []],
     ]);
@@ -202,7 +202,7 @@ test('the network adverts follow their own window in the timeline', function () 
 
 test('a busy menu board stays small: every line is sent once, however many entries carry it', function () {
     localNow('2026-09-24 09:00');
-    $dinner = Daypart::factory()->between('17:00', '22:00')->create(['organization_id' => $this->organization->id, 'name' => 'Dinner']);
+    $dinner = ['start_time' => '17:00', 'end_time' => '22:00'];
 
     foreach (range(0, 29) as $position) {
         scheduledPicture($this->organization, $this->screen, "Dish {$position}", $position, [$this->breakfast, $this->lunch, $dinner][$position % 3]);

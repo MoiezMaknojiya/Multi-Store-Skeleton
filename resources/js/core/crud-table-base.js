@@ -1,7 +1,7 @@
 /**
  * Factory function for CRUD table Alpine.js components.
  * Provides shared pagination, debounced search, fetch, save, and delete logic.
- * The listings built on it — accounts, organizations, permissions, the activity log, media, screens, dayparts,
+ * The listings built on it — accounts, organizations, permissions, the activity log, media, screens,
  * campaigns, channels, and the Ad Builder's ads and assets — add their own form shape and overrides
  * (roles, playlists and channel ads have their own components instead).
  */
@@ -40,7 +40,7 @@ export function createCrudTable({
     extraMethods = {},   // Additional methods specific to the entity
 }) {
     /* A fresh copy of the empty form every time, nested arrays included. A spread copy shared
-     * them with defaultForm, so a daypart's exception rows or a campaign's ticked screens were
+     * them with defaultForm, so a campaign's ticked screens were
      * pushed into the default itself — and the next "Add" opened with them already there. */
     const blankForm = () => structuredClone(defaultForm);
 

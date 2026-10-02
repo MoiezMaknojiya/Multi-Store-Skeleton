@@ -360,7 +360,7 @@ export function registerCampaignsTable(Alpine) {
             windowLabel(campaign) {
                 if (! campaign.start_time || ! campaign.end_time) return 'All day';
 
-                // One place decides how a window of time reads (core/clock.js), as on the Dayparts page.
+                // One place decides how a window of time reads (core/clock.js), as on a playlist's schedules.
                 return clockRange(campaign.start_time, campaign.end_time);
             },
 

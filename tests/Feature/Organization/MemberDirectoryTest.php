@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\Invitation;
-use App\Models\Role;
 use App\Models\Organization;
+use App\Models\Role;
 use App\Models\User;
 
 /*

@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\Channel;
 use App\Models\ChannelAd;
-use App\Models\Daypart;
 use App\Models\Media;
 use App\Models\PlaylistItem;
 use App\Models\ScheduleRule;
@@ -43,6 +42,9 @@ class PlaylistController extends Controller
         return response()->json([
             'items' => $this->itemsPayload($screen),
             'version' => $screen->playlistFingerprint(),
+            // The screen's own today, so the page can say which schedules have ended by the clock the
+            // television goes by — never the browser's.
+            'local_date' => $screen->localTime()->toDateString(),
         ]);
     }
 
@@ -160,7 +162,6 @@ class PlaylistController extends Controller
         $this->assertFilesAreInNoChannel($items);
         $this->assertPicturesStayUpLongEnough($items);
         $this->assertChannelsAreAvailable($screen, $items);
-        $this->assertDaypartsBelongToTheSameOrganization($screen, $items);
 
         // A save replaces the WHOLE list, so a client working from a stale copy
         // would quietly wipe out whatever changed in the meantime — a colleague
@@ -190,6 +191,7 @@ class PlaylistController extends Controller
             'message' => 'Playlist saved',
             'items' => $this->itemsPayload($screen->fresh()),
             'version' => $screen->fresh()->playlistFingerprint(),
+            'local_date' => $screen->localTime()->toDateString(),
         ]);
     }
 
@@ -314,7 +316,7 @@ class PlaylistController extends Controller
         $days = $validated['days'] ?? 7;
 
         $occurrences = collect($validated['rules'])
-            ->map(function (array $posted) use ($screen, $from) {
+            ->map(function (array $posted) use ($from) {
                 $rule = new ScheduleRule($this->ruleAttributes($posted));
 
                 // "Every 2 weeks" has to be every-2-weeks FROM something. A saved rule
@@ -322,13 +324,6 @@ class PlaylistController extends Controller
                 // to anchor on today or it would show a different answer from the one
                 // saving it a moment later would produce.
                 $rule->created_at = $from;
-
-                if ($rule->daypart_id !== null
-                    && ! Daypart::where('id', $rule->daypart_id)->where('organization_id', $screen->organization_id)->exists()) {
-                    throw ValidationException::withMessages([
-                        'rules' => 'Those opening hours belong to a different organization.',
-                    ]);
-                }
 
                 return $rule;
             })
@@ -464,31 +459,6 @@ class PlaylistController extends Controller
         }
     }
 
-    /**
-     * A daypart on a rule is a foreign key a client can post any number into, so it
-     * goes through the same wall the media does.
-     */
-    private function assertDaypartsBelongToTheSameOrganization(Screen $screen, array $items): void
-    {
-        $ids = collect($items)
-            ->flatMap(fn (array $item) => $item['rules'] ?? [])
-            ->pluck('daypart_id')
-            ->filter()
-            ->unique();
-
-        if ($ids->isEmpty()) {
-            return;
-        }
-
-        $allowed = Daypart::where('organization_id', $screen->organization_id)->whereIn('id', $ids)->count();
-
-        if ($allowed !== $ids->count()) {
-            throw ValidationException::withMessages([
-                'items' => 'Those opening hours belong to a different organization.',
-            ]);
-        }
-    }
-
     /** Write a whole playlist, rules and all, replacing whatever was there. */
     private function writeItems(Screen $screen, array $items): void
     {
@@ -583,7 +553,8 @@ class PlaylistController extends Controller
                 'channel_id' => $item->channel_id,
                 'duration_seconds' => $item->duration_seconds,
                 'rules' => $item->scheduleRules->map(fn (ScheduleRule $rule) => [
-                    'daypart_id' => $rule->daypart_id,
+                    'start_time' => $rule->start_time,
+                    'end_time' => $rule->end_time,
                     'starts_on' => $rule->starts_on?->toDateString(),
                     'ends_on' => $rule->ends_on?->toDateString(),
                     'recurrence_type' => $rule->recurrence_type,
@@ -613,7 +584,9 @@ class PlaylistController extends Controller
         $blank = fn (string $key) => blank($rule[$key] ?? null) ? null : $rule[$key];
 
         return [
-            'daypart_id' => $blank('daypart_id'),
+            // Both, or neither: the rules refuse one without the other, and neither is the whole day.
+            'start_time' => $blank('start_time'),
+            'end_time' => $blank('end_time'),
             'starts_on' => $blank('starts_on'),
             'ends_on' => $blank('ends_on'),
             'recurrence_type' => $type,
@@ -643,9 +616,11 @@ class PlaylistController extends Controller
 
         return [
             'items.*.rules' => ['array', 'max:'.self::MAX_RULES],
-            // min:1 deliberately: a posted 0 reads as "no id" to filled()/->filter() and would pass the
-            // same-organization check below on its way to a foreign-key error.
-            'items.*.rules.*.daypart_id' => ['nullable', 'integer', 'min:1'],
+            // WHAT TIME: wall-clock, to the minute, both or neither (neither is the whole day). An end
+            // BEFORE the start is allowed and runs past midnight; an end EQUAL to the start is not,
+            // because there is no honest reading of it.
+            'items.*.rules.*.start_time' => ['nullable', 'date_format:H:i', 'required_with:items.*.rules.*.end_time'],
+            'items.*.rules.*.end_time' => ['nullable', 'date_format:H:i', 'required_with:items.*.rules.*.start_time', 'different:items.*.rules.*.start_time'],
             'items.*.rules.*.starts_on' => ['nullable', 'date_format:Y-m-d'],
             'items.*.rules.*.ends_on' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:items.*.rules.*.starts_on'],
             $type => ['nullable', Rule::in(array_keys(ScheduleRule::TYPES))],
@@ -666,6 +641,11 @@ class PlaylistController extends Controller
     {
         return [
             'items.*.rules.max' => 'An item cannot have more than '.self::MAX_RULES.' schedules.',
+            'items.*.rules.*.start_time.required_with' => 'Time: give both a start and an end, or choose All day.',
+            'items.*.rules.*.end_time.required_with' => 'Time: give both a start and an end, or choose All day.',
+            'items.*.rules.*.start_time.date_format' => 'Time: enter the whole time, or choose All day.',
+            'items.*.rules.*.end_time.date_format' => 'Time: enter the whole time, or choose All day.',
+            'items.*.rules.*.end_time.different' => 'Time: the start and the end cannot be the same. To run past midnight, set an end earlier than the start.',
             'items.*.rules.*.ends_on.after_or_equal' => 'The end date cannot be before the start date.',
             'items.*.rules.*.recurrence_until.after_or_equal' => 'The repeat cannot end before the schedule starts.',
             'items.*.rules.*.recurrence_weekdays.required_if' => 'Choose at least one day of the week.',
@@ -744,7 +724,8 @@ class PlaylistController extends Controller
                     'is_draft' => $item->media?->isDraft() ?? false,
                 ]),
                 'rules' => $item->scheduleRules->map(fn (ScheduleRule $rule) => [
-                    'daypart_id' => $rule->daypart_id,
+                    'start_time' => $rule->start_time,
+                    'end_time' => $rule->end_time,
                     'starts_on' => $rule->starts_on?->toDateString(),
                     'ends_on' => $rule->ends_on?->toDateString(),
                     'recurrence_type' => $rule->recurrence_type,

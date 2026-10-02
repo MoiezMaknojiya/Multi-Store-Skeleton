@@ -3,7 +3,6 @@
 use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\ChannelAd;
-use App\Models\Daypart;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\PlaylistItem;
@@ -210,8 +209,7 @@ test('a channel with no ads running today is skipped rather than sent empty', fu
 */
 
 test("an unscheduled channel rides along while the organization's own files are on", function () {
-    $hours = Daypart::factory()->between('07:00', '20:00')->create(['organization_id' => $this->organization->id]);
-    lineOnScreen($this->screen, $this->poster, 0, ['daypart_id' => $hours->id]);
+    lineOnScreen($this->screen, $this->poster, 0, ['start_time' => '07:00', 'end_time' => '20:00']);
     lineOnScreen($this->screen, $this->gama, 1);
 
     // Noon: the organization's poster is on, and the channel with it.
@@ -219,8 +217,7 @@ test("an unscheduled channel rides along while the organization's own files are 
 });
 
 test('and goes dark with them, so it never lights up a screen the organization left dark', function () {
-    $hours = Daypart::factory()->between('07:00', '20:00')->create(['organization_id' => $this->organization->id]);
-    lineOnScreen($this->screen, $this->poster, 0, ['daypart_id' => $hours->id]);
+    lineOnScreen($this->screen, $this->poster, 0, ['start_time' => '07:00', 'end_time' => '20:00']);
     lineOnScreen($this->screen, $this->gama, 1);
 
     // 23:00 in Chicago.
@@ -232,10 +229,8 @@ test('and goes dark with them, so it never lights up a screen the organization l
 });
 
 test('a channel line with a schedule of its own follows that instead', function () {
-    $day = Daypart::factory()->between('07:00', '20:00')->create(['organization_id' => $this->organization->id]);
-    $late = Daypart::factory()->between('21:00', '23:59')->create(['organization_id' => $this->organization->id]);
-    lineOnScreen($this->screen, $this->poster, 0, ['daypart_id' => $day->id]);
-    lineOnScreen($this->screen, $this->gama, 1, ['daypart_id' => $late->id]);
+    lineOnScreen($this->screen, $this->poster, 0, ['start_time' => '07:00', 'end_time' => '20:00']);
+    lineOnScreen($this->screen, $this->gama, 1, ['start_time' => '21:00', 'end_time' => '23:59']);
 
     // 23:00: the organization's poster is off, but the channel was scheduled for exactly now.
     $this->travelTo(CarbonImmutable::parse('2026-10-11 04:00:00', 'UTC'));

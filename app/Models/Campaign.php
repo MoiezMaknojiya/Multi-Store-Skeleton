@@ -123,8 +123,8 @@ class Campaign extends Model
      *
      * The one expression covers both shapes: an ordinary window wants the time to be
      * inside BOTH ends, and one that crosses midnight — 22:00 to 02:00 — wants it
-     * past the start OR before the end. Same rule a daypart uses, without the
-     * per-weekday exceptions, which a network advert has no use for.
+     * past the start OR before the end. The same rule a playlist line's schedule uses
+     * (ScheduleRule::coversAt).
      */
     public function isDueAt(CarbonInterface $localMoment): bool
     {

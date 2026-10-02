@@ -1,7 +1,5 @@
 <?php
 
-use App\Models\Daypart;
-use App\Models\Organization;
 use App\Models\ScheduleRule;
 use Carbon\CarbonImmutable;
 
@@ -173,15 +171,13 @@ test('every second day counts from the start, not from the calendar', function (
     expect($alternate->coversDay(on('2026-03-22')))->toBeTrue();
 });
 
-test('a daypart that runs past midnight is counted against the day it OPENED', function () {
-    // The whole reason coversAt asks the daypart which day its window began on.
-    $organization = Organization::factory()->create();
-    $night = Daypart::factory()->overnight()->create(['organization_id' => $organization->id]);  // 22:00 – 02:00
-
+test('hours that run past midnight are counted against the day they OPENED', function () {
+    // The whole reason coversAt asks which day the hours open now began on.
     $fridayNights = new ScheduleRule([
         'recurrence_type' => ScheduleRule::WEEKLY,
         'recurrence_weekdays' => [5],           // Friday
-        'daypart_id' => $night->id,
+        'start_time' => '22:00',
+        'end_time' => '02:00',
     ]);
 
     // Friday night, inside the window: yes, obviously.
@@ -199,25 +195,21 @@ test('a daypart that runs past midnight is counted against the day it OPENED', f
     expect($fridayNights->coversAt(on('2026-03-20 15:00')))->toBeFalse();
 });
 
-test('a daypart id with nothing behind it plays never, not all day', function () {
-    // The rule names a window that cannot be found — gone after the rule was read, or
-    // never there. Reading that as "no daypart" (the whole day) would turn a lunchtime
-    // advert into a permanent one. (Deleting a daypart in the database is another
-    // matter: its foreign key empties daypart_id, which does read as the whole day —
-    // which is why a daypart still in use is retired, never deleted.)
-    $orphan = new ScheduleRule(['daypart_id' => 999999]);
+test('a rule with one of its two times missing keeps no hours at all', function () {
+    // The playlist's rules refuse one time without the other, so this is a row written by hand. It reads as the
+    // whole day — never as hours that open and do not close.
+    $half = new ScheduleRule(['start_time' => '11:00']);
 
-    expect($orphan->coversAt(on('2026-03-20 12:00')))->toBeFalse();
+    expect($half->hasTimes())->toBeFalse()
+        ->and($half->coversAt(on('2026-03-20 03:00')))->toBeTrue();
 });
 
-test('the next fourteen days are listed with the window each day opens', function () {
-    $organization = Organization::factory()->create();
-    $lunch = Daypart::factory()->between('11:00', '15:00')->create(['organization_id' => $organization->id]);
-
+test('the next fourteen days are listed with the hours each day opens', function () {
     $rule = new ScheduleRule([
         'recurrence_type' => ScheduleRule::WEEKLY,
         'recurrence_weekdays' => [5],
-        'daypart_id' => $lunch->id,
+        'start_time' => '11:00',
+        'end_time' => '15:00',
     ]);
 
     $found = $rule->occurrences(on('2026-03-16'), 14);   // a Monday, two weeks out
@@ -228,17 +220,18 @@ test('the next fourteen days are listed with the window each day opens', functio
     expect($found[0]['crosses_midnight'])->toBeFalse();
 });
 
-test('a day the daypart is closed is left out of the preview entirely', function () {
-    $organization = Organization::factory()->create();
-    $hours = Daypart::factory()->between('09:00', '17:00')->create(['organization_id' => $organization->id]);
-    $hours->syncExceptions([['weekday' => 7, 'start_time' => null, 'end_time' => null]]);  // Sunday shut
+test('a weekday the rule does not name is left out of the preview entirely, and hours past midnight say so', function () {
+    // Every day but Sunday, 22:00 to 02:00. 2026-09-13 is the Sunday in that week.
+    $nights = new ScheduleRule([
+        'recurrence_type' => ScheduleRule::WEEKLY,
+        'recurrence_weekdays' => [1, 2, 3, 4, 5, 6],
+        'start_time' => '22:00',
+        'end_time' => '02:00',
+    ]);
 
-    $everyDay = new ScheduleRule(['daypart_id' => $hours->id]);
+    $found = collect($nights->occurrences(on('2026-09-11'), 7));
 
-    $dates = collect($everyDay->occurrences(on('2026-09-11'), 7))->pluck('date');
-
-    // 2026-09-13 is the Sunday in that week. The rule covers the day; the window
-    // does not exist, so there is nothing to show.
-    expect($dates)->not->toContain('2026-09-13');
-    expect($dates)->toContain('2026-09-12', '2026-09-14');
+    expect($found->pluck('date'))->not->toContain('2026-09-13')
+        ->and($found->pluck('date'))->toContain('2026-09-12', '2026-09-14')
+        ->and($found->pluck('crosses_midnight')->unique()->all())->toBe([true]);
 });

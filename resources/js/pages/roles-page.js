@@ -18,7 +18,6 @@ const GROUPS = {
     member: 'Members',
     role: 'Roles',
     screen: 'Screens',
-    daypart: 'Dayparts',
     media: 'Media library',
     ad: 'Ad Builder',
     channel: 'Channels',

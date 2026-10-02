@@ -1,6 +1,5 @@
 <?php
 
-use App\Models\Daypart;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\ScheduleRule;
@@ -37,7 +36,8 @@ beforeEach(function () {
     $this->screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
     $this->poster = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Poster']);
     $this->other = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Other']);
-    $this->lunch = Daypart::factory()->between('11:00', '15:00')->create(['organization_id' => $this->organization->id]);
+    // Lunchtime, as a rule says it.
+    $this->lunch = ['start_time' => '11:00', 'end_time' => '15:00'];
 
     $this->actingAs($this->actor)->withSession(['current_organization_id' => $this->organization->id]);
 });
@@ -45,7 +45,7 @@ beforeEach(function () {
 test('a schedule is saved with the playlist and read back with it', function () {
     $this->putJson("/screens/{$this->screen->id}/playlist", playlistBody($this->screen, [
         itemBody($this->poster, [[
-            'daypart_id' => $this->lunch->id,
+            ...$this->lunch,
             'recurrence_type' => ScheduleRule::WEEKLY,
             'recurrence_weekdays' => [5],
             'recurrence_interval' => 1,
@@ -55,7 +55,8 @@ test('a schedule is saved with the playlist and read back with it', function () 
     $rules = $this->getJson("/screens/{$this->screen->id}/playlist")->assertOk()->json('items.0.rules');
 
     expect($rules)->toHaveCount(1);
-    expect($rules[0]['daypart_id'])->toBe($this->lunch->id);
+    expect($rules[0]['start_time'])->toBe('11:00');
+    expect($rules[0]['end_time'])->toBe('15:00');
     expect($rules[0]['recurrence_type'])->toBe('weekly');
     expect($rules[0]['recurrence_weekdays'])->toBe([5]);
 });
@@ -65,7 +66,7 @@ test('reordering the playlist does not throw the schedules away', function () {
     // whole list, so rules stored anywhere but IN the request would be cascaded
     // away by an ordinary drag of one row.
     $this->putJson("/screens/{$this->screen->id}/playlist", playlistBody($this->screen, [
-        itemBody($this->poster, [['daypart_id' => $this->lunch->id]]),
+        itemBody($this->poster, [$this->lunch]),
         itemBody($this->other),
     ]))->assertOk();
 
@@ -75,7 +76,7 @@ test('reordering the playlist does not throw the schedules away', function () {
     $this->putJson("/screens/{$this->screen->id}/playlist", [
         'items' => [
             itemBody($this->other),
-            itemBody($this->poster, [['daypart_id' => $this->lunch->id]]),
+            itemBody($this->poster, [$this->lunch]),
         ],
         'version' => $this->screen->playlistFingerprint(),
     ])->assertOk();
@@ -97,7 +98,7 @@ test('changing only a schedule is enough to make a stale save conflict', functio
 
     // A colleague sets the item's hours.
     $this->putJson("/screens/{$this->screen->id}/playlist", playlistBody($this->screen, [
-        itemBody($this->poster, [['daypart_id' => $this->lunch->id]]),
+        itemBody($this->poster, [$this->lunch]),
     ]))->assertOk();
 
     // Without the rules in the fingerprint this would go through and silently erase
@@ -111,7 +112,7 @@ test('changing only a schedule is enough to make a stale save conflict', functio
 });
 
 test('saving the same schedule twice is not a conflict', function () {
-    $rule = [['daypart_id' => $this->lunch->id, 'recurrence_type' => ScheduleRule::WEEKLY, 'recurrence_weekdays' => [5]]];
+    $rule = [[...$this->lunch, 'recurrence_type' => ScheduleRule::WEEKLY, 'recurrence_weekdays' => [5]]];
 
     $this->putJson("/screens/{$this->screen->id}/playlist", playlistBody($this->screen, [
         itemBody($this->poster, $rule),
@@ -133,14 +134,38 @@ test('saving the same schedule twice is not a conflict', function () {
     expect($this->screen->fresh()->playlistItems->first()->scheduleRules)->toHaveCount(1);
 });
 
-test('a daypart from another organization cannot be pinned to this screen\'s playlist', function () {
-    $theirs = Daypart::factory()->create(['organization_id' => Organization::factory()->create()->id]);
+test('a schedule\'s hours come as a pair that differ: one alone, or the same twice, saves nothing', function () {
+    $post = fn (array $rule) => $this->putJson("/screens/{$this->screen->id}/playlist",
+        playlistBody($this->screen, [itemBody($this->poster, [$rule])]));
 
-    $this->putJson("/screens/{$this->screen->id}/playlist", playlistBody($this->screen, [
-        itemBody($this->poster, [['daypart_id' => $theirs->id]]),
-    ]))->assertStatus(422)->assertJsonValidationErrors('items');
+    $post(['start_time' => '11:00'])->assertStatus(422)->assertJsonValidationErrors('items.0.rules.0.end_time');
+    $post(['end_time' => '15:00'])->assertStatus(422)->assertJsonValidationErrors('items.0.rules.0.start_time');
+    $post(['start_time' => '11:00', 'end_time' => '11:00'])->assertStatus(422)->assertJsonValidationErrors('items.0.rules.0.end_time');
+    $post(['start_time' => '11 o\'clock', 'end_time' => '15:00'])->assertStatus(422)->assertJsonValidationErrors('items.0.rules.0.start_time');
 
     expect($this->screen->fresh()->playlistItems)->toHaveCount(0);
+});
+
+test('hours past midnight are kept as typed, and a rule with none is the whole day', function () {
+    $this->putJson("/screens/{$this->screen->id}/playlist", playlistBody($this->screen, [
+        itemBody($this->poster, [['start_time' => '22:00', 'end_time' => '02:00'], ['start_time' => null, 'end_time' => '']]),
+    ]))->assertOk();
+
+    $rules = $this->getJson("/screens/{$this->screen->id}/playlist")->assertOk()->json('items.0.rules');
+
+    expect([$rules[0]['start_time'], $rules[0]['end_time']])->toBe(['22:00', '02:00'])
+        ->and([$rules[1]['start_time'], $rules[1]['end_time']])->toBe([null, null])
+        ->and(ScheduleRule::orderBy('position')->first()->crossesMidnight())->toBeTrue();
+});
+
+test('the playlist\'s answers carry the screen\'s own today, for the page to say which schedules have ended', function () {
+    // Three in the morning in London is still the evening before in Chicago.
+    $this->screen->update(['timezone' => 'America/Chicago']);
+    $this->travelTo('2026-03-21 03:00:00');
+
+    $this->getJson("/screens/{$this->screen->id}/playlist")->assertOk()->assertJsonPath('local_date', '2026-03-20');
+    $this->putJson("/screens/{$this->screen->id}/playlist", playlistBody($this->screen->fresh(), [itemBody($this->poster)]))
+        ->assertOk()->assertJsonPath('local_date', '2026-03-20');
 });
 
 test('each repeat type is made to bring the fields it needs', function () {
@@ -182,7 +207,7 @@ test('the fields of the other repeat types are dropped, not carried around', fun
 test('the preview says when the item would actually play', function () {
     $response = $this->postJson("/screens/{$this->screen->id}/playlist/preview", [
         'rules' => [[
-            'daypart_id' => $this->lunch->id,
+            ...$this->lunch,
             'recurrence_type' => ScheduleRule::WEEKLY,
             'recurrence_weekdays' => [5],
         ]],
@@ -200,12 +225,10 @@ test('the preview says when the item would actually play', function () {
 });
 
 test('the preview merges several rules rather than listing each separately', function () {
-    $evening = Daypart::factory()->between('16:00', '20:00')->create(['organization_id' => $this->organization->id]);
-
     $occurrences = $this->postJson("/screens/{$this->screen->id}/playlist/preview", [
         'rules' => [
-            ['daypart_id' => $this->lunch->id, 'recurrence_type' => ScheduleRule::WEEKLY, 'recurrence_weekdays' => [5]],
-            ['daypart_id' => $evening->id, 'recurrence_type' => ScheduleRule::WEEKLY, 'recurrence_weekdays' => [5]],
+            [...$this->lunch, 'recurrence_type' => ScheduleRule::WEEKLY, 'recurrence_weekdays' => [5]],
+            ['start_time' => '16:00', 'end_time' => '20:00', 'recurrence_type' => ScheduleRule::WEEKLY, 'recurrence_weekdays' => [5]],
         ],
         'days' => 7,
     ])->assertOk()->json('occurrences');
@@ -254,12 +277,10 @@ test('a repeat with no start date previews the same way saving it would behave',
     expect(collect($saved)->pluck('date')->all())->toBe($dates);
 });
 
-test('a preview cannot be built against another organization\'s hours', function () {
-    $theirs = Daypart::factory()->create(['organization_id' => Organization::factory()->create()->id]);
-
+test('a preview refuses the hours a save would refuse, in the same words', function () {
     $this->postJson("/screens/{$this->screen->id}/playlist/preview", [
-        'rules' => [['daypart_id' => $theirs->id]],
-    ])->assertStatus(422);
+        'rules' => [['start_time' => '11:00']],
+    ])->assertStatus(422)->assertJsonValidationErrors(['rules.0.end_time' => 'Time: give both a start and an end, or choose All day.']);
 });
 
 test('the whole playlist, schedules included, copies onto other screens', function () {
@@ -269,7 +290,7 @@ test('the whole playlist, schedules included, copies onto other screens', functi
     $this->putJson("/screens/{$target->id}/playlist", playlistBody($target, [itemBody($this->other)]))->assertOk();
 
     $this->putJson("/screens/{$this->screen->id}/playlist", playlistBody($this->screen, [
-        itemBody($this->poster, [['daypart_id' => $this->lunch->id, 'recurrence_type' => ScheduleRule::WEEKLY, 'recurrence_weekdays' => [5]]]),
+        itemBody($this->poster, [[...$this->lunch, 'recurrence_type' => ScheduleRule::WEEKLY, 'recurrence_weekdays' => [5]]]),
     ]))->assertOk();
 
     $this->postJson("/screens/{$this->screen->id}/playlist/copy", [
@@ -282,6 +303,7 @@ test('the whole playlist, schedules included, copies onto other screens', functi
     expect($copied[0]['title'])->toBe('Poster');            // the old item is gone
     expect($copied[0]['rules'])->toHaveCount(1);
     expect($copied[0]['rules'][0]['recurrence_weekdays'])->toBe([5]);
+    expect([$copied[0]['rules'][0]['start_time'], $copied[0]['rules'][0]['end_time']])->toBe(['11:00', '15:00']);
 });
 
 test('the copy targets say how many items each screen would lose', function () {

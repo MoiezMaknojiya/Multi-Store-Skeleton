@@ -6,13 +6,12 @@ use App\Models\BuilderAsset;
 use App\Models\Campaign;
 use App\Models\Channel;
 use App\Models\ChannelAd;
-use App\Models\Daypart;
 use App\Models\Invitation;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Organization;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Facades\DB;
@@ -45,7 +44,6 @@ function pausedOrganizationRows(Organization $organization, $owner): array
     return [
         'screen' => Screen::factory()->create(['organization_id' => $organization->id])->id,
         'media' => Media::factory()->create(['organization_id' => $organization->id])->id,
-        'daypart' => Daypart::factory()->create(['organization_id' => $organization->id])->id,
         'channel' => $channel->id,
         'channel-ad' => ChannelAd::factory()->create(['channel_id' => $channel->id])->id,
         'builder-ad' => BuilderAd::factory()->create(['organization_id' => $organization->id])->id,
@@ -62,7 +60,7 @@ function pausedOrganizationRows(Organization $organization, $owner): array
 
 test('every door of a paused organization is shut to its own Owner, whatever is asked and however', function () {
     $ids = pausedOrganizationRows($this->organization, $this->owner);
-    $counts = fn () => collect(['screens', 'media', 'dayparts', 'channels', 'channel_ads', 'builder_ads', 'builder_assets', 'roles', 'invitations', 'organization_user', 'playlist_items'])
+    $counts = fn () => collect(['screens', 'media', 'channels', 'channel_ads', 'builder_ads', 'builder_assets', 'roles', 'invitations', 'organization_user', 'playlist_items'])
         ->mapWithKeys(fn (string $table) => [$table => DB::table($table)->count()])->all();
     $before = $counts();
     $words = EnsureOrganizationIsActive::message('Alpha Mart');

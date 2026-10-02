@@ -94,7 +94,7 @@
                             <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
                                 Permanently deletes {{ $organization->name }} and everything in it:
                                 {{ $contents['screens'] }} {{ str('screen')->plural($contents['screens']) }} (they stop playing at once),
-                                {{ $contents['media'] }} media {{ str('file')->plural($contents['media']) }}, playlists, dayparts, the roles made in it,
+                                {{ $contents['media'] }} media {{ str('file')->plural($contents['media']) }}, playlists, the roles made in it,
                                 the organization's own channels, its Ad Builder designs and the assets they are made from, open invitations,
                                 and the access of all {{ $contents['members'] }} {{ str('member')->plural($contents['members']) }}.
                                 The people's accounts are not deleted.

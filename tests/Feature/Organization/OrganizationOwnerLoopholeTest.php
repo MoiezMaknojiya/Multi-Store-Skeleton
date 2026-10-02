@@ -2,13 +2,12 @@
 
 use App\Models\Channel;
 use App\Models\ChannelAd;
-use App\Models\Daypart;
 use App\Models\Invitation;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
@@ -51,7 +50,6 @@ beforeEach(function () {
     $this->rivalOwner = createOrganizationMember($this->rivalOrganization, Role::OWNER);
     $this->rivalScreen = Screen::factory()->create(['organization_id' => $this->rivalOrganization->id]);
     $this->rivalMedia = Media::factory()->create(['organization_id' => $this->rivalOrganization->id]);
-    $this->rivalDaypart = Daypart::factory()->create(['organization_id' => $this->rivalOrganization->id]);
 
     $this->actingAs($this->owner)->withSession(['current_organization_id' => $this->organization->id]);
 });
@@ -70,7 +68,6 @@ function actAs(User $user, Organization $organization)
 test('the seeded Owner runs their own organization', function () {
     $this->getJson('/screens/data')->assertOk();
     $this->getJson('/media/data')->assertOk();
-    $this->getJson('/dayparts/data')->assertOk();
     $this->getJson('/members/data')->assertOk();
     $this->getJson('/roles/data')->assertOk();
     $this->get('/settings/organization')->assertOk();
@@ -142,13 +139,12 @@ test('network advertising cannot be switched on — not by the switch, not smugg
 |--------------------------------------------------------------------------
 */
 
-test("another organization's screens, files and hours do not exist for them", function () {
+test("another organization's screens and files do not exist for them", function () {
     $this->getJson("/screens/{$this->rivalScreen->id}/playlist")->assertNotFound();
     $this->getJson("/screens/{$this->rivalScreen->id}/available-channels")->assertNotFound();
     $this->deleteJson("/screens/{$this->rivalScreen->id}")->assertNotFound();
     $this->putJson("/media/{$this->rivalMedia->id}", ['title' => 'Mine now'])->assertNotFound();
     $this->deleteJson("/media/{$this->rivalMedia->id}")->assertNotFound();
-    $this->deleteJson("/dayparts/{$this->rivalDaypart->id}")->assertNotFound();
 
     // And the file cannot be borrowed onto their own screen.
     $this->putJson("/screens/{$this->screen->id}/playlist", [

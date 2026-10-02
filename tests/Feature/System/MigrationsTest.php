@@ -79,7 +79,7 @@ test('every table has a migration of its own, and nothing in the database is nam
         ->and(Schema::hasTable('organizations'))->toBeTrue()
         ->and(Schema::hasTable('organization_user'))->toBeTrue();
 
-    foreach (['activity_logs', 'builder_ads', 'builder_assets', 'channels', 'dayparts', 'invitations', 'media', 'roles',
+    foreach (['activity_logs', 'builder_ads', 'builder_assets', 'channels', 'invitations', 'media', 'roles',
         'screens', 'organization_user', 'uploads'] as $table) {
         expect(Schema::hasColumn($table, 'organization_id'))->toBeTrue("{$table} has no organization_id");
     }

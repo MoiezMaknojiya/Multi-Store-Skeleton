@@ -2,9 +2,9 @@
 
 use App\Models\ActivityLog;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Organization;
 use App\Models\User;
 
 /*
@@ -59,7 +59,7 @@ test('a role from another organization cannot be given here', function () {
 
 test('a custom role gives and manages only what it holds itself', function () {
     // A supervisor who may change roles, and can see — but not upload — content.
-    $supervisor = createOrganizationUser($this->organization, ['member-update', 'screen-view', 'media-view', 'daypart-view'], 'Supervisor');
+    $supervisor = createOrganizationUser($this->organization, ['member-update', 'screen-view', 'media-view'], 'Supervisor');
     $viewer = createOrganizationMember($this->organization, Role::VIEWER);
     $helper = Role::create(['name' => 'Helper', 'organization_id' => $this->organization->id]);
     $helper->permissions()->sync(grantPermissions(['screen-view'])->pluck('id'));

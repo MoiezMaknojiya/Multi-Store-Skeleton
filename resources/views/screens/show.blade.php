@@ -34,7 +34,6 @@
             // will play with bars (docs/AD-BUILDER-SPEC.md §12) — the organization's to notice, not a refusal.
             'screenOrientation' => str_starts_with($screen->orientation, 'portrait') ? 'portrait' : 'landscape',
             'canEdit' => auth()->user()->can('screen-playlist'),
-            'dayparts' => $dayparts,
             'weekdays' => $weekdays,
             'ordinals' => $ordinals,
          ]) }})"
@@ -136,6 +135,11 @@
                                     </svg>
                                     <span class="sr-only">Schedule:</span>
                                     <span class="truncate" x-text="scheduleBadge(item)"></span>
+                                </p>
+                                {{-- Every schedule of the line is over, by the screen's own calendar: it plays no more. --}}
+                                <p x-show="scheduleEnded(item)" x-cloak class="mt-0.5">
+                                    <span class="badge-warning" x-bind:dusk="'playlist-ended-' + index"
+                                          title="Its schedule is over, so it no longer plays">Ended</span>
                                 </p>
                             </div>
 
@@ -416,7 +420,8 @@
                                     </div>
 
                                     <template x-if="rule.recurrence_type === 'weekly'">
-                                        {{-- A picked day is said, not only coloured: aria-pressed. --}}
+                                        {{-- A picked day is said, not only coloured: aria-pressed. The two quick picks
+                                             after the days tick the usual sets at once. --}}
                                         <div class="flex flex-wrap items-center gap-1" role="group" aria-label="Days of the week">
                                             @foreach ($weekdays as $value => $label)
                                                 <button type="button" @click="toggleWeekday(rule, {{ $value }})"
@@ -430,6 +435,10 @@
                                                     {{ substr($label, 0, 3) }}
                                                 </button>
                                             @endforeach
+                                            <button type="button" @click="setWeekdays(rule, [1, 2, 3, 4, 5])"
+                                                    x-bind:dusk="'rule-weekdays-' + ruleIndex" class="btn-row-neutral ml-2">Weekdays</button>
+                                            <button type="button" @click="setWeekdays(rule, [6, 7])"
+                                                    x-bind:dusk="'rule-weekends-' + ruleIndex" class="btn-row-neutral">Weekends</button>
                                         </div>
                                     </template>
 
@@ -478,26 +487,29 @@
                                 </div>
                             </template>
 
-                            {{-- WHAT TIME, on a day the rule covers. The organization's live dayparts, and a
-                                 retired one only on the rule that already uses it (daypartsFor). --}}
+                            {{-- WHAT TIME, on a day the rule covers: the whole day, or from one clock time to another,
+                                 typed here (owner, 2026-10-01) — laid out as the Days row above is. --}}
                             <div class="flex flex-wrap items-center gap-2">
-                                <label class="form-label w-16" x-bind:for="'rule-daypart-' + ruleIndex">Time</label>
-                                <select x-model="rule.daypart_id" @change="refreshPreview()" x-bind:id="'rule-daypart-' + ruleIndex"
-                                        x-bind:dusk="'rule-daypart-' + ruleIndex" class="form-select sm:w-72">
-                                    <option value="">All day</option>
-                                    <template x-for="daypart in daypartsFor(rule)" :key="daypart.id">
-                                        <option x-bind:value="daypart.id" x-text="daypartLabel(daypart)"
-                                                x-bind:selected="String(daypart.id) === String(rule.daypart_id)"></option>
-                                    </template>
+                                <label class="form-label w-16" x-bind:for="'rule-time-mode-' + ruleIndex">Time</label>
+                                <select x-model="rule.time_mode" @change="refreshPreview()" x-bind:id="'rule-time-mode-' + ruleIndex"
+                                        x-bind:dusk="'rule-time-mode-' + ruleIndex" class="form-select sm:w-44">
+                                    <option value="all">All day</option>
+                                    <option value="times">Between times</option>
                                 </select>
-                                {{-- It opens the Dayparts page (daypart-view) to make one there (daypart-store),
-                                     so it is offered to somebody who holds both. --}}
-                                @can(['daypart-view', 'daypart-store'])
-                                {{-- In a new tab, so nothing here is lost; the list reads itself again when this page is
-                                     back in view (refreshDayparts), and the new one is there. --}}
-                                <a href="{{ route('dayparts.view') }}" target="_blank" rel="noopener"
-                                   class="text-xs text-blue-600 dark:text-blue-400 hover:underline">New daypart<span class="sr-only"> (opens in a new tab)</span></a>
-                                @endcan
+
+                                <template x-if="rule.time_mode === 'times'">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <input type="time" x-model="rule.start_time" @change="refreshPreview()" aria-label="From"
+                                               x-bind:dusk="'rule-start-time-' + ruleIndex" class="form-input sm:w-36"
+                                               x-bind:class="scheduleErrors[ruleIndex]?.start_time ? '!border-red-500' : ''">
+                                        <span class="text-gray-500 dark:text-gray-400" aria-hidden="true">&rarr;</span>
+                                        <input type="time" x-model="rule.end_time" @change="refreshPreview()" aria-label="To"
+                                               x-bind:dusk="'rule-end-time-' + ruleIndex" class="form-input sm:w-36"
+                                               x-bind:class="scheduleErrors[ruleIndex]?.end_time ? '!border-red-500' : ''">
+                                        <span x-show="crossesMidnight(rule)" x-cloak class="text-xs text-gray-500 dark:text-gray-400"
+                                              x-bind:dusk="'rule-past-midnight-' + ruleIndex">Runs past midnight.</span>
+                                    </div>
+                                </template>
                             </div>
 
                             {{-- What OK found wrong with this rule, said under it (ruleProblems). --}}
@@ -514,9 +526,38 @@
                         </div>
                     </template>
 
-                    <button type="button" @click="addRule()" dusk="schedule-add-rule" class="btn-secondary-add">
-                        + Add a Schedule
-                    </button>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" @click="addRule()" dusk="schedule-add-rule" class="btn-secondary-add">
+                            + Add a Schedule
+                        </button>
+                        {{-- The same schedule on other lines too, without typing it again (owner, 2026-10-01). Only
+                             where there is another line to give it to. --}}
+                        <button type="button" x-show="otherLines().length > 0" x-cloak @click="copyOpen = !copyOpen"
+                                x-bind:aria-expanded="copyOpen.toString()" dusk="schedule-copy-open" class="btn-secondary">
+                            Copy to Other Lines
+                        </button>
+                    </div>
+
+                    <div x-show="copyOpen && otherLines().length > 0" x-cloak dusk="schedule-copy-panel"
+                         class="rounded-md border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <p class="text-sm text-gray-600 dark:text-gray-300">OK gives this schedule to the lines you tick, in place of theirs.</p>
+                            <button type="button" @click="toggleEveryCopyLine()" dusk="schedule-copy-all" class="btn-row-neutral"
+                                    x-text="copyToKeys.length === otherLines().length ? 'Clear All' : 'Select All'"></button>
+                        </div>
+                        <div class="max-h-48 space-y-2 overflow-y-auto">
+                            <template x-for="line in otherLines()" :key="line.key">
+                                <label class="flex items-center gap-3 rounded-md border border-gray-200 p-2 cursor-pointer dark:border-gray-700">
+                                    <input type="checkbox" class="form-checkbox"
+                                           x-bind:dusk="'schedule-copy-line-' + line.number"
+                                           x-bind:checked="copyToKeys.includes(line.key)"
+                                           @change="toggleCopyLine(line.key)">
+                                    <span class="w-6 text-center text-xs text-gray-500 dark:text-gray-400" x-text="line.number"></span>
+                                    <span class="min-w-0 flex-1 truncate text-sm text-gray-800 dark:text-white" x-text="line.title"></span>
+                                </label>
+                            </template>
+                        </div>
+                    </div>
 
                     {{-- Built by the server, through the very same code the television
                          is answered with — a preview from a second implementation
@@ -529,7 +570,8 @@
                             <template x-if="scheduleRules.length === 0">
                                 <span>Plays whenever the screen is on.</span>
                             </template>
-                            <template x-if="scheduleRules.length > 0 && preview.length === 0">
+                            {{-- Said once the answer is in: while it is on its way the heading says "working…". --}}
+                            <template x-if="scheduleRules.length > 0 && preview.length === 0 && !previewing">
                                 <span class="text-amber-700 dark:text-amber-400" dusk="schedule-preview-note"
                                       x-text="previewError || 'Nothing in the next 7 days.'"></span>
                             </template>

@@ -129,7 +129,7 @@ test('every button above the organizations says its words in Title Case', functi
     $channel = Channel::factory()->create();
 
     $pages = ['/dashboard', '/users', '/organizations', '/permissions', '/roles', '/activity', '/channels', "/channels/{$channel->id}",
-        '/campaigns', '/builder', '/builder/assets', '/builder/create?orientation=landscape', '/media', '/screens', '/dayparts', '/profile'];
+        '/campaigns', '/builder', '/builder/assets', '/builder/create?orientation=landscape', '/media', '/screens', '/profile'];
 
     $wrong = wordsNotTitleCased($pages, fn (string $page) => $this->actingAs($admin)->get($page)->assertOk()->getContent());
 
@@ -144,7 +144,7 @@ test('every button inside an organization says its words in Title Case', functio
     $channel = Channel::factory()->create(['organization_id' => $organization->id]);
     $ad = BuilderAd::factory()->create(['organization_id' => $organization->id]);
 
-    $pages = ['/dashboard', '/screens', "/screens/{$screen->id}", '/media', '/dayparts', '/channels', "/channels/{$channel->id}",
+    $pages = ['/dashboard', '/screens', "/screens/{$screen->id}", '/media', '/channels', "/channels/{$channel->id}",
         '/builder', '/builder/assets', "/builder/{$ad->id}", '/members', '/roles', '/activity', '/settings/organization', '/profile'];
 
     $wrong = wordsNotTitleCased($pages, fn (string $page) => $this->actingAs($owner)

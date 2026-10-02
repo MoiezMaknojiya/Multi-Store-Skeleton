@@ -2,8 +2,8 @@
 
 namespace App\Services;
 
-use App\Models\Role;
 use App\Models\Organization;
+use App\Models\Role;
 use App\Models\User;
 use Closure;
 use Illuminate\Support\Collection;

@@ -110,7 +110,7 @@ test('the pages inside an organization say how much each field takes', function 
     $this->actingAs($owner)->withSession(['current_organization_id' => $organization->id]);
 
     assertEveryFieldSaysItsLimit($this, [
-        '/dashboard', '/screens', '/screens/'.$screen->id, '/media', '/dayparts', '/channels', '/channels/'.$channel->id,
+        '/dashboard', '/screens', '/screens/'.$screen->id, '/media', '/channels', '/channels/'.$channel->id,
         '/builder', '/builder/assets', '/builder/create?orientation=landscape', '/members', '/roles', '/activity',
         '/settings/organization', '/profile',
     ]);

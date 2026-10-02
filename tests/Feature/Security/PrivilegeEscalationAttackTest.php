@@ -30,7 +30,7 @@ beforeEach(function () {
 });
 
 test('a custom role cannot be given a single permission its maker does not hold', function () {
-    foreach (['media-view', 'daypart-view', 'organization-destroy', 'channel-view', 'activity-view'] as $beyond) {
+    foreach (['media-view', 'screen-playlist', 'organization-destroy', 'channel-view', 'activity-view'] as $beyond) {
         $this->postJson('/roles', [
             'name' => 'Climber '.$beyond,
             'permissions' => Permission::whereIn('name', ['screen-view', $beyond])->pluck('id')->all(),

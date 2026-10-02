@@ -3,14 +3,13 @@
 use App\Models\ActivityLog;
 use App\Models\Channel;
 use App\Models\ChannelAd;
-use App\Models\Daypart;
 use App\Models\Invitation;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -163,7 +162,6 @@ test('deleting an organization takes everything it owns, the organization and th
     Storage::disk('public')->put($ownAd->media->thumbnail_path, 'ad thumb');
     PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $file->id, 'position' => 0, 'duration_seconds' => 10]);
     PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $channel->id, 'position' => 1]);
-    $hours = Daypart::factory()->create(['organization_id' => $this->organization->id]);
     $custom = Role::create(['name' => 'Cashier', 'organization_id' => $this->organization->id]);
     $invite = Invitation::factory()->create(['organization_id' => $this->organization->id]);
     ActivityLog::record('screen.paired', $screen, 'Paired screen Alpha TV', $this->owner);
@@ -189,7 +187,6 @@ test('deleting an organization takes everything it owns, the organization and th
         ->and(Role::find($custom->id))->toBeNull()
         ->and(Screen::find($screen->id))->toBeNull()
         ->and(PlaylistItem::where('screen_id', $screen->id)->count())->toBe(0)
-        ->and(Daypart::find($hours->id))->toBeNull()
         ->and(Media::find($file->id))->toBeNull()
         ->and(Channel::find($ownChannel->id))->toBeNull()
         ->and(ChannelAd::find($ownAd->id))->toBeNull()

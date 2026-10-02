@@ -81,7 +81,6 @@ class EveryPageRendersTest extends DuskTestCase
                 '/screens',
                 '/screens/'.$screen->id,     // one screen's playlist page
                 '/media',
-                '/dayparts',
                 '/channels',
                 '/channels/'.$channel->id,   // one channel's ads
                 '/builder',                  // the Ad Builder's two pages: the ads, whose New ad asks the shape…

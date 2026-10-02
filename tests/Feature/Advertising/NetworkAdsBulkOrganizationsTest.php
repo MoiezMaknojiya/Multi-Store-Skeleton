@@ -1,9 +1,9 @@
 <?php
 
 use App\Models\ActivityLog;
+use App\Models\Organization;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Organization;
 use App\Models\User;
 
 /*

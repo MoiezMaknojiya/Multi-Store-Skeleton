@@ -52,7 +52,7 @@ organizations) is out of scope; these rules stay the same if it is added later.
 ## 2. Vocabulary
 
 - **Account** (`users`) — an identity: name, phone, email, password. Owned by the person.
-- **Organization** — the tenant. Owns members, custom roles, invitations, screens, media, playlists, dayparts,
+- **Organization** — the tenant. Owns members, custom roles, invitations, screens, media, playlists,
   its own channels, and its Ad Builder designs and assets. It was called a **store** (and on some pages a shop) until
   2026-10-01, when the owner made it an organization everywhere — the screens, the code and the database — because the
   app is sold to hospitals, schools and other institutes as well as shops (see `.claude/rules/02-project-conventions.md`,
@@ -89,7 +89,6 @@ every organization; on an organization role or a custom role, the one organizati
 - `role-view`, `role-store`, `role-update`, `role-destroy` — this organization's custom roles
 - `screen-view`, `screen-store`, `screen-update`, `screen-destroy`, `screen-playlist`
 - `media-view`, `media-store`, `media-update`, `media-destroy`
-- `daypart-view`, `daypart-store`, `daypart-update`, `daypart-destroy`
 - `ad-view`, `ad-store`, `ad-update`, `ad-destroy` — the Ad Builder (`docs/AD-BUILDER-SPEC.md`), added with a
   migration of their own
 
@@ -149,8 +148,8 @@ An installation starts with these organization roles (`Role::STARTERS`) — a st
 |---|---|
 | **Owner** | every organization permission, `organization-view` and `organization-destroy`; a migration adding an organization permission grants it here |
 | **Admin** | every organization permission and `organization-view` — the difference is deleting the organization (and being an Owner, rule 9) |
-| **Staff** | `screen-view`, `screen-playlist`, `media-view`, `media-store`, `media-update`, `media-destroy`, `daypart-view` |
-| **Viewer** | `screen-view`, `media-view`, `daypart-view` |
+| **Staff** | `screen-view`, `screen-playlist`, `media-view`, `media-store`, `media-update`, `media-destroy` |
+| **Viewer** | `screen-view`, `media-view` |
 
 One migration inserts the permission catalogue and all four roles (`2026_10_01_202300_insert_permissions_and_starter_roles`);
 the seeder repairs the labels, makes the Super-Admin role and the admin account, and only puts the Owner role back
@@ -254,7 +253,7 @@ schema and the starter data directly.
     - An organization's people never delete accounts: that is the platform's (2026-09-17).
 22. **Delete organization** (`organization-destroy` — inside an organization the Owner's by default, for the organization worked in, from Settings →
     Organizations; on the platform any organization, from the Organizations page — always the typed name and the password): everything the organization owns goes in one transaction — memberships, invitations, custom roles,
-    screens (devices lose their token), playlists and schedule rules, dayparts, the organization's own channels (their
+    screens (devices lose their token), playlists and schedule rules, the organization's own channels (their
     ads and the lines carrying them), media rows (and any ad of the platform's channel that showed one of them),
     the Ad Builder's designs and assets, and media and Ad Builder files after commit — a channel's files are
     library rows (docs/CHANNEL-CONTENT-SPEC.md). **The organization row goes
@@ -403,7 +402,7 @@ role never outlives its organization.
 **What a fresh install gets** (26 migrations, one per table since 2026-10-01 — the conversion migrations that upgraded
 the owner's own database went on 2026-09-17, and every later change was folded into its table's file on 2026-10-01,
 so there is no upgrade path from the old model): the tables above in their final shape, plus one data migration. The
-baseline (`2026_10_01_202300_insert_permissions_and_starter_roles`) inserts the 41 permissions of `Permission::LABELS`
+baseline (`2026_10_01_202300_insert_permissions_and_starter_roles`) inserts 41 permissions — the 37 of `Permission::LABELS` and the four `daypart-*` that `2026_10_02_100000_put_the_time_on_the_schedule_rule` takes away again —
 with their labels and the four starter organization roles — Owner (every organization permission, `organization-view`,
 `organization-destroy`), Admin (every organization permission, `organization-view`), Staff (7) and Viewer (3). `db:seed`
 then adds the Super-Admin role holding the whole catalogue and the admin account. A permission added later ships a
@@ -416,7 +415,7 @@ Two form tracks: AJAX modals for lists, plain POST for settings and guest pages.
 tables, `dusk` selectors on every interactive element.
 
 **Sidebar**
-- Organization context: Dashboard · Screens · Dayparts · Media Library · Ad Builder (ad-view) · **Team** (Members, Roles) ·
+- Organization context: Dashboard · Screens · Media Library · Ad Builder (ad-view) · **Team** (Members, Roles) ·
   Channels (channel-view) · Activity Log (activity-view) — each link only when the role there carries it. No Organizations
   link: the organization is changed from Settings → Organizations (rule 33).
 - Platform: Dashboard · Organizations · Users · Roles · Permissions · Advertising · Channels · Activity Log

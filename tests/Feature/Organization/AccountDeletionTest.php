@@ -4,9 +4,9 @@ use App\Models\ActivityLog;
 use App\Models\Channel;
 use App\Models\Invitation;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 

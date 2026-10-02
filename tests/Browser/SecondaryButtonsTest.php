@@ -43,9 +43,10 @@ class SecondaryButtonsTest extends DuskTestCase
             $browser->loginAs($owner);
             $this->switchToOrganization($browser, $organization);
 
+            // The playlist's own line, not the file's name: the Content library beside it says the name too.
             $browser->visit('/screens/'.$here->id);
             $this->waitForAlpine($browser);
-            $browser->waitForText('Opening Poster');
+            $browser->waitFor('@playlist-schedule-0')->assertSee('Opening Poster');
 
             // The schedule box closes on Cancel, and changes nothing.
             $this->clickAndAwait($browser, '@playlist-schedule-0', fn (Browser $b) => $b->waitFor('@schedule-modal', 3));

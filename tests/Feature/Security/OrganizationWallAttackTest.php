@@ -4,14 +4,13 @@ use App\Models\ActivityLog;
 use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\ChannelAd;
-use App\Models\Daypart;
 use App\Models\Invitation;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\Permission;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Organization;
 
 /*
 |--------------------------------------------------------------------------
@@ -39,7 +38,6 @@ beforeEach(function () {
     $this->betaOwner = createOrganizationMember($this->beta, Role::OWNER);
     $this->betaScreen = Screen::factory()->create(['organization_id' => $this->beta->id, 'name' => 'Beta TV']);
     $this->betaMedia = Media::factory()->create(['organization_id' => $this->beta->id, 'title' => 'Beta poster']);
-    $this->betaDaypart = Daypart::factory()->create(['organization_id' => $this->beta->id, 'name' => 'Beta hours']);
     $this->betaChannel = Channel::factory()->create(['organization_id' => $this->beta->id, 'name' => 'Beta Specials']);
     $this->betaAd = ChannelAd::factory()->create(['channel_id' => $this->betaChannel->id, 'title' => 'Beta ad']);
     $this->betaRole = Role::create(['name' => 'Beta Cashier', 'organization_id' => $this->beta->id]);
@@ -61,9 +59,6 @@ test('every one of another organization’s rows answers 403 or 404, whatever th
         // Media
         fn () => $this->putJson("/media/{$this->betaMedia->id}", ['title' => 'Taken']),
         fn () => $this->deleteJson("/media/{$this->betaMedia->id}"),
-        // Dayparts
-        fn () => $this->putJson("/dayparts/{$this->betaDaypart->id}", ['name' => 'Taken', 'start_time' => '07:00', 'end_time' => '11:00']),
-        fn () => $this->deleteJson("/dayparts/{$this->betaDaypart->id}"),
         // Channels and their ads
         fn () => $this->getJson("/channels/{$this->betaChannel->id}"),
         fn () => $this->putJson("/channels/{$this->betaChannel->id}", ['name' => 'Taken']),
@@ -93,7 +88,6 @@ test('every one of another organization’s rows answers 403 or 404, whatever th
     expect($this->beta->fresh()->name)->toBe('Beta Deli')
         ->and(Screen::find($this->betaScreen->id)->name)->toBe('Beta TV')
         ->and(Media::find($this->betaMedia->id)->title)->toBe('Beta poster')
-        ->and(Daypart::find($this->betaDaypart->id)->name)->toBe('Beta hours')
         ->and(Channel::find($this->betaChannel->id)->name)->toBe('Beta Specials')
         ->and(ChannelAd::find($this->betaAd->id))->not->toBeNull()
         ->and(Role::find($this->betaRole->id)->name)->toBe('Beta Cashier')
@@ -114,16 +108,6 @@ test('another organization’s rows cannot be smuggled onto this organization’
     $this->putJson("/screens/{$this->alphaScreen->id}/playlist", [
         'version' => $version,
         'items' => [['channel_id' => $this->betaChannel->id]],
-    ])->assertStatus(422);
-
-    // Beta's daypart on a schedule rule of this organization's own file
-    $mine = Media::factory()->create(['organization_id' => $this->alpha->id]);
-    $this->putJson("/screens/{$this->alphaScreen->id}/playlist", [
-        'version' => $version,
-        'items' => [[
-            'media_id' => $mine->id, 'duration_seconds' => 10,
-            'rules' => [['daypart_id' => $this->betaDaypart->id]],
-        ]],
     ])->assertStatus(422);
 
     // Beta's file as the screen's holding picture
@@ -184,7 +168,7 @@ test('a role of another organization cannot be handed out here, however it is po
 });
 
 test('the listings never leak another organization’s rows, whatever is searched for', function () {
-    foreach (['screens', 'media', 'dayparts', 'channels'] as $resource) {
+    foreach (['screens', 'media', 'channels'] as $resource) {
         $rows = collect($this->getJson("/{$resource}/data?search=Beta")->assertOk()->json($resource));
         expect($rows)->toBeEmpty("{$resource} leaked a row for a search on Beta");
     }
@@ -213,7 +197,7 @@ test('with no organization in the session an organization member reaches nothing
 
     // A permission is read through the membership of the organization in the session (User::contextPermissionNames).
     // With no organization there is no membership to read, so every door is shut — not an unfiltered list.
-    foreach (['screens', 'media', 'dayparts', 'channels', 'members'] as $resource) {
+    foreach (['screens', 'media', 'channels', 'members'] as $resource) {
         expect($this->getJson("/{$resource}/data")->status())->toBe(403, "/{$resource}/data");
     }
 
@@ -227,7 +211,7 @@ test('a stale or invented organization id in the session opens nothing and break
     foreach ([$this->beta->id, 0, -1, 999999] as $stale) {
         $this->actingAs($this->attacker)->withSession(['current_organization_id' => $stale]);
 
-        foreach (['screens', 'media', 'dayparts', 'channels', 'members'] as $resource) {
+        foreach (['screens', 'media', 'channels', 'members'] as $resource) {
             $status = $this->getJson("/{$resource}/data")->status();
             expect($status)->toBe(403, "organization id {$stale} on /{$resource}/data answered {$status}");
         }
@@ -238,17 +222,13 @@ test('a stale or invented organization id in the session opens nothing and break
         ->and($this->betaMedia->fresh()->title)->toBe('Beta poster');
 });
 
-test('another organization’s daypart, file or ad answers 404 before anything sent is checked', function () {
-    // A 422 would say the id exists — and for a daypart, "this organization already has a daypart with that name"
-    // would read another organization's names back one guess at a time.
-    $this->putJson("/dayparts/{$this->betaDaypart->id}", ['name' => 'Beta hours', 'start_time' => '07:00', 'end_time' => '11:00'])->assertNotFound();
-    $this->putJson("/dayparts/{$this->betaDaypart->id}", [])->assertNotFound();
+test('another organization’s file or ad answers 404 before anything sent is checked', function () {
+    // A 422 would say the id exists, and what was wrong with what was sent would describe a row that is not theirs.
     $this->putJson("/media/{$this->betaMedia->id}", ['title' => ''])->assertNotFound();
 
     $betaDesign = BuilderAd::factory()->create(['organization_id' => $this->beta->id, 'name' => 'Beta sale']);
     $this->putJson("/builder/{$betaDesign->id}", ['name' => '', 'document' => 'nonsense'])->assertNotFound();
 
-    expect($this->betaDaypart->fresh()->name)->toBe('Beta hours')
-        ->and($this->betaMedia->fresh()->title)->toBe('Beta poster')
+    expect($this->betaMedia->fresh()->title)->toBe('Beta poster')
         ->and($betaDesign->fresh()->name)->toBe('Beta sale');
 });

@@ -61,11 +61,11 @@ class Role extends Model
         ],
         self::STAFF => [
             'name' => 'Staff',
-            'permissions' => ['screen-view', 'screen-playlist', 'media-view', 'media-store', 'media-update', 'media-destroy', 'daypart-view'],
+            'permissions' => ['screen-view', 'screen-playlist', 'media-view', 'media-store', 'media-update', 'media-destroy'],
         ],
         self::VIEWER => [
             'name' => 'Viewer',
-            'permissions' => ['screen-view', 'media-view', 'daypart-view'],
+            'permissions' => ['screen-view', 'media-view'],
         ],
     ];
 

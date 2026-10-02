@@ -2,7 +2,6 @@
 
 namespace Tests\Browser;
 
-use App\Models\Daypart;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\PlaylistItem;
@@ -33,9 +32,28 @@ class ScheduleUiTest extends DuskTestCase
         $this->seedSuperAdmin();
 
         return $this->organizationMember($organization, [
-            'screen-view', 'screen-update', 'screen-playlist',
-            'daypart-view', 'daypart-store', 'media-view',
+            'screen-view', 'screen-update', 'screen-playlist', 'media-view',
         ]);
+    }
+
+    /** Type into a date or a time box as a person leaving it would: the value, then `input` and `change`. */
+    private function setField(Browser $browser, string $dusk, string $value): void
+    {
+        $browser->script(
+            "const el = document.querySelector('[dusk=\"{$dusk}\"]');"
+            ."el.value = '{$value}';"
+            ."el.dispatchEvent(new Event('input', { bubbles: true }));"
+            ."el.dispatchEvent(new Event('change', { bubbles: true }));"
+        );
+    }
+
+    /** Which weekday buttons of the first rule are pressed, as their numbers (1 = Monday). */
+    private function pressedWeekdays(Browser $browser): array
+    {
+        return $browser->script(
+            'return [...document.querySelectorAll(\'[dusk^="rule-weekday-"][aria-pressed="true"]\')]'
+            .'.map((button) => Number(button.getAttribute("dusk").split("-")[2]));'
+        )[0];
     }
 
     /**
@@ -95,9 +113,6 @@ class ScheduleUiTest extends DuskTestCase
         $owner = $this->owner($organization);
 
         $screen = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Deli TV']);
-        $lunch = Daypart::factory()->between('11:00', '15:00')->create([
-            'organization_id' => $organization->id, 'name' => 'Lunch',
-        ]);
         $poster = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Eid offer']);
 
         PlaylistItem::create([
@@ -105,14 +120,15 @@ class ScheduleUiTest extends DuskTestCase
             'position' => 0, 'duration_seconds' => 10,
         ]);
 
-        $this->browse(function (Browser $browser) use ($owner, $organization, $screen, $lunch) {
+        $this->browse(function (Browser $browser) use ($owner, $organization, $screen) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
             $this->switchToOrganization($browser, $organization);
 
+            // The playlist's own line, not the file's name: the Content library beside it says the name too.
             $browser->visit('/screens/'.$screen->id);
             $this->waitForAlpine($browser);
-            $browser->waitForText('Eid offer');
+            $browser->waitFor('@playlist-schedule-0')->assertSee('Eid offer');
 
             $this->clickAndAwait($browser, '@playlist-schedule-0',
                 fn (Browser $b) => $b->waitFor('@schedule-modal'));
@@ -136,8 +152,18 @@ class ScheduleUiTest extends DuskTestCase
                 ->assertSeeIn('@rule-error-0', 'Choose at least one day of the week.')
                 ->assertVisible('@schedule-modal');
 
-            $this->jsClick($browser, '@rule-weekday-5-0');
+            // The two quick picks tick the usual sets at once, each in place of what was ticked.
+            $this->jsClick($browser, '@rule-weekdays-0');
             $browser->waitUntilMissing('@rule-error-0', 5);
+            $this->assertSame([1, 2, 3, 4, 5], $this->pressedWeekdays($browser));
+            $this->jsClick($browser, '@rule-weekends-0');
+            $this->assertSame([6, 7], $this->pressedWeekdays($browser));
+
+            // Fridays alone: the weekend off again, Friday on.
+            $this->jsClick($browser, '@rule-weekday-6-0');
+            $this->jsClick($browser, '@rule-weekday-7-0');
+            $this->jsClick($browser, '@rule-weekday-5-0');
+            $this->assertSame([5], $this->pressedWeekdays($browser));
 
             // A repeat of sixty weeks is none the server takes: the box goes red, the reason is said under the rule,
             // and the preview says it too rather than "nothing in the next 7 days".
@@ -150,13 +176,32 @@ class ScheduleUiTest extends DuskTestCase
             $this->jsType($browser, '@rule-interval-0', '1');
             $browser->waitUntilMissing('@rule-error-0', 5);
 
-            // WHAT TIME: the lunch window.
-            $browser->select('@rule-daypart-0', (string) $lunch->id);
+            // WHAT TIME: typed here, on the rule (owner, 2026-10-01). "Between times" with none typed is refused under
+            // the rule, and so is the same time twice.
+            $browser->select('@rule-time-mode-0', 'times')->waitFor('@rule-start-time-0');
+            $this->jsClick($browser, '@schedule-ok');
+            $browser->waitFor('@rule-error-0')->assertSeeIn('@rule-error-0', 'Time: give both a start and an end, or choose All day.');
+            $this->assertStringContainsString('border-red-500', (string) $browser->attribute('@rule-start-time-0', 'class'));
+
+            $this->setField($browser, 'rule-start-time-0', '11:00');
+            $this->setField($browser, 'rule-end-time-0', '11:00');
+            $this->jsClick($browser, '@schedule-ok');
+            $browser->waitFor('@rule-error-0')->assertSeeIn('@rule-error-0', 'the start and the end cannot be the same');
+
+            // An end before the start runs past midnight, and the window says so.
+            $this->setField($browser, 'rule-start-time-0', '22:00');
+            $this->setField($browser, 'rule-end-time-0', '02:00');
+            $browser->waitFor('@rule-past-midnight-0')->assertSeeIn('@rule-summary-0', 'past midnight');
+
+            // Lunchtime.
+            $this->setField($browser, 'rule-start-time-0', '11:00');
+            $this->setField($browser, 'rule-end-time-0', '15:00');
+            $browser->waitUntilMissing('@rule-past-midnight-0', 5)->waitUntilMissing('@rule-error-0', 5);
 
             // The plain-English line, so nobody has to read four inputs to know what
             // they just said.
             $browser->waitForTextIn('@rule-summary-0', 'Friday')
-                ->assertSeeIn('@rule-summary-0', 'Lunch');
+                ->assertSeeIn('@rule-summary-0', '11:00 AM – 3:00 PM');
 
             // And the preview, built by the SERVER through the same code the
             // television is answered with.
@@ -180,7 +225,7 @@ class ScheduleUiTest extends DuskTestCase
             $rule = ScheduleRule::firstOrFail();
             $this->assertSame('weekly', $rule->recurrence_type);
             $this->assertSame([5], $rule->recurrence_weekdays);
-            $this->assertSame($lunch->id, $rule->daypart_id);
+            $this->assertSame(['11:00', '15:00'], [$rule->start_time, $rule->end_time]);
 
             // It survives a reload, which is the only proof that matters.
             $browser->visit('/screens/'.$screen->id);
@@ -218,14 +263,12 @@ class ScheduleUiTest extends DuskTestCase
 
         $there = CarbonImmutable::now($screen->timezone);
 
-        // A window a couple of hours from now: this poster is not due at this moment.
-        $later = Daypart::factory()->between(
-            $there->addHours(2)->format('H:i'), $there->addHours(3)->format('H:i')
-        )->create(['organization_id' => $organization->id, 'name' => 'Later today']);
+        // Hours a couple of hours from now: this poster is not due at this moment.
+        $rule = $item->scheduleRules()->create([
+            'start_time' => $there->addHours(2)->format('H:i'), 'end_time' => $there->addHours(3)->format('H:i'),
+        ]);
 
-        $rule = $item->scheduleRules()->create(['daypart_id' => $later->id]);
-
-        $this->browse(function (Browser $tv) use ($rule, $organization, $there) {
+        $this->browse(function (Browser $tv) use ($rule, $there) {
             $tv->visit('/login');
             $tv->script("localStorage.clear(); localStorage.setItem('signage.device.token', 'hours-token');");
 
@@ -241,13 +284,9 @@ class ScheduleUiTest extends DuskTestCase
             )[0]);
 
             // -- Due -----------------------------------------------------------
-            // The window is widened around the present moment, and the television is
+            // The hours are widened around the present moment, and the television is
             // switched on again.
-            $now = Daypart::factory()->between(
-                $there->subHours(2)->format('H:i'), $there->addHours(2)->format('H:i')
-            )->create(['organization_id' => $organization->id, 'name' => 'Right now']);
-
-            $rule->update(['daypart_id' => $now->id]);
+            $rule->update(['start_time' => $there->subHours(2)->format('H:i'), 'end_time' => $there->addHours(2)->format('H:i')]);
 
             $tv->visit('/player');
 
@@ -267,6 +306,91 @@ class ScheduleUiTest extends DuskTestCase
 
             $tv->visit('/login');
             $tv->script('localStorage.clear();');
+        });
+    }
+
+    /**
+     * One schedule on several lines without typing it again, and a line whose schedule is over says so (owner,
+     * 2026-10-01): the reuse a named daypart used to give, and the mark a line that plays no more was missing.
+     */
+    public function test_a_schedule_is_copied_to_other_lines_and_one_that_is_over_says_ended(): void
+    {
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->owner($organization);
+        $screen = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Deli TV']);
+
+        foreach (['Eid offer', 'Winter sale', 'Coffee deal'] as $position => $title) {
+            PlaylistItem::create([
+                'screen_id' => $screen->id, 'position' => $position, 'duration_seconds' => 10,
+                'media_id' => Media::factory()->create(['organization_id' => $organization->id, 'title' => $title])->id,
+            ]);
+        }
+
+        $this->browse(function (Browser $browser) use ($owner, $organization, $screen) {
+            $this->freshSession($browser);
+            $browser->loginAs($owner);
+            $this->switchToOrganization($browser, $organization);
+
+            $browser->visit('/screens/'.$screen->id);
+            $this->waitForAlpine($browser);
+            // The playlist's own last line, not the name: the Content library beside it lists the same files,
+            // and its answer can come first.
+            $browser->waitFor('@playlist-schedule-2')->assertMissing('@playlist-ended-0');
+
+            // The first line: three days long ago, at lunchtime.
+            $this->clickAndAwait($browser, '@playlist-schedule-0', fn (Browser $b) => $b->waitFor('@schedule-modal'));
+            $this->clickAndAwait($browser, '@schedule-add-rule', fn (Browser $b) => $b->waitFor('@rule-day-mode-0'));
+            $browser->select('@rule-day-mode-0', 'range')->waitFor('@rule-starts-on-0');
+            $this->setField($browser, 'rule-starts-on-0', '2020-03-20');
+            $this->setField($browser, 'rule-ends-on-0', '2020-03-22');
+            $browser->select('@rule-time-mode-0', 'times')->waitFor('@rule-start-time-0');
+            $this->setField($browser, 'rule-start-time-0', '11:00');
+            $this->setField($browser, 'rule-end-time-0', '15:00');
+
+            // …and the third line as well. The list offers the other lines, never this one.
+            $browser->assertMissing('@schedule-copy-panel');
+            $this->jsClick($browser, '@schedule-copy-open');
+            $browser->waitFor('@schedule-copy-panel')
+                ->assertSeeIn('@schedule-copy-panel', 'Winter sale')
+                ->assertSeeIn('@schedule-copy-panel', 'Coffee deal')
+                ->assertDontSeeIn('@schedule-copy-panel', 'Eid offer');
+            $this->jsClick($browser, '@schedule-copy-line-3');
+
+            $this->jsClick($browser, '@schedule-ok');
+            $this->waitForModalClosed($browser, '@schedule-modal');
+            $browser->waitForText('Schedule copied to 1 other line.');
+
+            // Both say when they played, and that it is over; the line between them was left alone.
+            $browser->waitFor('@playlist-ended-0')
+                ->assertVisible('@playlist-ended-2')
+                ->assertSeeIn('@playlist-schedule-badge-2', '11:00 AM – 3:00 PM')
+                ->assertMissing('@playlist-ended-1')
+                ->assertMissing('@playlist-schedule-badge-1');
+            $this->assertSame(0, ScheduleRule::count(), 'nothing should be stored before Save Changes');
+
+            // Save Changes commits both, each line a rule of its own.
+            $this->clickAndAwait($browser, '@playlist-save',
+                fn (Browser $b) => $b->waitUsing(10, 250, fn () => ScheduleRule::count() === 2));
+
+            $lines = PlaylistItem::with('scheduleRules')->where('screen_id', $screen->id)->orderBy('position')->get();
+            $this->assertSame([1, 0, 1], $lines->map(fn (PlaylistItem $line) => $line->scheduleRules->count())->all());
+
+            foreach ([$lines[0], $lines[2]] as $line) {
+                $rule = $line->scheduleRules->first();
+                $this->assertSame(['11:00', '15:00', '2020-03-22'], [$rule->start_time, $rule->end_time, $rule->ends_on->toDateString()]);
+            }
+
+            // After a reload the mark is still there: it is read from the saved rules and the screen's own today.
+            $browser->visit('/screens/'.$screen->id);
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@playlist-ended-0')->assertVisible('@playlist-ended-2')->assertMissing('@playlist-ended-1');
+
+            // A schedule with no last day never ends: the mark goes as soon as the dates do.
+            $this->clickAndAwait($browser, '@playlist-schedule-0', fn (Browser $b) => $b->waitFor('@schedule-modal'));
+            $browser->select('@rule-day-mode-0', 'always');
+            $this->jsClick($browser, '@schedule-ok');
+            $this->waitForModalClosed($browser, '@schedule-modal');
+            $browser->waitUntilMissing('@playlist-ended-0', 5)->assertVisible('@playlist-ended-2');
         });
     }
 

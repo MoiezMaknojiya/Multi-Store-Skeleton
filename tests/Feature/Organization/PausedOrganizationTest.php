@@ -2,10 +2,10 @@
 
 use App\Models\ActivityLog;
 use App\Models\Media;
+use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
-use App\Models\Organization;
 use App\Models\User;
 
 /*
@@ -49,7 +49,7 @@ test('a paused organization\'s people land on a page that says so, and the menu 
 });
 
 test('every page of a paused organization leads to the dashboard, and every request a page makes is refused with its words', function () {
-    foreach (['/screens', '/media', '/members', '/roles', '/builder', '/builder/assets', '/dayparts', '/channels', '/activity', '/settings/organization'] as $page) {
+    foreach (['/screens', '/media', '/members', '/roles', '/builder', '/builder/assets', '/channels', '/activity', '/settings/organization'] as $page) {
         workingIn($this->owner, $this->organization)->get($page)->assertRedirect(route('dashboard'));
     }
 

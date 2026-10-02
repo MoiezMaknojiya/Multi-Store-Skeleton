@@ -75,16 +75,7 @@
             icon="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
         @endcan
 
-        {{-- Screens, then the hours those screens keep, then the files that fill
-             them: the order somebody actually sets an organization up in. --}}
-        @can('daypart-view')
-        <x-sidebar.nav-item
-            href="{{ route('dayparts.view') }}"
-            routeMatch="dayparts.*"
-            label="Dayparts"
-            icon="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        @endcan
-
+        {{-- Screens, then the files that fill them: the order somebody actually sets an organization up in. --}}
         @can('media-view')
         <x-sidebar.nav-item
             href="{{ route('media.view') }}"

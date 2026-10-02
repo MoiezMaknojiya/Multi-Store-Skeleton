@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Daypart;
 use App\Models\Media;
 use App\Models\PlaylistItem;
 use App\Models\ScheduleRule;
@@ -83,7 +82,7 @@ class ScheduleResolver
     {
         // A page's design comes along: an Ad Builder page taken off the screens (unpublished) is not played (Media::isDraft()).
         return $screen->playlistItems()
-            ->with(['media.builderAd', 'channel.ads', 'scheduleRules.daypart.exceptions'])
+            ->with(['media.builderAd', 'channel.ads', 'scheduleRules'])
             ->get()
             // A line whose file or channel no longer exists is simply not there.
             ->filter(fn (PlaylistItem $item) => $item->media !== null || $item->channel !== null)
@@ -141,9 +140,9 @@ class ScheduleResolver
 
     /**
      * Every moment after $from, up to $until, at which this screen's answer can change — a superset, never
-     * a miss: each local midnight (a rule's dates, a channel ad's dates, a weekday's hours all turn over
-     * there) and every clock time a daypart on the playlist opens or closes at, on every day in between. The
-     * offline timeline asks the resolver about each (docs/AD-BUILDER-SPEC.md §15).
+     * a miss: each local midnight (a rule's dates and weekdays, a channel ad's dates all turn over there) and
+     * every clock time a rule on the playlist opens or closes at, on every day in between. The offline
+     * timeline asks the resolver about each (docs/AD-BUILDER-SPEC.md §15).
      *
      * @param  Collection<int, PlaylistItem>  $playlist
      * @return list<CarbonImmutable>
@@ -153,10 +152,7 @@ class ScheduleResolver
         $timezone = $screen->timezone ?: Screen::DEFAULT_TIMEZONE;
         $times = $playlist
             ->flatMap(fn (PlaylistItem $item) => $item->scheduleRules)
-            ->map(fn (ScheduleRule $rule) => $rule->daypart)
-            ->filter()
-            ->unique('id')
-            ->flatMap(fn (Daypart $daypart) => $daypart->clockTimes())
+            ->flatMap(fn (ScheduleRule $rule) => $rule->clockTimes())
             ->unique()
             ->values();
 

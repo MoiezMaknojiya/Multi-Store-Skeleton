@@ -103,7 +103,7 @@ class Organization extends Model
      * Everything this organization owns, gone: its team (memberships and open invitations), its
      * custom roles, its screens — which takes their playlists, schedule rules, campaign links
      * and pairing requests through the foreign keys, and locks every device out on its next
-     * poll — its dayparts, its own channels, its whole media library, and its Ad Builder
+     * poll — its own channels, its whole media library, and its Ad Builder
      * designs with the shelf of pictures and videos they were built from, files included.
      *
      * Accounts are not the organization's: the people stay, and may be members elsewhere. The organization
@@ -115,7 +115,6 @@ class Organization extends Model
         DB::table('organization_user')->where('organization_id', $this->id)->delete();
         Invitation::where('organization_id', $this->id)->delete();
         Screen::where('organization_id', $this->id)->delete();
-        Daypart::where('organization_id', $this->id)->delete();
         Role::where('organization_id', $this->id)->delete();
 
         $this->purgeChannels();

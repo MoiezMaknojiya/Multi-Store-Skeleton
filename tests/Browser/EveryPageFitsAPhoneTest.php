@@ -7,7 +7,6 @@ use App\Models\BuilderAd;
 use App\Models\Campaign;
 use App\Models\Channel;
 use App\Models\ChannelAd;
-use App\Models\Daypart;
 use App\Models\Invitation;
 use App\Models\Media;
 use App\Models\Organization;
@@ -75,7 +74,6 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
                 '/media' => ['media-form-modal'],
                 '/screens' => ['screen-pair-modal', 'screen-form-modal'],
                 '/screens/'.$screen->id => ['playlist-copy-modal', 'playlist-schedule-modal'],
-                '/dayparts' => ['daypart-form-modal'],
                 '/profile' => ['confirm-user-deletion'],
             ]);
         });
@@ -103,7 +101,6 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
                 '/screens' => ['screen-pair-modal', 'screen-form-modal'],
                 '/screens/'.$screen->id => ['playlist-copy-modal', 'playlist-schedule-modal'],
                 '/media' => ['media-form-modal'],
-                '/dayparts' => ['daypart-form-modal'],
                 '/channels' => ['channel-form-modal', 'confirm-channel-deletion'],
                 '/channels/'.$ownChannel->id => ['channel-ad-modal'],
                 '/builder' => ['new-ad-orientation', 'confirm-ad-deletion'],
@@ -213,7 +210,7 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
 
     /**
      * An organization the way a real one looks: a long name, people with roles in two organizations, a pending invitation, a
-     * screen with a playlist, files with long names and descriptions, a daypart, a published ad, the platform's
+     * screen with a playlist, files with long names and descriptions, lines that keep hours, a published ad, the platform's
      * channel with an ad, and an activity log with something in it.
      *
      * @return array{0: Organization, 1: Screen, 2: Channel}
@@ -257,11 +254,15 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
 
         $screen = Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Front Counter Menu Board Television']);
         Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Drive-through Window Screen']);
-        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $menu->id, 'position' => 0, 'duration_seconds' => 10]);
-        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $video->id, 'position' => 1]);
-
-        Daypart::factory()->between('06:00', '11:30')->create(['organization_id' => $alpha->id, 'name' => 'Breakfast Rush Hours']);
-        Daypart::factory()->overnight()->create(['organization_id' => $alpha->id, 'name' => 'Late Night Takeaway Window']);
+        // The first line keeps hours on some weekdays and its schedule is long over; the second runs past midnight:
+        // the widest a line's schedule words and its "Ended" mark get.
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $menu->id, 'position' => 0, 'duration_seconds' => 10])
+            ->scheduleRules()->create([
+                'start_time' => '06:00', 'end_time' => '11:30', 'recurrence_type' => 'weekly', 'recurrence_weekdays' => [1, 2, 3, 4, 5],
+                'starts_on' => '2020-01-06', 'recurrence_until' => '2020-03-27', 'position' => 0,
+            ]);
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $video->id, 'position' => 1])
+            ->scheduleRules()->create(['start_time' => '22:00', 'end_time' => '02:00', 'position' => 0]);
 
         BuilderAd::factory()->withText('Two for one')->published()->create(['organization_id' => $alpha->id, 'name' => 'Weekend Special Two for One Burgers']);
 

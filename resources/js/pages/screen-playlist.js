@@ -10,10 +10,12 @@ import axios from 'axios';
 import { dayLabel, toAmPm, windowLabel } from '../core/clock.js';
 import { PlaylistItemDefaults } from '../core/playlist-defaults.js';
 
-/** A rule as the editor holds it. day_mode is a UI idea only — the server stores
- *  the dates and the repeat, and infers nothing from a mode. */
+/** A rule as the editor holds it. day_mode and time_mode are UI ideas only — the server stores
+ *  the dates, the repeat and the two times, and infers nothing from a mode. */
 const blankRule = () => ({
-    daypart_id: '',
+    time_mode: 'all',
+    start_time: '',
+    end_time: '',
     day_mode: 'always',
     starts_on: '',
     ends_on: '',
@@ -28,7 +30,9 @@ const blankRule = () => ({
 
 /** Turn a saved rule back into the shape the editor edits. */
 const ruleFromServer = (rule) => ({
-    daypart_id: rule.daypart_id ?? '',
+    time_mode: rule.start_time && rule.end_time ? 'times' : 'all',
+    start_time: rule.start_time ?? '',
+    end_time: rule.end_time ?? '',
     day_mode: rule.recurrence_type ? 'repeat' : ((rule.starts_on || rule.ends_on) ? 'range' : 'always'),
     starts_on: rule.starts_on ?? '',
     ends_on: rule.ends_on ?? '',
@@ -41,15 +45,17 @@ const ruleFromServer = (rule) => ({
     recurrence_until: rule.recurrence_until ?? '',
 });
 
-/** …and back into what the API takes. The fields belonging to the other day modes
+/** …and back into what the API takes. The fields belonging to the other modes
  *  are dropped rather than sent, so a rule that used to be a date range does not
- *  quietly carry its old dates around once it repeats. */
+ *  quietly carry its old dates around once it repeats — nor its old hours once it is all day. */
 const ruleToServer = (rule) => {
     const repeating = rule.day_mode === 'repeat';
     const ranged = rule.day_mode === 'range';
+    const timed = rule.time_mode === 'times';
 
     return {
-        daypart_id: rule.daypart_id === '' ? null : Number(rule.daypart_id),
+        start_time: timed && rule.start_time ? rule.start_time : null,
+        end_time: timed && rule.end_time ? rule.end_time : null,
         starts_on: (ranged || repeating) && rule.starts_on ? rule.starts_on : null,
         ends_on: ranged && rule.ends_on ? rule.ends_on : null,
         recurrence_type: repeating ? rule.recurrence_type : null,
@@ -67,6 +73,13 @@ const ruleToServer = (rule) => {
     };
 };
 
+/** The day before a stored day: "2026-10-01" → "2026-09-30". */
+const dayBefore = (day) => {
+    const [year, month, date] = String(day).split('-').map(Number);
+
+    return new Date(Date.UTC(year, month - 1, date - 1)).toISOString().slice(0, 10);
+};
+
 export function registerScreenPlaylist(Alpine) {
     Alpine.data('screenPlaylist', (config = {}) => ({
         screenId: config.screenId,
@@ -75,12 +88,14 @@ export function registerScreenPlaylist(Alpine) {
         screenOrientation: config.screenOrientation === 'portrait' ? 'portrait' : 'landscape',
         canEdit: config.canEdit ?? false,
         /* Fixed lists handed down by the page — see ScreenController::show. */
-        dayparts: config.dayparts ?? [],
         weekdays: config.weekdays ?? {},
 
         ordinals: config.ordinals ?? {},
 
         items: [],
+        /* The screen's own today ("2026-10-02"), as the playlist's answer says it: a schedule has ended by the
+         * television's clock, not the browser's. */
+        localDate: null,
         // What the server said the playlist was when this page loaded. Sent back
         // on save so the server can refuse rather than silently overwrite work
         // somebody else did in the meantime. Nothing polls it — it only travels
@@ -111,6 +126,9 @@ export function registerScreenPlaylist(Alpine) {
         previewing: false,
         previewTimer: null,
         previewToken: 0,
+        /* The other lines this schedule is given to as well when OK is pressed, by their row keys. */
+        copyOpen: false,
+        copyToKeys: [],
 
         /* ── Copying this playlist onto other screens ───────────────────── */
         copyTargets: [],
@@ -119,7 +137,6 @@ export function registerScreenPlaylist(Alpine) {
         copyLoading: false,
         availableLoaded: false,   // the library's first answer is in: until then it says "Loading…", not "nothing"
         leaveGuard: null,
-        focusGuard: null,
 
         init() {
             this.load();
@@ -129,10 +146,6 @@ export function registerScreenPlaylist(Alpine) {
             if (this.canEdit) {
                 this.loadAvailable();
                 this.loadChannels();
-
-                // A daypart made in another tab ("New daypart") is offered here as soon as this page is back.
-                this.focusGuard = () => this.refreshDayparts();
-                window.addEventListener('focus', this.focusGuard);
             }
 
             // Edits live on this page until Save Changes: leaving with some asks first, as the Ad Builder does.
@@ -151,17 +164,6 @@ export function registerScreenPlaylist(Alpine) {
 
         destroy() {
             if (this.leaveGuard) window.removeEventListener('beforeunload', this.leaveGuard);
-            if (this.focusGuard) window.removeEventListener('focus', this.focusGuard);
-        },
-
-        /** The dayparts a rule may name, read again (screens.daypart-options). A failure keeps the list there was. */
-        async refreshDayparts() {
-            try {
-                const { data } = await axios.get(`/screens/${this.screenId}/daypart-options`);
-                this.dayparts = data.dayparts;
-            } catch {
-                // The list already on the page still works; nothing to say.
-            }
         },
 
         async load() {
@@ -174,6 +176,7 @@ export function registerScreenPlaylist(Alpine) {
                     rules: (item.rules ?? []).map(ruleFromServer),
                 }));
                 this.version = data.version;
+                this.localDate = data.local_date ?? null;
                 this.dirty = false;
             } catch (error) {
                 window.toast(error.response?.data?.message ?? 'Could not load the playlist.');
@@ -335,6 +338,7 @@ export function registerScreenPlaylist(Alpine) {
                     rules: (item.rules ?? []).map(ruleFromServer),
                 }));
                 this.version = data.version;
+                this.localDate = data.local_date ?? this.localDate;
                 this.dirty = false;
                 window.toast('Playlist saved. The screen shows it within 30 seconds.', 'success');
             } catch (error) {
@@ -385,6 +389,8 @@ export function registerScreenPlaylist(Alpine) {
             // rules are nested objects, so a shallow copy would not be one.
             this.scheduleRules = JSON.parse(JSON.stringify(this.items[index].rules ?? []));
             this.preview = [];
+            this.copyOpen = false;
+            this.copyToKeys = [];
             this.refreshPreview();
             this.$dispatch('open-modal', 'playlist-schedule-modal');
         },
@@ -394,6 +400,8 @@ export function registerScreenPlaylist(Alpine) {
             this.scheduleIndex = null;
             this.scheduleRules = [];
             this.preview = [];
+            this.copyOpen = false;
+            this.copyToKeys = [];
         },
 
         /** OK, not Save: the schedule is staged into the playlist and committed by
@@ -411,9 +419,38 @@ export function registerScreenPlaylist(Alpine) {
                 return;
             }
 
-            this.items[this.scheduleIndex].rules = this.scheduleRules;
+            const rules = this.scheduleRules;
+            // The other lines ticked under "Copy to Other Lines" take the same schedule, each a copy of its own.
+            const others = this.items.filter((item) => this.copyToKeys.includes(item.key));
+
+            this.items[this.scheduleIndex].rules = rules;
+            others.forEach((item) => { item.rules = JSON.parse(JSON.stringify(rules)); });
             this.dirty = true;
             this.closeSchedule();
+
+            if (others.length > 0) {
+                window.toast(`Schedule copied to ${others.length} other ${others.length === 1 ? 'line' : 'lines'}.`, 'success');
+            }
+        },
+
+        /** The playlist's other lines, which this schedule may be copied to. */
+        otherLines() {
+            return this.items
+                .map((item, index) => ({ key: item.key, number: index + 1, title: item.title }))
+                .filter((line, index) => index !== this.scheduleIndex);
+        },
+
+        toggleCopyLine(key) {
+            const at = this.copyToKeys.indexOf(key);
+            if (at === -1) this.copyToKeys.push(key);
+            else this.copyToKeys.splice(at, 1);
+        },
+
+        /** Every other line at once — or none, when they are all ticked already. */
+        toggleEveryCopyLine() {
+            const keys = this.otherLines().map((line) => line.key);
+
+            this.copyToKeys = this.copyToKeys.length === keys.length ? [] : keys;
         },
 
         /** What is wrong with one rule, as {field: message} — the server's own rules and words (ruleMessages). */
@@ -433,17 +470,30 @@ export function registerScreenPlaylist(Alpine) {
                 if (rule.starts_on && rule.recurrence_until && rule.recurrence_until < rule.starts_on) problems.recurrence_until = 'The repeat cannot end before the schedule starts.';
             }
 
+            if (rule.time_mode === 'times') {
+                if (!rule.start_time || !rule.end_time) {
+                    problems[rule.start_time ? 'end_time' : 'start_time'] = 'Time: give both a start and an end, or choose All day.';
+                } else if (rule.start_time === rule.end_time) {
+                    problems.end_time = 'Time: the start and the end cannot be the same. To run past midnight, set an end earlier than the start.';
+                }
+            }
+
             return problems;
         },
 
         /**
-         * The window's dates and numbers the browser could not read — typed only in part — which it hands over as ''
-         * and would save as no date at all: [rule index, field, message] each (validity.badInput).
+         * The window's dates, times and numbers the browser could not read — typed only in part — which it hands
+         * over as '' and would save as no date at all: [rule index, field, message] each (validity.badInput).
          */
         unreadableRuleFields() {
             const fields = {
                 'rule-starts-on': 'starts_on', 'rule-ends-on': 'ends_on', 'rule-repeat-start': 'starts_on',
                 'rule-until': 'recurrence_until', 'rule-interval': 'recurrence_interval', 'rule-monthday': 'recurrence_monthday',
+                'rule-start-time': 'start_time', 'rule-end-time': 'end_time',
+            };
+            const messages = {
+                date: 'Enter the whole date, or leave it blank.',
+                time: 'Time: enter the whole time, or choose All day.',
             };
 
             return [...document.querySelectorAll('[dusk^="rule-"]')]
@@ -451,8 +501,7 @@ export function registerScreenPlaylist(Alpine) {
                 .map((input) => {
                     const [, name, index] = input.getAttribute('dusk').match(/^(rule-[a-z-]+)-(\d+)$/) ?? [];
 
-                    return fields[name] ? [Number(index), fields[name], input.type === 'date'
-                        ? 'Enter the whole date, or leave it blank.' : 'Enter a number.'] : null;
+                    return fields[name] ? [Number(index), fields[name], messages[input.type] ?? 'Enter a number.'] : null;
                 })
                 .filter(Boolean);
         },
@@ -485,6 +534,17 @@ export function registerScreenPlaylist(Alpine) {
             return rule.recurrence_weekdays.includes(Number(day));
         },
 
+        /** The quick picks beside the weekday buttons: Monday to Friday, or Saturday and Sunday. */
+        setWeekdays(rule, days) {
+            rule.recurrence_weekdays = [...days];
+            this.refreshPreview();
+        },
+
+        /** An end before the start: the hours run past midnight, and the window says so. */
+        crossesMidnight(rule) {
+            return rule.time_mode === 'times' && !!rule.start_time && !!rule.end_time && rule.end_time < rule.start_time;
+        },
+
         /**
          * "When would this actually play?" — answered by the server, through the very
          * same code the television is answered with. Computing it here in the browser
@@ -502,6 +562,10 @@ export function registerScreenPlaylist(Alpine) {
             // item whose schedule was open before this one — never lands over the current one.
             const token = ++this.previewToken;
 
+            // "Working…" from the change itself, not from when the request goes: otherwise the wait before it
+            // reads "Nothing in the next 7 days" for a moment, about rules nobody has been asked about yet.
+            this.previewing = this.scheduleIndex !== null && this.scheduleRules.length > 0;
+
             this.previewTimer = setTimeout(async () => {
                 // This callback is the newest (a later change would have cleared its timer), so it
                 // also ends the "working…" of any request it overtook, which no longer can.
@@ -512,6 +576,17 @@ export function registerScreenPlaylist(Alpine) {
 
                 if (this.scheduleRules.length === 0) {
                     this.preview = [];
+                    this.previewing = false;
+                    return;
+                }
+
+                // A rule still being filled in — "Between times" with a box empty, a weekly repeat with no day yet —
+                // is not asked about: the server would only refuse it. Its reason stands where the preview would.
+                const unfinished = this.scheduleRules.map((rule) => Object.values(this.ruleProblems(rule))[0]).find(Boolean);
+
+                if (unfinished) {
+                    this.preview = [];
+                    this.previewError = unfinished;
                     this.previewing = false;
                     return;
                 }
@@ -596,27 +671,6 @@ export function registerScreenPlaylist(Alpine) {
 
         /* ── Display ───────────────────────────────────────────────────── */
 
-        /** "Lunch (11:00 AM – 3:00 PM)" — built here rather than on the server, so one
-         *  place decides how a clock reads. A retired daypart says so: it still works for the
-         *  rules that already use it, and is offered to nothing new. */
-        daypartLabel(daypart) {
-            const label = `${daypart.name} (${windowLabel(daypart.start_time, daypart.end_time)})`;
-
-            return daypart.retired ? `${label} — retired` : label;
-        },
-
-        /**
-         * The Time options for one rule. The page is handed the organization's live dayparts plus any
-         * retired one a rule on this screen still uses (ScreenController::daypartOptions); a
-         * retired daypart is offered only to the rule that already has it, so it stays readable
-         * there — not "All day" — and is never picked afresh.
-         *
-         * A method, not a getter (see the Alpine gotcha in .claude/rules/02-project-conventions.md).
-         */
-        daypartsFor(rule) {
-            return this.dayparts.filter((daypart) => !daypart.retired || String(daypart.id) === String(rule.daypart_id));
-        },
-
         /** One window of the preview: "Fri 20 Mar 11:00 AM–3:00 PM". */
         slotLabel(slot) {
             return slot.start ? ` ${toAmPm(slot.start)}–${toAmPm(slot.end)}` : '';
@@ -625,8 +679,11 @@ export function registerScreenPlaylist(Alpine) {
         /** One rule in plain English, so nobody has to read four inputs to know what
          *  they just said. */
         ruleSummary(rule) {
-            const daypart = this.dayparts.find((d) => String(d.id) === String(rule.daypart_id));
-            const when = daypart ? this.daypartLabel(daypart) : 'All day';
+            // "11:00 AM – 3:00 PM" — built here rather than on the server, so one place decides how a clock reads.
+            const when = rule.time_mode !== 'times' ? 'All day'
+                : (rule.start_time && rule.end_time
+                    ? windowLabel(rule.start_time, rule.end_time) + (this.crossesMidnight(rule) ? ', past midnight' : '')
+                    : 'Set both times');
 
             if (rule.day_mode === 'always') return `Every day · ${when}`;
 
@@ -673,6 +730,23 @@ export function registerScreenPlaylist(Alpine) {
             const count = (item.rules ?? []).length;
             if (count === 0) return '';
             return count === 1 ? this.ruleSummary(item.rules[0]) : `${count} schedules`;
+        },
+
+        /**
+         * A line whose every schedule is over — its last day has passed on the screen's own calendar — so it no
+         * longer plays at all: said on the line. Hours that run past midnight still play into the morning after
+         * their last day, so such a schedule is over a day later.
+         */
+        scheduleEnded(item) {
+            const rules = item.rules ?? [];
+
+            if (!this.localDate || rules.length === 0) return false;
+
+            return rules.every((rule) => {
+                const last = rule.day_mode === 'range' ? rule.ends_on : (rule.day_mode === 'repeat' ? rule.recurrence_until : '');
+
+                return !!last && last < (this.crossesMidnight(rule) ? dayBefore(this.localDate) : this.localDate);
+            });
         },
 
         /** What a person calls a line or a file. A page published from the Ad Builder is stored as

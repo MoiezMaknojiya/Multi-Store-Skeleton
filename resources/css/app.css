@@ -524,7 +524,7 @@
    that still does not (very long names, many buttons) scrolls inside it too.
    What must never break at any width says so on its cell (`whitespace-nowrap`: a date, a size, a person's
    name in a log). Two kinds of cell always wrap: free text, marked `cell-prose` (an activity's details, a
-   description under a name, a daypart's exceptions), and a row that spans the table ("Loading…"). */
+   description under a name), and a row that spans the table ("Loading…"). */
 @utility table-base {
     @apply w-full text-sm;
 

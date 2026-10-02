@@ -93,7 +93,6 @@ test('arrays in a write body are refused, never crashed into', function () {
         ['/permissions', ['name' => ['mine-view'], 'label' => ['Mine']]],
         ['/organizations', ['name' => ['Mine'], 'owner_email' => ['a@b.c']]],
         ['/users/invitations', ['email' => ['a@b.c'], 'role_id' => ['1']]],
-        ['/dayparts', ['name' => ['D'], 'start_time' => ['07:00'], 'end_time' => '08:00']],
         ['/channels', ['name' => ['Ours'], 'is_active' => ['yes']]],
         ['/screens/pair', ['code' => ['ABCDEF'], 'mode' => ['new']]],
     ] as $i => [$url, $payload]) {
@@ -134,7 +133,6 @@ test('an array where the code expects a word is answered, not exploded', functio
         '/media/data?page[]=2',
         '/media/data?search[]=x&search[]=y',
         '/screens/data?search[]=x',
-        '/dayparts/data?search[]=x',
         '/members/data?search[]=x',
     ] as $url) {
         $answer($url);

@@ -118,7 +118,7 @@ test('a member removed mid-session loses everything on the very next request', f
 
     // The session still names the organization, but the membership it was read through is gone — so every
     // permission goes with it, with no sign-out in between.
-    foreach (['screens', 'media', 'dayparts', 'channels', 'members'] as $resource) {
+    foreach (['screens', 'media', 'channels', 'members'] as $resource) {
         expect($this->getJson("/{$resource}/data")->status())->toBe(403, "/{$resource}/data");
     }
 
@@ -204,7 +204,7 @@ test('a platform account carrying an organization id in its session gains nothin
 
     $this->get('/members')->assertForbidden();
     $this->get('/settings/organization')->assertNotFound();
-    $this->postJson('/dayparts', ['name' => 'Theirs', 'start_time' => '07:00', 'end_time' => '08:00'])->assertForbidden();
+    $this->postJson('/screens/pair', ['code' => 'ABCDEF', 'mode' => 'new', 'name' => 'Theirs', 'orientation' => 'landscape'])->assertForbidden();
     // What their platform role does give still works.
     $this->getJson('/users/data')->assertOk();
     $this->getJson('/organizations/data')->assertOk();

@@ -834,7 +834,7 @@ draws the stroke the way the page will, and the page carries it.
 ## 15. Offline playback — the player as a progressive web app (owner, 2026-09-23: "screen ko Offline cache bhi karo, progressive banao")
 
 **What it is.** A television keeps playing when the organization's internet drops: what its playlist says for every
-moment of the next three days — dayparts, dates and all — from a cache on the set itself, every file of it
+moment of the next three days — hours, dates and all — from a cache on the set itself, every file of it
 (pictures, videos, Ad Builder pages and what those pages load), and back to live the moment the line returns.
 Nothing on the television says so (owner's rule: the panel says a screen is offline, from its missed
 heartbeats — `Screen::OFFLINE_AFTER_MINUTES` — and the TV just keeps working). It works wherever the browser
@@ -916,12 +916,12 @@ anywhere else the player is exactly what it was — online only — because ever
 2. **The manifest** (`DeviceController::playlist`, one instant for all of it) says a little more than what
    plays now: the holding picture travels as `fallback` whenever the organization set one and it is still on the
    screens (never an unpublished ad page), even while items are due; and **`timeline`** says what the screen shows
-   at every moment its answer changes over the next `TIMELINE_HOURS` (72) — a daypart opening or closing, a
+   at every moment its answer changes over the next `TIMELINE_HOURS` (72) — a schedule's hours opening or closing, a
    new local day (a line's dates turn over there), a campaign's window (`ScheduleResolver::changePoints`,
    `NetworkAdResolver::changePoints`) — each worked out by the very resolver that answers online
    (`resolveLoaded()` on the playlist loaded once; `NetworkAdResolver::breaksAt()`, one query per local
    date), and kept only when it differs from the one before. Entries name their lines by key into one
-   `lines` map, so a line is sent once however many entries carry it: a 30-line, four-daypart menu board is
+   `lines` map, so a line is sent once however many entries carry it: a 30-line menu board with four sets of hours is
    about 16 KB, 2 KB gzipped, and costs some 40 ms. The timeline is also every file the next days may play —
    the player warms from it, and nothing further off reaches the device (a line its rules keep off the air
    never does, rule 02); the `assets[]` list the first design sent is gone. The `version` is moved by none of
@@ -983,7 +983,7 @@ alongside due items (and gone when it was never set), the timeline naming every 
 and nothing further off (tomorrow's picture in, next year's out, never a draft), the network advert under the
 campaign's own key, none of it moving the version; the cache keys — a picture and a video keep theirs through
 a new title, a new file moves it, a channel ad's is its file's (one copy on the set), a
-campaign's survives a new name; the web-app manifest route. `OfflineTimelineTest` — dayparts over three days,
+campaign's survives a new name; the web-app manifest route. `OfflineTimelineTest` — a line's hours over three days,
 the first entry now, the holding picture in the dark hours, a line ending today and one starting tomorrow at the screen's midnight, an overnight window
 with a closed Friday, a channel's ads day by day, campaign windows, thirty lines staying small, the version
 unmoved. `AdPagePolicyTest` — the policy's place, every inline script by its digest, scripts only from the
@@ -992,7 +992,7 @@ runtime's folder (a still page from nowhere), nothing reachable, typed words nev
 alone. `InputAbuseAttackTest` — text that is not UTF-8 anywhere a request carries it: 400, never 500.
 Dusk (`OfflinePlayerTest`): (1) a paired television's server is put into maintenance — every request a 503,
 which the worker's network-first paths treat as unreachable — and the set plays on from memory, its first
-picture's daypart closing and the picture never coming back, the holding picture after the second's, through a reboot, until
+picture's hours closing and the picture never coming back, the holding picture after the second's, through a reboot, until
 maintenance ends; (2) the line cut for real — the television served by a second server of its own (port 8002,
 `tests/Browser/support/range-router.php` answering range requests the way nginx does, since PHP's built-in
 server sends every file whole), which is killed, so nothing answers at all: live, everything is warmed and a

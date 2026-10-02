@@ -4,7 +4,6 @@ use App\Models\BuilderAd;
 use App\Models\Campaign;
 use App\Models\Channel;
 use App\Models\ChannelAd;
-use App\Models\Daypart;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\Permission;
@@ -87,18 +86,12 @@ test('a media row keeps its organization and its file whatever the payload says'
         ->and($media->title)->toBe('Poster two');
 });
 
-test('a daypart and a channel made inside an organization belong to that organization, never to the one posted', function () {
-    $this->postJson('/dayparts', [
-        'name' => 'Deli hours', 'start_time' => '07:00', 'end_time' => '20:00',
-        'organization_id' => $this->other->id, 'created_by' => null,
-    ])->assertOk();
-
+test('a channel made inside an organization belongs to that organization, never to the one posted', function () {
     $this->postJson('/channels', [
         'name' => 'Our Deals', 'organization_id' => $this->other->id, 'is_active' => true,
     ])->assertOk();
 
-    expect(Daypart::firstWhere('name', 'Deli hours')->organization_id)->toBe($this->organization->id)
-        ->and(Channel::firstWhere('name', 'Our Deals')->organization_id)->toBe($this->organization->id);
+    expect(Channel::firstWhere('name', 'Our Deals')->organization_id)->toBe($this->organization->id);
 });
 
 test('an upload joins the library of the organization it is made in, whatever library the payload names', function () {
@@ -345,8 +338,14 @@ test('ids that are not ids answer 422 or 404 — never a 500', function () {
         ['media_id' => $media->id, 'duration_seconds' => -5],
         ['media_id' => $media->id, 'duration_seconds' => 'ten'],
         ['media_id' => $media->id, 'channel_id' => 1, 'duration_seconds' => 10],
-        ['media_id' => $media->id, 'duration_seconds' => 10, 'rules' => [['daypart_id' => 0]]],
-        ['media_id' => $media->id, 'duration_seconds' => 10, 'rules' => [['daypart_id' => 'x']]],
+        // A schedule's hours in every wrong shape: one without the other, the same twice, a list, a time that is none.
+        ['media_id' => $media->id, 'duration_seconds' => 10, 'rules' => [['start_time' => '11:00']]],
+        ['media_id' => $media->id, 'duration_seconds' => 10, 'rules' => [['end_time' => '15:00']]],
+        ['media_id' => $media->id, 'duration_seconds' => 10, 'rules' => [['start_time' => '11:00', 'end_time' => '11:00']]],
+        ['media_id' => $media->id, 'duration_seconds' => 10, 'rules' => [['start_time' => ['11:00'], 'end_time' => '15:00']]],
+        ['media_id' => $media->id, 'duration_seconds' => 10, 'rules' => [['start_time' => '25:00', 'end_time' => '26:00']]],
+        ['media_id' => $media->id, 'duration_seconds' => 10, 'rules' => [['start_time' => "11:00' OR 1=1", 'end_time' => '15:00']]],
+        ['media_id' => $media->id, 'duration_seconds' => 10, 'rules' => [['start_time' => '11:00:00', 'end_time' => '15:00:00']]],
     ];
 
     foreach ($payloads as $i => $item) {
@@ -404,8 +403,6 @@ test('pagination cannot be used to dump a table or to break the page', function 
 test('a name the length of a book, or full of control characters, is refused rather than stored', function () {
     $long = str_repeat('a', 5000);
 
-    $this->postJson('/dayparts', ['name' => $long, 'start_time' => '07:00', 'end_time' => '08:00'])
-        ->assertStatus(422);
     $this->postJson('/channels', ['name' => $long])->assertStatus(422);
     $this->put('/settings/organization', [
         'name' => $long, 'street' => '1 Main St', 'city' => 'Dallas', 'state' => 'TX',
@@ -413,23 +410,19 @@ test('a name the length of a book, or full of control characters, is refused rat
     ])->assertSessionHasErrorsIn('organizationDetails', 'name');
 
     expect($this->organization->fresh()->name)->toBe('Alpha Mart')
-        ->and(Daypart::count())->toBe(0)
         ->and(Channel::count())->toBe(0);
 });
 
 test('a script tag in a name is stored as text and printed as text', function () {
     $payload = '<script>alert("xss")</script>';
-    $daypartName = '<script>alert("daypart-xss")</script>';     // its own words, to be found on a page by
 
     // Kept exactly as typed — never stripped, never refused for looking like code.
-    $this->postJson('/dayparts', ['name' => $daypartName, 'start_time' => '07:00', 'end_time' => '08:00'])->assertOk();
     $this->put('/settings/organization', [
         'name' => $payload, 'street' => '1 Main St', 'city' => 'Dallas', 'state' => 'TX',
         'zip_code' => '75001', 'country' => 'USA',
     ])->assertRedirect(route('organization-settings.edit'));
 
-    expect(Daypart::sole()->name)->toBe($daypartName)
-        ->and($this->organization->fresh()->name)->toBe($payload);
+    expect($this->organization->fresh()->name)->toBe($payload);
 
     $page = $this->get('/settings/organization')->assertOk();
     $page->assertDontSee($payload, false);
@@ -439,14 +432,12 @@ test('a script tag in a name is stored as text and printed as text', function ()
     $this->get('/dashboard')->assertOk()->assertDontSee($payload, false);
     $this->get('/members')->assertOk()->assertDontSee($payload, false);
 
-    // A screen's page hands the organization's dayparts to its schedule editor inside an attribute, where one raw
-    // quote or tag would break out of it: the daypart's name is on the page, but only ever encoded.
-    $screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
+    // A screen's page prints the screen's own name in its tab and its heading: only ever encoded.
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id, 'name' => $payload]);
 
     $this->get("/screens/{$screen->id}")->assertOk()
-        ->assertSee('daypart-xss', false)
-        ->assertDontSee($daypartName, false)
-        ->assertDontSee('"daypart-xss', false);
+        ->assertSee('&lt;script&gt;', false)
+        ->assertDontSee($payload, false);
 });
 
 test('an email field takes an address, not a header injection or a list', function () {
@@ -483,7 +474,7 @@ test('text that is not UTF-8 is refused at the door — a 400, never a 500 and n
     'a search in a listing' => ['GET', '/screens/data?search='.rawurlencode("Caf\xC3\x28"), [], []],
     'a new channel' => ['POST', '/channels', ['name' => "\xFF\xFE"], []],
     'a key that is not UTF-8' => ['POST', '/channels', ["na\xFFme" => 'x'], []],
-    'deep inside a list' => ['POST', '/dayparts', ['name' => 'Lunch', 'windows' => [['days' => ["\xE9"]]]], []],
+    'deep inside a list' => ['PUT', '/screens/{screen}/playlist', ['version' => 'x', 'items' => [['rules' => [['recurrence_weekdays' => ["\xE9"]]]]]], []],
     'the User-Agent the session keeps' => ['GET', '/screens/data', [], ['HTTP_USER_AGENT' => "Mozilla \xFF"]],
 ]);
 

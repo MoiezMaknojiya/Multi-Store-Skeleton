@@ -7,7 +7,6 @@ use App\Models\BuilderAd;
 use App\Models\Campaign;
 use App\Models\Channel;
 use App\Models\ChannelAd;
-use App\Models\Daypart;
 use App\Models\Invitation;
 use App\Models\Media;
 use App\Models\Organization;
@@ -88,7 +87,6 @@ class EveryButtonWorksTest extends DuskTestCase
                 '/builder/assets',
                 '/screens',
                 '/screens/'.$screen->id,
-                '/dayparts',
                 '/profile',
             ]);
         });
@@ -118,7 +116,6 @@ class EveryButtonWorksTest extends DuskTestCase
                 '/screens',
                 '/screens/'.$screen->id,
                 '/media',
-                '/dayparts',
                 '/channels',
                 '/channels/'.$ownChannel->id,
                 '/builder',
@@ -136,8 +133,8 @@ class EveryButtonWorksTest extends DuskTestCase
     /* ── Helpers ─────────────────────────────────────────────────────── */
 
     /**
-     * An organization with something on every page: people and an invitation, two screens (one with a playlist), files, a
-     * daypart, a published ad, the platform's channel with an ad, and a log.
+     * An organization with something on every page: people and an invitation, two screens (one with a playlist whose
+     * first line keeps hours), files, a published ad, the platform's channel with an ad, and a log.
      *
      * @return array{0: Organization, 1: Screen, 2: Channel}
      */
@@ -160,9 +157,8 @@ class EveryButtonWorksTest extends DuskTestCase
 
         $screen = Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Front Counter TV']);
         Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Drive-through Screen', 'last_seen_at' => null]);
-        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $menu->id, 'position' => 0, 'duration_seconds' => 10]);
-
-        Daypart::factory()->between('06:00', '11:30')->create(['organization_id' => $alpha->id, 'name' => 'Breakfast']);
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $menu->id, 'position' => 0, 'duration_seconds' => 10])
+            ->scheduleRules()->create(['start_time' => '06:00', 'end_time' => '11:30', 'position' => 0]);
 
         BuilderAd::factory()->withText('Two for one')->published()->create(['organization_id' => $alpha->id, 'name' => 'Weekend Burgers']);
 

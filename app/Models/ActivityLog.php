@@ -18,7 +18,7 @@ class ActivityLog extends Model
      * (e.g. password reset via email link).
      *
      * The entry belongs to an organization — and shows in that organization's own Activity Log — when the subject is an
-     * organization or something an organization owns (a screen, a media file, a daypart, a custom role, an organization's
+     * organization or something an organization owns (a screen, a media file, a custom role, an organization's
      * channel), or when $organizationId names one: pass it wherever the subject is gone (a delete) or is a
      * person (a member's role changed). An account's own sign-in, profile or password, and the platform's
      * own work, belong to no organization.

@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\BuilderAd;
-use App\Models\Daypart;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\PlaylistItem;
@@ -76,9 +75,7 @@ test('an unscheduled item plays around the clock', function () {
 test('an hour nothing is scheduled for goes black, not to "No content"', function () {
     // The screen has a playlist; it is simply not this item's turn. "No content"
     // across an organization's television at three in the morning reads as a fault.
-    place($this->screen, $this->poster, [
-        'daypart_id' => Daypart::factory()->between('11:00', '15:00')->create(['organization_id' => $this->organization->id])->id,
-    ]);
+    place($this->screen, $this->poster, ['start_time' => '11:00', 'end_time' => '15:00']);
 
     $quiet = resolveAt($this->screen, '2026-03-20 03:00');
 
@@ -102,12 +99,11 @@ test('an empty playlist is NOT blank — that screen is waiting to be given some
 });
 
 test('an item plays only on the days and at the times its rule allows', function () {
-    $lunch = Daypart::factory()->between('11:00', '15:00')->create(['organization_id' => $this->organization->id]);
-
     place($this->screen, $this->poster, [
         'recurrence_type' => ScheduleRule::WEEKLY,
         'recurrence_weekdays' => [5],           // Friday
-        'daypart_id' => $lunch->id,
+        'start_time' => '11:00',
+        'end_time' => '15:00',
     ]);
 
     // 2026-03-20 is a Friday, 2026-03-21 a Saturday.
@@ -117,16 +113,14 @@ test('an item plays only on the days and at the times its rule allows', function
 });
 
 test('an item plays if ANY of its rules says yes', function () {
-    $lunch = Daypart::factory()->between('11:00', '15:00')->create(['organization_id' => $this->organization->id]);
-    $evening = Daypart::factory()->between('16:00', '20:00')->create(['organization_id' => $this->organization->id]);
-
     $item = place($this->screen, $this->poster, [
-        'starts_on' => '2026-03-20', 'ends_on' => '2026-03-22', 'daypart_id' => $evening->id,
+        'starts_on' => '2026-03-20', 'ends_on' => '2026-03-22', 'start_time' => '16:00', 'end_time' => '20:00',
     ]);
     $item->scheduleRules()->create([
         'recurrence_type' => ScheduleRule::WEEKLY,
         'recurrence_weekdays' => [5],
-        'daypart_id' => $lunch->id,
+        'start_time' => '11:00',
+        'end_time' => '15:00',
         'position' => 1,
     ]);
 
@@ -203,13 +197,11 @@ test('with no default set a gap is simply black', function () {
 });
 
 test('two screens in different timezones answer differently at the same instant', function () {
-    $lunch = Daypart::factory()->between('11:00', '15:00')->create(['organization_id' => $this->organization->id]);
-
     $chicago = Screen::factory()->create(['organization_id' => $this->organization->id, 'timezone' => 'America/Chicago']);
     $london = Screen::factory()->create(['organization_id' => $this->organization->id, 'timezone' => 'Europe/London']);
 
-    place($chicago, $this->poster, ['daypart_id' => $lunch->id]);
-    place($london, $this->poster, ['daypart_id' => $lunch->id]);
+    place($chicago, $this->poster, ['start_time' => '11:00', 'end_time' => '15:00']);
+    place($london, $this->poster, ['start_time' => '11:00', 'end_time' => '15:00']);
 
     // One instant: noon in Chicago, five in the evening in London. The rule is wall
     // clock, so the same "11:00 to 15:00" means different moments in the two organizations.
@@ -220,12 +212,26 @@ test('two screens in different timezones answer differently at the same instant'
     expect($resolver->resolve($london->fresh(), $instant)['items'])->toBeEmpty();
 });
 
-test('a retired daypart keeps working where it is already in use', function () {
-    // Retiring takes a window out of the pickers; it must not stop the rules that
-    // already point at it.
-    $lunch = Daypart::factory()->between('11:00', '15:00')->retired()->create(['organization_id' => $this->organization->id]);
-    place($this->screen, $this->poster, ['daypart_id' => $lunch->id]);
+test('a line open late keeps the screen lit past midnight, on the night it opened', function () {
+    // Friday night, 22:00 to 02:00. 2026-03-20 is a Friday.
+    place($this->screen, $this->poster, [
+        'recurrence_type' => ScheduleRule::WEEKLY, 'recurrence_weekdays' => [5], 'start_time' => '22:00', 'end_time' => '02:00',
+    ]);
 
-    expect(resolveAt($this->screen, '2026-03-20 12:00')['items'])->toHaveCount(1);
-    expect(resolveAt($this->screen, '2026-03-20 20:00')['blank'])->toBeTrue();
+    expect(resolveAt($this->screen, '2026-03-20 23:00')['items'])->toHaveCount(1);
+    expect(resolveAt($this->screen, '2026-03-21 01:00')['items'])->toHaveCount(1);     // Saturday by the calendar
+    expect(resolveAt($this->screen, '2026-03-21 02:00')['blank'])->toBeTrue();
+    expect(resolveAt($this->screen, '2026-03-21 23:00')['blank'])->toBeTrue();         // Saturday night opens none
+});
+
+test('the moments a screen can change at are its rules\' own times, on every day ahead', function () {
+    place($this->screen, $this->poster, ['start_time' => '11:00', 'end_time' => '15:00']);
+
+    $resolver = app(ScheduleResolver::class);
+    $from = CarbonImmutable::parse('2026-03-20 09:00', 'America/Chicago');
+    $points = collect($resolver->changePoints($this->screen, $resolver->load($this->screen), $from, $from->addDay()))
+        ->map(fn (CarbonImmutable $point) => $point->setTimezone('America/Chicago')->format('d H:i'))->all();
+
+    // Today's opening and closing, midnight, and tomorrow's nothing past 09:00.
+    expect($points)->toBe(['20 11:00', '20 15:00', '21 00:00']);
 });

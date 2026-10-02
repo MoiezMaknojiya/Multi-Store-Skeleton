@@ -52,12 +52,12 @@ test('guests cannot reach any campaign endpoint', function () {
 
 test('an organization user cannot see or touch campaigns, whatever they hold', function () {
     // Deliberately given a broad hand-picked set — every screen and media permission,
-    // dayparts, the Organizations tab, even the accounts and roles views — and none of it
+    // the Organizations tab, even the accounts and roles views — and none of it
     // opens this door, because campaign-manage is not a permission row at all.
     $actor = createOrganizationUser($this->organization, [
         'screen-view', 'screen-store', 'screen-update', 'screen-destroy', 'screen-playlist',
         'media-view', 'media-store', 'media-update', 'media-destroy',
-        'daypart-view', 'daypart-store', 'organization-view', 'user-view', 'role-view',
+        'organization-view', 'user-view', 'role-view',
     ]);
 
     $campaign = Campaign::factory()->create();

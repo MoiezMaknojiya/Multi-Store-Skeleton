@@ -2,10 +2,11 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasClockTimes;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * When one item on one screen is allowed to play.
@@ -14,16 +15,36 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  *   WHICH DAYS   a date range, and optionally a repeat — every Friday, the third
  *                Thursday of the month, every year on the 14th.
- *   WHAT TIME    a daypart. Null means the whole day.
+ *   WHAT TIME    from one clock time to another, typed on the rule itself (owner, 2026-10-01: the
+ *                named dayparts a rule used to point at are gone, docs/SCHEDULE-SPEC.md §21). Both
+ *                empty means the whole day; an end before the start runs past midnight.
  *
  * Folding those two into one control is what forces the competing product to have
  * a separate modal for each; kept apart, "every Friday at lunch" is one row.
  *
  * An item may carry several rules and plays if ANY of them says yes, so "Eid
- * evenings AND every Friday lunchtime" is two rows rather than a special case.
+ * evenings AND every Friday lunchtime" is two rows rather than a special case — and so is
+ * "weekdays 07:00 to 20:00, Sunday 09:00 to 16:00".
+ *
+ * The times are WALL CLOCK, read in the screen's own timezone: "07:00" is seven in the morning
+ * where that television stands, which is why the daylight-saving switch needs no handling at all.
  */
 class ScheduleRule extends Model
 {
+    use HasClockTimes;
+
+    /** ISO weekdays, the one list the schedule window and the resolver share. Keys match
+     *  Carbon's dayOfWeekIso, so nothing ever has to be converted. */
+    public const WEEKDAYS = [
+        1 => 'Monday',
+        2 => 'Tuesday',
+        3 => 'Wednesday',
+        4 => 'Thursday',
+        5 => 'Friday',
+        6 => 'Saturday',
+        7 => 'Sunday',
+    ];
+
     public const DAILY = 'daily';
 
     public const WEEKLY = 'weekly';
@@ -53,7 +74,7 @@ class ScheduleRule extends Model
     ];
 
     protected $fillable = [
-        'playlist_item_id', 'daypart_id', 'starts_on', 'ends_on',
+        'playlist_item_id', 'start_time', 'end_time', 'starts_on', 'ends_on',
         'recurrence_type', 'recurrence_interval', 'recurrence_weekdays',
         'recurrence_monthday', 'recurrence_ordinal', 'recurrence_weekday',
         'recurrence_until', 'position',
@@ -74,9 +95,37 @@ class ScheduleRule extends Model
         ];
     }
 
-    public function daypart(): BelongsTo
+    protected function startTime(): Attribute
     {
-        return $this->belongsTo(Daypart::class);
+        return self::clockTime();
+    }
+
+    protected function endTime(): Attribute
+    {
+        return self::clockTime();
+    }
+
+    /** Whether the rule keeps hours of its own. With none it covers the whole of every day it covers. */
+    public function hasTimes(): bool
+    {
+        return $this->start_time !== null && $this->end_time !== null;
+    }
+
+    /** An end before the start means the hours run past midnight — 22:00 to 02:00. */
+    public function crossesMidnight(): bool
+    {
+        return $this->hasTimes() && $this->end_time <= $this->start_time;
+    }
+
+    /**
+     * The clock times at which this rule's answer can change, as "H:i" — the moments a television's
+     * answer can change at (the offline timeline, docs/AD-BUILDER-SPEC.md §15).
+     *
+     * @return list<string>
+     */
+    public function clockTimes(): array
+    {
+        return $this->hasTimes() ? [$this->start_time, $this->end_time] : [];
     }
 
     /**
@@ -84,34 +133,47 @@ class ScheduleRule extends Model
      *
      * The moment must already be in the screen's timezone.
      *
-     * The subtle part is which DAY the day-rule is tested against. With a window
-     * that runs past midnight, half past midnight on Saturday belongs to Friday's
-     * window — the organization said "Friday night, 22:00 to 02:00" and meant it. So the
-     * daypart is asked which day the currently-open window began on, and the day
-     * rule is checked against THAT, not against the calendar date.
+     * The subtle part is which DAY the day-rule is tested against. With hours that
+     * run past midnight, half past midnight on Saturday belongs to Friday's
+     * hours — the organization said "Friday night, 22:00 to 02:00" and meant it. So the
+     * rule is asked which day the hours open now began on, and its days are checked
+     * against THAT, not against the calendar date.
      */
     public function coversAt(CarbonInterface $moment): bool
     {
         $at = CarbonImmutable::instance($moment);
 
-        if ($this->daypart_id === null) {
+        if (! $this->hasTimes()) {
             return $this->coversDay($at->startOfDay());
         }
 
-        $daypart = $this->daypart;
-
-        if ($daypart === null) {
-            // A daypart id with nothing behind it — gone after this rule was read, or
-            // never there — plays never: all day would be the opposite of the window it
-            // asked for. Deleting a daypart in the database is another matter: the
-            // foreign key empties daypart_id, which reads as the whole day (above), and
-            // that is why a daypart still in use is retired, never deleted.
-            return false;
-        }
-
-        $serviceDay = $daypart->openWindowDay($at);
+        $serviceDay = $this->openWindowDay($at);
 
         return $serviceDay !== null && $this->coversDay($serviceDay);
+    }
+
+    /**
+     * WHICH DAY the hours open at this moment belong to — or null when the clock is outside them.
+     *
+     * Two days' hours can cover "now": today's, and yesterday's that have not closed yet because
+     * they run past midnight. Checking only today's is the bug that makes "22:00–02:00" go dark at
+     * midnight.
+     */
+    private function openWindowDay(CarbonImmutable $at): ?CarbonImmutable
+    {
+        $time = $at->format('H:i');
+        [$start, $end] = [$this->start_time, $this->end_time];
+
+        if ($end > $start) {
+            return $time >= $start && $time < $end ? $at->startOfDay() : null;
+        }
+
+        // Past midnight: today's hours run to the end of the day, and yesterday's reach into this morning.
+        if ($time >= $start) {
+            return $at->startOfDay();
+        }
+
+        return $time < $end ? $at->subDay()->startOfDay() : null;
     }
 
     /**
@@ -191,7 +253,6 @@ class ScheduleRule extends Model
     public function occurrences(CarbonInterface $from, int $days = 7): array
     {
         $start = CarbonImmutable::parse(CarbonImmutable::instance($from)->toDateString());
-        $daypart = $this->daypart_id ? $this->daypart : null;
         $found = [];
 
         foreach (range(0, max(0, $days - 1)) as $offset) {
@@ -201,19 +262,12 @@ class ScheduleRule extends Model
                 continue;
             }
 
-            // With no daypart the item is eligible for the whole day; with one, only
-            // inside the window that day opens — and a closed weekday opens none.
-            $window = $daypart?->windowFor($day->dayOfWeekIso);
-
-            if ($daypart !== null && $window === null) {
-                continue;
-            }
-
+            // With no hours of its own the item is eligible for the whole day; with them, only inside them.
             $found[] = [
                 'date' => $day->toDateString(),
-                'start' => $window[0] ?? null,
-                'end' => $window[1] ?? null,
-                'crosses_midnight' => $window !== null && $window[1] <= $window[0],
+                'start' => $this->hasTimes() ? $this->start_time : null,
+                'end' => $this->hasTimes() ? $this->end_time : null,
+                'crosses_midnight' => $this->crossesMidnight(),
             ];
         }
 
@@ -294,7 +348,8 @@ class ScheduleRule extends Model
     public function fingerprint(): string
     {
         return implode(',', [
-            $this->daypart_id,
+            $this->start_time,
+            $this->end_time,
             $this->starts_on?->toDateString(),
             $this->ends_on?->toDateString(),
             $this->recurrence_type,

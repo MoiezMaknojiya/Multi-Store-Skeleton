@@ -3,8 +3,8 @@
 namespace Tests\Browser;
 
 use App\Models\Channel;
-use App\Models\Role;
 use App\Models\Organization;
+use App\Models\Role;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;

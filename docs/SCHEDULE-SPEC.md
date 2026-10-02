@@ -13,6 +13,11 @@ kuch bhi due na ho to **default media**.
 > Screen ke apne operating hours pehle design mein the — 2026-09-10 ko hata diye gaye.
 > §18 dekho.
 
+> **2026-10-01 — Dayparts hata diye gaye.** Waqt ab rule par hi likha jata hai, schedule ki window
+> ke andar: *All day*, ya *From … To …*. Neeche §2 (Daypart), §6 ki do daypart tables, §9 ke daypart
+> endpoints, §10 ka Dayparts page aur faisle #1, #9, #11 ab **tareekh** hain. Aaj ka model §21 mein hai —
+> pehle woh parho.
+
 > **As built — 2026-09-17 tak sahi kiya gaya.** Ye document design ka hai, magar neeche
 > ke "kya bana" hisse code se milaye gaye hain. Jo badla: manifest ke `blank` ka matlab
 > (§8), activity log ke asal action names aur endpoints (§9), resolver ka asal API (§12),
@@ -36,7 +41,7 @@ kuch bhi due na ho to **default media**.
 
 | # | Faisla |
 |---|---|
-| 1 | Daypart named + reusable hai — ek dafa banao, kai screens/items par lagao |
+| 1 | ~~Daypart named + reusable hai — ek dafa banao, kai screens/items par lagao~~ — 2026-10-01: waqt rule par likha jata hai (§21) |
 | 2 | Timezone **screen** par, default `America/Chicago`, owner badal sakta hai |
 | 3 | Gap mein **default media** chalti hai, **screen** par set hoti hai |
 | 4 | ~~Layer 1 (screen hours)~~ **+** Layer 2 (item window) **+** Layer 3 (recurrence) — §18 |
@@ -44,9 +49,9 @@ kuch bhi due na ho to **default media**.
 | 6 | **Organization-level hours nahi** — organization khula reh sakta hai jab andar ka deli band ho |
 | 7 | Rules na hon to item **24 ghante** chalta hai |
 | 8 | Kuch due na ho → default media; wo bhi na ho → **kaali screen** (§18) |
-| 9 | `Dayparts` ka sidebar mein apna page, + jahan choose karte ho wahin inline "New" |
+| 9 | ~~`Dayparts` ka sidebar mein apna page, + jahan choose karte ho wahin inline "New"~~ — page hata (§21) |
 | 10 | Schedule modal mein **"agle 7 din"** ka preview |
-| 11 | Daypart **retire** hota hai, delete nahi (live rules us par lage hote hain) |
+| 11 | ~~Daypart **retire** hota hai, delete nahi (live rules us par lage hote hain)~~ — daypart hi nahi raha (§21) |
 | 12 | `Copy` = **poori playlist** (items + duration + schedules) target screen par replace; confirm modal pehle dikhaye ke kya mitega |
 
 ### Timezone ke baare mein ek baat
@@ -623,7 +628,7 @@ likhi jati — aur do jagah likhi hui baat kabhi na kabhi ek doosre se ulat jati
 |---|---|
 | `screens.timezone` | file ke rules **wall clock** hain. "Jumma 11:00" ka matlab wahi 11 baje jahan TV lagi hai |
 | `screens.default_media_id` | jab kuch bhi due na ho to kya chale |
-| Dayparts | file ke rule ka "kis waqt se kis waqt tak" — reusable |
+| ~~Dayparts~~ | 2026-10-01 tak file ke rule ka "kis waqt se kis waqt tak" yahi tha; ab rule khud kehta hai (§21) |
 | Schedule rules | poora feature isi ka hai |
 
 ### "Kuch nahi" ke ab teen matlab hain
@@ -654,7 +659,7 @@ hoti. Iske do test hain:
 Raat ko TV **khud** kaali nahi hoti — wo tab kaali honti hai jab us waqt ke liye kuch
 schedule na ho **aur** default media set na ho. Yaani agar organization din ke gap mein branding
 dikhana chahti hai **aur** raat ko kaala, to abhi dono ek saath nahi ho sakte: default
-media chabis ghante chalega. Zarurat pare to `Late night` jaisa daypart bana kar
+media chabis ghante chalega. Zarurat pare to `22:00 – 06:00` jaisa waqt de kar
 branding par ulta rule lagaya ja sakta hai — magar wo abhi banaya nahi gaya.
 
 ---
@@ -711,16 +716,131 @@ Is spec mein controller/request/JS ke naam chhote likhe hain; 2026-09-17 ke layo
 
 | Spec mein | Asli jagah |
 | --- | --- |
-| `ScreenController` · `PlaylistController` · `MediaController` · `DaypartController` · `ChannelController` · `ChannelAdController` | `app/Http/Controllers/Signage/` |
-| `StoreMediaRequest` · `UpdateMediaRequest` · `DaypartRequest` · `ChannelRequest` · `ChannelAdRequest` | `app/Http/Requests/Signage/` |
+| `ScreenController` · `PlaylistController` · `MediaController` · `ChannelController` · `ChannelAdController` (`DaypartController` 2026-10-01 ko gaya) | `app/Http/Controllers/Signage/` |
+| `StoreMediaRequest` · `UpdateMediaRequest` · `ChannelRequest` · `ChannelAdRequest` (`DaypartRequest` 2026-10-01 ko gaya) | `app/Http/Requests/Signage/` |
 | `DeviceController` | `app/Http/Controllers/Device/` |
 | `CampaignController` · `NetworkAdsController` (+ `CampaignRequest`) | `app/Http/Controllers/Advertising/`, `app/Http/Requests/Advertising/` |
 | `validate.js` · `crud-table-base.js` · `playlist-defaults.js` · `media-file.js` | `resources/js/core/` |
-| `media-table.js` · `screens-table.js` · `dayparts-table.js` · `channels-table.js` | `resources/js/tables/` |
+| `media-table.js` · `screens-table.js` · `channels-table.js` (`dayparts-table.js` 2026-10-01 ko gaya) | `resources/js/tables/` |
 | `screen-playlist.js` · `channel-ads.js` | `resources/js/pages/` |
 | `player.js` · `app.js` | `resources/js/` (Vite ke do entry points) |
 
 Schedule ke tests `tests/Feature/Signage/` mein hain (`ScheduleResolverTest`, `ScheduleRuleTest`, `PlaylistScheduleTest`,
-`ScreenScheduleTest`, `DaypartWindowTest`, `ChannelManifestTest`), aur playlist/media par hone wale hamle
+`ScreenScheduleTest`, `ScheduleRuleTimesTest`, `ChannelManifestTest`), aur playlist/media par hone wale hamle
 `tests/Feature/Security/` mein (`OrganizationWallAttackTest`, `InputAbuseAttackTest`, `FileUploadAttackTest`,
 `DeviceApiAttackTest`). Naming aur folder ke usool `.claude/rules/02-project-conventions.md` mein likhe hain.
+
+---
+
+## 21. Dayparts hataye gaye — waqt ab rule par hai (2026-10-01)
+
+Owner ka sawal: *"dayparts ko hata k kahi Playlist mein jab schedule set karte ha waha nahi dal sakte? ya koi
+better option batao"* — phir *"srif Xibo nahi aur bhi ha unka bhi pata karo aur jo best ho woo batao"* — phir
+*"theek ha kardo"*.
+
+### Kya dekha
+
+23 signage products ke docs dekhe ke waqt kahan aur kaise set hota hai:
+
+| Tareeqa | Products |
+|---|---|
+| Waqt item ya playlist ke schedule mein hi likha jata hai | Yodeck, ScreenCloud, OptiSigns, NoviSign, Rise Vision, Signagelive, TelemetryTV, BrightSign, Scala, Poppulo, embed signage, Samsung VXT, Navori, Appspace, Screenly, Fugo, Look, Mvix, piSignage, Pickcel, AbleSign |
+| Naam wale dayparts ki alag library | Xibo — aur wahan bhi "Custom" chun kar waqt wahin likha ja sakta hai |
+| Day parts har screen ke apne andar (ads network) | Broadsign |
+
+Screenly ne July 2026 mein apna schedule dobara banaya aur wohi shakal chuni jo hamari thi — din + waqt ke rules,
+kai rules ek saath, saada lafzon ka khulasa — sirf waqt wahin likha jata hai. Hamare yahan waqt ke liye doosre page
+par ja kar naam wala daypart banana parta tha (aur local database mein ek bhi rule kisi daypart par laga hua nahi tha).
+
+### Naya model
+
+Rule ke do hisse wahi hain (§4), sirf WAQT badla:
+
+| Hissa | Sawal | Options |
+|---|---|---|
+| **DIN** | kaunse calendar days? | hamesha · date range · repeat — jaisa tha |
+| **WAQT** | us din ke andar kaunse ghante? | **poora din**, ya **`start_time` se `end_time` tak** — rule par hi likha hua |
+
+- `schedule_rules.start_time` / `end_time` — `time`, nullable. **Dono NULL = poora din.** Ek ke baghair doosra nahi
+  (`required_with`), aur dono barabar nahi (`different`).
+- **`end_time < start_time` ka matlab aadhi raat cross** — jaisa daypart mein tha. Aur wohi baat jo §5 mein thi:
+  raat 12:30 par jo ghante khule hain wo **kal** shuru hue the, isliye rule ke din **us din** ke against parhe jate
+  hain (`ScheduleRule::coversAt` → `openWindowDay`). "Jumma ki raat 22:00–02:00" Hafte ki subah 00:30 par chalta hai.
+- **Kisi din alag waqt** (daypart ki exception): usi line par **ek aur rule** — line tab chalti hai jab **koi bhi**
+  rule haan kahe. "Deli: Mangal se Hafta 07:00–20:00, Itwaar 09:00–16:00, Peer band" = do rules:
+  weekly `[2,3,4,5,6]` 07:00–20:00, aur weekly `[7]` 09:00–16:00. Peer kisi rule mein nahi, to band.
+- Timezone wahi screen ka (§1) — waqt wall clock hai.
+
+### UI (schedule ki window)
+
+```
+Days  [Every day ▾]
+Time  [Between times ▾]   11:00 → 15:00            Runs past midnight.   ← sirf jab end < start
+      Every day · 11:00 AM – 3:00 PM                                    [Remove]
+
+[+ Add a Schedule]  [Copy to Other Lines]
+```
+
+- **Time**: `All day` ya `Between times` — doosre par do `type="time"` khaane (`rule-start-time-N`, `rule-end-time-N`).
+  Days wali line ki hi shakal.
+- **Weekdays / Weekends** — weekly repeat mein din ke buttons ke baad do quick picks (`setWeekdays`): Peer–Jumma,
+  ya Hafta–Itwaar, jo tick the unki jagah.
+- **Copy to Other Lines** — jo cheez naam wala daypart deta tha (ek tabdeeli, kai lines) uska badal. Window ke andar
+  doosri lines ki list khulti hai (`otherLines`, `copyToKeys`, Select All); **OK** is line ke saath ticked lines ko bhi
+  yehi schedule deta hai — har ek ki apni copy, unke purane schedule ki jagah. Sab kuch page par staged, `Save Changes`
+  tak (jaise har edit). Screens ke darmiyan `Copy to Other Screens` pehle se hai.
+- **Ended** — jis line ke **saare** rules ka aakhri din guzar chuka ho (date range ka `ends_on`, repeat ka
+  `recurrence_until`), us par `Ended` ka pill (`scheduleEnded`). "Aaj" screen ka apna hai: playlist ke GET aur PUT
+  dono `local_date` bhejte hain — browser ki tareekh kabhi nahi. Aadhi raat cross karne wale ghante aakhri din ki agli
+  subah tak chalte hain, isliye aisa rule ek din baad "Ended" hota hai.
+- **Next 7 days** server se hi aata hai (wohi code jo TV ko jawab deta hai), magar **adhoora rule poocha hi nahi jata**: waqt ka ek
+  khaana khali ho ya weekly repeat mein koi din na ho to us ki wajah preview ki jagah likhi aati hai (`ruleProblems`), aur
+  server ko aisi request nahi jati jo woh sirf 422 se lautata. Jawab aane tak heading "working…" kehti hai, "Nothing in the
+  next 7 days" nahi.
+- Validation window mein, rule ke neeche, server ke hi lafzon mein: *"Time: give both a start and an end, or choose All
+  day."* · *"Time: the start and the end cannot be the same. To run past midnight, set an end earlier than the start."* ·
+  adha likha waqt: *"Time: enter the whole time, or choose All day."*
+
+### Kya hata
+
+| Cheez | Kahan tha |
+|---|---|
+| Dayparts page + sidebar link | `resources/views/dayparts/index.blade.php`, `dayparts-table.js`, `/dayparts` ke 5 routes |
+| `DaypartController`, `DaypartRequest`, `Daypart`, `DaypartException`, `DaypartFactory` | — |
+| `dayparts`, `daypart_exceptions` tables · `schedule_rules.daypart_id` | migration ne hataye (neeche) |
+| `GET /screens/{screen}/daypart-options` | playlist page ab koi list nahi mangta |
+| 4 permissions: `daypart-view/store/update/destroy` | catalogue 41 → 37. Jo playlist badal sakta hai (`screen-playlist`) wohi waqt set karta hai |
+| `PlaylistController::assertDaypartsBelongToTheSameOrganization` | doosre organization ka hawala ab ho hi nahi sakta |
+
+### Migration — `2026_10_02_100000_put_the_time_on_the_schedule_rule`
+
+Jo rule kisi daypart par laga tha, us mein wohi waqt khud likh diya jata hai — TV par kuch nahi badalta:
+
+1. **Pehle parho, pehle inkaar.** Daypart ke har din ke ek jaise ghante: rule ko wahi ghante mil jate hain. Kuch dinon
+   ke alag ghante (ya band din): rule **har alag ghanton ke liye ek rule** ban jata hai, un dinon par weekly — pehla
+   usi row par, baaqi usi line par us ke baad. Jo rule kabhi chal hi nahi sakta tha (daypart us din band) wo "kabhi
+   nahi" hi rehta hai (weekly, koi din nahi) — rule ke baghair line chabis ghante chalti.
+2. Do cheezein is tarah nahi kahi ja saktin, aur migration **kuch badle baghair ruk jati hai**, rule ka naam le kar:
+   aisa repeat jo "sirf in dinon" nahi keh sakta (har N din, mahine ki tareekh, saal mein ek baar) alag-ghanton wale
+   daypart par; aur aisa daypart jis ka ek din pichhli raat ke band hone se pehle khul jata ho, jab rule dinon mein farq
+   karta ho.
+3. `down()` tables, column aur permissions wapas deta hai — har (organization, ghante) ka ek daypart, ghanton ke naam se.
+
+Saboot: `ScheduleTimesMigrationTest` 63 joron (rule ke din × daypart) ke liye do mahine ke **har aadhe ghante** par purane
+rows ka jawab — purane models ke usoolon se nikala hua — migration ke baad wali line ke jawab se milata hai.
+
+### Tests
+
+| File | Kya |
+|---|---|
+| `ScheduleRuleTimesTest` (naya, 10) | ghanton ka hisab: kinare, aadhi raat, "jis din khule", do rules = alag din, timezone, DST, fingerprint |
+| `ScheduleTimesMigrationTest` (naya, 9) | upar wala saboot, split rows, inkaar, wapsi |
+| `ScheduleRuleTest`, `ScheduleResolverTest`, `PlaylistScheduleTest`, `ScreenScheduleTest`, `ChannelManifestTest`, `OfflineTimelineTest` | dayparts ki jagah rule ke apne ghante; `changePoints` ab rules ke waqt se |
+| `ValidationWordsTest`, `InputAbuseAttackTest` | waqt ke inkaar ke lafz, aur waqt har ghalat shakal mein |
+| Dusk `ScheduleUiTest` | waqt likhna, quick picks, aadhi raat ka note, Copy to Other Lines, Ended |
+| gaye | `DaypartCrudTest` (18), `DaypartWindowTest` (10), Dusk `DaypartUiTest` (2) |
+
+### Jo cheez kam hui
+
+Pehle "Deli hours" ek jagah badalne se us par lagi har line badal jati thi. Ab ek line ka schedule badal kar
+**Copy to Other Lines** dabana hota hai (aur doosri screens ke liye Copy to Other Screens). 21 products isi tarah chalte hain.

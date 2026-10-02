@@ -18,7 +18,6 @@ class Permission extends Model
         'role-view', 'role-store', 'role-update', 'role-destroy',
         'screen-view', 'screen-store', 'screen-update', 'screen-destroy', 'screen-playlist',
         'media-view', 'media-store', 'media-update', 'media-destroy',
-        'daypart-view', 'daypart-store', 'daypart-update', 'daypart-destroy',
         'ad-view', 'ad-store', 'ad-update', 'ad-destroy',
     ];
 
@@ -86,10 +85,6 @@ class Permission extends Model
         'media-store' => 'Upload Media',
         'media-update' => 'Update Media',
         'media-destroy' => 'Delete Media',
-        'daypart-view' => 'View Dayparts',
-        'daypart-store' => 'Create Dayparts',
-        'daypart-update' => 'Update Dayparts',
-        'daypart-destroy' => 'Delete Dayparts',
         'ad-view' => 'View Ads',
         'ad-store' => 'Create Ads',
         'ad-update' => 'Update Ads',

@@ -110,7 +110,7 @@ test('the pages inside an organization say organization', function () {
     $this->actingAs($member)->withSession(['current_organization_id' => $organization->id]);
 
     assertEveryPageSaysOrganization($this, [
-        '/dashboard', '/screens', '/screens/'.$screen->id, '/media', '/dayparts', '/channels', '/channels/'.$channel->id,
+        '/dashboard', '/screens', '/screens/'.$screen->id, '/media', '/channels', '/channels/'.$channel->id,
         '/builder', '/builder/assets', '/builder/create?orientation=landscape', '/members', '/roles', '/activity',
         '/settings/organization', '/profile',
     ]);
