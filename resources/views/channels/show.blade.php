@@ -207,7 +207,10 @@
                                         </select>
                                     </div>
                                 </template>
+                                {{-- Enter here searches at once. Left to the browser it would send the form this box sits in:
+                                     the ad was saved with whatever tile was picked, by somebody who only meant to search. --}}
                                 <input type="search" x-model="picker.search" @input.debounce.300ms="loadPicker()"
+                                       @keydown.enter.prevent="loadPicker()"
                                        dusk="channel-ad-picker-search" class="form-input min-w-0 flex-1" maxlength="255"
                                        x-bind:placeholder="source === 'ads' ? 'Search ads…' : 'Search files…'" aria-label="Search">
                             </div>

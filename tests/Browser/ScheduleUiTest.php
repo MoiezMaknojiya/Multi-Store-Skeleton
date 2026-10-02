@@ -337,6 +337,12 @@ class ScheduleUiTest extends DuskTestCase
             // and its answer can come first.
             $browser->waitFor('@playlist-schedule-2')->assertMissing('@playlist-ended-0');
 
+            // Leaving the page asks only while something waits for Save Changes.
+            $leavingAsks = fn (): bool => $browser->script(
+                'const leaving = new Event("beforeunload", { cancelable: true }); window.dispatchEvent(leaving); return leaving.defaultPrevented;'
+            )[0];
+            $this->assertFalse($leavingAsks(), 'nothing was changed, yet leaving the page asks');
+
             // The first line: three days long ago, at lunchtime.
             $this->clickAndAwait($browser, '@playlist-schedule-0', fn (Browser $b) => $b->waitFor('@schedule-modal'));
             $this->clickAndAwait($browser, '@schedule-add-rule', fn (Browser $b) => $b->waitFor('@rule-day-mode-0'));
@@ -354,11 +360,21 @@ class ScheduleUiTest extends DuskTestCase
                 ->assertSeeIn('@schedule-copy-panel', 'Winter sale')
                 ->assertSeeIn('@schedule-copy-panel', 'Coffee deal')
                 ->assertDontSeeIn('@schedule-copy-panel', 'Eid offer');
+
+            // Select All ticks every other line and becomes Clear All; pressed again, none is ticked.
+            $this->jsClick($browser, '@schedule-copy-all');
+            $browser->waitForTextIn('@schedule-copy-all', 'Clear All')
+                ->assertChecked('@schedule-copy-line-2')->assertChecked('@schedule-copy-line-3');
+            $this->jsClick($browser, '@schedule-copy-all');
+            $browser->waitForTextIn('@schedule-copy-all', 'Select All')
+                ->assertNotChecked('@schedule-copy-line-2')->assertNotChecked('@schedule-copy-line-3');
+
             $this->jsClick($browser, '@schedule-copy-line-3');
 
             $this->jsClick($browser, '@schedule-ok');
             $this->waitForModalClosed($browser, '@schedule-modal');
             $browser->waitForText('Schedule copied to 1 other line.');
+            $this->assertTrue($leavingAsks(), 'two lines wait for Save Changes, and leaving the page does not ask');
 
             // Both say when they played, and that it is over; the line between them was left alone.
             $browser->waitFor('@playlist-ended-0')
@@ -379,6 +395,9 @@ class ScheduleUiTest extends DuskTestCase
                 $rule = $line->scheduleRules->first();
                 $this->assertSame(['11:00', '15:00', '2020-03-22'], [$rule->start_time, $rule->end_time, $rule->ends_on->toDateString()]);
             }
+
+            // Saved: nothing is waiting any more.
+            $browser->waitUsing(5, 100, fn () => ! $leavingAsks(), 'the playlist is saved, and leaving the page still asks');
 
             // After a reload the mark is still there: it is read from the saved rules and the screen's own today.
             $browser->visit('/screens/'.$screen->id);

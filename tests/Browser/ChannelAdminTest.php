@@ -8,6 +8,7 @@ use App\Models\Media;
 use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
+use Facebook\WebDriver\WebDriverKeys;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -98,6 +99,18 @@ class ChannelAdminTest extends DuskTestCase
             $browser->assertSeeIn('@channel-ad-chosen', 'No file chosen yet.');
             $this->jsClick($browser, '@channel-ad-pick-'.$ad->media_id);
             $browser->waitForTextIn('@channel-ad-chosen', 'gama-coke')->assertSeeIn('@channel-ad-chosen', 'Image · chosen');
+
+            // Enter in the search box searches. The box sits inside the form, and left to the browser Enter sent the
+            // form: the ad was saved with the tile picked, by somebody who only meant to search (found by hand,
+            // 2026-10-02).
+            $this->countRequests($browser, 'POST', '/channels/'.$channel->id.'/ads');
+            $browser->click('@channel-ad-picker-search')->keys('@channel-ad-picker-search', 'gama', '{enter}')->pause(700)
+                ->assertVisible('@channel-ad-form')
+                ->assertVisible('@channel-ad-pick-'.$ad->media_id)
+                ->assertSeeIn('@channel-ad-chosen', 'gama-coke');
+            $this->assertSame(0, $browser->script('return window.__requestsCounted;')[0], 'Enter in the search box sent the form');
+            $this->assertSame(1, ChannelAd::where('channel_id', $channel->id)->count(), 'Enter in the search box saved an ad');
+
             $this->jsType($browser, '@channel-ad-title', 'Coke again');
 
             // Six seconds at least (owner's rule, 2026-09-28): said under the field before anything is sent.
@@ -172,7 +185,26 @@ class ChannelAdminTest extends DuskTestCase
             JS);
             $browser->waitUntilMissing('@channel-ad-seconds')
                 ->assertVisible('@channel-ad-video-note');
+
+            // -- Closing while the file is still going up asks first -----------------
+            // The uploader's own "bytes are going" is sent, for the same reason: what the dialog does with it is
+            // the point. Cancel and Escape both ask; Keep Uploading stays; Stop and Close closes.
+            $browser->script(<<<'JS'
+                document.querySelector('[dusk="channel-ad-dropzone"]').dispatchEvent(new CustomEvent('upload-busy', {
+                    bubbles: true, detail: { busy: true },
+                }));
+            JS);
             $this->jsClick($browser, '@channel-ad-cancel');
+            $browser->waitFor('@channel-ad-upload-still-going')
+                ->assertSeeIn('@channel-ad-upload-still-going', 'The file is still uploading. Stop it and close?')
+                ->assertVisible('@channel-ad-form')
+                ->press('Keep Uploading')
+                ->waitUntilMissing('@channel-ad-upload-still-going')
+                ->assertVisible('@channel-ad-form');
+            $browser->driver->getKeyboard()->sendKeys(WebDriverKeys::ESCAPE);
+            $browser->waitFor('@channel-ad-upload-still-going')->assertVisible('@channel-ad-form');
+            $this->jsClick($browser, '@channel-ad-stop-and-close');
+            $this->waitForModalClosed($browser, '@channel-ad-form');
 
             // -- Reordering ---------------------------------------------------------
             $second = ChannelAd::factory()->lasting(8)->showing(['thumbnail_path' => null])->create([
