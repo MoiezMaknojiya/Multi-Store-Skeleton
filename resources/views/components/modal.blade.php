@@ -14,6 +14,9 @@ $maxWidth = [
     '2xl' => 'sm:max-w-2xl',
     '3xl' => 'sm:max-w-3xl',
     '4xl' => 'sm:max-w-4xl',
+    // A picker beside a form (a channel's Add Ad): as wide as a laptop's window lets it be, and never touching the
+    // window's sides — the sizes above are all narrower than the window they open in.
+    '6xl' => 'sm:max-w-[min(72rem,calc(100%-2rem))]',
 ][$maxWidth] ?? 'sm:max-w-2xl';
 @endphp
 

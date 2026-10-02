@@ -216,6 +216,30 @@ A file uploaded inside a channel joins a library, so it meets the library's two 
   before a byte is sent; the server decides. Taking an ad out frees nothing, because the file stays in its
   library — deleting it there does.
 
+## 8c. The Add-ad dialog shows the library beside its fields (owner, 2026-10-02)
+
+"Add Ad ka popup bohot chota ha aur sari ads nahi dikhti ... abhi srf 3 show ho rae ha" (2026-10-01). The owner
+asked for two columns, was shown both ways round, and chose the second: **the files on the left, the fields on
+the right** — a file is picked first and described after, and Save ends up under the fields.
+
+- **From a laptop up (1024 px)** the dialog is as wide as the window lets it be, up to 1152 px, and never taller
+  than the window: the tiles scroll inside it, and Cancel and Save are always in sight. The tiles stand as many
+  across as the column takes — four at a desk, three on a small laptop — and **Load More** is under the last one.
+  While a library is open the dialog keeps one height, however few files it lists, so it does not jump as they
+  arrive; Upload and "Keep This File", with nothing to scroll, are only as tall as what they hold.
+- **Beside the files:** a card that names the tile picked ("No file chosen yet." before) — the tile itself may
+  have scrolled away, or a search may have left it out — then Title, Seconds on screen and the two dates on one
+  line. The dates share a line so a small laptop (a 620 px window) shows every field with nothing to scroll for.
+  The card shows the picture above the name only in a window tall enough for it over the fields (704 px), and the
+  picture is the first thing to give up height when an error takes a line; in a shorter window it is a row.
+- **An ad being changed** shows the file it keeps as a picture where there is a column for it, and no card.
+- **On a phone** the same, one under the other: the sources, two tiles across in a box that scrolls, the card as
+  a row, the fields, Save.
+- Nothing about what is saved changed: the same three sources, the same fields, the same rules behind them.
+
+`tests/Browser/EveryPageFitsAPhoneTest` opens the dialog by its button at a desk, a short laptop, a tablet on
+its side and a phone, with a library longer than one page, and holds it to all of the above.
+
 ---
 
 ## 9. Questions already answered, so nobody asks again

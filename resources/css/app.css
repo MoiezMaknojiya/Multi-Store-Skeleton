@@ -2,6 +2,10 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* A window tall enough for a picture above a column of fields. The Add Ad dialog shows the chosen file large only
+   then: on a shorter laptop it is a row, so the fields under it are all in sight with nothing to scroll. */
+@custom-variant tall (@media (min-height: 44rem));
+
 /* Tailwind v4 gives a button the browser's own arrow; everything that can be pressed here says so with the hand —
    and a disabled one keeps the arrow (its utilities add not-allowed). */
 @layer base {

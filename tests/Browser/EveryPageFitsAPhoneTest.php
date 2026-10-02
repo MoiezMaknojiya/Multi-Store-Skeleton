@@ -206,6 +206,102 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
         });
     }
 
+    /**
+     * A channel's Add Ad is the one dialog as wide as its window (owner, 2026-10-01: "Add Ad ka popup bohot chota ha
+     * aur sari ads nahi dikhti ... srf 3 show ho rae ha"; of the two pictures shown, 2026-10-02: "doosri wali theek
+     * ha"): the files on the left, what is said of the one chosen on the right. So it is measured at a desk, a short
+     * laptop, the smallest laptop, a tablet on its side and a phone, opened the way a person opens it and with a
+     * library longer than one page of it.
+     */
+    public function test_the_add_ad_dialog_shows_the_files_beside_the_fields_and_fits_every_window(): void
+    {
+        $this->seedSuperAdmin();
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart Downtown Superstore']);
+        $keeper = $this->organizationMember($alpha, ['channel-view', 'channel-store', 'channel-update'], 'keeper@example.com', 'Channel Keeper');
+        $channel = Channel::factory()->create(['organization_id' => $alpha->id, 'name' => 'Alpha Weekend Deals and Offers']);
+
+        // Thirty files no playlist holds — more than one page of the picker — named as long as real ones, each with a
+        // picture of its own; and one already in the channel, to change.
+        foreach (range(1, 30) as $number) {
+            $file = Media::factory()->create([
+                'organization_id' => $alpha->id,
+                'title' => sprintf('%02d Breakfast, Lunch and Dinner Specials Menu Board', $number),
+                'orientation' => $number % 7 === 0 ? 'portrait' : 'landscape',
+            ]);
+            $this->putImage($file->thumbnail_path, 30 + $number * 7, 110, 230 - $number * 6);
+        }
+        $shown = Media::factory()->create(['organization_id' => $alpha->id, 'title' => 'Minute Maid Mango Summer Promotion']);
+        $this->putImage($shown->thumbnail_path, 240, 150, 40);
+        $ad = ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $shown->id, 'title' => 'Minute Maid Mango Summer Promotion']);
+
+        $this->browse(function (Browser $browser) use ($keeper, $alpha, $channel, $ad) {
+            $this->freshSession($browser);
+            $browser->loginAs($keeper);
+            $this->switchToOrganization($browser, $alpha);
+            $browser->visit('/dashboard');
+
+            $page = '/channels/'.$channel->id;
+            $desk = $this->measureAddAd($browser, $page, $ad->id, 1440, 900);
+            $laptop = $this->measureAddAd($browser, $page, $ad->id, 1366, 650);
+            $tablet = $this->measureAddAd($browser, $page, $ad->id, 1024, 768);
+            $phone = $this->measureAddAd($browser, $page, $ad->id, self::PHONE_WIDTH, 812);
+
+            // The smallest laptop there is (1366 by 768, with the browser's own bars): still every field and Save in
+            // sight, nothing but the tiles to scroll.
+            $small = $this->measureAddAd($browser, $page, $ad->id, 1366, 620);
+            $this->assertSame([], $small['errors'], 'On the smallest laptop the dialog could not be measured.');
+            $this->assertSame([false, true, 0, 0], [$small['dialogScrolls'], $small['saveInSight'], max(0, $small['fieldsScroll'] - 1), max(0, $small['filesScroll'] - 1)],
+                'On the smallest laptop: the dialog taller than its window, Save out of sight, the fields scrolling, the files\' column scrolling.');
+
+            foreach (['a desk' => $desk, 'a short laptop' => $laptop, 'a tablet on its side' => $tablet, 'a phone' => $phone] as $where => $found) {
+                $this->assertSame([], $found['errors'], "On {$where} the dialog could not be measured.");
+                $this->assertSame('fits', $found['adding'], "On {$where}, with the library open: ".json_encode($found['adding']));
+                $this->assertSame('fits', $found['uploading'], "On {$where}, with Upload open: ".json_encode($found['uploading']));
+                $this->assertSame('fits', $found['editing'], "On {$where}, changing an ad: ".json_encode($found['editing']));
+                $this->assertSame(0, $found['sideways'], "On {$where} the dialog scrolls sideways.");
+                $this->assertSame('No file chosen yet.', $found['chosenBefore'], "On {$where} the card says nothing is chosen yet.");
+                $this->assertSame($found['picked'].' Image · chosen', $found['chosenAfter'], "On {$where} the card names the tile picked.");
+                $this->assertLessThan(1, $found['fieldsMoved'], "On {$where} picking a tile moved the fields.");
+                $this->assertSame([24, 31], $found['tilesBeforeAndAfterMore'], "On {$where} Load More, under the last tile, brings the rest.");
+                $this->assertSame($found['chosenAfter'], $found['chosenAfterSearch'], "On {$where} the card still names the tile picked once a search has left it out.");
+                $this->assertSame(['kept' => true, 'chosen' => false, 'name' => 'Minute Maid Mango Summer Promotion'], $found['keeping'],
+                    "On {$where} an ad being changed shows the file it has, and no card for a tile.");
+            }
+
+            // From a laptop up: two columns, the dialog no taller than the window, Cancel and Save in sight, and every
+            // field in sight with nothing to scroll for. With a library open the dialog is as tall as its window lets
+            // it be (a 1rem margin above and below) however few files are listed, so it does not jump as they arrive;
+            // Upload, with nothing to scroll, is only as tall as what it holds.
+            foreach (['a desk' => [$desk, 4, 12, 868], 'a short laptop' => [$laptop, 4, 8, 618], 'a tablet on its side' => [$tablet, 3, 6, 736]] as $where => [$found, $columns, $tiles, $height]) {
+                $this->assertSame($height, $found['frame'], "On {$where} the dialog is as tall as its window lets it be.");
+                $this->assertSame($height, $found['frameWithOneFile'], "On {$where} the dialog changed its height when a search left one file.");
+                $this->assertLessThan($height, $found['frameUploading'], "On {$where} Upload is only as tall as what it holds.");
+                $this->assertTrue($found['sideBySide'], "On {$where} the files and the fields stand side by side.");
+                $this->assertSame($columns, $found['columns'], "On {$where} the tiles stand {$columns} across.");
+                $this->assertGreaterThanOrEqual($tiles, $found['tilesInSight'], "On {$where} at least {$tiles} tiles are in sight at once (there were three).");
+                $this->assertFalse($found['dialogScrolls'], "On {$where} the dialog is taller than its window.");
+                $this->assertTrue($found['saveInSight'], "On {$where} Save is out of sight.");
+                $this->assertLessThanOrEqual(1, $found['fieldsScroll'], "On {$where} the fields need scrolling.");
+                $this->assertLessThanOrEqual(1, $found['filesScroll'], "On {$where} the files' column itself scrolls: only its tiles should.");
+                $this->assertGreaterThan(0, $found['tilesScroll'], "On {$where} the tiles scroll inside the dialog.");
+            }
+
+            // The chosen file's picture stands above its name only in a window tall enough for it over the fields.
+            $this->assertTrue($desk['pictureAbove'], 'At a desk the chosen file is shown large.');
+            $this->assertGreaterThanOrEqual(170, $desk['pictureHeight']);
+            $this->assertFalse($laptop['pictureAbove'], 'On a short laptop the chosen file is a row, so the fields fit.');
+            $this->assertTrue($tablet['pictureAbove'], 'On a tablet on its side the picture gives up some height, not the fields.');
+            $this->assertGreaterThanOrEqual(56, $tablet['pictureHeight']);
+
+            // A phone: one column, the files first and then the fields, two tiles across, in a box that scrolls.
+            $this->assertFalse($phone['sideBySide']);
+            $this->assertTrue($phone['filesFirst'], 'On a phone the files come before the fields.');
+            $this->assertSame(2, $phone['columns']);
+            $this->assertGreaterThan(0, $phone['tilesScroll']);
+            $this->assertFalse($phone['pictureAbove']);
+        });
+    }
+
     /* ── Helpers ─────────────────────────────────────────────────────── */
 
     /**
@@ -294,7 +390,8 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
                 }
             }
 
-            // The dialogs are a phone's problem: on a laptop each one is a column far narrower than the page.
+            // The dialogs are a phone's problem: on a laptop each one is a column far narrower than the page — all but
+            // a channel's Add Ad, as wide as its window, which is measured at every size in a test of its own.
             foreach ($this->measure($browser, $page, [], self::LAPTOP_WIDTH, 'laptop') as $where => $found) {
                 if ($found !== 'fits') {
                     $problems['laptop: '.$where] = $found;
@@ -326,6 +423,131 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
 
         return json_decode((string) $json, true);
     }
+
+    /**
+     * The Add Ad dialog of a channel's page in a frame of that size: opened by its button, a tile picked, the rest of
+     * the library asked for, Upload looked at, then an ad opened to be changed — and what stands where at each step.
+     *
+     * @return array<string, mixed>
+     */
+    private function measureAddAd(Browser $browser, string $page, int $adId, int $width, int $height): array
+    {
+        $browser->driver->manage()->timeouts()->setScriptTimeout(90);
+
+        $json = $browser->driver->executeAsyncScript(self::MEASURE.self::MEASURE_ADD_AD.<<<'JS'
+            const [page, adId, width, height, done] = arguments;
+            addAd(page, adId, width, height).then(
+                (result) => done(JSON.stringify(result)),
+                (error) => done(JSON.stringify({ errors: ['the dialog could not be measured: ' + error] })),
+            );
+        JS, [$page, $adId, $width, $height]);
+
+        return json_decode((string) $json, true);
+    }
+
+    /** The Add Ad dialog, step by step, in a frame of the size asked for (it uses MEASURE's `wait` and `problems`). */
+    private const MEASURE_ADD_AD = <<<'JS'
+        async function addAd(page, adId, width, height) {
+            const found = { errors: [] };
+            const frame = document.createElement('iframe');
+            frame.style.cssText = `position:fixed;left:0;top:0;width:${width}px;height:${height}px;border:0;z-index:2147483647;background:#fff`;
+            document.body.appendChild(frame);
+            await new Promise((resolve) => { frame.onload = resolve; frame.src = page; setTimeout(resolve, 15000); });
+            const win = frame.contentWindow;
+            const doc = win.document;
+
+            const at = (dusk) => doc.querySelector(`[dusk="${dusk}"]`);
+            const seen = (el) => !!el && el.offsetParent !== null;
+            const box = (el) => el.getBoundingClientRect();
+            const until = async (ready) => { for (let i = 0; i < 80 && !ready(); i++) await wait(100); return ready(); };
+            const tiles = () => [...doc.querySelectorAll('[dusk^="channel-ad-pick-"]')];
+            const laptop = width >= 1024;
+
+            try {
+                if (!await until(() => seen(at('channel-ad-row-' + adId)))) throw 'the channel never listed its ad';
+
+                /* Add Ad, as a person opens it: the library's first page. */
+                at('add-channel-ad').click();
+                if (!await until(() => tiles().length > 0)) throw 'the picker never listed a file';
+                await wait(300);
+
+                const panel = at('channel-ad-form').closest('[role="dialog"]');
+                const overlay = panel.parentElement;
+                const files = at('channel-ad-files');
+                const fields = at('channel-ad-fields');
+                const picker = at('channel-ad-picker');
+                const chosen = at('channel-ad-chosen');
+                const picture = chosen.firstElementChild;
+                const title = at('channel-ad-title');
+                const pickerBox = box(picker);
+                const save = box(at('channel-ad-save'));
+
+                found.sideways = overlay.scrollWidth - overlay.clientWidth;
+                found.frame = Math.round(box(panel).height);
+                found.dialogScrolls = overlay.scrollHeight > overlay.clientHeight + 1;
+                found.sideBySide = box(fields).left >= box(files).right - 1 && Math.abs(box(fields).top - box(files).top) < 2;
+                found.filesFirst = box(fields).top >= box(files).bottom - 1;
+                found.columns = new Set(tiles().map((tile) => Math.round(box(tile).left))).size;
+                found.tilesInSight = tiles().filter((tile) => {
+                    const each = box(tile);
+                    return each.top >= pickerBox.top - 1 && each.bottom <= pickerBox.bottom + 1 && each.bottom <= win.innerHeight;
+                }).length;
+                found.tilesScroll = picker.scrollHeight - picker.clientHeight;
+                found.filesScroll = files.scrollHeight - files.clientHeight;
+                found.fieldsScroll = fields.scrollHeight - fields.clientHeight;
+                found.saveInSight = save.top >= 0 && save.bottom <= win.innerHeight;
+                found.chosenBefore = chosen.innerText.trim();
+
+                /* A tile picked: the card names it, and no field moves. */
+                const titleTop = box(title).top;
+                found.picked = tiles()[0].querySelector('p').innerText.trim();
+                tiles()[0].click();
+                await wait(300);
+                found.chosenAfter = chosen.innerText.trim().replace(/\s+/g, ' ');
+                found.fieldsMoved = Math.abs(box(title).top - titleTop);
+                found.pictureAbove = box(picture).bottom <= box(picture.nextElementSibling).top + 1;
+                found.pictureHeight = Math.round(box(picture).height);
+                found.adding = problems(win, laptop);
+
+                /* The rest of the library, from under the last tile. */
+                const before = tiles().length;
+                at('channel-ad-picker-more').click();
+                await until(() => tiles().length > before);
+                found.tilesBeforeAndAfterMore = [before, tiles().length];
+
+                /* A search that leaves one file, and not the one picked: the card still names the pick, and the
+                   dialog keeps its height. */
+                const search = at('channel-ad-picker-search');
+                search.value = '07 Breakfast';
+                search.dispatchEvent(new win.Event('input', { bubbles: true }));
+                if (!await until(() => tiles().length === 1)) throw 'the search never left one file';
+                await wait(200);
+                found.chosenAfterSearch = chosen.innerText.trim().replace(/\s+/g, ' ');
+                found.frameWithOneFile = Math.round(box(panel).height);
+
+                /* Upload. */
+                at('channel-ad-source-upload').click();
+                if (!await until(() => seen(at('channel-ad-drop')))) throw 'Upload never showed its box';
+                await wait(200);
+                found.frameUploading = Math.round(box(panel).height);
+                found.uploading = problems(win, laptop);
+                at('channel-ad-cancel').click();
+                await until(() => !seen(at('channel-ad-form')));
+
+                /* An ad being changed: the file it has, and no card for a tile. */
+                at('edit-channel-ad-' + adId).click();
+                if (!await until(() => seen(at('channel-ad-kept')))) throw 'an ad being changed never showed its file';
+                await wait(200);
+                found.keeping = { kept: seen(at('channel-ad-kept')), chosen: seen(chosen), name: at('channel-ad-kept').querySelector('p').innerText.trim() };
+                found.editing = problems(win, laptop);
+            } catch (error) {
+                found.errors.push(String(error));
+            }
+
+            frame.remove();
+            return found;
+        }
+    JS;
 
     /** The measuring itself, in the page: a frame of the width asked for, and what is wrong in it. */
     private const MEASURE = <<<'JS'

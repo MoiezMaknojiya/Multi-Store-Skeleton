@@ -246,6 +246,13 @@ export function registerChannelAds(Alpine) {
             this.forgetErrors('media_id');
         },
 
+        /** What the card beside the fields says of the tile picked: its name, or that none is yet. */
+        chosenTitle() {
+            if (this.chosen) return this.chosen.title;
+
+            return this.source === 'ads' ? 'No ad chosen yet.' : 'No file chosen yet.';
+        },
+
         /** "3 published ads are on a playlist", or "1 file is …": what the picker leaves out, in words. */
         onPlaylistsText() {
             const count = this.picker.onPlaylists;

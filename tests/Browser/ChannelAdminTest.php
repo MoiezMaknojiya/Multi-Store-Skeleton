@@ -94,7 +94,10 @@ class ChannelAdminTest extends DuskTestCase
             // -- The same file again, chosen from the library: nothing uploaded twice --
             $this->jsClick($browser, '@add-channel-ad');
             $browser->waitFor('@channel-ad-pick-'.$ad->media_id)->screenshot('channel-ad-library-picker');
+            // Nothing picked yet, and the card beside the fields says so; picked, it names the file.
+            $browser->assertSeeIn('@channel-ad-chosen', 'No file chosen yet.');
             $this->jsClick($browser, '@channel-ad-pick-'.$ad->media_id);
+            $browser->waitForTextIn('@channel-ad-chosen', 'gama-coke')->assertSeeIn('@channel-ad-chosen', 'Image · chosen');
             $this->jsType($browser, '@channel-ad-title', 'Coke again');
 
             // Six seconds at least (owner's rule, 2026-09-28): said under the field before anything is sent.
@@ -112,6 +115,19 @@ class ChannelAdminTest extends DuskTestCase
             $this->assertSame(7, $again->duration_seconds);
             $this->assertSame(1, Media::whereNull('organization_id')->count(), 'choosing a library file made a copy of it');
             $browser->waitFor('@channel-ad-row-'.$again->id)->assertSeeIn('@channel-ad-title-'.$again->id, 'Coke again');
+
+            // -- Changing an ad keeps the file it has: shown, with no card for a tile, and saved as it was --
+            $this->jsClick($browser, '@edit-channel-ad-'.$again->id);
+            $browser->waitFor('@channel-ad-kept')
+                ->assertSeeIn('@channel-ad-kept', 'Coke again')
+                ->assertMissing('@channel-ad-chosen')
+                ->assertMissing('@channel-ad-picker-empty');
+            $this->jsType($browser, '@channel-ad-title', 'Coke once more');
+            $this->jsClick($browser, '@channel-ad-save');
+            $browser->waitUsing(15, 200, fn () => $again->fresh()->title === 'Coke once more');
+            $this->assertSame($ad->media_id, $again->fresh()->media_id, 'the ad kept its file');
+            $this->waitForModalClosed($browser, '@channel-ad-form');
+            $browser->waitForTextIn('@channel-ad-title-'.$again->id, 'Coke once more');
 
             // -- An Ad Builder ad: the platform's own library has none, so an organization is chosen --
             $this->jsClick($browser, '@add-channel-ad');
