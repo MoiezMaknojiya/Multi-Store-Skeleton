@@ -15,6 +15,7 @@ April 2026, and 8.4 is the version the panel is developed against.
 | `deploy.sh` | Puts the **last commit** live and checks it | Claude or you, from Git Bash on the PC |
 | `server/release.sh` | The server's half of a deploy (uploaded by `deploy.sh` each time) | — |
 | `server/enable-http2.sh` | Turns HTTP/2 on once HTTPS is there (step 5) | **You**, as root — it changes Nginx's settings |
+| `server/add-domain.sh`, `use-domain.sh`, `retire-domain.sh` | Move the panel to another address ("Another address for the panel") | **You**, as root — they change Nginx, the certificates and `shared/.env` |
 
 ## On the server
 
@@ -174,6 +175,54 @@ ln -sfn /var/www/signage/releases/STAMP /var/www/signage/current && sudo systemc
 ```
 
 A migration the newer release ran stays run — going back is for code, not for the database.
+
+## Another address for the panel
+
+Moving the panel from one address to another (first done 2026-10-02, when filters at AT&T and Spectrum had
+marked the first domain's name) is three steps, each a script that checks itself and puts things back if Nginx
+or the panel will not take the change. Between the first and the last the panel answers at both addresses.
+
+**1. The new address reaches the server.** An A record for it → the server's IPv4 (DNS only, no proxy). Then,
+from the project folder in Git Bash:
+
+```bash
+scp -i ~/.ssh/signage_deploy deploy/server/add-domain.sh deploy/server/use-domain.sh deploy/server/retire-domain.sh deploy/server/nginx-site.conf root@SERVER_IP:/root/signage-setup/
+```
+
+```bash
+ssh -i ~/.ssh/signage_deploy root@SERVER_IP "bash /root/signage-setup/add-domain.sh sign.yourdomain.com"
+```
+
+It gives the address a site file of its own beside the first (`/etc/nginx/sites-available/signage-…`, written
+from `nginx-site.conf`), both certificates on the ISRG Root X1 chain, the first site's TLS settings and HTTP/2,
+and ends by asking `https://…/up` on the server itself. `--check` after the address changes nothing and only
+asks Nginx whether it would take the site.
+
+**2. The panel calls itself by it.** `APP_URL` is where every picture, video and published ad is fetched from
+and what the emails link to; the mail address is the second word, on a domain Brevo has authenticated:
+
+```bash
+ssh -i ~/.ssh/signage_deploy root@SERVER_IP "bash /root/signage-setup/use-domain.sh sign.yourdomain.com no-reply@yourdomain.com"
+```
+
+It keeps a copy of `shared/.env` beside it, changes those two lines alone, rebuilds the cache, reloads PHP and
+writes every published Ad Builder page again (a page names the panel's address in its own security policy).
+Then, by hand: **each television** opens `https://sign.yourdomain.com/player` and is paired again from the
+Screens page with **Replace Device** — a television knows the panel by the address it opened, and the token it
+holds belongs to that address; its playlist stays. The Android player app carries the address in its code and
+needs a build with the new one. `php artisan mail:test you@example.com` proves the mail. Deploys name the new
+address from now on: `bash deploy/deploy.sh deploy@SERVER_IP https://sign.yourdomain.com`.
+
+**3. The old address goes.** Once nothing opens it any more:
+
+```bash
+ssh -i ~/.ssh/signage_deploy root@SERVER_IP "bash /root/signage-setup/retire-domain.sh app.olddomain.com"
+```
+
+The site that stays becomes `/etc/nginx/sites-available/signage`, the retired one is kept switched off as
+`signage.retired-…`, and its two certificates are deleted. It refuses while the panel still calls itself by the
+address. Only then delete the old DNS record — a name that still reaches the server after this gets a
+certificate warning, which is what a retired address should give.
 
 ## A visitor cannot open the site
 
