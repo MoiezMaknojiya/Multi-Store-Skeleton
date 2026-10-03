@@ -186,7 +186,14 @@ systemctl reload nginx
 
 echo "== 4/4 Asking $DOMAIN, on this server itself"
 ask() { curl -s -o /dev/null -w "$1" --max-time 20 --resolve "$DOMAIN:443:127.0.0.1" --resolve "$DOMAIN:80:127.0.0.1" "${@:2}" || true; }
-up="$(ask '%{http_code}' "https://$DOMAIN/up")"
+# A reload hands new connections to the new workers within a moment, not at once: the first live run met an
+# old worker with no HTTPS site for the name yet, which offered the first site's certificate — curl refused
+# it (000) although the new site was in place.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    up="$(ask '%{http_code}' "https://$DOMAIN/up")"
+    if [[ "$up" == 200 ]]; then break; fi
+    sleep 1
+done
 plain="$(ask '%{http_code} %{redirect_url}' "http://$DOMAIN/login")"
 rsa=$( { echo | openssl s_client -connect 127.0.0.1:443 -servername "$DOMAIN" -tls1_2 \
     -cipher 'ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256' 2>/dev/null; } | grep -c 'Cipher is ECDHE-RSA' || true)

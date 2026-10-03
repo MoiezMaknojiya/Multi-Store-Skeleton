@@ -126,7 +126,12 @@ for name in "$OLD" "$OLD-rsa"; do
 done
 
 echo "== 3/3 Asking the panel, on this server itself"
-up="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 --resolve "$own:443:127.0.0.1" "https://$own/up" || true)"
+# A reload reaches every worker within a moment, not at once (add-domain.sh met an old one on its first live run).
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    up="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 --resolve "$own:443:127.0.0.1" "https://$own/up" || true)"
+    if [[ "$up" == 200 ]]; then break; fi
+    sleep 1
+done
 left="$(nginx -T 2> /dev/null | grep -E '^[[:space:]]*server_name[[:space:]]' | tr -s ' ;' '\n' | grep -cxF "$OLD" || true)"
 echo "   https://$own/up  $up"
 echo "   sites still answering at $OLD: $left"
