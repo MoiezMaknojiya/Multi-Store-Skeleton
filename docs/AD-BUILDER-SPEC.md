@@ -319,14 +319,26 @@ so the three can never disagree. **Every key is named in the rules**, because wh
 ## 7a. Fonts (stage 2, built)
 
 - **`config/fonts.php` is the list.** 51 Google families grouped by kind (sans · display · serif · mono ·
-  urdu) with the weights worth fetching, plus eight system faces that need no download. Only a family on
-  that list can be installed, so a font name typed by hand can never make the server fetch an arbitrary URL.
-- **Installing is one request, once, for the whole installation.** `GoogleFontInstaller` asks Google for the
-  family's stylesheet (with a browser user-agent, or Google answers in TTF), downloads **every** `@font-face`
-  it names — one per weight per subset, all of them, because dropping the subsets is how an Urdu advert
-  loses exactly the characters it needed — writes them under `fonts/{slug}/`, and saves a stylesheet of our
-  own beside them pointing at the local copies. `builder_fonts` records what is on disk, so the row's
-  existence is the answer to "can a television render this with no internet?".
+  urdu), each with the weights Google had on 2026-10-05 (what the picker shows before a family is installed),
+  plus eight system faces that need no download. Only a family on that list can be installed, so a font name
+  typed by hand can never make the server fetch an arbitrary URL.
+- **Installing is one request, once, for the whole installation — with every weight the family has**
+  (owner, 2026-10-05: Montserrat had 800 on Google and not here). `GoogleFontInstaller` asks Google for all
+  nine weights (`wght@100;…;900`, with a browser user-agent, or Google answers in TTF); Google answers with
+  exactly the ones the family has (Lato's five, Oswald's 200 to 700, a variable family's nine) and those are
+  what `builder_fonts.weights` records. It downloads **every** `@font-face` named — one per weight per
+  subset, because dropping the subsets is how an Urdu advert loses exactly the characters it needed — each
+  file once (a variable family names one file a subset for all its weights), writes them under
+  `fonts/{slug}/`, and saves a stylesheet of our own beside them pointing at the local copies. The guard is
+  60 files, not 60 blocks: Noto Sans is 72 blocks and 8 files. `builder_fonts` records what is on disk, so
+  the row's existence is the answer to "can a television render this with no internet?".
+- **And it keeps up with Google** (owner, 2026-10-05: "google font k jese jese new weight aye dalte raho"):
+  `php artisan fonts:refresh`, Sundays at 04:30, asks again for every installed family; one that has gained a
+  weight is fetched again whole, under new names (`font-{stamp}.css`, so a page that loaded the old
+  stylesheet never meets a missing file), the row is pointed at it and the old files go — `ad_font.updated` in
+  the log. A family whose weights are the same downloads nothing; one Google cannot answer for, or whose
+  files do not all come, stays exactly as it was until the next week. A weight Google drops stays: a design
+  may use it. Published ads carry the fonts inside their pages and are not touched.
 - **The editor loads the family the moment it is picked** (a `<link>` added to the panel's own page), so the
   stage shows the real face rather than a promise.
 - **A published advert carries its fonts INSIDE the page** (`AdFontEmbedder`, 2026-09-19), as `data:` URLs —

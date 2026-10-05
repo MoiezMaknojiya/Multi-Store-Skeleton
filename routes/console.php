@@ -56,3 +56,13 @@ Schedule::command('disk:check')->hourly()->name('disk-space-check')->withoutOver
 | row names any more (its organization or its person deleted meanwhile).
 */
 Schedule::command('uploads:prune')->hourly()->name('prune-uploads')->withoutOverlapping();
+
+/*
+|--------------------------------------------------------------------------
+| The Ad Builder's fonts — kept up with Google every week (owner, 2026-10-05)
+|--------------------------------------------------------------------------
+| "google font k jese jese new weight aye dalte raho": every installed family is asked about again, and any weight
+| Google has added since is downloaded beside the rest (GoogleFontInstaller::refresh). Nothing is fetched for a family
+| whose weights are the same, and published ads keep the fonts they carry inside their pages.
+*/
+Schedule::command('fonts:refresh')->weeklyOn(0, '04:30')->name('refresh-fonts')->withoutOverlapping();

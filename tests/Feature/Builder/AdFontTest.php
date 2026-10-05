@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\ActivityLog;
 use App\Models\BuilderAd;
 use App\Models\BuilderFont;
 use App\Models\Media;
@@ -82,9 +83,13 @@ test('picking a font downloads it once and serves it from here', function () {
 
     $font = BuilderFont::sole();
 
+    // Google is asked for every weight there is, and the family has what Google answered with.
+    Http::assertSent(fn ($request) => str_contains(urldecode($request->url()), 'family=Poppins:wght@100;200;300;400;500;600;700;800;900'));
+
     expect($font->family)->toBe('Poppins')
         ->and($font->slug)->toBe('poppins')
-        ->and($font->availableWeights())->toBe([400, 500, 600, 700])
+        ->and($font->availableWeights())->toBe([400, 700])
+        ->and($response->json('font.weights'))->toBe([400, 700])
         ->and($font->files)->toHaveCount(3)          // two latin subsets at 400, one at 700
         ->and($font->installed_by)->toBe($this->designer->id)
         ->and($response->json('font.installed'))->toBeTrue();
@@ -115,6 +120,101 @@ test('installing the same font twice costs nothing', function () {
 
     expect(BuilderFont::count())->toBe(1)
         ->and(BuilderFont::sole()->files)->toHaveCount(3);
+});
+
+/** One more @font-face, as Google writes them. */
+function googleBlock(int $weight, string $file, string $family = 'Poppins'): string
+{
+    return "\n/* latin */\n@font-face {\n  font-family: '{$family}';\n  font-style: normal;\n  font-weight: {$weight};\n  font-display: swap;\n"
+        ."  src: url(https://fonts.gstatic.com/s/poppins/v21/{$file}.woff2) format('woff2');\n  unicode-range: U+0000-00FF, U+0131;\n}\n";
+}
+
+test('a variable family’s one file is downloaded once, for every weight it serves', function () {
+    // Montserrat's latin subset: one file, named by Google for each of its weights.
+    Http::fake([
+        'fonts.googleapis.com/*' => Http::response(googleBlock(400, 'variable', 'Montserrat').googleBlock(800, 'variable', 'Montserrat')),
+        'fonts.gstatic.com/*' => Http::response('woff2-bytes'),
+    ]);
+
+    $this->postJson('/builder/fonts', ['family' => 'Montserrat'])->assertOk()->assertJsonPath('font.weights', [400, 800]);
+
+    $font = BuilderFont::sole();
+    $css = Storage::disk('public')->get($font->css_path);
+
+    expect($font->files)->toHaveCount(1)
+        ->and(substr_count($css, '@font-face'))->toBe(2)
+        ->and(substr_count($css, basename($font->files[0])))->toBe(2);
+    Http::assertSentCount(2);   // the stylesheet, and the one file
+});
+
+test('every week an installed family gets the weights Google has added, under new names, and the old files go', function () {
+    $stylesheet = googleStylesheet();
+    Http::fake([
+        'fonts.googleapis.com/*' => function () use (&$stylesheet) {
+            return Http::response($stylesheet);
+        },
+        'fonts.gstatic.com/*' => Http::response('woff2-bytes'),
+    ]);
+
+    $this->postJson('/builder/fonts', ['family' => 'Poppins'])->assertOk();
+    $before = BuilderFont::sole()->only(['files', 'css_path']);
+
+    // Google has 800 now.
+    $stylesheet .= googleBlock(800, 'latin-800');
+    $this->artisan('fonts:refresh')->expectsOutputToContain('Poppins: added weight 800.')->assertSuccessful();
+
+    $font = BuilderFont::sole();
+
+    expect($font->availableWeights())->toBe([400, 700, 800])
+        ->and($font->files)->toHaveCount(4)
+        ->and($font->css_path)->not->toBe($before['css_path'])
+        ->and(Storage::disk('public')->get($font->css_path))->toContain('font-weight:800')
+        ->and(ActivityLog::where('action', 'ad_font.updated')->sole()->description)->toBe('Added weight 800 to the font Poppins for the ad builder');
+
+    foreach ($font->files as $file) {
+        Storage::disk('public')->assertExists($file);
+    }
+
+    foreach ([...$before['files'], $before['css_path']] as $old) {
+        Storage::disk('public')->assertMissing($old);
+    }
+
+    // Nothing new: nothing is downloaded, nothing is logged.
+    Http::fake(['fonts.gstatic.com/*' => fn () => throw new RuntimeException('no file may be fetched')]);
+    $this->artisan('fonts:refresh')->expectsOutputToContain('Poppins: has every weight Google has.')->assertSuccessful();
+
+    expect(BuilderFont::sole()->css_path)->toBe($font->css_path)
+        ->and(ActivityLog::where('action', 'ad_font.updated')->count())->toBe(1);
+});
+
+test('a refresh Google cannot answer, or cannot finish, leaves the family as it was', function () {
+    $stylesheet = googleStylesheet();
+    $google = 200;
+    Http::fake([
+        'fonts.googleapis.com/*' => function () use (&$stylesheet, &$google) {
+            return Http::response($google === 200 ? $stylesheet : '', $google);
+        },
+        'fonts.gstatic.com/*' => fn ($request) => str_contains($request->url(), 'latin-800')
+            ? Http::response('', 500)
+            : Http::response('woff2-bytes'),
+    ]);
+
+    $this->postJson('/builder/fonts', ['family' => 'Poppins'])->assertOk();
+    $before = BuilderFont::sole()->only(['weights', 'files', 'css_path']);
+    $filesBefore = Storage::disk('public')->allFiles('fonts/poppins');
+
+    // Google down.
+    $google = 503;
+    $this->artisan('fonts:refresh')->expectsOutputToContain('Could not reach Google Fonts for Poppins (503)')->assertSuccessful();
+
+    // Google up, with a new weight whose file will not come.
+    $google = 200;
+    $stylesheet .= googleBlock(800, 'latin-800');
+    $this->artisan('fonts:refresh')->expectsOutputToContain('Not every file of Poppins could be downloaded')->assertSuccessful();
+
+    expect(BuilderFont::sole()->only(['weights', 'files', 'css_path']))->toBe($before)
+        ->and(Storage::disk('public')->allFiles('fonts/poppins'))->toBe($filesBefore)
+        ->and(ActivityLog::where('action', 'ad_font.updated')->count())->toBe(0);
 });
 
 test('only the families on our own list can be installed', function () {
