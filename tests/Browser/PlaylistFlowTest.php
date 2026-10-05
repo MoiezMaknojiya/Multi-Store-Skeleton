@@ -2,6 +2,8 @@
 
 namespace Tests\Browser;
 
+use App\Models\Channel;
+use App\Models\ChannelAd;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\PlaylistItem;
@@ -658,6 +660,49 @@ class PlaylistFlowTest extends DuskTestCase
             $this->waitForAlpine($browser);
             $browser->waitForText('Alpha Poster')
                 ->assertDontSee('Beta Poster');
+        });
+    }
+
+    /**
+     * The platform's library reaches every organization's screens (owner, 2026-10-05), marked as the platform's —
+     * all but a file a channel holds, which would play twice on a screen that carries the channel.
+     */
+    public function test_the_picker_offers_the_platform_s_files_too_but_none_a_channel_holds(): void
+    {
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->makeOwner($alpha);
+        $screen = Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Counter TV']);
+
+        // No thumbnails: the page must not ask for files these rows only pretend to have.
+        $own = Media::factory()->create(['organization_id' => $alpha->id, 'title' => 'Alpha Poster', 'thumbnail_path' => null]);
+        $platform = Media::factory()->platformOwned()->create(['title' => 'Platform Promo', 'thumbnail_path' => null]);
+        $inAChannel = Media::factory()->platformOwned()->create(['title' => 'Channel Promo', 'thumbnail_path' => null]);
+        ChannelAd::factory()->create(['channel_id' => Channel::factory()->create(['name' => 'GAMA'])->id, 'media_id' => $inAChannel->id]);
+
+        $this->browse(function (Browser $browser) use ($owner, $alpha, $screen, $own, $platform) {
+            $this->freshSession($browser);
+            $browser->loginAs($owner);
+            $this->switchToOrganization($browser, $alpha);
+
+            $browser->visit("/screens/{$screen->id}");
+            $this->waitForAlpine($browser);
+            $browser->within('@media-picker', fn (Browser $picker) => $picker->waitForText('Platform Promo')
+                ->assertSee('Alpha Poster')
+                ->assertDontSee('Channel Promo'));
+            $browser->assertSeeIn('@picker-platform-'.$platform->id, 'From the platform')
+                ->assertMissing('@picker-platform-'.$own->id);
+
+            // Added and saved like the organization's own file, and the line says whose it is.
+            $this->jsClick($browser, '@playlist-add-'.$platform->id);
+            $browser->waitFor('@playlist-platform-0');
+            $this->jsClick($browser, '@playlist-save');
+            $browser->waitUsing(10, 200, fn () => PlaylistItem::where('screen_id', $screen->id)->pluck('media_id')->all() === [$platform->id]);
+
+            $browser->refresh();
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@playlist-platform-0')
+                ->assertSeeIn('@playlist-platform-0', 'From the platform')
+                ->screenshot('playlist-platform-file');
         });
     }
 }

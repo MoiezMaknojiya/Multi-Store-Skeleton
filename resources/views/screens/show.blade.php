@@ -106,7 +106,12 @@
                             </div>
 
                             <div class="flex-1 min-w-0">
-                                <p class="text-sm font-medium text-gray-800 dark:text-white truncate" x-text="item.title"></p>
+                                <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 min-w-0 text-sm font-medium text-gray-800 dark:text-white">
+                                    <span class="truncate" x-text="item.title"></span>
+                                    {{-- The platform's file, which the organization's Media page never lists. --}}
+                                    <span x-show="item.from_platform" x-cloak class="badge-neutral shrink-0"
+                                          x-bind:dusk="'playlist-platform-' + index">From the platform</span>
+                                </p>
                                 <p class="text-xs text-gray-500 dark:text-gray-400">
                                     <span x-text="typeLabel(item)"></span>
                                     {{-- It keeps its place, and plays again once the ad is published. --}}
@@ -194,7 +199,7 @@
                 </div>
             </div>
 
-            {{-- The right-hand column: the organization's own files, and below them the channels it
+            {{-- The right-hand column: the organization's own files and the platform's, and below them the channels it
                  may carry — the same kind of box, so adding either one reads the same. Both are
                  for adding to the playlist, and their lists answer screen-playlist alone, so
                  somebody who may only look at the playlist is not shown two boxes that stay empty. --}}
@@ -249,7 +254,13 @@
                             </div>
 
                             <div class="flex-1 min-w-0">
-                                <p class="text-sm font-medium text-gray-800 dark:text-white truncate" x-text="media.title"></p>
+                                <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 min-w-0 text-sm font-medium text-gray-800 dark:text-white">
+                                    <span class="truncate" x-text="media.title"></span>
+                                    {{-- The platform's own file, offered to every organization's screens (owner, 2026-10-05);
+                                         below the name when there is no room beside it, so neither is cut short. --}}
+                                    <span x-show="media.from_platform" x-cloak class="badge-neutral shrink-0"
+                                          x-bind:dusk="'picker-platform-' + media.id">From the platform</span>
+                                </p>
                                 <p class="text-xs text-gray-500 dark:text-gray-400">
                                     <span x-text="typeLabel(media)"></span>
                                     {{-- Which way the file is — or, when that is not the screen's way, why it matters:
@@ -295,10 +306,10 @@
                                 </div>
 
                                 <div class="flex-1 min-w-0">
-                                    <p class="flex items-center gap-1.5 min-w-0 text-sm font-medium text-gray-800 dark:text-white">
+                                    <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 min-w-0 text-sm font-medium text-gray-800 dark:text-white">
                                         <span class="truncate" x-text="channel.title"></span>
-                                        {{-- A channel the organization made for itself, told apart from the platform's; kept out of
-                                             the truncated name so a long name never hides it. --}}
+                                        {{-- A channel the organization made for itself, told apart from the platform's; below
+                                             the name when there is no room beside it, so neither is cut short. --}}
                                         <span x-show="channel.is_organization_channel" class="badge-neutral shrink-0"
                                               x-bind:dusk="'channel-picker-own-' + channel.id">This organization</span>
                                     </p>

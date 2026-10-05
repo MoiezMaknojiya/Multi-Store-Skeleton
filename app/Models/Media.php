@@ -16,8 +16,8 @@ use Illuminate\Support\Facades\Storage;
 /**
  * A file in a media library. A library belongs to an organization (`organization_id` set) — its inventory, which every
  * colleague may put on the organization's screens — or to the platform (`organization_id` NULL, docs/CHANNEL-CONTENT-SPEC.md),
- * whose files reach a television only inside a channel. An organization never sees or plays the platform's rows, and
- * nothing here ever crosses from one organization to another.
+ * whose files reach a television inside a channel or on any organization's playlist (playableOn). An organization never
+ * lists, changes or deletes the platform's rows, and nothing here ever crosses from one organization to another.
  */
 class Media extends Model
 {
@@ -90,6 +90,19 @@ class Media extends Model
     public function scopePlatformOwned(Builder $query): Builder
     {
         return $query->whereNull('organization_id');
+    }
+
+    /**
+     * The files a screen's playlist may hold: its own organization's library and the platform's, which is offered to
+     * every organization's screens (owner, 2026-10-05: "platform library mein jo bhi kuch upload karu woo har screen
+     * ki content playlist mein ani chahiye") — never another organization's. A file a channel holds is still kept off
+     * every playlist (scopeInNoChannel), the platform's too.
+     */
+    public function scopePlayableOn(Builder $query, Screen $screen): Builder
+    {
+        return $query->where(fn (Builder $library) => $library
+            ->where('organization_id', $screen->organization_id)
+            ->orWhereNull('organization_id'));
     }
 
     /**

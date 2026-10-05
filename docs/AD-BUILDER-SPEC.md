@@ -1091,3 +1091,15 @@ add ha toh content library mein show naah ho usko. Yeh tick wala kaam shayad hat
   `down()` ticks every ad published by then, so going back takes nothing off any picker or screen.
 - Tests: `AdPlaylistUseTest` now holds the new rule (draft nowhere, published in both pickers, the channel rule both
   ways, no tick left), `AdPlaylistUseMigrationTest` the migration both ways.
+
+## Addendum — 2026-10-05: the platform's library on every playlist
+
+The owner: "platform library mein jo bhi kuch upload karu woo har screen ki content playlist mein ani chahiye ... aur
+agar woo channel mein use ho rae toh nahi ayegi" (docs/CHANNEL-CONTENT-SPEC.md §8d).
+
+- A published ad for every organization is a row of the platform's library, so every screen's Content library now
+  offers it as it is, marked "From the platform". It plays the platform's published version: Publish changes reaches
+  those screens too, Unpublish keeps their lines in place as drafts, and deleting it takes the lines away. While a
+  channel shows it, no playlist is offered it.
+- Copy still makes it the organization's own to change. The words of 2026-10-01 above, "an organization plays it from
+  its own copy", no longer hold.

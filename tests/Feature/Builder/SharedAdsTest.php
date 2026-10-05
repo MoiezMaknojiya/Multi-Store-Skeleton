@@ -8,6 +8,7 @@ use App\Models\ChannelAd;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\Permission;
+use App\Models\Screen;
 use App\Models\User;
 use App\Services\OrganizationStorage;
 use Illuminate\Support\Collection;
@@ -307,6 +308,32 @@ test('the platform\'s channel takes a published ad for every organization from t
     $ids = collect($this->getJson("/channels/{$channel->id}/library?type=html")->assertOk()->json('media'))->pluck('id')->all();
 
     expect($ids)->toBe([$ad->media_id]);
+});
+
+test('every organization\'s playlist takes the platform\'s published ad as it is, and loses it while it is unpublished', function () {
+    $ad = makeForEveryOrganization($this);
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
+    $manager = createOrganizationUser($this->organization, ['screen-view', 'screen-playlist'], 'Manager');
+    $this->actingAs($manager)->withSession(['current_organization_id' => $this->organization->id]);
+
+    // Offered, marked as the platform's, and taken by the save (owner, 2026-10-05).
+    $offered = collect($this->getJson("/screens/{$screen->id}/available-media")->assertOk()->json('media'))->firstWhere('id', $ad->media_id);
+    expect($offered)->toMatchArray(['type' => Media::TYPE_HTML, 'from_platform' => true]);
+
+    $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
+    $this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => [['media_id' => $ad->media_id, 'duration_seconds' => 10]]])
+        ->assertOk()
+        ->assertJsonPath('items.0.from_platform', true);
+
+    // Unpublished by the platform: the line keeps its place as a draft, and no picker offers the ad.
+    $this->actingAs(createSuperAdmin())->flushSession();
+    $this->postJson("/builder/{$ad->id}/unpublish")->assertOk();
+
+    $this->actingAs($manager)->withSession(['current_organization_id' => $this->organization->id]);
+    expect(collect($this->getJson("/screens/{$screen->id}/available-media")->assertOk()->json('media'))->pluck('id'))->not->toContain($ad->media_id);
+    $this->getJson("/screens/{$screen->id}/playlist")->assertOk()
+        ->assertJsonPath('items.0.media_id', $ad->media_id)
+        ->assertJsonPath('items.0.is_draft', true);
 });
 
 test('an organization is previewed the platform\'s ad as it was published; the platform its draft', function () {

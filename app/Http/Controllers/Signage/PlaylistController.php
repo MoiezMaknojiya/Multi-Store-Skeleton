@@ -49,7 +49,9 @@ class PlaylistController extends Controller
     }
 
     /**
-     * The media this screen is allowed to play: its own organization's library.
+     * The media this screen is allowed to play: its own organization's library, and the platform's — offered to
+     * every screen of every organization (owner, 2026-10-05: "platform library mein jo bhi kuch upload karu woo har
+     * screen ki content playlist mein ani chahiye").
      *
      * Its own endpoint, gated by the playlist permission, so someone who may
      * change playlists does not also need media-view — a permission is meant to
@@ -65,15 +67,16 @@ class PlaylistController extends Controller
         $search = trim((string) ($validated['search'] ?? ''));
 
         // Never an Ad Builder page taken off the screens (unpublished): nobody picks one until it is published
-        // again — nor any file a channel shows, an ad included (owner's rule, 2026-09-26): it would play twice on a
-        // screen that also carries the channel. Publish alone decides the rest (owner, 2026-10-01).
-        $media = Media::where('organization_id', $screen->organization_id)
+        // again — nor any file a channel shows, an ad included (owner's rule, 2026-09-26, the platform's files
+        // too): it would play twice on a screen that also carries the channel. Publish alone decides the rest
+        // (owner, 2026-10-01).
+        $media = Media::playableOn($screen)
             ->withoutDrafts()
             ->inNoChannel()
             ->when($search !== '', fn (Builder $q) => $q->where('title', 'like', "%{$search}%"))
             ->orderByDesc('created_at')
             ->limit(100)
-            ->get(['id', 'title', 'type', 'duration_seconds', 'orientation', 'disk', 'path', 'thumbnail_path']);
+            ->get(['id', 'organization_id', 'title', 'type', 'duration_seconds', 'orientation', 'disk', 'path', 'thumbnail_path']);
 
         return response()->json([
             'media' => $media->map(fn (Media $item) => [
@@ -83,6 +86,8 @@ class PlaylistController extends Controller
                 'orientation' => $item->orientation,
                 'duration_seconds' => $item->duration_seconds,
                 'thumbnail_url' => $item->thumbnail_url,
+                // The platform's own file: the tile says so, as a shared ad's card does.
+                'from_platform' => $item->organization_id === null,
             ])->all(),
         ]);
     }
@@ -340,7 +345,7 @@ class PlaylistController extends Controller
     }
 
     /**
-     * A screen can only play its own organization's files. Without this, a client could
+     * A screen can only play its own organization's files and the platform's. Without this, a client could
      * post any media id it liked and an organization would end up showing another organization's
      * content — the organization wall applied to the one place it is easy to forget.
      */
@@ -354,11 +359,11 @@ class PlaylistController extends Controller
             return;
         }
 
-        $allowed = Media::where('organization_id', $screen->organization_id)->whereIn('id', $ids)->count();
+        $allowed = Media::playableOn($screen)->whereIn('id', $ids)->count();
 
         if ($allowed !== $ids->count()) {
             throw ValidationException::withMessages([
-                'items' => 'One of those files is not in this organization\'s library.',
+                'items' => 'One of those files is not in this organization\'s library or the platform\'s.',
             ]);
         }
     }
@@ -717,6 +722,8 @@ class PlaylistController extends Controller
                     // plays with bars (docs/AD-BUILDER-SPEC.md §12) — the organization's to notice, not a refusal.
                     'orientation' => $item->media?->orientation,
                     'thumbnail_url' => $item->media?->thumbnail_url,
+                    // The platform's file: the line says so, since the organization's Media page never lists it.
+                    'from_platform' => $item->media !== null && $item->media->organization_id === null,
                     // Both null means "always"; the player never sees an item whose
                     // window has closed, but the panel should say so.
                     // An Ad Builder page taken off the screens (unpublished) keeps its place and plays again once it

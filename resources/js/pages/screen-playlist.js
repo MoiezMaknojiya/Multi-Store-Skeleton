@@ -230,6 +230,7 @@ export function registerScreenPlaylist(Alpine) {
                 type: media.type,
                 orientation: media.orientation ?? null,
                 thumbnail_url: media.thumbnail_url,
+                from_platform: media.from_platform === true,
                 // A picture stays up for as long as the line says. A video runs to its own end — its
                 // measured length, or a generous backstop for one nobody could measure (never an image's
                 // six seconds, which would cut it off) — and an Ad Builder page for the length its design

@@ -85,15 +85,15 @@ channel_ads
 
 | | Own organization's rows | Another organization's | The platform's (NULL) |
 | --- | --- | --- | --- |
-| An organization's member (`media-view`) | ✅ Media page, playlist picker, channel picker | ❌ | ❌ |
+| An organization's member (`media-view`) | ✅ Media page, playlist picker, channel picker | ❌ | the playlist picker alone, marked (§8d) |
 | Platform user (`media-view` above the organizations) | ✅ | ✅ | ✅ |
-| A television | only through its screen's playlist | ❌ | only inside a **channel** line |
+| A television | only through its screen's playlist | ❌ | inside a **channel** line, or as a playlist line (§8d) |
 
 - `Media::visibleTo` keeps its shape: an organization member sees `organization_id = session organization`; a platform user sees
   everything. The new rule is the one that did not exist before — an organization member must never match
   `organization_id IS NULL`, which is what a plain `where('organization_id', $organizationId)` already does.
-- `PlaylistController::assertMediaBelongsToTheSameOrganization` is unchanged and therefore already refuses a
-  platform row on a screen: the walls hold without a new rule.
+- `PlaylistController::assertMediaBelongsToTheSameOrganization` takes the screen's organization's rows and, since
+  2026-10-05, the platform's (`Media::playableOn`, §8d); another organization's are refused as ever.
 - The platform's Media page gets the chooser the Ad Builder's Assets page has: **Platform** (the default) or
   one organization. It decides both what the listing shows and where an upload lands. An organization's Media page has no
   chooser and no way to reach the platform's rows.
@@ -239,6 +239,27 @@ the right** — a file is picked first and described after, and Save ends up und
 
 `tests/Browser/EveryPageFitsAPhoneTest` opens the dialog by its button at a desk, a short laptop, a tablet on
 its side and a phone, with a library longer than one page, and holds it to all of the above.
+
+## 8d. The platform's library on every playlist (owner, 2026-10-05)
+
+"platform library mein jo bhi kuch upload karu woo har screen ki content playlist mein ani chahiye ... aur agar woo
+channel mein use ho rae toh nahi ayegi."
+
+- Every screen's Content library, in every organization, offers the platform's files beside the organization's own
+  (`Media::playableOn`, `PlaylistController::availableMedia`), each marked **From the platform** on its tile and on
+  the playlist line it becomes, since the organization's Media page never lists it. A published ad for every
+  organization is a row of that library and is offered the same way; Copy still makes one the organization's own.
+- A file a channel holds, the platform's channel or an organization's, paused or out of its dates, is offered to no
+  playlist (§8a); out of every channel it is offered again.
+- The save takes the screen's organization's rows and the platform's alone
+  (`PlaylistController::assertMediaBelongsToTheSameOrganization`, 422 "One of those files is not in this
+  organization's library or the platform's."): another organization's file is still refused.
+- An organization's people still never list, change or delete the platform's rows: the Media page and every write
+  keep `Media::visibleTo`, and an organization's channel takes the organization's own rows only. The platform deletes
+  its file as before: a playlist line is no reason to refuse, and the file leaves every screen that played it, in
+  every organization.
+- Tests: `tests/Feature/Signage/PlatformFilesOnPlaylistsTest.php`, the wall in `OrganizationWallAttackTest` and
+  `PlaylistFlowTest::test_the_picker_offers_the_platform_s_files_too_but_none_a_channel_holds`.
 
 ---
 
