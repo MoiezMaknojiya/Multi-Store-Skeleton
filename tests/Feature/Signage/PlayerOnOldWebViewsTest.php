@@ -6,7 +6,7 @@
 |--------------------------------------------------------------------------
 |
 | An organization's television is whatever it put behind the screen: a Fire TV, a cheap Android box, the Android
-| player app on either (com.digitallifts.player) — and their WebViews can be as old as Chrome 80. So the
+| player app on either (com.thedisplaysolution.player; com.digitallifts.player before 2026-10-04) — and their WebViews can be as old as Chrome 80. So the
 | player is built for that floor: no stylesheet but its own (the panel's Tailwind v4 needs Chrome 111), no
 | CSS the floor lacks (inset is Chrome 87), and no browser API newer than it in anything the television
 | runs — the page's script, its worker and the Ad Builder's runtime. Newer syntax Vite writes down to

@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    {{-- The tab says which page it is ("Screens · Digital Lifts"): the page's own title, or its header's words. --}}
+    {{-- The tab says which page it is ("Screens · The Display Solution"): the page's own title, or its header's words. --}}
     @php($__pageTitle = trim(preg_replace('/\s+/', ' ', html_entity_decode(strip_tags((string) ($title ?? $header ?? '')), ENT_QUOTES | ENT_HTML5))))
     <title>{{ $__pageTitle !== '' ? $__pageTitle.' · ' : '' }}{{ config('app.name', 'Laravel') }}</title>
 

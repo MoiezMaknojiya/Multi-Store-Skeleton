@@ -6,7 +6,7 @@ use App\Models\Role;
 use App\Models\User;
 
 /*
- * Every page says in its tab where you are ("Sign in · Digital Lifts") and names itself with one <h1> (rule 02,
+ * Every page says in its tab where you are ("Sign in · The Display Solution") and names itself with one <h1> (rule 02,
  * "Every page speaks to a keyboard and a screen reader"). The panel's pages are held to it in a browser by
  * EveryPageRendersTest; these are the doors before the panel.
  */

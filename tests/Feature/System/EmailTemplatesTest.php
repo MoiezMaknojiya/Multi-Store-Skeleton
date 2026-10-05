@@ -50,11 +50,11 @@ test('the invitation email carries the link, who sent it, the role and when it e
         'expires_at' => now()->addDays(Invitation::LIFETIME_DAYS),
     ]);
 
-    config(['app.name' => 'Digital Lifts']);
+    config(['app.name' => 'The Display Solution']);
     $html = renderedMail(new InvitationNotification($invitation->fresh(), 'plain-token'));
 
     expect($html)
-        ->toContain('Digital Lifts')                              // the brand bar, not a stock heading
+        ->toContain('The Display Solution')                              // the brand bar, not a stock heading
         ->toContain(route('invitations.show', 'plain-token'))     // the link, in the button and in words
         ->toContain('Moiez Ali')
         ->toContain('Alpha Mart')
@@ -131,14 +131,14 @@ test('both emails go out with a plain-text twin beside the HTML', function () {
 
 test('the email that confirms a new account carries its signed link, the address, the minutes and the week', function () {
     $user = User::factory()->unverified()->create(['first_name' => 'Zebulon', 'email' => 'sana@example.com']);
-    config(['app.name' => 'Digital Lifts']);
+    config(['app.name' => 'The Display Solution']);
 
     $mail = (new VerifyEmailNotification)->toMail($user);
     $html = (string) $mail->render();
     $link = $mail->viewData['url'];
 
     expect($mail->view)->toBe(['emails.verify-email', 'emails.verify-email-text'])
-        ->and($mail->subject)->toBe('Confirm your email for Digital Lifts')
+        ->and($mail->subject)->toBe('Confirm your email for The Display Solution')
         ->and($link)->toStartWith(url("/verify-email/{$user->id}/".sha1('sana@example.com')))
         ->toContain('expires=')->toContain('signature=');
 
