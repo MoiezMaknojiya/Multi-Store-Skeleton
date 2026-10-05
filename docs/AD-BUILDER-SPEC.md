@@ -601,6 +601,17 @@ row of the decisions table), no animation timeline scrubber (the ad is not a vid
   every poster was its bare background colour — while the browser test, which checked only the size,
   passed. `poster.js` strips Alpine's attributes from the copy (`onCloneEachNode`), and the test now reads
   the stage colour and the shape's blue out of the poster's pixels.
+- **A poster taken while a picture was still on its way had a gap where it should be** (the SS6 burger
+  menu's first poster, 2026-10-05). `modern-screenshot` fetches every picture again with a time limit of its
+  own (8 s); one still arriving when Save is pressed came back as its transparent placeholder, and the stage
+  showed through. Since then `capturePoster` first waits — 15 s at most — for the stage's pictures to be
+  decoded (its `<img>` elements and an `Image` of every picture a CSS background draws), every video to show
+  a frame (asked with `preload = 'auto'`: while designing it shows only what its metadata gives) and the
+  fonts; and it hands each picture the page already has to the library (`fetchFn`), at no more than twice the
+  poster's size, so none is fetched a second time. A picture that never comes still leaves its gap: a save is
+  never held for good. `AdEditorPolishFlowTest` saves while a picture takes twenty seconds on Chrome's own
+  slowed network, and reads the picture's red in the poster — the code before failed it, the stage's colour
+  in its place.
 - **A folder in `public/` named like a route takes the route away.** The runtime first lived in
   `public/builder/`, and from then on `/builder` and `POST /builder` answered with the folder — a 404 under
   `php artisan serve`, a listing or a 403 under Apache (`RewriteCond !-d`) — while every feature test passed,

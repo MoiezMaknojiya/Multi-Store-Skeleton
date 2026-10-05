@@ -3,11 +3,16 @@
 namespace Tests\Browser;
 
 use App\Models\BuilderAd;
+use App\Models\BuilderAsset;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\MediaStorage;
+use Facebook\WebDriver\Chrome\ChromeDevToolsDriver;
 use Facebook\WebDriver\Exception\TimeoutException;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -304,6 +309,60 @@ class AdEditorPolishFlowTest extends DuskTestCase
             $browser->waitFor('@preview-overlay');
             $this->key($browser, 'p', ['ctrlKey' => true]);
             $browser->waitUntilMissing('@preview-overlay', 5);
+        });
+    }
+
+    public function test_the_poster_waits_for_a_picture_still_on_its_way(): void
+    {
+        // The SS6 burger menu's first poster (2026-10-05) came out half empty: saved while its pictures were still
+        // arriving, the photograph had gaps where they should have been.
+        $this->seedSuperAdmin();
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($organization, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $picture = $this->redPictureOnTheShelf($organization);
+
+        $this->browse(function (Browser $browser) use ($designer, $organization, $picture) {
+            $this->freshSession($browser);
+            $browser->loginAs($designer);
+            $this->switchToOrganization($browser, $organization);
+
+            $browser->visit('/builder/create?orientation=landscape');
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@stage-empty-hint');
+
+            // A slow line: the picture takes some twenty seconds to arrive — far longer than the photograph's own
+            // fetch waits (eight seconds) once Save is pressed.
+            $tools = new ChromeDevToolsDriver($browser->driver);
+            $tools->execute('Network.enable');
+            $tools->execute('Network.emulateNetworkConditions', [
+                'offline' => false, 'latency' => 0, 'uploadThroughput' => -1,
+                'downloadThroughput' => max(1, (int) ($picture->size / 20)),
+            ]);
+
+            try {
+                $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
+                $browser->waitFor('@pick-asset-'.$picture->id, 15);
+                $this->jsClick($browser, '@pick-asset-'.$picture->id);
+                $browser->waitUntilMissing('@asset-picker', 5);
+
+                // Saved at once, the picture still on its way.
+                $this->jsType($browser, '@ad-name', 'Slow picture');
+                $this->jsClick($browser, '@ad-save');
+                $browser->waitUsing(45, 250, fn () => BuilderAd::where('name', 'Slow picture')->whereNotNull('thumbnail_path')->exists());
+            } finally {
+                $tools->execute('Network.emulateNetworkConditions', ['offline' => false, 'latency' => 0, 'downloadThroughput' => -1, 'uploadThroughput' => -1]);
+            }
+
+            // The picture's red where the picture is, not the stage showing through a gap.
+            $ad = BuilderAd::firstWhere('name', 'Slow picture');
+            $element = $ad->document['elements'][0];
+            $poster = imagecreatefromstring(Storage::disk('public')->get($ad->thumbnail_path));
+            $rgb = imagecolorat($poster,
+                intdiv((int) $element['x'] + intdiv((int) $element['w'], 2), 3),
+                intdiv((int) $element['y'] + intdiv((int) $element['h'], 2), 3));
+
+            $this->assertGreaterThan(150, ($rgb >> 16) & 0xFF, 'the picture is in the poster');
+            $this->assertLessThan(100, ($rgb >> 8) & 0xFF, 'the picture is in the poster');
         });
     }
 
@@ -768,5 +827,28 @@ class AdEditorPolishFlowTest extends DuskTestCase
     {
         $this->jsClick($browser, '@ad-save');
         $browser->waitUntil('!'.self::EDITOR.'.saving && !'.self::EDITOR.'.dirty', 30);
+    }
+
+    /** A red picture on the organization's shelf, grained so it weighs what a photograph does, stored as an upload is. */
+    private function redPictureOnTheShelf(Organization $organization): BuilderAsset
+    {
+        $directory = storage_path('framework/testing');
+        File::ensureDirectoryExists($directory);
+        $path = $directory.DIRECTORY_SEPARATOR.'red-grain.png';
+
+        mt_srand(11);
+        $grain = imagecreatetruecolor(400, 225);
+        for ($x = 0; $x < 400; $x++) {
+            for ($y = 0; $y < 225; $y++) {
+                imagesetpixel($grain, $x, $y, imagecolorallocate($grain, mt_rand(190, 255), mt_rand(0, 50), mt_rand(0, 50)));
+            }
+        }
+        $image = imagecreatetruecolor(1600, 900);
+        imagecopyresized($image, $grain, 0, 0, 0, 0, 1600, 900, 400, 225);
+        imagepng($image, $path);
+
+        $stored = app(MediaStorage::class)->storeBuilderAsset(new UploadedFile($path, 'red-grain.png', 'image/png', null, true), $organization->id);
+
+        return BuilderAsset::fromStoredFile($organization->id, 'Red grain', $stored, null);
     }
 }
