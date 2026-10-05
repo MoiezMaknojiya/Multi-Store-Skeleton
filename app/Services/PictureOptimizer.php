@@ -13,8 +13,10 @@ use Throwable;
  * 80's WebView included — whenever that is lighter than what came. Transparency is kept, and so is the colour profile a
  * picture came with (an iPhone's Display P3, a designer's Adobe RGB): the WebP carries the very same one, so a screen
  * reads its colours exactly as it read the upload's. A picture packed without loss — a PNG of 256 colours or fewer, a
- * lossless WebP — is written without loss again unless it had to be brought down; a photograph, or a PNG of more
- * colours, at a quality nobody sees on a screen.
+ * lossless WebP — is written without loss again unless it had to be brought down; a photograph at a quality nobody
+ * sees on a screen. And because lossy WebP keeps colour at half resolution — which nearly every JPEG has already done,
+ * but a PNG has not — a picture whose own colour is that sharp is measured: where small coloured detail would change
+ * (a menu's thin red words on black came out maroon, a logo's edges would blur), every pixel is kept instead.
  *
  * Left exactly as it came: a GIF, and a PNG or WebP that moves (GD would keep its first frame alone); a CMYK JPEG (GD
  * reads its colours wrong); a picture whose colours GD cannot keep — a grey or CMYK profile on what GD reads as RGB, a
@@ -49,6 +51,23 @@ class PictureOptimizer
 
     /** How many segments or chunks are read, at most, before a picture's own data begins. */
     private const MAX_PARTS = 10000;
+
+    /**
+     * How a lossy WebP is checked against a picture whose own colour is sharper than half resolution: in blocks this
+     * many pixels square, every other pixel each way, a pixel whose colour (Cb/Cr) moved more than COLOUR_STEP is one a
+     * person may see changed; a block where COLOUR_SHARE of them did is detail that changed (a thin coloured letter,
+     * a logo's edge), and COLOUR_BLOCKS of those keep the picture without loss. Set on 33 real pictures, 2026-10-05:
+     * 24 of the 26 photographs and menu cut-outs stayed lossy (a photo with sharp red and green edges went lossless, and
+     * a JPEG of full colour stayed as it came, its lossless copy being heavier), and every picture with words — the
+     * owner's own menus, a 4K menu and a screenshot of this panel — was written without loss, not a pixel changed.
+     */
+    private const COLOUR_BLOCK = 16;
+
+    private const COLOUR_STEP = 24;
+
+    private const COLOUR_SHARE = 0.1;
+
+    private const COLOUR_BLOCKS = 2;
 
     /** A PNG's primaries and white point, as sRGB has them (cHRM, in hundred-thousandths): white, red, green, blue. */
     private const SRGB_PRIMARIES = [31270, 32900, 64000, 33000, 30000, 60000, 15000, 6000];
@@ -94,7 +113,12 @@ class PictureOptimizer
         $targetWidth = max(1, (int) round(($onItsSide ? $height : $width) * $scale));
         $targetHeight = max(1, (int) round(($onItsSide ? $width : $height) * $scale));
 
-        if (! self::fitsInMemory($this->memoryNeeded($width * $height, $targetWidth * $targetHeight, $orientation, $scale < 1))) {
+        // Without loss while its pixels are the ones that came; brought down they change anyway, and the measuring
+        // below decides.
+        $lossless = $about['lossless'] && $scale === 1;
+        $measured = ! $lossless && $about['fullColour'];
+
+        if (! self::fitsInMemory($this->memoryNeeded($width * $height, $targetWidth * $targetHeight, $orientation, $scale < 1, $measured))) {
             return null;
         }
 
@@ -110,9 +134,14 @@ class PictureOptimizer
             $image = $this->scaled($image, $targetWidth, $targetHeight);
         }
 
-        // Without loss only while its pixels are the ones that came: brought down they change anyway, and a lossless copy
-        // of resampled pixels can weigh several times what came (measured: a lossless WebP of 975 KB became 4.4 MB).
-        $bytes = $this->webp($image, $about['lossless'] && $scale === 1, $mime === 'image/jpeg' ? self::PHOTO_QUALITY : self::DRAWING_QUALITY);
+        $bytes = $this->webp($image, $lossless ? null : ($mime === 'image/jpeg' ? self::PHOTO_QUALITY : self::DRAWING_QUALITY));
+
+        // A lossy WebP keeps colour at half resolution. A picture that still has it whole is measured, and where small
+        // coloured detail would change, every pixel is kept instead — only where it would: a lossless copy of a photo
+        // weighs five to ten times the lossy one (measured on the owner's menu cut-outs).
+        if ($bytes !== null && $measured && $this->losesColour($image, $bytes)) {
+            $bytes = $this->webp($image, null);
+        }
 
         if ($bytes !== null && $about['profile'] !== null) {
             $bytes = $this->withProfile($bytes, $about['profile'], imagesx($image), imagesy($image));
@@ -165,24 +194,83 @@ class PictureOptimizer
     /**
      * Everything GD holds on the way, at 4 bytes a pixel, added up — PHP keeps what a step frees for later instead of
      * handing it back, so the steps do not take turns (measured: a 48 MP photograph peaks at 278 MB): the picture as
-     * read (twice when it turns — a turn is a copy), its smaller copy, the copy GD hands the WebP encoder and the WebP.
+     * read (twice when it turns — a turn is a copy), its smaller copy, the copy GD hands the WebP encoder and the WebP;
+     * and when its colour is measured, the lossy WebP read back and a lossless WebP beside it.
      */
-    private function memoryNeeded(int $pixels, int $targetPixels, int $orientation, bool $scaled): int
+    private function memoryNeeded(int $pixels, int $targetPixels, int $orientation, bool $scaled, bool $measured): int
     {
         $picture = $pixels * self::BYTES_PER_PIXEL;
         $target = $targetPixels * self::BYTES_PER_PIXEL;
 
         return $picture * (in_array($orientation, [3, 5, 6, 7, 8], true) ? 2 : 1)
             + ($scaled ? $target : 0)
-            + $target + $targetPixels * 2;
+            + $target + $targetPixels * 2
+            + ($measured ? $target + $targetPixels * 2 : 0);
+    }
+
+    /**
+     * Whether a lossy WebP of the picture would visibly change small coloured detail: the WebP is read back and compared
+     * with the picture in blocks (COLOUR_BLOCK), every other pixel each way, in colour alone (Cb/Cr) — light and dark
+     * keep their full resolution in a WebP. A pixel nobody sees (more than half transparent) is not counted.
+     */
+    private function losesColour(GdImage $picture, string $webp): bool
+    {
+        $lossy = @imagecreatefromstring($webp);
+
+        if (! $lossy instanceof GdImage || imagesx($lossy) !== imagesx($picture) || imagesy($lossy) !== imagesy($picture)) {
+            return true;
+        }
+
+        $width = imagesx($picture);
+        $height = imagesy($picture);
+        $columns = intdiv($width + self::COLOUR_BLOCK - 1, self::COLOUR_BLOCK);
+        $seen = [];
+        $moved = [];
+        $step = self::COLOUR_STEP ** 2;
+
+        for ($y = 0; $y < $height; $y += 2) {
+            $row = intdiv($y, self::COLOUR_BLOCK) * $columns;
+
+            for ($x = 0; $x < $width; $x += 2) {
+                $p = imagecolorat($picture, $x, $y);
+
+                if ((($p >> 24) & 0x7F) > 64) {
+                    continue;
+                }
+
+                $q = imagecolorat($lossy, $x, $y);
+                $red = (($p >> 16) & 0xFF) - (($q >> 16) & 0xFF);
+                $green = (($p >> 8) & 0xFF) - (($q >> 8) & 0xFF);
+                $blue = ($p & 0xFF) - ($q & 0xFF);
+                $cb = -0.168736 * $red - 0.331264 * $green + 0.5 * $blue;
+                $cr = 0.5 * $red - 0.418688 * $green - 0.081312 * $blue;
+                $block = $row + intdiv($x, self::COLOUR_BLOCK);
+                $seen[$block] = ($seen[$block] ?? 0) + 1;
+
+                if ($cb * $cb + $cr * $cr > $step) {
+                    $moved[$block] = ($moved[$block] ?? 0) + 1;
+                }
+            }
+        }
+
+        $changed = 0;
+
+        foreach ($moved as $block => $count) {
+            if ($seen[$block] >= 16 && $count >= $seen[$block] * self::COLOUR_SHARE && ++$changed >= self::COLOUR_BLOCKS) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
      * What a file says about itself before it is opened — the colour profile its colours are read by (null: none, so
-     * sRGB) and whether it was packed without loss — or null when it must stay as it came: it moves, its colours could
+     * sRGB), whether it was packed without loss, and whether its colour is still at full resolution (a PNG, a lossless
+     * WebP, a JPEG that kept every component whole) — or null when it must stay as it came: it moves, its colours could
      * not be kept, or it is not built as its format says.
      *
-     * @return array{profile: ?string, lossless: bool}|null
+     * @return array{profile: ?string, lossless: bool, fullColour: bool}|null
      */
     private function about(string $path, string $mime): ?array
     {
@@ -204,11 +292,11 @@ class PictureOptimizer
     }
 
     /**
-     * A JPEG's colour profile: its APP2 segments before the picture's data, joined in their order when the profile was
-     * too big for one.
+     * A JPEG's colour profile — its APP2 segments before the picture's data, joined in their order when the profile was
+     * too big for one — and, from its frame header, whether its colour components were kept as whole as its light.
      *
      * @param  resource  $handle
-     * @return array{profile: ?string, lossless: bool}|null
+     * @return array{profile: ?string, lossless: bool, fullColour: bool}|null
      */
     private function aboutJpeg($handle): ?array
     {
@@ -219,6 +307,7 @@ class PictureOptimizer
         $parts = [];
         $count = 0;
         $collected = 0;
+        $fullColour = false;
 
         for ($i = 0; $i < self::MAX_PARTS; $i++) {
             if ($this->take($handle, 1) !== "\xFF") {
@@ -237,7 +326,7 @@ class PictureOptimizer
 
             // The picture's data begins (or the file ends): every profile segment comes before it.
             if ($code === 0xDA || $code === 0xD9) {
-                return $this->withJpegProfile($parts, $count);
+                return $this->withJpegProfile($parts, $count, $fullColour);
             }
 
             // A marker that stands alone, with no length.
@@ -250,6 +339,26 @@ class PictureOptimizer
 
             if ($length < 0) {
                 return null;
+            }
+
+            // A frame header: each component's sampling. Three components sampled alike kept their colour whole
+            // (a camera's JPEG halves it; Photoshop's best quality does not).
+            if (in_array($code, [0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF], true)) {
+                $frame = $this->take($handle, $length);
+
+                if ($frame === null || strlen($frame) < 6) {
+                    return null;
+                }
+
+                $samplings = [];
+
+                for ($component = 0; $component < ord($frame[5]) && 7 + $component * 3 < strlen($frame); $component++) {
+                    $samplings[] = ord($frame[7 + $component * 3]);
+                }
+
+                $fullColour = count($samplings) >= 3 && count(array_unique($samplings)) === 1;
+
+                continue;
             }
 
             if ($code === 0xE2 && $length >= 14) {
@@ -280,12 +389,12 @@ class PictureOptimizer
      * The profile a JPEG's segments make, numbered 1 to their count — or null (as it came) when one is missing.
      *
      * @param  array<int, string>  $parts
-     * @return array{profile: ?string, lossless: bool}|null
+     * @return array{profile: ?string, lossless: bool, fullColour: bool}|null
      */
-    private function withJpegProfile(array $parts, int $count): ?array
+    private function withJpegProfile(array $parts, int $count, bool $fullColour): ?array
     {
         if ($parts === []) {
-            return ['profile' => null, 'lossless' => false];
+            return $this->carried(null, false, $fullColour);
         }
 
         ksort($parts);
@@ -294,16 +403,16 @@ class PictureOptimizer
             return null;
         }
 
-        return $this->carried(implode('', $parts), false);
+        return $this->carried(implode('', $parts), false, $fullColour);
     }
 
     /**
      * A PNG's colours, from the chunks before its data: a profile (iCCP) is carried over, sRGB (or nothing said) is
      * what a WebP is read as anyway, and a gamma or primaries of its own — which a browser honours and GD drops — keep
-     * it as it came. A palette PNG is written without loss again.
+     * it as it came. A palette PNG is written without loss again. A PNG's colour is always whole.
      *
      * @param  resource  $handle
-     * @return array{profile: ?string, lossless: bool}|null
+     * @return array{profile: ?string, lossless: bool, fullColour: bool}|null
      */
     private function aboutPng($handle): ?array
     {
@@ -359,7 +468,7 @@ class PictureOptimizer
             $name = strstr($chunks['iCCP'], "\0", true);
             $profile = $name === false ? false : @gzuncompress(substr($chunks['iCCP'], strlen($name) + 2), self::MAX_PROFILE_BYTES);
 
-            return is_string($profile) ? $this->carried($profile, $lossless) : null;
+            return is_string($profile) ? $this->carried($profile, $lossless, true) : null;
         }
 
         $otherColours = (isset($chunks['cHRM']) && ! $this->srgbPrimaries($chunks['cHRM']))
@@ -369,7 +478,7 @@ class PictureOptimizer
             return null;
         }
 
-        return ['profile' => null, 'lossless' => $lossless];
+        return $this->carried(null, $lossless, true);
     }
 
     /** A cHRM chunk that names sRGB's own primaries and white point, give or take a hundredth. */
@@ -396,10 +505,10 @@ class PictureOptimizer
 
     /**
      * A WebP's colour profile (ICCP), whether it moves (ANIM, ANMF, or the flag in its VP8X header), and whether its
-     * picture is lossless (VP8L).
+     * picture is lossless (VP8L) — whose colour is whole, where a lossy one's is already at half resolution.
      *
      * @param  resource  $handle
-     * @return array{profile: ?string, lossless: bool}|null
+     * @return array{profile: ?string, lossless: bool, fullColour: bool}|null
      */
     private function aboutWebp($handle): ?array
     {
@@ -427,7 +536,7 @@ class PictureOptimizer
 
             // The picture itself: every chunk that describes it comes first.
             if ($type === 'VP8 ' || $type === 'VP8L' || $type === 'ALPH') {
-                return $profile === null ? ['profile' => null, 'lossless' => $type === 'VP8L'] : $this->carried($profile, $type === 'VP8L');
+                return $this->carried($profile, $type === 'VP8L', $type === 'VP8L');
             }
 
             // A chunk is padded to an even length.
@@ -456,17 +565,17 @@ class PictureOptimizer
     }
 
     /**
-     * The profile carried over, when it is one a WebP of RGB pixels can carry — an ICC profile describing RGB — or null
-     * (as it came) for any other.
+     * What a file says about itself, with the profile to carry over — none, or one a WebP of RGB pixels can carry (an
+     * ICC profile describing RGB) — or null (as it came) for any other profile.
      *
-     * @return array{profile: string, lossless: bool}|null
+     * @return array{profile: ?string, lossless: bool, fullColour: bool}|null
      */
-    private function carried(string $profile, bool $lossless): ?array
+    private function carried(?string $profile, bool $lossless, bool $fullColour): ?array
     {
-        $rgb = strlen($profile) >= 132 && strlen($profile) <= self::MAX_PROFILE_BYTES
-            && substr($profile, 36, 4) === 'acsp' && substr($profile, 16, 4) === 'RGB ';
+        $carriable = $profile === null || (strlen($profile) >= 132 && strlen($profile) <= self::MAX_PROFILE_BYTES
+            && substr($profile, 36, 4) === 'acsp' && substr($profile, 16, 4) === 'RGB ');
 
-        return $rgb ? ['profile' => $profile, 'lossless' => $lossless] : null;
+        return $carriable ? ['profile' => $profile, 'lossless' => $lossless, 'fullColour' => $fullColour] : null;
     }
 
     /**
@@ -560,13 +669,17 @@ class PictureOptimizer
         return $scaled;
     }
 
-    /** The picture as a WebP: without loss when it came without loss, otherwise at the quality given. */
-    private function webp(GdImage $image, bool $lossless, int $quality): ?string
+    /** The picture as a WebP at the quality given, or without loss (no quality) — null when GD cannot write that. */
+    private function webp(GdImage $image, ?int $quality): ?string
     {
+        if ($quality === null && ! defined('IMG_WEBP_LOSSLESS')) {
+            return null;
+        }
+
         ob_start();
 
         try {
-            $written = imagewebp($image, null, $lossless && defined('IMG_WEBP_LOSSLESS') ? IMG_WEBP_LOSSLESS : $quality);
+            $written = imagewebp($image, null, $quality ?? IMG_WEBP_LOSSLESS);
         } finally {
             $bytes = (string) ob_get_clean();
         }

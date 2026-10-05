@@ -137,12 +137,27 @@ organization's 512 MB and sent to the televisions.
 | A phone photo whose EXIF says it was held on its side | turned upright, as a WebP — always: an old WebView shows it on its side |
 | Any other JPEG, PNG or WebP | a WebP when that is at least a tenth lighter; otherwise the file as it came |
 | A palette PNG, or a lossless WebP, that keeps its size | a lossless WebP: its pixels exactly |
+| A picture of whole colour (a PNG, a lossless WebP, a JPEG written at full colour) whose small coloured detail a lossy WebP would change — words, a logo's edge | a lossless WebP: every pixel as it came (or the file itself, when that is lighter) |
 | A colour profile (an iPhone's Display P3, Adobe RGB…) | the very same profile, in the WebP's ICCP chunk, so a screen reads the colours as it read the upload's |
 | A GIF; a PNG or WebP that moves; a CMYK JPEG; a grey or CMYK profile, or a split one with a part missing; a PNG whose gamma or primaries are not sRGB's; a file not built as its format says, or that GD cannot read; a picture too big for the memory one request has | the file as it came |
 | A video | the file as it came, always: there is no ffmpeg on the server |
 
 A WebP is written at 85 for a photograph (a JPEG) and 90 for a PNG or a WebP. Nothing the optimizer does refuses an
-upload: whatever goes wrong, the file is stored as it came. The organization's wall and the server's reserve are asked
+upload: whatever goes wrong, the file is stored as it came.
+
+**Why words are measured.** A lossy WebP keeps colour at half resolution, as nearly every JPEG already has; a PNG keeps
+it whole. On a 4K menu written as PNG, thin red words on black came back maroon — a higher quality does not help, the
+halving is in the format. So a picture whose colour is whole is written lossy, read back and compared with itself
+(`PictureOptimizer::losesColour`: blocks of 16×16, every other pixel, the colour alone), and where small coloured detail
+would move it is written without loss instead. A picture of words then weighs a third less, not nine tenths, and loses
+nothing.
+
+**Tested on 33 real pictures** (2026-10-05): Windows' own photographs, the owner's SS6 menu pictures (17 cut-outs up to
+4096 px), the owner's four SS6 menus drawn from their SVGs at 1080p and 4K, a 4K menu with words in Arial, a screenshot
+of the panel, a phone photo held on its side and one tagged Display P3. Chrome drew every upload and its stored WebP at
+the same size and compared them: 90.9 MB became 21.2 MB; the 25 lossy ones scored from 34.9 dB (the most finely
+textured photograph) to 52.5 dB; the 7 written without loss — every picture with words, and one photograph with sharp
+red and green edges — were pixel-identical; one JPEG of full colour stayed as it came. The organization's wall and the server's reserve are asked
 with the size that came, before it is made lighter. The Media page's and the shelf's answers carry
 `lighter: {from, to}`, and the row says "Added · made lighter: 4.4 MB to 1.7 MB" — only when the two sizes read
 differently (700 bytes made 60 read "1 KB" both times). A channel's Upload and an advert store the lighter file too and
@@ -155,6 +170,8 @@ Measured on photographs drawn for it (a gradient with grain), PHP held to the se
 | 12 MP, 4032 × 3024 | 4.4 MB | 1.7 MB, 3840 × 2880 | 2.7 s | 136 MB |
 | 24 MP held on its side, 6000 × 4000 | 8.4 MB | 1.6 MB, 2560 × 3840 | 3.7 s | 188 MB |
 | 48 MP, 8000 × 6000 | 16.4 MB | 1.6 MB, 3840 × 2880 | 4.2 s | 278 MB |
+| A 4K menu with words, PNG (measured, then lossless) | 6.1 MB | 4.3 MB, 3840 × 2160 | 6.2 s | 74 MB |
+| A menu cut-out, 3444 × 4096 PNG (measured, lossy) | 6.0 MB | 388 KB, 3229 × 3840 | 3.7 s | 172 MB |
 
 The memory is asked before GD opens anything (`PictureOptimizer::fitsInMemory`, with every step's pictures added up:
 PHP keeps what one step frees for later instead of handing it back), so a picture that would not fit is stored as it

@@ -59,6 +59,72 @@ function poPicture(int $width, int $height, string $format = 'jpeg', ?Closure $p
     return $path;
 }
 
+/**
+ * A picture made like a photograph, written as a PNG: colour that changes gently across it, and its fine detail in light
+ * and dark — where a camera's detail is. (poPicture's hues jump from cell to cell: a colour chart, which a lossy WebP
+ * would change, and the optimizer measures so.)
+ */
+function poPhoto(int $width, int $height, ?Closure $paint = null): string
+{
+    $tile = imagecreatetruecolor(16, 9);
+    for ($x = 0; $x < 16; $x++) {
+        for ($y = 0; $y < 9; $y++) {
+            imagesetpixel($tile, $x, $y, imagecolorallocate($tile, 150 + (int) (40 * sin($x / 3)), 120 + (int) (30 * sin(($x + $y) / 4)), 90 + (int) (30 * cos($y / 2))));
+        }
+    }
+
+    $image = imagecreatetruecolor($width, $height);
+    imagecopyresampled($image, $tile, 0, 0, 0, 0, $width, $height, 16, 9);
+
+    // Grain in light alone: the same grey over every channel, half see-through.
+    $grain = imagecreatetruecolor(61, 61);
+    imagealphablending($grain, false);
+    mt_srand(7);
+    for ($x = 0; $x < 61; $x++) {
+        for ($y = 0; $y < 61; $y++) {
+            $grey = mt_rand(0, 255);
+            imagesetpixel($grain, $x, $y, imagecolorallocatealpha($grain, $grey, $grey, $grey, 96));
+        }
+    }
+    imagealphablending($image, true);
+    imagesettile($image, $grain);
+    imagefilledrectangle($image, 0, 0, $width - 1, $height - 1, IMG_COLOR_TILED);
+
+    if ($paint) {
+        $image = $paint($image);
+    }
+
+    $path = tempnam(sys_get_temp_dir(), 'po');
+    imagepng($image, $path);
+
+    return $path;
+}
+
+/** A photograph cut out of its background, as a menu's burger is: an ellipse of it, its edge fading over a few pixels. */
+function poCutOut(GdImage $photo): GdImage
+{
+    $width = imagesx($photo);
+    $height = imagesy($photo);
+    $cut = imagecreatetruecolor($width, $height);
+    imagealphablending($cut, false);
+    imagesavealpha($cut, true);
+    imagefill($cut, 0, 0, imagecolorallocatealpha($cut, 0, 0, 0, 127));
+
+    for ($y = 0; $y < $height; $y += 1) {
+        for ($x = (int) ($width * 0.2); $x < $width * 0.8; $x++) {
+            // How far inside the ellipse, 1 at its edge: past it, nothing; within 2% of it, fading.
+            $reach = (($x - $width / 2) / ($width * 0.3)) ** 2 + (($y - $height / 2) / ($height * 0.35)) ** 2;
+            if ($reach < 1) {
+                $rgb = imagecolorat($photo, $x, $y);
+                $alpha = (int) round(127 * max(0, min(1, ($reach - 0.96) / 0.04)));
+                imagesetpixel($cut, $x, $y, imagecolorallocatealpha($cut, ($rgb >> 16) & 0xFF, ($rgb >> 8) & 0xFF, $rgb & 0xFF, $alpha));
+            }
+        }
+    }
+
+    return $cut;
+}
+
 /** The same JPEG with one more marker segment right after its start (an EXIF or an ICC profile). */
 function poWithSegment(string $path, int $marker, string $payload): string
 {
@@ -246,25 +312,94 @@ test('a profile too big for one JPEG segment is joined in its numbered order', f
 });
 
 test('a cut-out keeps its colour profile and its transparency together', function () {
+    // A logo-like shape of one colour on nothing, and a photograph cut out of its background (soft at its edge, as a
+    // real cut-out is): whichever way each is written, both carry the profile and their transparency.
     $profile = poIccProfile('Display P3');
-    $path = poPicture(4000, 2000, 'png', function (GdImage $image) {
-        $clear = imagecreatetruecolor(4000, 2000);
+    $logo = poPicture(3900, 400, 'png', function (GdImage $image) {
+        $clear = imagecreatetruecolor(3900, 400);
         imagealphablending($clear, false);
         imagesavealpha($clear, true);
         imagefill($clear, 0, 0, imagecolorallocatealpha($clear, 0, 0, 0, 127));
-        imagefilledrectangle($clear, 1500, 500, 2500, 1500, imagecolorallocate($clear, 255, 0, 0));
+        imagefilledrectangle($clear, 1500, 100, 2400, 300, imagecolorallocate($clear, 255, 0, 0));
 
         return $clear;
     });
-    $bytes = poOptimizedBytes(poWithChunk($path, 'iCCP', "Display P3\0\0".gzcompress($profile)), 'image/png');
-    $chunks = poWebpChunks($bytes);
-    $decoded = imagecreatefromstring($bytes);
+    $cutOut = poPhoto(3900, 400, fn (GdImage $photo) => poCutOut($photo));
+    $written = [];
 
-    expect(array_keys($chunks))->toBe(['VP8X', 'ICCP', 'ALPH', 'VP8 '])
-        ->and(ord($chunks['VP8X'][0]) & 0x30)->toBe(0x30)
-        ->and($chunks['ICCP'])->toBe($profile)
-        ->and(imagecolorsforindex($decoded, imagecolorat($decoded, 10, 10))['alpha'])->toBe(127)
-        ->and(imagecolorsforindex($decoded, imagecolorat($decoded, 1920, 960)))->toMatchArray(['red' => 255, 'alpha' => 0]);
+    foreach (['logo' => $logo, 'cut-out' => $cutOut] as $name => $path) {
+        $bytes = poOptimizedBytes(poWithChunk($path, 'iCCP', "Display P3\0\0".gzcompress($profile)), 'image/png');
+        $chunks = poWebpChunks($bytes);
+        $decoded = imagecreatefromstring($bytes);
+        $written[$name] = [array_keys($chunks), imagecolorsforindex($decoded, imagecolorat($decoded, 1920, 197))];
+
+        expect(array_slice(array_keys($chunks), 0, 2))->toBe(['VP8X', 'ICCP'])
+            ->and(ord($chunks['VP8X'][0]) & 0x30)->toBe(0x30)
+            ->and($chunks['ICCP'])->toBe($profile)
+            ->and(imagecolorsforindex($decoded, imagecolorat($decoded, 10, 10))['alpha'])->toBe(127)
+            ->and($written[$name][1]['alpha'])->toBe(0);
+    }
+
+    // The logo's flat red, sharp against nothing, is kept exact; the photograph stays light: lossy, its transparency in
+    // a layer of its own.
+    expect($written['logo'][0])->toBe(['VP8X', 'ICCP', 'VP8L'])
+        ->and($written['logo'][1])->toMatchArray(['red' => 255, 'green' => 0, 'blue' => 0])
+        ->and($written['cut-out'][0])->toBe(['VP8X', 'ICCP', 'ALPH', 'VP8 ']);
+});
+
+test('small coloured words keep every pixel, while a photograph stays light', function () {
+    // Thin red words on black, the kind a lossy WebP would turn maroon (seen on a real 4K menu): wider than 4K, so it is
+    // always written — and written without loss.
+    $words = function (bool $withWords): string {
+        return poPhoto(3900, 600, function (GdImage $image) use ($withWords) {
+            if ($withWords) {
+                imagefilledrectangle($image, 0, 400, 3899, 599, imagecolorallocate($image, 0, 0, 0));
+                for ($line = 0; $line < 10; $line++) {
+                    imagestring($image, 5, 10, 410 + $line * 18, str_repeat('Prices and participation may vary. ', 12), imagecolorallocate($image, 229, 0, 5));
+                }
+            }
+
+            return $image;
+        });
+    };
+
+    $bytes = poOptimizedBytes($words(true), 'image/png');
+    $decoded = imagecreatefromstring($bytes);
+    $reddest = 0;
+    for ($x = 10; $x < 1200; $x++) {
+        for ($y = 400; $y < 590; $y++) {
+            $colour = imagecolorsforindex($decoded, imagecolorat($decoded, $x, $y));
+            $reddest = max($reddest, $colour['green'] < 40 ? $colour['red'] : 0);
+        }
+    }
+
+    expect(array_keys(poWebpChunks($bytes)))->toBe(['VP8L'])
+        ->and($reddest)->toBeGreaterThan(200)
+        // The same photograph without the words is a photograph: lossy.
+        ->and(array_keys(poWebpChunks(poOptimizedBytes($words(false), 'image/png'))))->toBe(['VP8 ']);
+});
+
+test('a JPEG is measured only when it kept its colour whole, as a camera’s does not', function () {
+    $optimizer = app(PictureOptimizer::class);
+    $about = fn (string $path) => (fn () => $this->about($path, 'image/jpeg'))->call($optimizer);
+    $header = function (array $samplings): string {
+        $components = '';
+        foreach ($samplings as $id => $sampling) {
+            $components .= chr($id + 1).chr($sampling).chr(0);
+        }
+        $frame = chr(8).pack('nn', 100, 100).chr(count($samplings)).$components;
+        $path = tempnam(sys_get_temp_dir(), 'po');
+        file_put_contents($path, "\xFF\xD8\xFF\xC0".pack('n', strlen($frame) + 2).$frame."\xFF\xDA");
+
+        return $path;
+    };
+
+    // Photoshop's best quality: every component at one sampling. A camera's: colour at half. Grey: no colour at all.
+    expect($about($header([0x11, 0x11, 0x11]))['fullColour'])->toBeTrue()
+        ->and($about($header([0x22, 0x11, 0x11]))['fullColour'])->toBeFalse()
+        ->and($about($header([0x11]))['fullColour'])->toBeFalse()
+        // GD writes its JPEGs with colour at half resolution, as a camera does.
+        ->and($about(poPicture(64, 64))['fullColour'])->toBeFalse();
 });
 
 test('colours GD cannot keep leave a picture as it came, and sRGB in any of its words does not', function () {
@@ -289,7 +424,7 @@ test('colours GD cannot keep leave a picture as it came, and sRGB in any of its 
         ->and($jpeg(poIccProfile('sRGB IEC61966-2.1')))->not->toBeNull();
 });
 
-test('a drawing packed without loss is written without loss again, unless it had to be brought down', function () {
+test('a drawing packed without loss is written without loss again, and brought down it is measured like any picture', function () {
     // A palette PNG of a few colours, as a logo or a price list is.
     $drawing = function (int $width, int $height): string {
         $palette = imagecreate($width, $height);
@@ -310,12 +445,13 @@ test('a drawing packed without loss is written without loss again, unless it had
         ->and(imagecolorsforindex($decoded, imagecolorat($decoded, 960, 540)))->toMatchArray(['red' => 200, 'green' => 16, 'blue' => 46])
         ->and(imagecolorsforindex($decoded, imagecolorat($decoded, 5, 5)))->toMatchArray(['red' => 255, 'green' => 255, 'blue' => 255]);
 
-    // Brought down, its pixels change anyway, and a lossless copy of resampled pixels can weigh several times what came:
-    // a palette PNG, or a lossless WebP, bigger than 4K is written as a drawing is.
-    $lossless = poPicture(4000, 2000, 'png');
+    // Brought down, its pixels change anyway, so it is measured like any picture of whole colour: the drawing's red and
+    // blue edges would change, so it stays lossless; a lossless WebP of a photograph has nothing of the sort, and is made
+    // lossy — a lossless copy of resampled photo pixels weighs several times what came.
+    $lossless = poPhoto(4000, 2000);
     imagewebp(imagecreatefrompng($lossless), $lossless, IMG_WEBP_LOSSLESS);
 
-    expect(array_keys(poWebpChunks(poOptimizedBytes($drawing(4000, 2000), 'image/png'))))->toBe(['VP8 '])
+    expect(array_keys(poWebpChunks(poOptimizedBytes($drawing(4000, 2000), 'image/png'))))->toBe(['VP8L'])
         ->and(array_keys(poWebpChunks(poOptimizedBytes($lossless, 'image/webp'))))->toBe(['VP8 ']);
 });
 
