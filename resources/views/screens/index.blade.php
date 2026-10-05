@@ -6,7 +6,8 @@
     {{-- Js::from, not @json: @json leaves its quotes raw and the first string would
          close this attribute (see .claude/rules/02-project-conventions.md). --}}
     <div x-data="screensTable({{ Js::from([
-            'hasOrganization' => (bool) session('current_organization_id'),
+            // Above the organizations only: whose screen a new one is, chosen in the Add Screen dialog.
+            'organizations' => $organizations,
             'defaultTimezone' => \App\Models\Screen::DEFAULT_TIMEZONE,
             'organizationAcceptsAds' => $organizationAcceptsAds,
             // One set of words for a screen's four ways, the model's — the list and the dialogs say the same.
@@ -89,6 +90,11 @@
                             <a x-bind:href="'/screens/' + item.id" x-bind:dusk="'open-screen-' + item.id"
                                class="font-medium text-blue-600 hover:underline dark:text-blue-400 whitespace-nowrap"
                                x-text="item.name"></a>
+                            {{-- Above the organizations every organization's screens share one list: each says whose it is. --}}
+                            @if ($organizations !== null)
+                                <p class="text-xs text-gray-500 whitespace-nowrap dark:text-gray-400"
+                                   x-bind:dusk="'screen-organization-' + item.id" x-text="item.organization?.name ?? ''"></p>
+                            @endif
                             <p class="text-xs" x-text="playlistLabel(item)"
                                x-bind:class="(item.playlist_items_count ?? 0) === 0 ? 'text-amber-700 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'"></p>
                         </td>
@@ -206,9 +212,25 @@
                 </p>
 
                 <form @submit.prevent="pairScreen" novalidate dusk="screen-pair-form" class="mt-4 space-y-4">
-                    <div x-show="!hasOrganization && pairForm.mode === 'new'" x-cloak class="alert-warning">
-                        Select an organization first.
-                    </div>
+                    {{-- Above the organizations a new screen is paired FOR an organization: a screen always belongs to one.
+                         Inside an organization it is the one the person works in, and nothing is asked. --}}
+                    @if ($organizations !== null)
+                        <template x-if="pairForm.mode === 'new'">
+                            <div>
+                                <x-crud.form-field label="Organization" field="organization_id" :required="true">
+                                    <select x-model="pairForm.organization_id" dusk="screen-pair-organization" class="form-select">
+                                        <option value="">Choose an organization</option>
+                                        @foreach ($organizations as $organization)
+                                            <option value="{{ $organization['id'] }}">{{ $organization['name'] }}</option>
+                                        @endforeach
+                                    </select>
+                                </x-crud.form-field>
+                                @if (count($organizations) === 0)
+                                    <p class="mt-1 text-xs text-amber-700 dark:text-amber-400">No organization yet. Create one on the Organizations page first.</p>
+                                @endif
+                            </div>
+                        </template>
+                    @endif
 
                     <x-crud.form-field label="Pairing code" field="code" :required="true">
                         <x-text-input x-model="pairForm.code" dusk="screen-code" class="uppercase tracking-[0.4em] text-center text-lg font-mono"

@@ -11,6 +11,7 @@ use App\Models\Permission;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
+use App\Services\DevicePairing;
 
 /*
 |--------------------------------------------------------------------------
@@ -117,6 +118,20 @@ test('another organization’s rows cannot be smuggled onto this organization’
 
     expect(PlaylistItem::where('screen_id', $this->alphaScreen->id)->count())->toBe(0)
         ->and(Screen::find($this->alphaScreen->id)->default_media_id)->toBeNull();
+});
+
+test('a new screen cannot be planted in another organization by naming it', function () {
+    // Only the platform says whose a new screen is (the Add Screen dialog's Organization list); an organization's
+    // person pairs into the organization they stand in, whatever they post.
+    $code = app(DevicePairing::class)->register()['code'];
+
+    $this->postJson('/screens/pair', [
+        'code' => $code, 'mode' => 'new', 'name' => 'Planted TV', 'orientation' => 'landscape',
+        'organization_id' => $this->beta->id,
+    ])->assertOk();
+
+    expect(Screen::where('name', 'Planted TV')->sole()->organization_id)->toBe($this->alpha->id)
+        ->and(Screen::where('organization_id', $this->beta->id)->pluck('name')->all())->toBe(['Beta TV']);
 });
 
 test('the platform’s library and another organization’s files stay out of this organization’s channels, listings and screens', function () {

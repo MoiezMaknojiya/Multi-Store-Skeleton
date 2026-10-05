@@ -140,18 +140,92 @@ test('the same code cannot be used twice', function () {
     expect(Screen::count())->toBe(1);
 });
 
-test('pairing without an organization selected is refused with a helpful message', function () {
+/* ── Pairing from above the organizations ──────────────────────────────── */
+
+test('the platform pairs a TV for the organization it chooses in the dialog', function () {
+    // Owner, 2026-10-05: the super admin's Screens page offered Add Screen and nowhere to say whose screen it was.
+    $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    Organization::factory()->create(['name' => 'Beta Foods']);
     $admin = createSuperAdmin(['screen-store']);
-    $code = waitingDeviceCode();
 
     $this->actingAs($admin)->postJson('/screens/pair', [
-        'code' => $code,
+        'code' => waitingDeviceCode(),
         'mode' => 'new',
         'name' => 'Counter TV',
         'orientation' => 'landscape',
-    ])->assertStatus(422)->assertJsonValidationErrors(['code']);
+        'organization_id' => $organization->id,
+    ])->assertOk();
+
+    $screen = Screen::sole();
+    expect($screen->organization_id)->toBe($organization->id);
+    expect($screen->isPaired())->toBeTrue();
+    // The log says whose it is, and belongs to that organization.
+    $this->assertDatabaseHas('activity_logs', [
+        'action' => 'screen.paired',
+        'organization_id' => $organization->id,
+        'description' => 'Paired screen Counter TV for Alpha Mart',
+    ]);
+});
+
+test('the platform must say whose screen it is, and a gone organization is said so', function () {
+    $admin = createSuperAdmin(['screen-store']);
+
+    // Nothing chosen: said under the dialog's Organization list, and the code is not spent.
+    $code = waitingDeviceCode();
+    $this->actingAs($admin)->postJson('/screens/pair', [
+        'code' => $code, 'mode' => 'new', 'name' => 'Counter TV', 'orientation' => 'landscape',
+    ])->assertStatus(422)->assertJsonValidationErrors(['organization_id' => 'Choose the organization this screen belongs to.']);
+
+    // Deleted while the dialog was open.
+    $this->actingAs($admin)->postJson('/screens/pair', [
+        'code' => $code, 'mode' => 'new', 'name' => 'Counter TV', 'orientation' => 'landscape', 'organization_id' => 999_999,
+    ])->assertStatus(422)->assertJsonValidationErrors(['organization_id' => 'That organization no longer exists. Reload the page and choose again.']);
+
+    // Not a number at all.
+    $this->actingAs($admin)->postJson('/screens/pair', [
+        'code' => $code, 'mode' => 'new', 'name' => 'Counter TV', 'orientation' => 'landscape', 'organization_id' => ['x'],
+    ])->assertStatus(422)->assertJsonValidationErrors(['organization_id' => 'Choose an organization from the list.']);
 
     expect(Screen::count())->toBe(0);
+    // The television's code still works for the next try.
+    $organization = Organization::factory()->create();
+    $this->actingAs($admin)->postJson('/screens/pair', [
+        'code' => $code, 'mode' => 'new', 'name' => 'Counter TV', 'orientation' => 'landscape', 'organization_id' => $organization->id,
+    ])->assertOk();
+});
+
+test('above the organizations the list says whose each screen is, and finds them by it', function () {
+    $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $beta = Organization::factory()->create(['name' => 'Beta Foods']);
+    $admin = createSuperAdmin(['screen-view']);
+    Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Counter TV']);
+    Screen::factory()->create(['organization_id' => $beta->id, 'name' => 'Deli TV']);
+
+    $rows = collect($this->actingAs($admin)->getJson('/screens/data')->assertOk()->json('screens'));
+    expect($rows->pluck('organization.name', 'name')->sortKeys()->all())->toBe(['Counter TV' => 'Alpha Mart', 'Deli TV' => 'Beta Foods']);
+    // Only the name of the organization travels with a row.
+    expect(array_keys($rows->first()['organization']))->toBe(['id', 'name']);
+
+    $found = collect($this->actingAs($admin)->getJson('/screens/data?search=Beta')->assertOk()->json('screens'))->pluck('name');
+    expect($found->all())->toBe(['Deli TV']);
+
+    // The page offers the list of organizations to choose from in the Add Screen dialog.
+    $this->actingAs($admin)->get('/screens')->assertOk()
+        ->assertSee('dusk="screen-pair-organization"', false)
+        ->assertSee('Beta Foods');
+});
+
+test('inside an organization nothing asks whose screen it is, and nothing says it', function () {
+    $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    $owner = createOrganizationUser($organization, ['screen-view', 'screen-store']);
+    Screen::factory()->create(['organization_id' => $organization->id]);
+
+    $this->actingAs($owner)->withSession(['current_organization_id' => $organization->id])
+        ->get('/screens')->assertOk()->assertDontSee('screen-pair-organization', false);
+
+    $row = $this->actingAs($owner)->withSession(['current_organization_id' => $organization->id])
+        ->getJson('/screens/data')->assertOk()->json('screens.0');
+    expect($row)->not->toHaveKey('organization');
 });
 
 test('a user without screen-store cannot pair anything', function () {

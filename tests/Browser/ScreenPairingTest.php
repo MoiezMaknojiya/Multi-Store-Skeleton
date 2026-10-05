@@ -111,6 +111,60 @@ class ScreenPairingTest extends DuskTestCase
     }
 
     /**
+     * The super admin pairs a television FOR an organization, chosen in the Add Screen dialog — the platform had
+     * the button and nowhere to say whose screen it was (owner, 2026-10-05) — and the list says whose each one is.
+     */
+    public function test_the_super_admin_pairs_a_tv_for_the_organization_chosen_in_the_dialog(): void
+    {
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
+        Organization::factory()->create(['name' => 'Beta Foods']);
+        $admin = $this->seedSuperAdmin();
+        Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Window Board']);
+
+        $this->browse(function (Browser $tv, Browser $panel) use ($admin, $alpha) {
+            $tv->visit('/login');
+            $tv->script('localStorage.clear();');
+            $tv->visit('/player');
+            $tv->waitFor('@pairing-code', 15);
+            $tv->waitUntil('document.querySelector(\'[dusk="pairing-code"]\').textContent.trim().length === 6', 15);
+            $code = trim($tv->text('@pairing-code'));
+
+            $this->freshSession($panel);
+            $panel->loginAs($admin);
+            $panel->visit('/screens');
+            $this->waitForAlpine($panel);
+            $panel->waitForText('Window Board');
+            // Every organization's screens share the list, so each says whose it is.
+            $panel->assertSeeIn('@screen-organization-'.Screen::where('name', 'Window Board')->value('id'), 'Alpha Mart');
+
+            // Nothing chosen: said under the list, and nothing is made.
+            $this->clickAndAwait($panel, '@add-screen', fn (Browser $b) => $b->waitFor('@screen-pair-form', 3));
+            $panel->assertVisible('@screen-pair-organization')
+                ->assertDontSee('Select an organization first');
+            $this->jsType($panel, '@screen-code', $code);
+            $this->jsType($panel, '@screen-name', 'Counter TV');
+            $this->jsClick($panel, '@screen-pair-save');
+            $panel->waitForText('Choose the organization this screen belongs to.', 5);
+            $this->assertSame(1, Screen::count());
+
+            // Chosen: the screen is Alpha Mart's.
+            $panel->select('@screen-pair-organization', (string) $alpha->id);
+            $this->jsClick($panel, '@screen-pair-save');
+            $this->waitForModalClosed($panel, '@screen-pair-form');
+            $panel->waitForText('Counter TV', 10);
+
+            $screen = Screen::where('name', 'Counter TV')->firstOrFail();
+            $this->assertSame($alpha->id, $screen->organization_id);
+            $this->assertSame($admin->id, $screen->paired_by);
+            $panel->waitUsing(10, 200, fn () => str_contains($panel->text('@screen-organization-'.$screen->id), 'Alpha Mart'));
+
+            // The television picks its token up on its next poll and starts.
+            $tv->waitForText('No content', 60);
+            $tv->visit('/login');
+        });
+    }
+
+    /**
      * Every control on the screens page: cancel, edit, cancel again, replace the
      * device, search, and delete.
      */

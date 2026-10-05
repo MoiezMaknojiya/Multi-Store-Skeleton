@@ -31,7 +31,7 @@ class ScreenController extends Controller
      * page's own permission is what gates them, which keeps `screen-update`
      * self-sufficient without a second endpoint to gate.
      */
-    public function index(): View
+    public function index(Request $request): View
     {
         return view('screens.index', [
             'orientations' => Screen::ORIENTATIONS,
@@ -39,15 +39,23 @@ class ScreenController extends Controller
             // Only the advertising panel uses this, and only a super admin inside an
             // impersonated session ever sees that panel.
             'organizationAcceptsAds' => (bool) Organization::find(session('current_organization_id'))?->accepts_network_ads,
+            // Above the organizations a new screen is paired FOR an organization, chosen in the dialog (owner,
+            // 2026-10-05: the platform had an Add Screen button and nowhere to say whose screen it was).
+            'organizations' => $request->user()->globalRole() !== null ? Organization::orderBy('name')->get(['id', 'name'])->toArray() : null,
         ]);
     }
 
     /** Return paginated, searchable screens as JSON, scoped to the current organization. */
     public function data(Request $request): JsonResponse
     {
+        // Above the organizations every organization's screens are listed together, so each says whose it is — and
+        // the search finds them by that name too.
+        $aboveTheOrganizations = $request->user()->globalRole() !== null;
+
         // The count rides along so the listing can say which screens actually
         // have something to play, without a query per row.
-        $query = Screen::visibleTo(auth()->user())->withCount('playlistItems')->orderByDesc('created_at');
+        $query = Screen::visibleTo(auth()->user())->withCount('playlistItems')->orderByDesc('created_at')
+            ->when($aboveTheOrganizations, fn (Builder $q) => $q->with('organization:id,name'));
 
         // Searchable by everything the row actually shows: the name, the device id
         // (the listing prints its last block, and a LIKE finds that inside the whole
@@ -59,10 +67,14 @@ class ScreenController extends Controller
             'screens',
             ['*'],
             null,
-            function (Builder $q, string $search) {
+            function (Builder $q, string $search) use ($aboveTheOrganizations) {
                 // Stored as "2026-09-07 14:08:48", so a typed 2026-09-07 — or just
                 // 2026-09 — matches straight away.
                 $q->orWhere('paired_at', 'like', "%{$search}%");
+
+                if ($aboveTheOrganizations) {
+                    $q->orWhereHas('organization', fn (Builder $organization) => $organization->where('name', 'like', "%{$search}%"));
+                }
 
                 // But the panel prints the date in the READER's own locale, so what
                 // somebody sees and copies is "9/7/2026". Match that too, or the
@@ -138,12 +150,17 @@ class ScreenController extends Controller
             // The clock the screen keeps, asked on the pairing form (it was a silent default): every schedule on its
             // playlist is read against it. Left out, the default; the Edit form changes it later.
             'timezone' => ['nullable', 'string', 'max:64', Rule::in(timezone_identifiers_list())],
+            // Whose screen a new one is, said by the platform team only (pairingOrganizationId). An organization's
+            // person pairs into the organization they stand in, and whatever they send here is not read.
+            'organization_id' => ['nullable', 'integer', 'min:1'],
         ], [
             'code.size' => 'A pairing code is exactly 6 characters.',
             'name.required_if' => 'Give the screen a name.',
             'orientation.required_if' => 'Choose how the screen is mounted.',
             'screen_id.required_if' => 'Choose which screen this device replaces.',
             'timezone.in' => 'Choose a time zone from the list.',
+            'organization_id.integer' => 'Choose an organization from the list.',
+            'organization_id.min' => 'Choose an organization from the list.',
         ]);
 
         return $validated['mode'] === 'replace'
@@ -154,12 +171,21 @@ class ScreenController extends Controller
     /** A screen the organization has not set up yet: make it, then hand it the token. */
     private function pairNewScreen(array $validated, DevicePairing $pairing): JsonResponse
     {
-        $organizationId = $this->currentOrganizationId();
+        $organizationId = $this->pairingOrganizationId($validated);
+        $aboveTheOrganizations = auth()->user()->globalRole() !== null;
 
         // One transaction, because a code that turns out to be dead must leave no
         // trace. Without it a bad code would still create the screen and the organization
         // would collect ghost rows every time somebody mistyped.
-        $screen = DB::transaction(function () use ($validated, $organizationId, $pairing) {
+        $screen = DB::transaction(function () use ($validated, $organizationId, $aboveTheOrganizations, $pairing) {
+            // The organization chosen above the organizations is read under its row's lock: deleted in between, it is
+            // said so here rather than left to the foreign key's 500.
+            if ($aboveTheOrganizations && ! Organization::whereKey($organizationId)->lockForUpdate()->exists()) {
+                throw ValidationException::withMessages([
+                    'organization_id' => 'That organization no longer exists. Reload the page and choose again.',
+                ]);
+            }
+
             $screen = Screen::create([
                 'organization_id' => $organizationId,
                 'name' => $validated['name'],
@@ -177,7 +203,8 @@ class ScreenController extends Controller
             return $screen;
         });
 
-        ActivityLog::record('screen.paired', $screen, "Paired screen {$screen->name}");
+        ActivityLog::record('screen.paired', $screen, "Paired screen {$screen->name}"
+            .($aboveTheOrganizations ? " for {$screen->organization?->name}" : ''));
 
         return response()->json(['message' => 'Screen paired successfully', 'screen' => $screen->fresh()]);
     }
@@ -310,15 +337,29 @@ class ScreenController extends Controller
         return array_keys($dates);
     }
 
-    /** A screen belongs to an organization, so pairing one needs an organization context. */
-    private function currentOrganizationId(): int
+    /**
+     * The organization a new screen belongs to. An organization's person: the organization they are working in —
+     * with none selected the pairing is refused. The platform team: the organization chosen in the dialog, which
+     * they must choose (a screen always belongs to one).
+     */
+    private function pairingOrganizationId(array $validated): int
     {
-        $organizationId = (int) session('current_organization_id');
+        if (auth()->user()->globalRole() === null) {
+            $organizationId = (int) session('current_organization_id');
 
-        if (! $organizationId) {
-            throw ValidationException::withMessages([
-                'code' => 'Select an organization before pairing — a screen belongs to the organization it is paired in.',
-            ]);
+            if (! $organizationId) {
+                throw ValidationException::withMessages([
+                    'code' => 'Select an organization before pairing — a screen belongs to the organization it is paired in.',
+                ]);
+            }
+
+            return $organizationId;
+        }
+
+        $organizationId = (int) ($validated['organization_id'] ?? 0);
+
+        if ($organizationId === 0) {
+            throw ValidationException::withMessages(['organization_id' => 'Choose the organization this screen belongs to.']);
         }
 
         return $organizationId;

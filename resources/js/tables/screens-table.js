@@ -24,6 +24,19 @@ const browserTimezone = () => {
  *  reloaded. The server decides is_online (Screen::OFFLINE_AFTER_MINUTES); this is only the polling. */
 const REFRESH_MS = 30000;
 
+/** An empty Add Screen form. Above the organizations it also asks whose screen it is: chosen already when there is
+ *  only one organization to choose. */
+const blankPairForm = (config) => ({
+    code: '',
+    mode: 'new',
+    name: '',
+    orientation: 'landscape',
+    timezone: config.defaultTimezone ?? 'America/Chicago',
+    organization_id: config.organizations?.length === 1 ? String(config.organizations[0].id) : '',
+    screen_id: null,
+    screen_name: '',
+});
+
 export function registerScreensTable(Alpine) {
     Alpine.data('screensTable', (config = {}) => createCrudTable({
         fetchUrl: '/screens/data',
@@ -33,11 +46,12 @@ export function registerScreensTable(Alpine) {
         deleteModalName: 'confirm-screen-deletion',
 
         extraState: {
-            hasOrganization: config.hasOrganization ?? false,
+            /* Above the organizations only (null inside one): the organizations a new screen may be paired for. */
+            organizations: config.organizations ?? null,
             /* The model's words for the four ways (Screen::ORIENTATIONS), so the list and the dialogs agree. */
             orientations: config.orientations ?? {},
             browserTimezone: browserTimezone(),
-            pairForm: { code: '', mode: 'new', name: '', orientation: 'landscape', timezone: config.defaultTimezone ?? 'America/Chicago', screen_id: null, screen_name: '' },
+            pairForm: blankPairForm(config),
             refreshTimer: null,
             /* The default-media picker's options, fetched when the modal opens: the
              * library can be long and most edits never touch it. */
@@ -118,7 +132,7 @@ export function registerScreensTable(Alpine) {
 
             /* ── Pair / replace ────────────────────────────────────────── */
             openPairModal() {
-                this.pairForm = { code: '', mode: 'new', name: '', orientation: 'landscape', timezone: config.defaultTimezone ?? 'America/Chicago', screen_id: null, screen_name: '' };
+                this.pairForm = blankPairForm(config);
                 this.formErrors = {};
                 this.$dispatch('open-modal', 'screen-pair-modal');
             },
@@ -130,6 +144,7 @@ export function registerScreensTable(Alpine) {
                     name: '',
                     orientation: screen.orientation,
                     timezone: screen.timezone,
+                    organization_id: '',
                     screen_id: screen.id,
                     screen_name: screen.name,
                 };
@@ -146,11 +161,15 @@ export function registerScreensTable(Alpine) {
                 if (this.saving) return;
 
                 const isNew = this.pairForm.mode === 'new';
+                const forAnOrganization = isNew && this.organizations !== null;
                 const rules = { code: [required('Pairing code')] };
                 if (isNew) {
                     // In the server's own words (ScreenController::pair).
                     rules.name = [requiredMessage('Give the screen a name.'), maxLen('Screen name', 255)];
                     rules.orientation = [requiredMessage('Choose how the screen is mounted.')];
+                }
+                if (forAnOrganization) {
+                    rules.organization_id = [requiredMessage('Choose the organization this screen belongs to.')];
                 }
 
                 const errors = validate(this.pairForm, rules);
@@ -173,6 +192,7 @@ export function registerScreensTable(Alpine) {
                         name: isNew ? this.pairForm.name : null,
                         orientation: isNew ? this.pairForm.orientation : null,
                         timezone: isNew ? this.pairForm.timezone : null,
+                        organization_id: forAnOrganization ? this.pairForm.organization_id : null,
                         screen_id: isNew ? null : this.pairForm.screen_id,
                     });
                     this.closePairModal();
