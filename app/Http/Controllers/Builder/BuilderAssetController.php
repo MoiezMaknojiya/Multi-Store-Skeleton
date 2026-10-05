@@ -115,6 +115,8 @@ class BuilderAssetController extends Controller
         $organizationId = $this->targetOrganizationId($request->validated());
 
         $file = $request->file('file');
+        // What came, before a picture is made lighter (PictureOptimizer) — read now, while the upload is still on disk.
+        $uploaded = (int) $file->getSize();
 
         $asset = $this->storage->addBuilderAsset(
             $file,
@@ -130,7 +132,13 @@ class BuilderAssetController extends Controller
 
         $request->forgetFinishedUpload();
 
-        return response()->json(['message' => 'Uploaded', 'asset' => $asset, 'storage' => $this->quota->summary($organizationId)]);
+        return response()->json([
+            'message' => 'Uploaded',
+            'asset' => $asset,
+            'storage' => $this->quota->summary($organizationId),
+            // How much lighter the picture was made, for the uploader to say.
+            'lighter' => $asset->size < $uploaded ? ['from' => $uploaded, 'to' => $asset->size] : null,
+        ]);
     }
 
     /**

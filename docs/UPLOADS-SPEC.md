@@ -7,7 +7,7 @@
 > What a file may be — its formats, size and length, the organization's 512 MB, the server's reserve — is still ruled by
 > `.claude/rules/02-project-conventions.md` (**Upload limits**), and nothing here loosens it.
 >
-> **Status: built, 2026-09-29.**
+> **Status: built, 2026-09-29.** Pictures made light on their way in: built, 2026-10-05 (§7).
 
 ---
 
@@ -102,8 +102,8 @@ taken), and the formats and limits under it; it turns blue while a file is dragg
 file: a preview (the picture itself, or the video's poster), the name, the size and a video's length, a bar in the
 panel's blue with the percent, the speed and the time left, and Pause, Resume, Cancel or Try again. What each row
 says: "Checking…" · "Waiting…" · "Uploading 45% · 2.4 MB/s · 12 s left" · "Paused at 45%" · "Connection lost.
-Waiting for the internet…" · "Connection trouble at 45%. Trying again…" · "Adding…" · "Added" · "Uploaded. It is
-added when you save." · or the reason it was refused, in red. The bar never goes back: a chunk sent again after a
+Waiting for the internet…" · "Connection trouble at 45%. Trying again…" · "Adding…" · "Added" · "Added · made
+lighter: 4.4 MB to 1.7 MB" (§7) · "Uploaded. It is added when you save." · or the reason it was refused, in red. The bar never goes back: a chunk sent again after a
 pause or a lost connection starts from the last one the server kept, and the bar waits until it is caught up.
 Several files show "3 of 5 added" above the rows. It works with the keyboard, says its changes to a screen reader,
 turns dark with the panel, and fits a phone (`EveryPageFitsAPhoneTest`).
@@ -116,5 +116,47 @@ that are paths or not UTF-8, too many at once, a half-finished upload posted, on
 wearing a picture's name) and `tests/Browser/ChunkedUploadFlowTest.php` (several files dropped at once; a picture
 larger than a chunk sent in pieces, one request each, and arriving byte for byte; paused and resumed; a lost
 connection waited out on the same page — Chrome's own network emulation, offline and slow; cancelled on its way,
-and gone from the server; a form holding Save until its file is in). The refusals as a person meets them are
-`tests/Browser/UploadLimitsTest.php`.
+and gone from the server; a form holding Save until its file is in). The pictures it compares byte for byte are GIFs
+of noise made in the page, because a GIF is stored exactly as it came (§7). The refusals as a person meets them are
+`tests/Browser/UploadLimitsTest.php`; pictures made light, `tests/Feature/Signage/PictureOptimizerTest.php` and
+`tests/Browser/PicturesMadeLighterTest.php`.
+
+## 7. Pictures made light on their way in (owner, 2026-10-05)
+
+> "upload par tasveer khud halki karne wala feature bana do, sub upload mein lagana aur yeh bhi dekhna k video bhi
+> upload honti ha" — and "Badi tasveer ko chhota karna yeh bhi bana do".
+
+Before a door stores a picture, `MediaStorage::put` asks `App\Services\PictureOptimizer` for a lighter one: on the
+server, once every byte is in, on the file the door has already checked — so every rule of this spec still judges what
+came. It is one place for all four doors (and `builder:examples`), and what it gives is what is stored, counted to the
+organization's 512 MB and sent to the televisions.
+
+| What came | What is stored |
+| --- | --- |
+| A JPEG, PNG or WebP over 4K | brought down to 3840 px on its longer side, as a WebP — always, whatever it then weighs, as WordPress brings down what is over its own threshold |
+| A phone photo whose EXIF says it was held on its side | turned upright, as a WebP — always: an old WebView shows it on its side |
+| Any other JPEG, PNG or WebP | a WebP when that is at least a tenth lighter; otherwise the file as it came |
+| A palette PNG, or a lossless WebP, that keeps its size | a lossless WebP: its pixels exactly |
+| A colour profile (an iPhone's Display P3, Adobe RGB…) | the very same profile, in the WebP's ICCP chunk, so a screen reads the colours as it read the upload's |
+| A GIF; a PNG or WebP that moves; a CMYK JPEG; a grey or CMYK profile, or a split one with a part missing; a PNG whose gamma or primaries are not sRGB's; a file not built as its format says, or that GD cannot read; a picture too big for the memory one request has | the file as it came |
+| A video | the file as it came, always: there is no ffmpeg on the server |
+
+A WebP is written at 85 for a photograph (a JPEG) and 90 for a PNG or a WebP. Nothing the optimizer does refuses an
+upload: whatever goes wrong, the file is stored as it came. The organization's wall and the server's reserve are asked
+with the size that came, before it is made lighter. The Media page's and the shelf's answers carry
+`lighter: {from, to}`, and the row says "Added · made lighter: 4.4 MB to 1.7 MB" — only when the two sizes read
+differently (700 bytes made 60 read "1 KB" both times). A channel's Upload and an advert store the lighter file too and
+say nothing of it: their dialog closes on Save. Files uploaded before 2026-10-05 are as they came.
+
+Measured on photographs drawn for it (a gradient with grain), PHP held to the server's 384 MB:
+
+| Picture | Came | Stored | Time | Memory over the request's own |
+| --- | --- | --- | --- | --- |
+| 12 MP, 4032 × 3024 | 4.4 MB | 1.7 MB, 3840 × 2880 | 2.7 s | 136 MB |
+| 24 MP held on its side, 6000 × 4000 | 8.4 MB | 1.6 MB, 2560 × 3840 | 3.7 s | 188 MB |
+| 48 MP, 8000 × 6000 | 16.4 MB | 1.6 MB, 3840 × 2880 | 4.2 s | 278 MB |
+
+The memory is asked before GD opens anything (`PictureOptimizer::fitsInMemory`, with every step's pictures added up:
+PHP keeps what one step frees for later instead of handing it back), so a picture that would not fit is stored as it
+came rather than ending the request. `signage.optimize_pictures` (`SIGNAGE_OPTIMIZE_PICTURES`) switches it; it is on
+everywhere but the Pest suite.

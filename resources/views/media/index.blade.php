@@ -105,7 +105,7 @@
                             <span x-text="typeLabel(item)"></span>
                             <span class="block text-xs text-gray-500 dark:text-gray-400" x-text="item.orientation ?? '-'"></span>
                         </td>
-                        <td class="px-5 py-4 text-gray-600 dark:text-gray-300 whitespace-nowrap" x-text="formatSize(item.size)"></td>
+                        <td class="px-5 py-4 text-gray-600 dark:text-gray-300 whitespace-nowrap" dusk="media-size" x-text="formatSize(item.size)"></td>
                         <td class="px-5 py-4">
                             {{-- askToDelete: a file a channel shows is refused at once, before any confirmation. --}}
                             {{-- A file keeps its name alone (owner, 2026-10-01): when it plays is said on its playlist line. --}}

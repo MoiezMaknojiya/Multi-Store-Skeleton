@@ -110,6 +110,9 @@ class MediaController extends Controller
     /** Upload a file into a library: the current organization's, or — above the organizations — the one the page chose. */
     public function store(StoreMediaRequest $request, MediaStorage $storage, OrganizationStorage $quota): JsonResponse
     {
+        // What came, before a picture is made lighter (PictureOptimizer) — read now, while the upload is still on disk.
+        $uploaded = (int) $request->file('file')->getSize();
+
         $media = $storage->addToLibrary(
             $request->file('file'),
             $this->uploadTarget($request),
@@ -123,7 +126,13 @@ class MediaController extends Controller
 
         $request->forgetFinishedUpload();
 
-        return response()->json(['message' => 'File uploaded successfully', 'media' => $media, 'storage' => $quota->summary($media->organization_id)]);
+        return response()->json([
+            'message' => 'File uploaded successfully',
+            'media' => $media,
+            'storage' => $quota->summary($media->organization_id),
+            // How much lighter the picture was made, for the uploader to say.
+            'lighter' => $media->size < $uploaded ? ['from' => $uploaded, 'to' => $media->size] : null,
+        ]);
     }
 
     /** Rename a file, describe it, or set its schedule window. */

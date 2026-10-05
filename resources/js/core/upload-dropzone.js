@@ -181,6 +181,8 @@ export function registerUploadDropzone(Alpine) {
                     error: '',
                     uploadId: null,
                     fading: false,
+                    // {from, to} in bytes once the server has made the picture lighter.
+                    lighter: null,
                 });
 
                 // The reactive row, as Alpine keeps it.
@@ -389,6 +391,8 @@ export function registerUploadDropzone(Alpine) {
                 try {
                     const { data } = await axios.post(this.addUrl, form);
 
+                    // A picture the server made lighter (PictureOptimizer) says by how much.
+                    item.lighter = data?.lighter ?? null;
                     item.status = 'done';
                     this.say(`${item.name} is added.`);
                     this.$dispatch('upload-added', { response: data, name: item.name });
@@ -553,7 +557,13 @@ export function registerUploadDropzone(Alpine) {
                     case 'paused': return `Paused at ${item.percent}%`;
                     case 'adding': return 'Adding…';
                     case 'ready': return 'Uploaded. It is added when you save.';
-                    case 'done': return 'Added';
+                    case 'done': {
+                        // How much lighter the server made a picture, when the words show it (700 bytes made 60 are
+                        // "1 KB" both times).
+                        const [from, to] = item.lighter ? [bytesInWords(item.lighter.from), bytesInWords(item.lighter.to)] : [];
+
+                        return from !== to ? `Added · made lighter: ${from} to ${to}` : 'Added';
+                    }
                     default: return '';
                 }
             },

@@ -15,7 +15,8 @@ use Throwable;
 
 /**
  * Puts an uploaded file on disk and works out everything the library needs to
- * describe it: type, dimensions, orientation, length and a thumbnail.
+ * describe it: type, dimensions, orientation, length and a thumbnail. A picture is
+ * made light for the televisions first (PictureOptimizer), at every door.
  *
  * Thumbnails are made with GD, which ships with PHP — no image package is added
  * for this. GD cannot open a video, and ffmpeg is not available, so a video's
@@ -32,6 +33,7 @@ class MediaStorage
         private readonly VideoDuration $durations,
         private readonly OrganizationStorage $quota,
         private readonly DiskGuard $disk,
+        private readonly PictureOptimizer $pictures,
     ) {}
 
     /** Longest edge of a generated thumbnail, in pixels. */
@@ -217,12 +219,24 @@ class MediaStorage
         $measured = $type === Media::TYPE_VIDEO ? $this->durations->seconds((string) $file->getRealPath()) : null;
         $clientSeconds = isset($clientMeta['duration_seconds']) ? (int) $clientMeta['duration_seconds'] : null;
 
-        // The extension comes from the type read off the BYTES, never from the name the client sent:
-        // `mimes:` judges the bytes, so a real PNG named `promo.html` passes it — and kept as .html it
-        // would be served as a page from the panel's own address, running whatever its text chunks held.
+        // A picture is stored light enough for a television (PictureOptimizer): what lands on disk, is counted to the
+        // organization and is sent to the screens is the lighter file, when there is one.
         $name = (string) Str::ulid();
-        $extension = $file->extension() ?: 'bin';
-        $path = $file->storeAs($directory, "{$name}.{$extension}", $disk);
+        $lighter = $type === Media::TYPE_IMAGE ? $this->pictures->optimize((string) $file->getRealPath(), $mime) : null;
+
+        if ($lighter !== null) {
+            $path = "{$directory}/{$name}.{$lighter['extension']}";
+            Storage::disk($disk)->put($path, $lighter['bytes']);
+            $mime = $lighter['mime'];
+            $size = strlen($lighter['bytes']);
+        } else {
+            // The extension comes from the type read off the BYTES, never from the name the client sent:
+            // `mimes:` judges the bytes, so a real PNG named `promo.html` passes it — and kept as .html it
+            // would be served as a page from the panel's own address, running whatever its text chunks held.
+            $extension = $file->extension() ?: 'bin';
+            $path = $file->storeAs($directory, "{$name}.{$extension}", $disk);
+            $size = $file->getSize();
+        }
 
         $width = null;
         $height = null;
@@ -245,7 +259,7 @@ class MediaStorage
             'disk' => $disk,
             'path' => $path,
             'thumbnail_path' => $thumbnailPath,
-            'size' => $file->getSize(),
+            'size' => $size,
             'width' => $width,
             'height' => $height,
             'duration_seconds' => $type === Media::TYPE_VIDEO
@@ -288,11 +302,20 @@ class MediaStorage
     /**
      * Scale an image down to THUMB_MAX on its longest edge and write a JPEG.
      * Returns null when GD cannot read the format — the library then falls back
-     * to showing the original, which is correct, just heavier.
+     * to showing the original, which is correct, just heavier — and when the picture is
+     * too big to open in the memory the request has left: a small file claiming a huge
+     * picture gets no thumbnail, rather than taking the upload down with it.
      */
     private function makeImageThumbnail(string $disk, string $path, string $target, string $mime): ?string
     {
-        $source = $this->readImage(Storage::disk($disk)->path($path), $mime);
+        $absolute = Storage::disk($disk)->path($path);
+        $size = @getimagesize($absolute);
+
+        if ($size === false || ! PictureOptimizer::fitsInMemory(((int) $size[0] * (int) $size[1] + self::THUMB_MAX ** 2) * PictureOptimizer::BYTES_PER_PIXEL)) {
+            return null;
+        }
+
+        $source = $this->readImage($absolute, $mime);
 
         if (! $source) {
             return null;

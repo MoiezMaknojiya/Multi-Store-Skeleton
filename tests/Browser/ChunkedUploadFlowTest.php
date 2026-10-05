@@ -21,8 +21,9 @@ use Tests\DuskTestCase;
  * paused, resumed and cancelled; and a form holds its Save until its file is in.
  *
  * A slow or a lost connection is Chrome's own network emulation, so the page runs its real code throughout. The files
- * are made in the page: pictures drawn on a canvas, and "noise" pictures that no compression can shrink, for sizes
- * past a chunk.
+ * are made in the page: pictures drawn on a canvas, and "noise" GIFs that no compression can shrink, for sizes past a
+ * chunk — a GIF because the server stores every GIF exactly as it came (PictureOptimizer makes the other pictures
+ * lighter), so what arrives can be compared with what was chosen, byte for byte.
  */
 class ChunkedUploadFlowTest extends DuskTestCase
 {
@@ -55,8 +56,9 @@ class ChunkedUploadFlowTest extends DuskTestCase
             $browser->waitForTextIn('@media-upload-summary', '3 of 3 added', 30)
                 ->assertDontSeeIn('@media-drop', 'Let go to upload');
 
+            // (A picture the server made lighter says by how much after it: PicturesMadeLighterTest.)
             foreach (['Breakfast menu.png', 'Lunch menu.png', 'Dinner menu.png'] as $name) {
-                $this->assertSame('Added', $this->statusOf($browser, 'media', $name));
+                $this->assertStringStartsWith('Added', (string) $this->statusOf($browser, 'media', $name));
             }
 
             // Each is in the library, titled by its name, and nothing is left on its way.
@@ -84,11 +86,11 @@ class ChunkedUploadFlowTest extends DuskTestCase
             $this->openMediaUpload($browser, $owner, $organization);
             $this->countChunks($browser);
 
-            $this->choose($browser, 'media-file', "window.__noise('Big poster.png', 1800)");
-            $this->waitForStatus($browser, 'media', 'Big poster.png', '/^Added$/', 60);
+            $this->choose($browser, 'media-file', "window.__noise('Big poster.gif', 3400)");
+            $this->waitForStatus($browser, 'media', 'Big poster.gif', '/^Added$/', 60);
 
             $media = Media::sole();
-            $sent = $browser->script("return window.__digests['Big poster.png'];")[0];
+            $sent = $browser->script("return window.__digests['Big poster.gif'];")[0];
 
             // Every byte, in the order sent: the same picture, byte for byte, as the one chosen.
             $this->assertSame($sent['size'], $media->size);
@@ -112,41 +114,41 @@ class ChunkedUploadFlowTest extends DuskTestCase
 
             try {
                 $this->network($browser, self::SLOW);
-                $this->choose($browser, 'media-file', "window.__noise('Slow poster.png', 1300)");
-                $this->waitForStatus($browser, 'media', 'Slow poster.png', '/^Uploading ([1-9]\d?)%/', 60);
+                $this->choose($browser, 'media-file', "window.__noise('Slow poster.gif', 2450)");
+                $this->waitForStatus($browser, 'media', 'Slow poster.gif', '/^Uploading ([1-9]\d?)%/', 60);
 
                 // Paused: it stays where it is.
-                $this->clickInRow($browser, 'media', 'Slow poster.png', 'pause');
-                $paused = $this->waitForStatus($browser, 'media', 'Slow poster.png', '/^Paused at \d+%$/', 10);
+                $this->clickInRow($browser, 'media', 'Slow poster.gif', 'pause');
+                $paused = $this->waitForStatus($browser, 'media', 'Slow poster.gif', '/^Paused at \d+%$/', 10);
                 $browser->pause(1500);
-                $this->assertSame($paused, $this->statusOf($browser, 'media', 'Slow poster.png'));
+                $this->assertSame($paused, $this->statusOf($browser, 'media', 'Slow poster.gif'));
 
                 // Resumed: on it goes.
-                $this->clickInRow($browser, 'media', 'Slow poster.png', 'pause');
-                $this->waitForStatus($browser, 'media', 'Slow poster.png', '/^Uploading \d+%/', 10);
+                $this->clickInRow($browser, 'media', 'Slow poster.gif', 'pause');
+                $this->waitForStatus($browser, 'media', 'Slow poster.gif', '/^Uploading \d+%/', 10);
 
                 // The connection drops: the row says so, and waits.
                 $this->network($browser, self::SLOW, offline: true);
-                $this->waitForStatus($browser, 'media', 'Slow poster.png', '/^Connection lost\. Waiting for the internet…$/', 10);
+                $this->waitForStatus($browser, 'media', 'Slow poster.gif', '/^Connection lost\. Waiting for the internet…$/', 10);
                 $browser->pause(2000);
                 $this->assertSame(0, Media::count());
 
                 // Back, at full speed: it carries on from where the server kept it, on the same page.
                 $this->network($browser, null);
-                $this->waitForStatus($browser, 'media', 'Slow poster.png', '/^Added$/', 60);
+                $this->waitForStatus($browser, 'media', 'Slow poster.gif', '/^Added$/', 60);
                 $this->assertSame(1, Media::count());
                 $this->assertTrue($browser->script('return window.__samePage === true;')[0], 'the page was loaded again');
-                $this->assertSame($browser->script("return window.__digests['Slow poster.png'].sha256;")[0],
+                $this->assertSame($browser->script("return window.__digests['Slow poster.gif'].sha256;")[0],
                     hash('sha256', (string) Storage::disk('public')->get(Media::sole()->path)));
 
                 // Cancelled on its way: the row goes, and so does the upload on the server.
                 $this->network($browser, self::SLOW);
-                $this->choose($browser, 'media-file', "window.__noise('Changed my mind.png', 1300)");
-                $this->waitForStatus($browser, 'media', 'Changed my mind.png', '/^Uploading \d+%/', 60);
+                $this->choose($browser, 'media-file', "window.__noise('Changed my mind.gif', 2450)");
+                $this->waitForStatus($browser, 'media', 'Changed my mind.gif', '/^Uploading \d+%/', 60);
                 $this->assertSame(1, Upload::count());
 
-                $this->clickInRow($browser, 'media', 'Changed my mind.png', 'remove');
-                $browser->waitUsing(10, 200, fn () => $this->statusOf($browser, 'media', 'Changed my mind.png') === null);
+                $this->clickInRow($browser, 'media', 'Changed my mind.gif', 'remove');
+                $browser->waitUsing(10, 200, fn () => $this->statusOf($browser, 'media', 'Changed my mind.gif') === null);
                 $browser->waitUsing(20, 200, fn () => Upload::count() === 0, 'the cancelled upload stayed on the server');
                 $this->assertSame(1, Media::count());
             } finally {
@@ -168,8 +170,8 @@ class ChunkedUploadFlowTest extends DuskTestCase
 
             try {
                 $this->network($browser, self::SLOW);
-                $this->choose($browser, 'campaign-file', "window.__noise('Summer advert.png', 1100)");
-                $this->waitForStatus($browser, 'campaign', 'Summer advert.png', '/^Uploading \d+%/', 60);
+                $this->choose($browser, 'campaign-file', "window.__noise('Summer advert.gif', 2060)");
+                $this->waitForStatus($browser, 'campaign', 'Summer advert.gif', '/^Uploading \d+%/', 60);
 
                 // The picture's seconds can be set while it goes up; Save waits.
                 $browser->waitFor('@campaign-seconds');
@@ -180,7 +182,7 @@ class ChunkedUploadFlowTest extends DuskTestCase
                 $this->assertSame(0, Campaign::count());
 
                 $this->network($browser, null);
-                $this->waitForStatus($browser, 'campaign', 'Summer advert.png', '/^Uploaded\. It is added when you save\.$/', 60);
+                $this->waitForStatus($browser, 'campaign', 'Summer advert.gif', '/^Uploaded\. It is added when you save\.$/', 60);
             } finally {
                 $this->network($browser, null);
             }
@@ -219,7 +221,7 @@ class ChunkedUploadFlowTest extends DuskTestCase
         ]);
     }
 
-    /** Files made in the page: a plain picture, and a picture of noise $side pixels square (about 4 bytes a pixel). */
+    /** Files made in the page: a plain picture (a PNG), and a GIF of noise $side pixels square (about 1.13 bytes a pixel). */
     private function defineFiles(Browser $browser): void
     {
         $browser->script(<<<'JS'
@@ -249,24 +251,64 @@ class ChunkedUploadFlowTest extends DuskTestCase
                 };
 
                 window.__noise = (name, side) => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = side;
-                    canvas.height = side;
-                    const context = canvas.getContext('2d');
-                    const image = context.createImageData(side, side);
-                    const words = new Uint32Array(image.data.buffer);
+                    const pixels = new Uint8Array(side * side);
 
                     // At most 64 KB of randomness per call.
-                    for (let at = 0; at < words.length; at += 16384) {
-                        crypto.getRandomValues(words.subarray(at, Math.min(at + 16384, words.length)));
+                    for (let at = 0; at < pixels.length; at += 65536) {
+                        crypto.getRandomValues(pixels.subarray(at, Math.min(at + 65536, pixels.length)));
                     }
 
-                    // Opaque, so the canvas keeps every colour exactly as drawn.
-                    for (let at = 3; at < image.data.length; at += 4) image.data[at] = 255;
+                    // Every pixel a code of its own, 9 bits wide: a clear code every 250 keeps the decoder's table, and so
+                    // the width, from growing — the "uncompressed GIF" every decoder reads.
+                    const codes = new Uint8Array(Math.ceil((pixels.length * 251 / 250 + 2) * 9 / 8) + 1);
+                    let length = 0;
+                    let buffer = 0;
+                    let bits = 0;
+                    const put = (code) => {
+                        buffer |= code << bits;
+                        bits += 9;
 
-                    context.putImageData(image, 0, 0);
+                        while (bits >= 8) {
+                            codes[length++] = buffer & 0xFF;
+                            buffer >>>= 8;
+                            bits -= 8;
+                        }
+                    };
 
-                    return asPng(canvas, name);
+                    for (let at = 0; at < pixels.length; at++) {
+                        if (at % 250 === 0) put(256);
+                        put(pixels[at]);
+                    }
+
+                    put(257);
+                    if (bits > 0) codes[length++] = buffer & 0xFF;
+
+                    // The codes in blocks of at most 255 bytes, each led by its length, and an empty block to end them.
+                    const blocks = new Uint8Array(length + Math.ceil(length / 255) + 1);
+                    let out = 0;
+
+                    for (let at = 0; at < length; at += 255) {
+                        const size = Math.min(255, length - at);
+                        blocks[out++] = size;
+                        blocks.set(codes.subarray(at, at + size), out);
+                        out += size;
+                    }
+
+                    blocks[out++] = 0;
+
+                    // GIF89a, a screen $side square with a table of 256 random colours, one image of it, the end.
+                    const low = side & 0xFF;
+                    const high = side >> 8;
+                    const colours = new Uint8Array(768);
+                    crypto.getRandomValues(colours);
+
+                    return remember(new File([
+                        new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, low, high, low, high, 0xF7, 0, 0]),
+                        colours,
+                        new Uint8Array([0x2C, 0, 0, 0, 0, low, high, low, high, 0, 8]),
+                        blocks.subarray(0, out),
+                        new Uint8Array([0x3B]),
+                    ], name, { type: 'image/gif' }));
                 };
             }
         JS);

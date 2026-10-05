@@ -25,6 +25,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Uploaded pictures
+    |--------------------------------------------------------------------------
+    */
+
+    /**
+     * Whether an uploaded picture is made light for the televisions (App\Services\PictureOptimizer, owner 2026-10-05:
+     * "upload par tasveer khud halki karne wala feature bana do, sub upload mein lagana"): brought down to 4K, turned
+     * the way the camera held it and written as WebP when that is lighter. On everywhere but the Pest suite, whose
+     * storage tests count files by the sizes they claim; the optimizer's own tests turn it on, and Dusk runs with it.
+     */
+    'optimize_pictures' => (bool) env('SIGNAGE_OPTIMIZE_PICTURES', env('APP_ENV') !== 'testing'),
+
+    /*
+    |--------------------------------------------------------------------------
     | The server's own disk
     |--------------------------------------------------------------------------
     */

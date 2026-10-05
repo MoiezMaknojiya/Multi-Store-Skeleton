@@ -14,7 +14,7 @@
  *    one field, and when a file plays is said on its playlist line.
  */
 import { createCrudTable } from '../core/crud-table-base.js';
-import { storageUsedText, storagePercent } from '../core/media-file.js';
+import { bytesInWords, storageUsedText, storagePercent } from '../core/media-file.js';
 import { validate, required, maxLen } from '../core/validate.js';
 
 export function registerMediaTable(Alpine) {
@@ -105,16 +105,9 @@ export function registerMediaTable(Alpine) {
                 return { image: 'Image', video: 'Video', html: 'Ad page' }[item.type] ?? item.type;
             },
 
+            /** In the words the storage meter and the uploader use, so a file reads the same size everywhere. */
             formatSize(bytes) {
-                if (!bytes) return '-';
-                const units = ['B', 'KB', 'MB', 'GB'];
-                let value = bytes;
-                let unit = 0;
-                while (value >= 1024 && unit < units.length - 1) {
-                    value /= 1024;
-                    unit++;
-                }
-                return `${value < 10 && unit > 0 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
+                return bytes ? bytesInWords(bytes) : '-';
             },
 
             formatDuration(seconds) {

@@ -6,7 +6,7 @@
  * its storage meter when one has (onUploaded).
  */
 import { createCrudTable } from '../core/crud-table-base.js';
-import { storageUsedText, storagePercent } from '../core/media-file.js';
+import { bytesInWords, storageUsedText, storagePercent } from '../core/media-file.js';
 
 export function registerBuilderAssetsTable(Alpine) {
     Alpine.data('builderAssetsTable', (config = {}) => createCrudTable({
@@ -77,11 +77,9 @@ export function registerBuilderAssetsTable(Alpine) {
                 ].filter(Boolean).join(' · ');
             },
 
-            /** "2.4 MB" — a size a person reads, not a number of bytes. */
+            /** "2.4 MB": in the words the storage meter and the uploader use, so a file reads the same size everywhere. */
             sizeLabel(asset) {
-                const mb = (asset.size ?? 0) / (1024 * 1024);
-
-                return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round((asset.size ?? 0) / 1024))} KB`;
+                return bytesInWords(asset.size ?? 0);
             },
 
             /** Named by any ad — this organization's, or another organization's or the platform's for a file shared with every organization. */
