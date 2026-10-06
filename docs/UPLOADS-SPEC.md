@@ -118,8 +118,8 @@ larger than a chunk sent in pieces, one request each, and arriving byte for byte
 connection waited out on the same page — Chrome's own network emulation, offline and slow; cancelled on its way,
 and gone from the server; a form holding Save until its file is in). The pictures it compares byte for byte are GIFs
 of noise made in the page, because a GIF is stored exactly as it came (§7). The refusals as a person meets them are
-`tests/Browser/UploadLimitsTest.php`; pictures made light, `tests/Feature/Signage/PictureOptimizerTest.php` and
-`tests/Browser/PicturesMadeLighterTest.php`.
+`tests/Browser/UploadLimitsTest.php`; pictures made light, `tests/Feature/Signage/PictureOptimizerTest.php`,
+`tests/Feature/Security/PictureOptimizerAttackTest.php` and `tests/Browser/PicturesMadeLighterTest.php`.
 
 ## 7. Pictures made light on their way in (owner, 2026-10-05)
 
@@ -168,12 +168,36 @@ Measured on photographs drawn for it (a gradient with grain), PHP held to the se
 | Picture | Came | Stored | Time | Memory over the request's own |
 | --- | --- | --- | --- | --- |
 | 12 MP, 4032 × 3024 | 4.4 MB | 1.7 MB, 3840 × 2880 | 2.7 s | 136 MB |
-| 24 MP held on its side, 6000 × 4000 | 8.4 MB | 1.6 MB, 2560 × 3840 | 3.7 s | 188 MB |
+| 24 MP held on its side, 6000 × 4000 | 7.6 MB | 0.9 MB, 2560 × 3840 | 3.1 s | 172 MB (188 when it was turned first) |
 | 48 MP, 8000 × 6000 | 16.4 MB | 1.6 MB, 3840 × 2880 | 4.2 s | 278 MB |
 | A 4K menu with words, PNG (measured, then lossless) | 6.1 MB | 4.3 MB, 3840 × 2160 | 6.2 s | 74 MB |
 | A menu cut-out, 3444 × 4096 PNG (measured, lossy) | 6.0 MB | 388 KB, 3229 × 3840 | 3.7 s | 172 MB |
 
 The memory is asked before GD opens anything (`PictureOptimizer::fitsInMemory`, with every step's pictures added up:
 PHP keeps what one step frees for later instead of handing it back), so a picture that would not fit is stored as it
-came rather than ending the request. `signage.optimize_pictures` (`SIGNAGE_OPTIMIZE_PICTURES`) switches it; it is on
-everywhere but the Pest suite.
+came rather than ending the request. A picture over 4K is brought down before it is turned, so the turn copies the
+smaller picture. `signage.optimize_pictures` (`SIGNAGE_OPTIMIZE_PICTURES`) switches it; it is on everywhere but the
+Pest suite.
+
+**Broken on purpose** (the owner, 2026-10-05: "stress testing aur brute force ya out of box different type ki testing
+ki? break kar k dekha?"):
+
+- **Brute force.** 30 000 broken pictures, two seeds: 15 kinds of JPEG, PNG and WebP (the optimizer's own output among
+  them) cut short, bytes changed, lengths that lie, chunks and segments added, a colour profile that inflates without
+  end, sizes claimed in billions — each through the optimizer, and every WebP it wrote decoded again. It found one
+  fault: a PNG claiming two billion pixels a side overflowed the memory sum, and the upload answered 500 (the sum is a
+  float since). Nothing else escaped; every WebP decodes within 4K; the slowest case took 2.3 s (a JPEG of a few KB
+  claiming a big picture, which GD fills in grey) and the most memory was 358 MB. `PictureOptimizerAttackTest` keeps
+  200 of them, broken the same way every run, and sixteen hostile or unusual pictures by name.
+- **Stress.** Six uploads at the same moment on ONE CPU core, 384 MB each, as the live server runs them: a 48 MP
+  photograph, phones held upright at 24 and 12 MP, a 4K menu with words, a 3444 × 4096 cut-out and an 8K design (each
+  one 3 to 7 s of the core alone). Side by side they held 1.4 GB at one moment, and six 48 MP photographs 2.1 GB — the
+  live server's whole memory: GD's copies and the WebP encoder's (some 200 MB more for a 4K picture written without
+  loss, which PHP's limit never sees). Before the optimizer, six 48 MP photographs held 1.4 GB for their thumbnails
+  alone. So `MediaStorage::onePictureAtATime` gives one picture at a time its turn — made lighter and its thumbnail
+  drawn — under the operating system's lock on `storage/framework/cache/picture-turn.lock`, which a request that dies
+  hands on at once. The six now hold some 590 MB and take about as long together (31 to 34 s on the core, against 28 to
+  31 side by side), and the first is done in 5 s, where side by side none was done before 26. An upload whose turn has
+  not come in a minute and a half (`PICTURE_TURN_SECONDS`, so the wait and the work stay inside the two minutes
+  `TakesAFinishedUpload` holds an upload) is stored as it came, the file its own preview; a video never waits. The 48 MP
+  photograph held upright, stored as it came before (it did not fit when turned first), now comes out 2880 × 3840.

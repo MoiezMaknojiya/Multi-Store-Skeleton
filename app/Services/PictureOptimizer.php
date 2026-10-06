@@ -118,7 +118,7 @@ class PictureOptimizer
         $lossless = $about['lossless'] && $scale === 1;
         $measured = ! $lossless && $about['fullColour'];
 
-        if (! self::fitsInMemory($this->memoryNeeded($width * $height, $targetWidth * $targetHeight, $orientation, $scale < 1, $measured))) {
+        if (! self::fitsInMemory($this->memoryNeeded((float) $width * $height, (float) $targetWidth * $targetHeight, $orientation, $scale < 1, $measured))) {
             return null;
         }
 
@@ -128,11 +128,13 @@ class PictureOptimizer
             return null;
         }
 
-        $image = $this->turn($image, $orientation);
-
+        // Brought down first, then turned: the turn copies the smaller picture alone (a 48 MP photo held upright did not
+        // fit the other way round, and was stored as it came — found by the stress round, 2026-10-05).
         if ($scale < 1) {
-            $image = $this->scaled($image, $targetWidth, $targetHeight);
+            $image = $this->scaled($image, $onItsSide ? $targetHeight : $targetWidth, $onItsSide ? $targetWidth : $targetHeight);
         }
+
+        $image = $this->turn($image, $orientation);
 
         $bytes = $this->webp($image, $lossless ? null : ($mime === 'image/jpeg' ? self::PHOTO_QUALITY : self::DRAWING_QUALITY));
 
@@ -163,9 +165,11 @@ class PictureOptimizer
 
     /**
      * Whether this many bytes of pictures can be opened in the memory this request has left — asked before GD allocates
-     * for them, so a small file claiming a huge picture cannot take the request down with it.
+     * for them, so a small file claiming a huge picture cannot take the request down with it. Reckoned as a float: a
+     * header claiming two billion pixels a side multiplies past the largest integer (found by brute force, 2026-10-05:
+     * the upload answered 500).
      */
-    public static function fitsInMemory(int $bytes): bool
+    public static function fitsInMemory(float $bytes): bool
     {
         $limit = self::memoryLimit();
 
@@ -194,16 +198,17 @@ class PictureOptimizer
     /**
      * Everything GD holds on the way, at 4 bytes a pixel, added up — PHP keeps what a step frees for later instead of
      * handing it back, so the steps do not take turns (measured: a 48 MP photograph peaks at 278 MB): the picture as
-     * read (twice when it turns — a turn is a copy), its smaller copy, the copy GD hands the WebP encoder and the WebP;
-     * and when its colour is measured, the lossy WebP read back and a lossless WebP beside it.
+     * read, and beside it its smaller copy — or, kept its size, its turned copy (a turn is a copy; a picture brought
+     * down is turned in the room the big one left) — the copy GD hands the WebP encoder and the WebP; and when its
+     * colour is measured, the lossy WebP read back and a lossless WebP beside it.
      */
-    private function memoryNeeded(int $pixels, int $targetPixels, int $orientation, bool $scaled, bool $measured): int
+    private function memoryNeeded(float $pixels, float $targetPixels, int $orientation, bool $scaled, bool $measured): float
     {
         $picture = $pixels * self::BYTES_PER_PIXEL;
         $target = $targetPixels * self::BYTES_PER_PIXEL;
+        $turned = in_array($orientation, [3, 5, 6, 7, 8], true);
 
-        return $picture * (in_array($orientation, [3, 5, 6, 7, 8], true) ? 2 : 1)
-            + ($scaled ? $target : 0)
+        return $picture + ($scaled ? $target : ($turned ? $picture : 0))
             + $target + $targetPixels * 2
             + ($measured ? $target + $targetPixels * 2 : 0);
     }

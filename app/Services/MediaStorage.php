@@ -10,6 +10,7 @@ use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -38,6 +39,13 @@ class MediaStorage
 
     /** Longest edge of a generated thumbnail, in pixels. */
     private const THUMB_MAX = 480;
+
+    /**
+     * How long an upload waits, at most, for its picture's turn (onePictureAtATime): six big pictures take some 30 s on one
+     * core, and the wait and the work stay inside the two minutes a finished upload is held for its door
+     * (TakesAFinishedUpload).
+     */
+    private const PICTURE_TURN_SECONDS = 90;
 
     /** A browser-supplied poster larger than this is ignored, not stored. */
     private const POSTER_MAX_BYTES = 2 * 1024 * 1024;
@@ -203,15 +211,69 @@ class MediaStorage
     }
 
     /**
-     * Put the file on disk and measure it.
+     * Put the file on disk and measure it — a picture in its turn (onePictureAtATime).
      *
      * @param  array<string, mixed>  $clientMeta
      * @return array<string, mixed>
      */
     private function put(UploadedFile $file, string $directory, array $clientMeta = []): array
     {
-        $disk = 'public';
         $mime = (string) $file->getMimeType();
+
+        if (str_starts_with($mime, 'video/')) {
+            return $this->putAndMeasure($file, $directory, $clientMeta, $mime, true);
+        }
+
+        return $this->onePictureAtATime(fn (bool $itsTurn) => $this->putAndMeasure($file, $directory, $clientMeta, $mime, $itsTurn));
+    }
+
+    /**
+     * Runs $work while no other request on this server works on a picture, and tells it whether that turn came (the
+     * stress round, 2026-10-05): a big picture made lighter holds 250 to 430 MB while it lasts — GD's copy of it and the
+     * WebP encoder's, which PHP's own memory limit never sees — and six uploads at once on one CPU held 2.1 GB together,
+     * the live server's whole memory. One at a time they take about as long together on that one CPU (590 MB at most),
+     * and the first are done sooner. The turn is the operating system's lock on a file, so a request that dies mid-way
+     * hands it on at once; a turn that has not come after PICTURE_TURN_SECONDS is given up, and the picture is stored
+     * as it came.
+     *
+     * @template T
+     *
+     * @param  Closure(bool): T  $work
+     * @return T
+     */
+    private function onePictureAtATime(Closure $work): mixed
+    {
+        $turn = @fopen(storage_path('framework/cache/picture-turn.lock'), 'c');
+
+        if ($turn === false) {
+            return $work(true);
+        }
+
+        try {
+            for ($naps = 0; ! flock($turn, LOCK_EX | LOCK_NB); $naps++) {
+                if ($naps >= self::PICTURE_TURN_SECONDS * 10) {
+                    return $work(false);
+                }
+
+                Sleep::for(100)->milliseconds();
+            }
+
+            return $work(true);
+        } finally {
+            fclose($turn);
+        }
+    }
+
+    /**
+     * Put the file on disk and measure it. A picture whose turn never came ($itsTurn false) is stored as it came, with
+     * no thumbnail: the library shows the file itself, as it does for a picture GD cannot read.
+     *
+     * @param  array<string, mixed>  $clientMeta
+     * @return array<string, mixed>
+     */
+    private function putAndMeasure(UploadedFile $file, string $directory, array $clientMeta, string $mime, bool $itsTurn): array
+    {
+        $disk = 'public';
         $type = str_starts_with($mime, 'video/') ? Media::TYPE_VIDEO : Media::TYPE_IMAGE;
 
         // A video's length, from its own bytes — the upload's validation read the same file (App\Rules\VideoLength),
@@ -222,7 +284,7 @@ class MediaStorage
         // A picture is stored light enough for a television (PictureOptimizer): what lands on disk, is counted to the
         // organization and is sent to the screens is the lighter file, when there is one.
         $name = (string) Str::ulid();
-        $lighter = $type === Media::TYPE_IMAGE ? $this->pictures->optimize((string) $file->getRealPath(), $mime) : null;
+        $lighter = $type === Media::TYPE_IMAGE && $itsTurn ? $this->pictures->optimize((string) $file->getRealPath(), $mime) : null;
 
         if ($lighter !== null) {
             $path = "{$directory}/{$name}.{$lighter['extension']}";
@@ -244,7 +306,7 @@ class MediaStorage
 
         if ($type === Media::TYPE_IMAGE) {
             [$width, $height] = $this->imageDimensions($disk, $path);
-            $thumbnailPath = $this->makeImageThumbnail($disk, $path, "{$directory}/thumbs/{$name}.jpg", $mime);
+            $thumbnailPath = $itsTurn ? $this->makeImageThumbnail($disk, $path, "{$directory}/thumbs/{$name}.jpg", $mime) : null;
         } else {
             // Trust the browser only for shape, never for identity: these values
             // are already validated as integers by the form request.
@@ -311,7 +373,7 @@ class MediaStorage
         $absolute = Storage::disk($disk)->path($path);
         $size = @getimagesize($absolute);
 
-        if ($size === false || ! PictureOptimizer::fitsInMemory(((int) $size[0] * (int) $size[1] + self::THUMB_MAX ** 2) * PictureOptimizer::BYTES_PER_PIXEL)) {
+        if ($size === false || ! PictureOptimizer::fitsInMemory(((float) $size[0] * $size[1] + self::THUMB_MAX ** 2) * PictureOptimizer::BYTES_PER_PIXEL)) {
             return null;
         }
 

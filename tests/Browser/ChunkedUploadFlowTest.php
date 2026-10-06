@@ -70,8 +70,10 @@ class ChunkedUploadFlowTest extends DuskTestCase
             $browser->waitForText('Breakfast menu')->waitForText('Lunch menu')->waitForText('Dinner menu');
 
             // An "Added" row goes by itself after eight seconds, as a notification does (owner, 2026-09-30), and the
-            // count of the batch with it; the files stay in the library.
-            $browser->waitUntilMissing('@media-upload-row', 15)
+            // count of the batch with it; the files stay in the library. Every row is waited for, not the first one
+            // shown: a row that has faded stays in the list a moment longer, and so does the count, until the last
+            // one has gone (waitUntilMissing looked at the first row alone, and passed while two were still there).
+            $browser->waitUntil('document.querySelectorAll(\'[dusk="media-upload-row"]\').length === 0', 15)
                 ->assertMissing('@media-upload-summary')
                 ->assertSee('Breakfast menu');
         });

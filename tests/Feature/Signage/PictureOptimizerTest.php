@@ -249,6 +249,34 @@ test('a phone photo is turned the way the camera held it', function () {
     expect($corner['red'])->toBeGreaterThan(200)->and($corner['green'])->toBeLessThan(80);
 });
 
+test('a picture over 4K held upright is brought down, then turned: its corner lands where the camera saw it', function () {
+    // 4000 x 2000 as stored, a red corner top-left; the camera says a quarter turn clockwise shows it upright.
+    $path = poWithSegment(poPicture(4000, 2000, 'jpeg', function (GdImage $image) {
+        imagefilledrectangle($image, 0, 0, 399, 399, imagecolorallocate($image, 255, 0, 0));
+
+        return $image;
+    }), 0xE1, poExifOrientation(6));
+
+    $upright = poOptimized($path, 'image/jpeg');
+
+    expect([imagesx($upright), imagesy($upright)])->toBe([1920, 3840]);
+
+    // The red corner is now top-right.
+    $corner = imagecolorsforindex($upright, imagecolorat($upright, 1820, 100));
+    expect($corner['red'])->toBeGreaterThan(200)->and($corner['green'])->toBeLessThan(80);
+});
+
+test('a big photo held upright needs no more memory than one lying flat: it is brought down before it is turned', function () {
+    $optimizer = app(PictureOptimizer::class);
+    $needed = fn (float $pixels, float $target, int $orientation) => (fn () => $this->memoryNeeded($pixels, $target, $orientation, $target < $pixels, false))->call($optimizer);
+
+    // 48 MP, as a phone's full resolution writes it: upright as flat, some 290 MB — inside the live server's 384.
+    expect($needed(8000.0 * 6000, 3840.0 * 2880, 6))->toBe($needed(8000.0 * 6000, 3840.0 * 2880, 1))
+        ->and($needed(8000.0 * 6000, 3840.0 * 2880, 6))->toBeLessThan(300.0 * 1024 * 1024)
+        // A picture that keeps its size is turned beside itself: one copy more.
+        ->and($needed(8e6, 8e6, 6) - $needed(8e6, 8e6, 1))->toBe(8e6 * PictureOptimizer::BYTES_PER_PIXEL);
+});
+
 test('transparency is kept', function () {
     $path = poPicture(4000, 2000, 'png', function (GdImage $image) {
         $clear = imagecreatetruecolor(4000, 2000);
