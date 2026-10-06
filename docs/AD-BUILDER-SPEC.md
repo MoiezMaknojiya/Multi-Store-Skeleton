@@ -121,11 +121,12 @@ fonts/{slug}/font.css                             the family's own stylesheet, p
 **Deleting.** An organization's deletion purges its ads, its assets and their files — `Organization::purgeBuilder()`,
 called from `purgeContents()` alongside `purgeMedia()`/`purgeChannels()`, rows inside the transaction and
 files after commit (the rule in `02-project-conventions.md`). Deleting an ad deletes its published media
-row (so it leaves every playlist it was on), its HTML, the row's poster copy and its own poster. Deleting that
-media row from the library instead takes only the page and the row's copy, never the design's `poster.jpg`
-(`MediaController::destroy` also keeps a thumbnail that a design still names — a row published before rows had
-a copy of their own). Deleting an asset is refused while an ad still uses it, and says which ads (the same
-shape as a role that somebody still holds).
+row (so it leaves every playlist it was on), its HTML, the row's poster copy and its own poster. That media
+row is the Ad Builder's alone to remove: the Media page lists photographs and videos only (owner, 2026-10-05:
+"media library mein show mat karo list lambi ho jayegi"), and renames or deletes no ad's page — 404,
+`Media::scopeWithoutAdPages` — while a screen's Content library (unless a channel shows it), its holding
+picture and a channel's pickers still offer it. Deleting an asset is refused while an ad still uses it, and
+says which ads (the same shape as a role that somebody still holds).
 
 **The shared shelf** (owner, 2026-09-29: "mujhe sub store k liya upload karna ho toh takay woo mere asset ko use
 kar sake aur agar permission du toh woo delete bhi kar sake"). An asset with no organization — `builder_assets.organization_id`

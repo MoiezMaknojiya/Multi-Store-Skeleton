@@ -1,9 +1,11 @@
 <?php
 
+use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
 use App\Models\Organization;
+use App\Models\Screen;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\VideoFiles;
@@ -452,18 +454,42 @@ test('deleting the uploader keeps the organization\'s media — the file belongs
     $this->assertDatabaseHas('media', ['id' => $media->id, 'created_by' => null]);
 });
 
-test('the listing can be narrowed to the ad pages the Ad Builder published', function () {
+test('the Media page lists photographs and videos alone: an ad’s page is the Ad Builder’s, chosen where it plays', function () {
+    // Owner, 2026-10-05: "media library mein show mat karo list lambi ho jayegi ... content library mein show karo agar
+    // channel mein use naahi ho rae ho".
     $organization = Organization::factory()->create();
-    $actor = createOrganizationUser($organization, ['media-view']);
+    $actor = createOrganizationUser($organization, ['media-view', 'media-update', 'media-destroy', 'screen-view', 'screen-playlist']);
+    $session = ['current_organization_id' => $organization->id];
 
-    Media::factory()->create(['organization_id' => $organization->id]);
-    $page = Media::factory()->create(['organization_id' => $organization->id, 'type' => Media::TYPE_HTML, 'mime_type' => 'text/html']);
+    $photo = Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Burger']);
+    $video = Media::factory()->video()->create(['organization_id' => $organization->id]);
+    $page = Media::find(BuilderAd::factory()->withText()->published()->create(['organization_id' => $organization->id])->media_id);
+    $platformPage = Media::find(BuilderAd::factory()->withText()->published()->create(['organization_id' => null])->media_id);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
 
-    $ids = collect($this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
-        ->getJson('/media/data?type=html')->assertOk()->json('media'))->pluck('id');
+    $this->actingAs($actor)->withSession($session);
+    $listed = fn (string $query = '') => collect($this->getJson('/media/data'.$query)->assertOk()->json('media'))->pluck('id')->sort()->values()->all();
 
-    expect($ids->all())->toBe([$page->id]);
-
-    // Any other word is still refused, as it always was.
+    // The list knows no ad pages, nor does its type filter.
+    expect($page->type)->toBe(Media::TYPE_HTML)
+        ->and($listed())->toBe(collect([$photo->id, $video->id])->sort()->values()->all());
+    $this->getJson('/media/data?type=html')->assertStatus(422);
     $this->getJson('/media/data?type=audio')->assertStatus(422);
+
+    // Nor is one renamed or deleted here: the Ad Builder names it, unpublishes it and deletes it.
+    $this->putJson("/media/{$page->id}", ['title' => 'Renamed'])->assertNotFound();
+    $this->deleteJson("/media/{$page->id}")->assertNotFound();
+    expect($page->fresh()->title)->not->toBe('Renamed');
+
+    // A screen's Content library offers it — the organization's own and the platform's — while no channel shows it.
+    $offered = fn () => collect($this->getJson("/screens/{$screen->id}/available-media")->assertOk()->json('media'))->pluck('id')->all();
+    expect($offered())->toContain($page->id, $platformPage->id, $photo->id);
+
+    ChannelAd::factory()->create(['channel_id' => Channel::factory()->create(['organization_id' => $organization->id])->id, 'media_id' => $page->id]);
+    expect($offered())->not->toContain($page->id)->toContain($platformPage->id);
+
+    // Above the organizations the platform's own library is read the same way.
+    $this->flushSession();
+    $this->actingAs(createSuperAdmin(['media-view']));
+    expect(collect($this->getJson('/media/data?library=platform')->assertOk()->json('media'))->pluck('id'))->not->toContain($platformPage->id);
 });

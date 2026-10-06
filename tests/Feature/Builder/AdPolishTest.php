@@ -89,7 +89,7 @@ test('a picture that claims to be larger than a poster may be is refused before 
     expect($ad->thumbnail_path)->toBeNull();
 });
 
-test('publishing shows the poster in the media library, at an address that changes with each publish', function () {
+test('publishing gives the page’s row a poster of its own, which the pickers show, at an address that changes with each publish', function () {
     $ad = saveWithPoster($this, pictureDataUri());
 
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
@@ -108,34 +108,22 @@ test('publishing shows the poster in the media library, at an address that chang
     expect($picture->thumbnail_url)->toEndWith('/media/1/thumbs/a.jpg');
 });
 
-test('deleting the published page from the library leaves the design its poster', function () {
+test('the Media page never deletes a published page: the design, its page and its poster stay for the Ad Builder', function () {
+    // Owner, 2026-10-05: the Media page lists photographs and videos alone. An ad's page is unpublished or deleted
+    // with its design, in the Ad Builder.
     $ad = saveWithPoster($this, pictureDataUri());
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
     $media = Media::sole();
 
     $librarian = createOrganizationUser($this->organization, ['media-view', 'media-destroy'], 'Librarian');
     $this->actingAs($librarian)->withSession(['current_organization_id' => $this->organization->id])
-        ->deleteJson("/media/{$media->id}")->assertOk();
+        ->deleteJson("/media/{$media->id}")->assertNotFound();
 
-    Storage::disk('public')->assertMissing($media->path);
-    Storage::disk('public')->assertMissing($media->thumbnail_path);
+    expect($media->fresh())->not->toBeNull()
+        ->and($ad->fresh()->media_id)->toBe($media->id);
+    Storage::disk('public')->assertExists($media->path);
+    Storage::disk('public')->assertExists($media->thumbnail_path);
     Storage::disk('public')->assertExists($ad->fresh()->thumbnail_path);
-    expect($ad->fresh()->media_id)->toBeNull();
-});
-
-test('a row published before it had a poster of its own still leaves the design its poster', function () {
-    // Published by an earlier version, which pointed the library row at the design's own file.
-    $ad = saveWithPoster($this, pictureDataUri());
-    $this->postJson("/builder/{$ad->id}/publish")->assertOk();
-    $media = Media::sole();
-    $media->forceFill(['thumbnail_path' => $ad->thumbnail_path])->save();
-
-    $librarian = createOrganizationUser($this->organization, ['media-view', 'media-destroy'], 'Librarian');
-    $this->actingAs($librarian)->withSession(['current_organization_id' => $this->organization->id])
-        ->deleteJson("/media/{$media->id}")->assertOk();
-
-    Storage::disk('public')->assertMissing($media->path);
-    Storage::disk('public')->assertExists($ad->thumbnail_path);
 });
 
 test('republishing a design that changed nothing measurable still moves the row, so screens fetch it again', function () {

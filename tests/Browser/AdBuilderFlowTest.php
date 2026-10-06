@@ -565,7 +565,13 @@ class AdBuilderFlowTest extends DuskTestCase
             $this->waitForAlpine($browser);
             $browser->waitFor('@ad-status-'.$ad->id)->assertSeeIn('@ad-status-'.$ad->id, 'Changes not published');
 
+            // The Media page lists photographs and videos alone (owner, 2026-10-05): the ad's page is the Ad Builder's.
             $browser->visit('/media');
+            $this->waitForAlpine($browser);
+            $browser->waitForText('No files yet.')->assertDontSee('Winter sale');
+
+            // The screen's playlist keeps the published version, under its published name.
+            $browser->visit('/screens/'.$screen->id);
             $this->waitForAlpine($browser);
             $browser->waitForText('Winter sale')->assertDontSee('Winter sale 2');
 
@@ -583,7 +589,7 @@ class AdBuilderFlowTest extends DuskTestCase
             $this->assertSame('Winter sale', $browser->value('@ad-name'));
             $this->assertSame('published', $ad->fresh()->status());
 
-            /* ── 4. Unpublish: off the screens — the library and the playlist say so ── */
+            /* ── 4. Unpublish: off the screens — the playlist says so ── */
             $this->jsClick($browser, '@ad-publish-menu');
             $browser->waitFor('@publish-menu');
             $this->jsClick($browser, '@ad-unpublish');
@@ -593,10 +599,6 @@ class AdBuilderFlowTest extends DuskTestCase
                 ->waitForTextIn('@publication-status', 'Draft · not on screens');
             $this->assertSame('publish', strtolower(trim($browser->text('@ad-publish'))));
             $this->assertFalse($ad->fresh()->isPublished());
-
-            $browser->visit('/media');
-            $this->waitForAlpine($browser);
-            $browser->waitForText('No files yet.');
 
             $browser->visit('/screens/'.$screen->id);
             $this->waitForAlpine($browser);

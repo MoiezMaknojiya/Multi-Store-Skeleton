@@ -99,10 +99,9 @@ export function registerMediaTable(Alpine) {
             },
 
             /* ── Display helpers ───────────────────────────────────────── */
-            /** What a person calls the file. A page published from the Ad Builder is stored as
-             *  type "html", which is nobody's word for it — and it is not an image either. */
+            /** What a person calls the file: the library lists photographs and videos alone. */
             typeLabel(item) {
-                return { image: 'Image', video: 'Video', html: 'Ad page' }[item.type] ?? item.type;
+                return { image: 'Image', video: 'Video' }[item.type] ?? item.type;
             },
 
             /** In the words the storage meter and the uploader use, so a file reads the same size everywhere. */

@@ -33,7 +33,6 @@
                     <option value="">All types</option>
                     <option value="image">Images</option>
                     <option value="video">Videos</option>
-                    <option value="html">Ad pages</option>
                 </select>
                 <select x-model="filterOrientation" @change="applyFilters()" dusk="media-filter-orientation" aria-label="Orientation"
                         class="form-select sm:w-40">
@@ -101,7 +100,6 @@
                             <p class="font-medium text-gray-800 dark:text-white" x-text="item.title"></p>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300">
-                            {{-- An Ad Builder page is stored as "html" — shown as what it is, an ad page. --}}
                             <span x-text="typeLabel(item)"></span>
                             <span class="block text-xs text-gray-500 dark:text-gray-400" x-text="item.orientation ?? '-'"></span>
                         </td>

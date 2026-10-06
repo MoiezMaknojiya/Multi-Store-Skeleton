@@ -100,11 +100,12 @@ test('a changed published ad keeps its published version on its screens until th
         ->assertJsonPath('ad.is_published', true)
         ->assertJsonPath('ad.status', 'changed');
 
-    // The screens, the pickers and the library still have the published version: its page, words and name.
+    // The screens and the pickers still have the published version: its page, words and name. The Media page lists
+    // photographs and videos alone (owner, 2026-10-05), never an ad's page.
     expect($pageOnScreen())->toHaveCount(1)
         ->and(Storage::disk('public')->get($page->path))->toContain('Winter sale')->not->toContain('Spring sale')
         ->and($page->fresh()->title)->toBe('Winter sale')
-        ->and(idsFrom($this, '/media/data'))->toContain($page->id)
+        ->and(idsFrom($this, '/media/data'))->not->toContain($page->id)
         ->and(idsFrom($this, $offering))->toContain($page->id)
         ->and(idsFrom($this, $leavingOut))->not->toContain($page->id);
 
@@ -170,7 +171,7 @@ test('there is nothing to discard on an ad never published, up to date, or publi
     expect(ActivityLog::where('action', 'ad.changes_discarded')->exists())->toBeFalse();
 });
 
-test('unpublishing takes the page off its screens, channel, pickers and library — and publishing brings it back', function (string $from) {
+test('unpublishing takes the page off its screens, channel and pickers — and publishing brings it back', function (string $from) {
     $ad = BuilderAd::factory()->withText('Winter sale')->create(['organization_id' => $this->organization->id, 'name' => 'Winter sale']);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
     $page = Media::sole();
@@ -195,7 +196,6 @@ test('unpublishing takes the page off its screens, channel, pickers and library 
 
     $pageOnScreen = fn () => collect(addressesOnScreen($this, 'draft-token'))->filter(fn (string $url) => str_contains($url, "/ads/{$ad->id}/"));
     $pickers = fn () => [
-        'library' => idsFrom($this, '/media/data'),
         'playlist' => idsFrom($this, "/screens/{$screen->id}/available-media"),
         'holding picture' => idsFrom($this, "/screens/{$screen->id}/media-options"),
         'channel' => idsFrom($this, "/channels/{$channel->id}/library?type=html"),
@@ -246,7 +246,9 @@ test('unpublishing takes the page off its screens, channel, pickers and library 
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
 
     expect(Media::find($page->id))->not->toBeNull()
-        ->and($pageOnScreen())->toHaveCount(1);
+        ->and($pageOnScreen())->toHaveCount(1)
+        // Published or not, the Media page never lists it: it is the Ad Builder's to look after.
+        ->and(idsFrom($this, '/media/data'))->not->toContain($page->id);
     foreach ($pickers() as $picker => $ids) {
         $picker === $otherSide
             ? expect($ids)->not->toContain($page->id)
@@ -293,11 +295,12 @@ test('an ad changed after its publish before versions were kept stays on the scr
         'organization_id' => $this->organization->id, 'published_document' => null, 'published_name' => null,
     ]);
     DB::table('builder_ads')->where('id', $ad->id)->update(['updated_at' => now()->addMinute()]);
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
 
     expect($ad->fresh()->status())->toBe('changed')
         ->and($ad->fresh()->hasPublishedVersion())->toBeFalse()
         ->and(Media::find($ad->media_id)->isDraft())->toBeFalse()
-        ->and(idsFrom($this, '/media/data'))->toContain($ad->media_id);
+        ->and(idsFrom($this, "/screens/{$screen->id}/available-media"))->toContain($ad->media_id);
 });
 
 test("an unpublished ad is nobody's holding picture", function () {

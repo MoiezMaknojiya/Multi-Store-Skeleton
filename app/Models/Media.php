@@ -118,6 +118,17 @@ class Media extends Model
     }
 
     /**
+     * Photographs and videos alone: the Media page's own list (owner, 2026-10-05: "media library mein show mat karo
+     * list lambi ho jayegi"). An Ad Builder page is looked after in the Ad Builder, and chosen where it plays — a
+     * screen's Content library (while no channel shows it), its holding picture, a channel's pickers — each of which
+     * keeps a list of its own. Every draft is an ad page, so none is listed either.
+     */
+    public function scopeWithoutAdPages(Builder $query): Builder
+    {
+        return $query->where('type', '!=', self::TYPE_HTML);
+    }
+
+    /**
      * Without the files a channel shows (owner's rule, 2026-09-26: "agar koi bhi file channel k ander assign ha
      * toh woo playlist mein nahi dikhe warna woo 2 bar ho jayegi"): a file in a channel AND on the playlist that
      * carries that channel plays twice in one pass. So a file plays from playlists or from channels, never both:

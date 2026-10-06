@@ -87,7 +87,8 @@ class DashboardSummary
         }
 
         if ($user->can('media-view')) {
-            $mediaCount = Media::where('organization_id', $organization->id)->withoutDrafts()->count();
+            // What the Media page lists: photographs and videos, not the Ad Builder's pages.
+            $mediaCount = Media::where('organization_id', $organization->id)->withoutAdPages()->count();
             $storage = $this->quota->summary($organization->id);
             $percent = $storage && $storage['limit'] > 0 ? (int) floor($storage['used'] * 100 / $storage['limit']) : 0;
 

@@ -7,7 +7,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Signage\StoreMediaRequest;
 use App\Http\Requests\Signage\UpdateMediaRequest;
 use App\Models\ActivityLog;
-use App\Models\BuilderAd;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Services\MediaStorage;
@@ -57,15 +56,15 @@ class MediaController extends Controller
     public function data(Request $request, OrganizationStorage $quota): JsonResponse
     {
         $filters = $request->validate([
-            'type' => ['nullable', Rule::in([Media::TYPE_IMAGE, Media::TYPE_VIDEO, Media::TYPE_HTML])],
+            'type' => ['nullable', Rule::in([Media::TYPE_IMAGE, Media::TYPE_VIDEO])],
             'orientation' => ['nullable', 'in:landscape,portrait'],
             'sort' => ['nullable', 'string'],
             'library' => ['nullable', 'string', 'regex:/^(platform|[1-9][0-9]{0,9})$/'],
         ]);
 
-        // An Ad Builder page taken off the screens (unpublished) is in no library until it is published again (owner,
-        // 2026-09-21): the Ad Builder is where a draft lives.
-        $query = Media::visibleTo(auth()->user())->withoutDrafts()->with('organization:id,name');
+        // Photographs and videos alone (owner, 2026-10-05: "media library mein show mat karo list lambi ho jayegi"): an
+        // Ad Builder page, published or a draft, is looked after in the Ad Builder and chosen where it plays.
+        $query = Media::visibleTo(auth()->user())->withoutAdPages()->with('organization:id,name');
 
         if (auth()->user()->globalRole() !== null && filled($filters['library'] ?? null)) {
             $filters['library'] === 'platform'
@@ -139,8 +138,9 @@ class MediaController extends Controller
     public function update(UpdateMediaRequest $request, Media $media): JsonResponse
     {
         // Route middleware is not enough: the target has to be inside the organization the
-        // actor is working in, or it does not exist for them (404, never 403).
-        $media = Media::visibleTo(auth()->user())->findOrFail($media->id);
+        // actor is working in, or it does not exist for them (404, never 403) — and an ad's
+        // page is named in the Ad Builder, as it is listed there.
+        $media = Media::visibleTo(auth()->user())->withoutAdPages()->findOrFail($media->id);
         $before = $media->title;
 
         // A file keeps its name and nothing else of what a person types (owner, 2026-10-01: "srif naam rakho").
@@ -151,10 +151,13 @@ class MediaController extends Controller
         return response()->json(['message' => 'File renamed.', 'media' => $media]);
     }
 
-    /** Delete a file, its thumbnail and its row. */
+    /**
+     * Delete a file, its thumbnail and its row. An ad's page is not deleted here: the Ad Builder unpublishes or deletes
+     * its design, and the page with it.
+     */
     public function destroy(Media $media, MediaStorage $storage, OrganizationStorage $quota): JsonResponse
     {
-        $media = Media::visibleTo(auth()->user())->findOrFail($media->id);
+        $media = Media::visibleTo(auth()->user())->withoutAdPages()->findOrFail($media->id);
         $title = $media->title;
 
         // A channel showing this file would lose the ad without anybody deciding so: refused, naming them.
@@ -162,19 +165,12 @@ class MediaController extends Controller
             throw ValidationException::withMessages(['file' => $inUse]);
         }
 
-        // A published ad's row published before each got a poster of its own still names the design's
-        // poster: that file belongs to the design, which outlives this row, so it stays.
-        $thumbnail = $media->type === Media::TYPE_HTML
-            && BuilderAd::where('thumbnail_path', $media->thumbnail_path)->exists()
-                ? null
-                : $media->thumbnail_path;
-
         // The row goes first and the files only once that has committed: a stale file on disk is
         // harmless, a row pointing at a deleted file is a broken thumbnail on every screen that lists it.
-        DB::transaction(function () use ($media, $storage, $thumbnail) {
+        DB::transaction(function () use ($media, $storage) {
             $media->delete();
 
-            DB::afterCommit(fn () => $storage->deleteFiles($media->disk, $media->path, $thumbnail));
+            DB::afterCommit(fn () => $storage->deleteFiles($media->disk, $media->path, $media->thumbnail_path));
         });
 
         ActivityLog::record('media.deleted', null, "Deleted media {$title}", organizationId: $media->organization_id);
