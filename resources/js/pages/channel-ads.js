@@ -75,8 +75,10 @@ export function registerChannelAds(Alpine) {
             this.load();
         },
 
-        async load() {
-            this.loading = true;
+        /* After a change (`quiet`), the rows stay where they are until the new ones are in, with no "Loading..." row
+         * pushing them down under the pointer — as crud-table-base's refreshInPlace (owner, 2026-10-07). */
+        async load({ quiet = false } = {}) {
+            if (!quiet) this.loading = true;
             try {
                 const { data } = await axios.get(`/channels/${this.channelId}/ads`);
                 this.ads = data.ads;
@@ -430,7 +432,7 @@ export function registerChannelAds(Alpine) {
                 const errors = error.response?.data?.errors;
                 window.toast(errors ? Object.values(errors)[0][0] : (error.response?.data?.message ?? 'Could not change the order.'));
                 // Whatever went wrong, show the order as the server has it.
-                await this.load();
+                await this.load({ quiet: true });
             } finally {
                 this.reordering = false;
             }

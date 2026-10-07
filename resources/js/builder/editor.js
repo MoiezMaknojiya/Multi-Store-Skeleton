@@ -16,6 +16,7 @@
  * (motion.js), arranging and the clipboard (arrange.js), and zoom, rulers, guides and history (view.js).
  */
 import axios from 'axios';
+import { isAClickBeside, noteShut } from '../core/click-beside.js';
 import { arrangePanel, CLIPBOARD_KEY, readClipboard } from './arrange.js';
 import {
     clampName, isGroup, MAX_NAME, MAX_TEXT, newId, normaliseDocument, parentIdOf, readPreference, renumberDepth, syncGroupBounds,
@@ -64,7 +65,7 @@ export function registerAdEditor(Alpine) {
         const motion = { running: [], easeTweens: {}, lengthTimer: null };
         // Where the keyboard was before an overlay of the editor opened, to go back to when it closes — a DOM node,
         // so never in the reactive state.
-        const overlay = { returnTo: null };
+        const overlay = { returnTo: null, openedAt: 0 };
         // Which rows of the font picker have come into sight, to preview their families (watchFontRow) — an observer
         // and DOM nodes, so never in the reactive state either.
         const fontRows = { observer: null, preview: new WeakMap() };
@@ -230,6 +231,7 @@ export function registerAdEditor(Alpine) {
 
             overlayOpened(flag) {
                 overlay.returnTo = document.activeElement;
+                overlay.openedAt = performance.now();
 
                 const into = { fontPickerOpen: 'fontSearch', assetPickerOpen: 'assetPanel', shortcutsOpen: 'shortcutsPanel' }[flag];
 
@@ -238,12 +240,18 @@ export function registerAdEditor(Alpine) {
             },
 
             overlayClosed() {
+                noteShut();
                 const back = overlay.returnTo;
                 overlay.returnTo = null;
 
                 if (back && back !== document.body && back.isConnected && typeof back.focus === 'function') {
                     back.focus({ preventScroll: true });
                 }
+            },
+
+            /** A click beside an overlay closes it — not the rest of the double-click that opened it (core/click-beside.js). */
+            closeOverlayFromBeside(event, flag) {
+                if (isAClickBeside(event, overlay.openedAt)) this[flag] = false;
             },
 
             /** Tab and Shift+Tab go round an open overlay's own controls, never to the editor behind it. */

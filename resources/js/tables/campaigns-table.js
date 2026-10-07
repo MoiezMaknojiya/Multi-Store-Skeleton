@@ -256,8 +256,8 @@ export function registerCampaignsTable(Alpine) {
 
                     this.closeCampaignModal();
                     this.currentPage = 1;
-                    await this.fetchItems();
-                    await this.loadScreens();   // the booked seconds have moved
+                    this.refreshInPlace();  // not awaited: the button is free again the moment the request is over
+                    this.loadScreens();  // not awaited, the booked seconds have moved
                 } catch (error) {
                     if (error.response?.status === 422 && error.response.data.errors) {
                         this.formErrors = error.response.data.errors;

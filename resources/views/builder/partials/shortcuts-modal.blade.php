@@ -1,6 +1,6 @@
 {{-- Every shortcut the editor knows (§10a), opened with ? or the ⌨ button. --}}
 <div x-show="shortcutsOpen" x-cloak class="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-6"
-     @click.self="shortcutsOpen = false" @keydown.tab="keepFocusIn($event, $refs.shortcutsPanel)" dusk="shortcuts-modal">
+     @click.self="closeOverlayFromBeside($event, 'shortcutsOpen')" @keydown.tab="keepFocusIn($event, $refs.shortcutsPanel)" dusk="shortcuts-modal">
     <div class="mt-10 max-h-[80vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-6 focus:outline-none dark:bg-gray-800"
          role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" tabindex="-1" x-ref="shortcutsPanel">
         <div class="flex items-center justify-between">

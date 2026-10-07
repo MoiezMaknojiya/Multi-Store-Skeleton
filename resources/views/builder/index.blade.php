@@ -161,7 +161,7 @@
                                            x-bind:dusk="'edit-ad-' + item.id">Edit</a>
                                     @endcan
                                     @can('ad-store')
-                                        <button type="button" class="btn-row-neutral" @click="duplicate(item)" x-show="item.can?.copy"
+                                        <button type="button" class="btn-row-neutral" @click="duplicate(item, $event)" x-show="item.can?.copy"
                                                 x-bind:disabled="busyId === item.id"
                                                 x-bind:aria-label="'Copy ' + item.name"
                                                 x-bind:dusk="'duplicate-ad-' + item.id">

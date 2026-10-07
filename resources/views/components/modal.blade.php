@@ -36,7 +36,7 @@ $maxWidth = [
     {{-- BACKDROP --}}
     <div
         x-show="show"
-        @unless ($persistent) x-on:click="closeMe" @endunless
+        @unless ($persistent) x-on:click="closeFromBeside($event)" @endunless
         class="fixed inset-0 bg-gray-600/60 dark:bg-black/60"
     >
     </div>

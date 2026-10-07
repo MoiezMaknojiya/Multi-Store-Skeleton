@@ -82,7 +82,7 @@ export function registerMediaTable(Alpine) {
                 clearTimeout(this.refreshTimer);
                 this.refreshTimer = setTimeout(() => {
                     this.currentPage = 1;
-                    this.fetchItems();
+                    this.refreshInPlace();
                 }, 400);
             },
 

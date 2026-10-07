@@ -9,6 +9,7 @@
  * role can hold — nothing greyed out — so the checklist never offers what RoleController would refuse.
  */
 import axios from 'axios';
+import { passwordRefusal } from '../core/password-refusal.js';
 import { validate, required, maxLen, minCount } from '../core/validate.js';
 
 /* Group titles, in the order an organization is set up and run. Anything else is appended. The catalogue's own
@@ -64,8 +65,10 @@ export function registerRolesPage(Alpine) {
             this.fetch();
         },
 
-        async fetch() {
-            this.loading = true;
+        /* After a change (`quiet`), the rows stay where they are until the new ones are in, with no "Loading..." row
+         * pushing them down under the pointer — as crud-table-base's refreshInPlace (owner, 2026-10-07). */
+        async fetch({ quiet = false } = {}) {
+            if (!quiet) this.loading = true;
             try {
                 const { data } = await axios.get('/roles/data');
                 this.roles = data.roles;
@@ -230,7 +233,7 @@ export function registerRolesPage(Alpine) {
                     : await axios.post('/roles', this.isPlatform ? { ...payload, type: this.form.type } : payload);
                 this.$dispatch('close-modal', 'role-form');
                 window.toast(data.message, 'success');
-                await this.fetch();
+                this.fetch({ quiet: true });  // not awaited: the button is free again the moment the request is over
             } catch (error) {
                 if (error.response?.status === 422 && error.response.data.errors) {
                     this.formErrors = error.response.data.errors;
@@ -273,21 +276,32 @@ export function registerRolesPage(Alpine) {
             }
             this.deleting = true;
             this.deletePasswordError = '';
+            // A late answer never shuts the question about another role (crud-table-base's deleteItem says why).
+            const target = this.selectedRole.id;
+            const stillAsked = () => this.selectedRole?.id === target;
+            let said;
             try {
-                const { data } = await axios.delete(`/roles/${this.selectedRole.id}`, { data: { password: this.deletePassword } });
-                this.$dispatch('close-modal', 'confirm-role-deletion');
-                window.toast(data.message, 'success');
-                await this.fetch();
+                const { data } = await axios.delete(`/roles/${target}`, { data: { password: this.deletePassword } });
+                said = data.message;
             } catch (error) {
-                const passwordError = error.response?.status === 422 ? error.response.data.errors?.password?.[0] : null;
-                if (passwordError) {
-                    this.deletePasswordError = passwordError;
-                } else {
-                    window.toast(error.response?.data?.message ?? 'Could not delete the role.');
+                if (error.response?.status !== 404) {
+                    const passwordError = passwordRefusal(error);
+                    if (passwordError && stillAsked()) {
+                        this.deletePasswordError = passwordError;
+                    } else {
+                        window.toast(passwordError ?? error.response?.data?.message ?? 'Could not delete the role.');
+                    }
+                    return;
                 }
+                said = 'That role is already gone.';
             } finally {
+                // Down when the request is over, not after the list is brought up to date (crud-table-base's deleteItem).
                 this.deleting = false;
             }
+
+            if (stillAsked()) this.$dispatch('close-modal', 'confirm-role-deletion');
+            window.toast(said, 'success');
+            await this.fetch({ quiet: true });
         },
     }));
 }

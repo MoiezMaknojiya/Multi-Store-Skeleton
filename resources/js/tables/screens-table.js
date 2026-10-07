@@ -214,7 +214,7 @@ export function registerScreensTable(Alpine) {
                         ? 'Screen paired. The TV starts within 30 seconds: open its Playlist to choose what it shows.'
                         : 'Device replaced. The new TV starts within 30 seconds, with this screen\'s playlist.', 'success');
                     this.currentPage = 1;
-                    await this.fetchItems();
+                    this.refreshInPlace();  // not awaited: the button is free again the moment the request is over
                 } catch (error) {
                     if (error.response?.status === 422 && error.response.data.errors) {
                         this.formErrors = error.response.data.errors;
@@ -294,7 +294,7 @@ export function registerScreensTable(Alpine) {
                 this.savingAds = true;
                 try {
                     await axios.put('/network-ads/screens', { screen_ids: ids, accepts });
-                    await this.fetchItems();
+                    this.refreshInPlace();  // not awaited: the button is free again the moment the request is over
                 } catch (error) {
                     window.toast(error.response?.data?.message ?? 'Could not change that.');
                 } finally {

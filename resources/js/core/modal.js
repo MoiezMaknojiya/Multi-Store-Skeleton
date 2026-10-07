@@ -1,4 +1,5 @@
 // resources/js/core/modal.js
+import { isAClickBeside, noteShut } from './click-beside.js';
 
 /* The dialogs open now, the last one on top: only the top one answers Escape and keeps the keyboard, so a dialog
  * opened from another closes alone. */
@@ -16,6 +17,7 @@ export function registerCustomModal(Alpine) {
     Alpine.data('customModal', (modalName, initialShow, isFocusable) => ({
         show: initialShow,
         returnFocusTo: null,
+        openedAt: 0,
 
         init() {
             this.nameTheDialog();
@@ -24,6 +26,7 @@ export function registerCustomModal(Alpine) {
 
             this.$watch('show', value => {
                 if (value) {
+                    this.openedAt = performance.now();
                     this.returnFocusTo = document.activeElement;
                     openModals.push(this.$el);
                     document.body.classList.add('overflow-y-hidden');
@@ -37,6 +40,7 @@ export function registerCustomModal(Alpine) {
                         target?.focus({ preventScroll: true });
                     }, 100);
                 } else {
+                    noteShut();
                     const at = openModals.indexOf(this.$el);
                     if (at !== -1) openModals.splice(at, 1);
 
@@ -107,6 +111,11 @@ export function registerCustomModal(Alpine) {
 
         closeOnEscape() {
             if (this.onTop()) this.closeMe();
+        },
+
+        /* A click on the backdrop — unless it is the rest of the double-click that opened the dialog (click-beside.js). */
+        closeFromBeside(event) {
+            if (isAClickBeside(event, this.openedAt)) this.closeMe();
         },
 
         openEvent(event) {

@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\MediaStorage;
 use Facebook\WebDriver\Chrome\ChromeDevToolsDriver;
 use Facebook\WebDriver\Exception\TimeoutException;
+use Facebook\WebDriver\Interactions\WebDriverActions;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
@@ -540,6 +541,35 @@ class AdEditorPolishFlowTest extends DuskTestCase
      * Esc closes a picker that is open — even from the picker's own search box — and does only that: the
      * element behind it stays selected, rather than one press also letting go of what was being worked on.
      */
+    /**
+     * Owner, 2026-10-07: a double click on what opens an overlay must not shut it — the second click lands on the
+     * overlay drawn over the button (core/click-beside.js) — while a later click beside it still does. A real mouse:
+     * a JavaScript click never meets it.
+     */
+    public function test_a_double_click_on_the_font_button_leaves_the_picker_open(): void
+    {
+        [$designer, $organization, $ad] = $this->adWith([$this->text('headline', 100, 100, 'Big sale')]);
+
+        $this->browse(function (Browser $browser) use ($designer, $organization, $ad) {
+            $this->openEditor($browser, $designer, $organization, $ad);
+
+            $this->jsClick($browser, '@layer-headline');
+            $browser->waitFor('@text-font');
+
+            $button = $browser->element('[dusk="text-font"]');
+            (new WebDriverActions($browser->driver))->moveToElement($button)->click()->perform();
+            usleep(150000);
+            (new WebDriverActions($browser->driver))->click()->perform();
+            $browser->pause(700);
+            $browser->assertVisible('@font-picker');
+
+            // Beside the picker's panel, a moment later: it closes, and the element is still the one selected.
+            $browser->script("window.__beside = document.querySelector('[dusk=\"font-picker\"]'); window.__beside.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));");
+            $browser->waitUntilMissing('@font-picker', 5);
+            $this->assertSame(['headline'], $browser->script('return '.self::EDITOR.'.selectedIds;')[0]);
+        });
+    }
+
     public function test_esc_closes_an_open_picker_and_keeps_the_selection(): void
     {
         [$designer, $organization, $ad] = $this->adWith([$this->text('headline', 100, 100, 'Big sale')]);

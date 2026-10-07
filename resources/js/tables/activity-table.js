@@ -110,7 +110,7 @@ export function registerActivityTable(Alpine) {
                     if (dropped.length) parts.push(`deleted: ${dropped.map(d => `${d.year} (${d.rows} rows)`).join(', ')}`);
                     window.toast(`Maintenance complete — ${parts.length ? parts.join('; ') : 'nothing to do'}`, 'success');
                     await this.fetchPartitions();
-                    await this.fetchItems();
+                    await this.refreshInPlace();
                 } catch (error) {
                     window.toast(error.response?.data?.message ?? 'Maintenance failed. Please try again.');
                 } finally {

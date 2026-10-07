@@ -6,6 +6,8 @@
  */
 import axios from 'axios';
 import { createCrudTable } from '../core/crud-table-base.js';
+import { isARepeatPress } from '../core/click-beside.js';
+import { passwordRefusal } from '../core/password-refusal.js';
 import { validate, required, emailFormat, maxLen } from '../core/validate.js';
 
 export function registerUsersTable(Alpine) {
@@ -132,7 +134,7 @@ export function registerUsersTable(Alpine) {
             /* After any change: this modal's lists, and the row's badges in the table behind it. */
             async afterAccessChange(message) {
                 window.toast(message, 'success');
-                await Promise.all([this.loadAccess(), this.fetchItems()]);
+                await Promise.all([this.loadAccess(), this.refreshInPlace()]);
             },
 
             async saveMembershipRole(membership) {
@@ -167,23 +169,34 @@ export function registerUsersTable(Alpine) {
                 }
                 this.removingBusy = true;
                 this.removePasswordError = '';
+                // A late answer never shuts the question about another organization (crud-table-base's deleteItem).
+                const target = this.removing;
+                const stillAsked = () => this.removing === target;
+                let said;
                 try {
                     const { data } = await axios.delete(
-                        `/users/${this.accessTarget.id}/organizations/${this.removing.organization_id}`,
+                        `/users/${this.accessTarget.id}/organizations/${target.organization_id}`,
                         { data: { password: this.removePassword } },
                     );
-                    this.removing = null;
-                    await this.afterAccessChange(data.message);
+                    said = data.message;
                 } catch (error) {
-                    const passwordError = error.response?.status === 422 ? error.response.data.errors?.password?.[0] : null;
-                    if (passwordError) {
-                        this.removePasswordError = passwordError;
-                    } else {
-                        window.toast(error.response?.data?.message ?? 'Could not remove them from the organization.');
+                    if (error.response?.status !== 404) {
+                        const passwordError = passwordRefusal(error);
+                        if (passwordError && stillAsked()) {
+                            this.removePasswordError = passwordError;
+                        } else {
+                            window.toast(passwordError ?? error.response?.data?.message ?? 'Could not remove them from the organization.');
+                        }
+                        return;
                     }
+                    said = 'They are already out of that organization.';
                 } finally {
+                    // Down when the request is over, not after the lists are brought up to date (crud-table-base's deleteItem).
                     this.removingBusy = false;
                 }
+
+                if (stillAsked()) this.removing = null;
+                await this.afterAccessChange(said);
             },
 
             async assignToOrganization() {
@@ -242,27 +255,43 @@ export function registerUsersTable(Alpine) {
                 }
                 this.deleting = true;
                 this.deletePasswordError = '';
-                try {
-                    const { data } = await axios.delete(`/users/${this.selectedItem.id}`, { data: { password: this.deletePassword } });
+                // A late answer never shuts the question about another account (crud-table-base's deleteItem says why).
+                const gone = this.selectedItem.id;
+                const stillAsked = () => this.selectedItem?.id === gone;
+                const forget = () => {
+                    this.items = this.items.filter((item) => item.id !== gone);
+                    if (!stillAsked()) return;
                     this.$dispatch('close-modal', 'confirm-account-deletion');
                     this.selectedItem = null;
-                    window.toast(data.ownerless_organizations?.length
+                };
+                let said;
+                try {
+                    const { data } = await axios.delete(`/users/${gone}`, { data: { password: this.deletePassword } });
+                    said = data.ownerless_organizations?.length
                         ? `${data.message} Now without an owner: ${data.ownerless_organizations.join(', ')}.`
-                        : data.message, 'success');
-                    await this.fetchItems();
-                    if (this.items.length === 0 && this.currentPage > 1) {
-                        this.currentPage--;
-                        await this.fetchItems();
-                    }
+                        : data.message;
                 } catch (error) {
-                    const passwordError = error.response?.status === 422 ? error.response.data.errors?.password?.[0] : null;
-                    if (passwordError) {
-                        this.deletePasswordError = passwordError;
-                    } else {
-                        window.toast(error.response?.data?.message ?? 'Could not delete this account.');
+                    if (error.response?.status !== 404) {
+                        const passwordError = passwordRefusal(error);
+                        if (passwordError && stillAsked()) {
+                            this.deletePasswordError = passwordError;
+                        } else {
+                            window.toast(passwordError ?? error.response?.data?.message ?? 'Could not delete this account.');
+                        }
+                        return;
                     }
+                    said = 'That account is already gone.';
                 } finally {
+                    // Down when the request is over, not after the list is brought up to date (crud-table-base's deleteItem).
                     this.deleting = false;
+                }
+
+                forget();
+                window.toast(said, 'success');
+                await this.refreshInPlace();
+                if (this.items.length === 0 && this.currentPage > 1) {
+                    this.currentPage--;
+                    await this.fetchItems();
                 }
             },
 
@@ -283,21 +312,32 @@ export function registerUsersTable(Alpine) {
                 }
                 this.removingRole = true;
                 this.rolePasswordError = '';
+                // A late answer never shuts the question about somebody else (crud-table-base's deleteItem says why).
+                const target = this.selectedForRole.id;
+                const stillAsked = () => this.selectedForRole?.id === target;
+                let said;
                 try {
-                    const { data } = await axios.delete(`/users/${this.selectedForRole.id}/platform-role`, { data: { password: this.rolePassword } });
-                    this.$dispatch('close-modal', 'confirm-remove-platform-role');
-                    window.toast(data.message, 'success');
-                    await this.fetchItems();
+                    const { data } = await axios.delete(`/users/${target}/platform-role`, { data: { password: this.rolePassword } });
+                    said = data.message;
                 } catch (error) {
-                    const passwordError = error.response?.status === 422 ? error.response.data.errors?.password?.[0] : null;
-                    if (passwordError) {
-                        this.rolePasswordError = passwordError;
-                    } else {
-                        window.toast(error.response?.data?.message ?? 'Could not remove the platform role.');
+                    if (error.response?.status !== 404) {
+                        const passwordError = passwordRefusal(error);
+                        if (passwordError && stillAsked()) {
+                            this.rolePasswordError = passwordError;
+                        } else {
+                            window.toast(passwordError ?? error.response?.data?.message ?? 'Could not remove the platform role.');
+                        }
+                        return;
                     }
+                    said = 'That account is already gone.';
                 } finally {
+                    // Down when the request is over, not after the list is brought up to date (crud-table-base's deleteItem).
                     this.removingRole = false;
                 }
+
+                if (stillAsked()) this.$dispatch('close-modal', 'confirm-remove-platform-role');
+                window.toast(said, 'success');
+                await this.refreshInPlace();
             },
 
             /* ── Platform team invitations ─────────────────────────────── */
@@ -342,7 +382,7 @@ export function registerUsersTable(Alpine) {
                     const { data } = await axios.post('/users/invitations', this.inviteForm);
                     this.$dispatch('close-modal', 'invite-platform-member');
                     window.toast(data.message, data.email_sent === false ? 'error' : 'success');
-                    await this.fetchInvitations();
+                    this.fetchInvitations();  // not awaited: the button is free again the moment the request is over
                 } catch (error) {
                     if (error.response?.status === 422 && error.response.data.errors) {
                         this.formErrors = error.response.data.errors;
@@ -354,13 +394,13 @@ export function registerUsersTable(Alpine) {
                 }
             },
 
-            async resendInvitation(invitation) {
-                if (this.busyInvitationId) return;
+            async resendInvitation(invitation, event) {
+                if (this.busyInvitationId || isARepeatPress(event)) return;
                 this.busyInvitationId = invitation.id;
                 try {
                     const { data } = await axios.post(`/users/invitations/${invitation.id}/resend`);
                     window.toast(data.message, data.email_sent === false ? 'error' : 'success');
-                    await this.fetchInvitations();
+                    this.fetchInvitations();  // not awaited: the button is free again the moment the request is over
                 } catch (error) {
                     window.toast(error.response?.data?.message ?? 'Could not resend the invitation.');
                 } finally {
@@ -380,7 +420,7 @@ export function registerUsersTable(Alpine) {
                     const { data } = await axios.delete(`/users/invitations/${this.selectedInvitation.id}`);
                     this.$dispatch('close-modal', 'confirm-revoke-platform-invitation');
                     window.toast(data.message, 'success');
-                    await this.fetchInvitations();
+                    this.fetchInvitations();  // not awaited: the button is free again the moment the request is over
                 } catch (error) {
                     window.toast(error.response?.data?.message ?? 'Could not revoke the invitation.');
                 } finally {

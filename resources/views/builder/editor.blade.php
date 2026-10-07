@@ -984,7 +984,7 @@
              keyboard goes in when one opens (overlayOpened) and stays inside while it is open (keepFocusIn), Esc
              closes it and the keyboard goes back to what opened it. --}}
         <div x-show="fontPickerOpen" x-cloak class="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-6"
-             @click.self="fontPickerOpen = false" @keydown.tab="keepFocusIn($event, $refs.fontPanel)" dusk="font-picker">
+             @click.self="closeOverlayFromBeside($event, 'fontPickerOpen')" @keydown.tab="keepFocusIn($event, $refs.fontPanel)" dusk="font-picker">
             <div class="mt-16 max-h-[70vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 focus:outline-none dark:bg-gray-800"
                  role="dialog" aria-modal="true" aria-labelledby="font-picker-title" tabindex="-1" x-ref="fontPanel">
                 {{-- The search and the groups stay in sight while the families scroll under them: a list of 138 is
@@ -1059,7 +1059,7 @@
 
         {{-- ── The asset picker: a new element, a background layer's file, or a replacement ── --}}
         <div x-show="assetPickerOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
-             @click.self="assetPickerOpen = false" @keydown.tab="keepFocusIn($event, $refs.assetPanel)" dusk="asset-picker">
+             @click.self="closeOverlayFromBeside($event, 'assetPickerOpen')" @keydown.tab="keepFocusIn($event, $refs.assetPanel)" dusk="asset-picker">
             <div class="max-h-[80vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-5 focus:outline-none dark:bg-gray-800"
                  role="dialog" aria-modal="true" aria-labelledby="asset-picker-title" tabindex="-1" x-ref="assetPanel">
                 <div class="flex items-center justify-between gap-3">

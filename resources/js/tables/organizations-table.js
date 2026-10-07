@@ -89,7 +89,7 @@ export function registerOrganizationsTable(Alpine) {
                     const { data } = await axios.post('/organizations/' + this.ownerOrganization.id + '/owner-invitation', { email: this.ownerEmail });
                     this.$dispatch('close-modal', 'invite-organization-owner');
                     window.toast(data.message, data.email_sent === false ? 'error' : 'success');
-                    await this.fetchItems();
+                    this.refreshInPlace();  // not awaited: the button is free again the moment the request is over
                 } catch (error) {
                     if (error.response?.status === 422 && error.response.data.errors) {
                         this.ownerErrors = error.response.data.errors;
@@ -128,24 +128,41 @@ export function registerOrganizationsTable(Alpine) {
                 }
 
                 this.deleting = true;
-                try {
-                    const { data } = await axios.delete('/organizations/' + this.selectedItem.id, { data: { confirm_name: this.deleteConfirmName, password: this.deletePassword } });
+                // A late answer never shuts the question about another organization (crud-table-base's deleteItem).
+                const gone = this.selectedItem.id;
+                const stillAsked = () => this.selectedItem?.id === gone;
+                const forget = () => {
+                    this.items = this.items.filter((item) => item.id !== gone);
+                    if (!stillAsked()) return;
                     this.$dispatch('close-modal', 'confirm-organization-deletion');
                     this.selectedItem = null;
-                    window.toast(data.message, 'success');
-                    await this.fetchItems();
-                    if (this.items.length === 0 && this.currentPage > 1) {
-                        this.currentPage--;
-                        await this.fetchItems();
-                    }
+                };
+                let said;
+                try {
+                    const { data } = await axios.delete('/organizations/' + gone, { data: { confirm_name: this.deleteConfirmName, password: this.deletePassword } });
+                    said = data.message;
                 } catch (error) {
-                    if (error.response?.status === 422 && error.response.data.errors) {
-                        this.deleteErrors = error.response.data.errors;
-                    } else {
-                        window.toast(error.response?.data?.message ?? 'Could not delete the organization.');
+                    if (error.response?.status !== 404) {
+                        // A wrong name or password goes under its field, and so does "too many wrong passwords" (429).
+                        if ([422, 429].includes(error.response?.status) && error.response.data.errors && stillAsked()) {
+                            this.deleteErrors = error.response.data.errors;
+                        } else {
+                            window.toast(error.response?.data?.message ?? 'Could not delete the organization.');
+                        }
+                        return;
                     }
+                    said = 'That organization is already gone.';
                 } finally {
+                    // Down when the request is over, not after the list is brought up to date (crud-table-base's deleteItem).
                     this.deleting = false;
+                }
+
+                forget();
+                window.toast(said, 'success');
+                await this.refreshInPlace();
+                if (this.items.length === 0 && this.currentPage > 1) {
+                    this.currentPage--;
+                    await this.fetchItems();
                 }
             },
 
@@ -212,7 +229,7 @@ export function registerOrganizationsTable(Alpine) {
                     });
                     this.$dispatch('close-modal', 'confirm-organization-ads');
                     this.pendingAdsAccepts = null;
-                    await this.fetchItems();   // clears the selection via the watcher
+                    this.refreshInPlace();  // not awaited, clears the selection via the watcher
                     window.toast(data.message, 'success');
                 } catch (error) {
                     window.toast(error.response?.data?.message ?? 'Could not change that.');

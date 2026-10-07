@@ -130,7 +130,7 @@
                                 <td class="px-5 py-4"><span x-bind:class="invitation.is_expired ? 'badge-danger' : 'badge-info'" x-text="expiresText(invitation)"></span></td>
                                 <td class="px-5 py-4">
                                     <div class="flex items-center justify-end gap-2">
-                                        <button type="button" class="btn-row-neutral" @click="resendInvitation(invitation)" x-bind:disabled="busyInvitationId !== null"
+                                        <button type="button" class="btn-row-neutral" @click="resendInvitation(invitation, $event)" x-bind:disabled="busyInvitationId !== null"
                                             x-bind:aria-label="'Resend the invitation to ' + invitation.email"
                                             x-bind:dusk="'resend-platform-invitation-' + invitation.id">
                                             <x-spinner x-show="busyInvitationId === invitation.id" x-cloak class="h-3 w-3" />

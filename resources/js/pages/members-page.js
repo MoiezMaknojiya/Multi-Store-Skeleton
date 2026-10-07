@@ -4,6 +4,8 @@
  * assignable roles), so the page never offers an action MemberController would refuse.
  */
 import axios from 'axios';
+import { isARepeatPress } from '../core/click-beside.js';
+import { passwordRefusal } from '../core/password-refusal.js';
 import { validate, required, emailFormat, maxLen } from '../core/validate.js';
 
 export function registerMembersPage(Alpine) {
@@ -38,8 +40,10 @@ export function registerMembersPage(Alpine) {
             this.fetch();
         },
 
-        async fetch() {
-            this.loading = true;
+        /* After a change (`quiet`), the rows stay where they are until the new ones are in, with no "Loading..." row
+         * pushing them down under the pointer — as crud-table-base's refreshInPlace (owner, 2026-10-07). */
+        async fetch({ quiet = false } = {}) {
+            if (!quiet) this.loading = true;
             try {
                 const { data } = await axios.get('/members/data');
                 this.members = data.members;
@@ -119,7 +123,7 @@ export function registerMembersPage(Alpine) {
                 this.$dispatch('close-modal', 'invite-member');
                 window.toast(data.message, data.email_sent === false ? 'error' : 'success');
                 this.tab = 'invitations';
-                await this.fetch();
+                this.fetch({ quiet: true });  // not awaited: the button is free again the moment the request is over
             } catch (error) {
                 this.handleError(error);
             } finally {
@@ -127,13 +131,13 @@ export function registerMembersPage(Alpine) {
             }
         },
 
-        async resend(invitation) {
-            if (this.busyInvitationId) return;
+        async resend(invitation, event) {
+            if (this.busyInvitationId || isARepeatPress(event)) return;
             this.busyInvitationId = invitation.id;
             try {
                 const { data } = await axios.post(`/members/invitations/${invitation.id}/resend`);
                 window.toast(data.message, data.email_sent === false ? 'error' : 'success');
-                await this.fetch();
+                this.fetch({ quiet: true });  // not awaited: the button is free again the moment the request is over
             } catch (error) {
                 window.toast(error.response?.data?.message ?? 'Could not resend the invitation.');
             } finally {
@@ -153,7 +157,7 @@ export function registerMembersPage(Alpine) {
                 const { data } = await axios.delete(`/members/invitations/${this.selectedInvitation.id}`);
                 this.$dispatch('close-modal', 'revoke-invitation');
                 window.toast(data.message, 'success');
-                await this.fetch();
+                this.fetch({ quiet: true });  // not awaited: the button is free again the moment the request is over
             } catch (error) {
                 window.toast(error.response?.data?.message ?? 'Could not revoke the invitation.');
             } finally {
@@ -185,7 +189,7 @@ export function registerMembersPage(Alpine) {
                 const { data } = await axios.put(`/members/${this.selectedMember.id}`, this.roleForm);
                 this.$dispatch('close-modal', 'change-member-role');
                 window.toast(data.message, 'success');
-                await this.fetch();
+                this.fetch({ quiet: true });  // not awaited: the button is free again the moment the request is over
             } catch (error) {
                 this.handleError(error);
             } finally {
@@ -209,21 +213,32 @@ export function registerMembersPage(Alpine) {
             }
             this.removing = true;
             this.removePasswordError = '';
+            // A late answer never shuts the question about somebody else (crud-table-base's deleteItem says why).
+            const target = this.selectedMember.id;
+            const stillAsked = () => this.selectedMember?.id === target;
+            let said;
             try {
-                const { data } = await axios.delete(`/members/${this.selectedMember.id}`, { data: { password: this.removePassword } });
-                this.$dispatch('close-modal', 'remove-member');
-                window.toast(data.message, 'success');
-                await this.fetch();
+                const { data } = await axios.delete(`/members/${target}`, { data: { password: this.removePassword } });
+                said = data.message;
             } catch (error) {
-                const passwordError = error.response?.status === 422 ? error.response.data.errors?.password?.[0] : null;
-                if (passwordError) {
-                    this.removePasswordError = passwordError;
-                } else {
-                    window.toast(error.response?.data?.message ?? 'Could not remove this member.');
+                if (error.response?.status !== 404) {
+                    const passwordError = passwordRefusal(error);
+                    if (passwordError && stillAsked()) {
+                        this.removePasswordError = passwordError;
+                    } else {
+                        window.toast(passwordError ?? error.response?.data?.message ?? 'Could not remove this member.');
+                    }
+                    return;
                 }
+                said = 'That member is already gone.';
             } finally {
+                // Down when the request is over, not after the list is brought up to date (crud-table-base's deleteItem).
                 this.removing = false;
             }
+
+            if (stillAsked()) this.$dispatch('close-modal', 'remove-member');
+            window.toast(said, 'success');
+            await this.fetch({ quiet: true });
         },
 
         /* ── Leave ─────────────────────────────────────────────────────── */

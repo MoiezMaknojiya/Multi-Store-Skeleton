@@ -151,7 +151,7 @@
                                 <td class="px-5 py-4">
                                     <div class="flex items-center justify-end gap-2" x-show="invitation.can_manage">
                                         @can('member-invite')
-                                        <button type="button" class="btn-row-neutral" x-on:click="resend(invitation)"
+                                        <button type="button" class="btn-row-neutral" x-on:click="resend(invitation, $event)"
                                             x-bind:aria-label="'Resend the invitation to ' + invitation.email"
                                             :disabled="busyInvitationId !== null" :dusk="'resend-invitation-' + invitation.id">
                                             <x-spinner x-show="busyInvitationId === invitation.id" x-cloak class="h-3 w-3" />

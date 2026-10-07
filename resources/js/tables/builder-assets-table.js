@@ -53,7 +53,7 @@ export function registerBuilderAssetsTable(Alpine) {
                 this.storage = detail?.response?.storage ?? this.storage;
 
                 clearTimeout(this.refreshTimer);
-                this.refreshTimer = setTimeout(() => this.fetchItems(), 400);
+                this.refreshTimer = setTimeout(() => this.refreshInPlace(), 400);
             },
 
             /** A file an ad still uses cannot be deleted (the server refuses it too): said at once, with the ads that

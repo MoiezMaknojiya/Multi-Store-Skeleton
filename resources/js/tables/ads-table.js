@@ -7,6 +7,7 @@
  */
 import axios from 'axios';
 import { takeAddressFlag } from '../core/address-flag.js';
+import { isARepeatPress } from '../core/click-beside.js';
 import { createCrudTable } from '../core/crud-table-base.js';
 
 export function registerAdsTable(Alpine) {
@@ -54,14 +55,14 @@ export function registerAdsTable(Alpine) {
             },
 
             /** A copy to work from. The server names it, so two people copying at once cannot collide. */
-            async duplicate(ad) {
-                if (this.busyId) return;
+            async duplicate(ad, event) {
+                if (this.busyId || isARepeatPress(event)) return;
                 this.busyId = ad.id;
 
                 try {
                     const { data } = await axios.post(`/builder/${ad.id}/duplicate`);
                     window.toast(data.message, 'success');
-                    await this.fetchItems();
+                    this.refreshInPlace();  // not awaited: the button is free again the moment the request is over
                 } catch (error) {
                     window.toast(error.response?.data?.message ?? 'Could not copy this ad.');
                 } finally {

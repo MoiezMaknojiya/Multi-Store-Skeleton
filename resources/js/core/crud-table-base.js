@@ -6,6 +6,7 @@
  * (roles, playlists and channel ads have their own components instead).
  */
 import axios from 'axios';
+import { passwordRefusal } from './password-refusal.js';
 import { unreadableFields } from './validate.js';
 
 /**
@@ -260,16 +261,13 @@ export function createCrudTable({
             }
             this.formErrors = {};
             this.saving = true;
+            const wasEditing = Boolean(this.editingItem);
+            let data;
             try {
                 const baseUrl = fetchUrl.replace('/data', '');
-                const wasEditing = Boolean(this.editingItem);
-                const { data } = wasEditing
+                ({ data } = wasEditing
                     ? await axios.put(`${baseUrl}/${this.editingItem.id}`, this.form)
-                    : await axios.post(baseUrl, this.form);
-                this.closeFormModal();
-                if (onSaved) onSaved(data, wasEditing);
-                else window.toast(data?.message ?? 'Saved.', 'success');
-                await this.fetchItems();
+                    : await axios.post(baseUrl, this.form));
             } catch (error) {
                 if (error.response?.status === 422 && error.response.data.errors) {
                     this.formErrors = error.response.data.errors;
@@ -279,9 +277,26 @@ export function createCrudTable({
                     // server's actual reason instead of swallowing it.
                     window.toast(error.response?.data?.message ?? 'An error occurred. Please try again.');
                 }
+                return;
             } finally {
+                /* The request is over, so the next save goes at once — not after the list is brought up to date
+                 * (owner, 2026-10-07: a press made then was lost on a button still disabled). */
                 this.saving = false;
             }
+
+            this.closeFormModal();
+            if (onSaved) onSaved(data, wasEditing);
+            else window.toast(data?.message ?? 'Saved.', 'success');
+            await this.refreshInPlace();
+        },
+
+        /* After something changed on this page (a save, a delete, a copy, an upload): the list brought up to date where
+         * it stands. The rows stay on screen until the new ones are in, so the page neither empties to "Loading..." nor
+         * jumps back to its top under the pointer (owner, 2026-10-07: after a delete, the next click on the Ads page
+         * opened another ad's editor — the list had emptied, the page scrolled to its top, and a poster sat where the
+         * next Delete had been). Searching, filtering, sorting and turning a page still load afresh. */
+        refreshInPlace() {
+            return this.fetchItems({ quiet: true });
         },
 
         /* ── Delete ────────────────────────────────────────────────────── */
@@ -300,29 +315,52 @@ export function createCrudTable({
             }
             this.deleting = true;
             this.deletePasswordError = '';
-            try {
-                const url = `${fetchUrl.replace('/data', '')}/${this.selectedItem.id}`;
-                const { data } = await axios.delete(url, deleteNeedsPassword ? { data: { password: this.deletePassword } } : undefined);
+
+            const gone = this.selectedItem.id;
+            /* By the time the answer comes the question may be about another row — this one was shut with Escape on a
+             * slow line and the next one asked: that one is left as it is, half-typed password and all. */
+            const stillAsked = () => this.selectedItem?.id === gone;
+            /* Its row goes at once, and every other one stays where it was (refreshInPlace). */
+            const forget = () => {
+                this.items = this.items.filter((item) => item.id !== gone);
+                this.total = Math.max(0, this.total - 1);
+                if (!stillAsked()) return;
                 this.$dispatch('close-modal', deleteModalName);
-                window.toast(data?.message ?? 'Deleted.', 'success');
                 this.selectedItem = null;
                 this.deletePassword = '';
-                await this.fetchItems();
-                if (this.items.length === 0 && this.currentPage > 1) {
-                    this.currentPage--;
-                    await this.fetchItems();
-                }
+            };
+
+            let said;
+            try {
+                const url = `${fetchUrl.replace('/data', '')}/${gone}`;
+                const { data } = await axios.delete(url, deleteNeedsPassword ? { data: { password: this.deletePassword } } : undefined);
+                said = data?.message ?? 'Deleted.';
             } catch (error) {
-                // A wrong or missing password goes under its field; anything else (a rule, too many tries) is a toast.
-                const passwordError = error.response?.status === 422 ? error.response.data.errors?.password?.[0] : null;
-                if (passwordError) {
-                    this.deletePasswordError = passwordError;
-                } else {
-                    console.error(`Failed to delete ${entityLabel}:`, error);
-                    window.toast(error.response?.data?.message ?? `Could not delete ${entityLabel}. Please try again.`);
+                if (error.response?.status !== 404) {
+                    // A wrong password, or too many, goes under its field; anything else (a rule, a lost line) is a toast.
+                    const passwordError = passwordRefusal(error);
+                    if (passwordError && stillAsked()) {
+                        this.deletePasswordError = passwordError;
+                    } else {
+                        if (!passwordError) console.error(`Failed to delete ${entityLabel}:`, error);
+                        window.toast(passwordError ?? error.response?.data?.message ?? `Could not delete ${entityLabel}. Please try again.`);
+                    }
+                    return;
                 }
+                // Gone already — another tab or a colleague deleted it: said so, and the list brought up to date.
+                said = `That ${entityLabel} is already gone.`;
             } finally {
+                /* The request is over, so the next question can be answered at once — not after the list is brought up
+                 * to date (owner, 2026-10-07: a Delete pressed then was lost on a button still disabled). */
                 this.deleting = false;
+            }
+
+            forget();
+            window.toast(said, 'success');
+            await this.refreshInPlace();
+            if (this.items.length === 0 && this.currentPage > 1) {
+                this.currentPage--;
+                await this.fetchItems();
             }
         },
 

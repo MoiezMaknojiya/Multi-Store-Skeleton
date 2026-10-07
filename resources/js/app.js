@@ -13,6 +13,7 @@ import { registerPasswordForm }      from './pages/password-form.js';
 import { registerProfileInfo }       from './pages/profile-info.js';
 import { registerDeleteAccountForm } from './pages/delete-account.js';
 import { registerFormGuard }         from './core/form-guard.js';
+import { registerStrayClickGuard }   from './core/click-beside.js';
 import { registerDigitsOnly }        from './core/digits-only.js';
 import { registerRegisterForm }      from './pages/register-form.js';
 import { registerAuthForms }         from './pages/auth-forms.js';
@@ -71,6 +72,9 @@ window.toast = (message, type = 'error') => Alpine.store('toasts').push(message,
 
 /* Block double submits on plain (full-page) forms — login, profile, logout, etc. */
 registerFormGuard();
+
+/* The second press of a double click that shut a dialog never reaches the page beneath it (core/click-beside.js). */
+registerStrayClickGuard();
 
 /* A digits-only field (`data-digits`, a phone or a ZIP code) keeps to its digits, and to that many, on every page. */
 registerDigitsOnly();
