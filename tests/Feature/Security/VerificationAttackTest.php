@@ -173,3 +173,36 @@ test('somebody who signs up with your address and keeps the session open loses i
     $this->post('/login', ['email' => 'victim@example.com', 'password' => 'squatter-pass'])->assertSessionHasErrors();
     $this->assertGuest();
 });
+
+test('only a super admin viewing as the account confirms it for them: a session that says otherwise confirms nothing', function () {
+    $customer = User::factory()->unverified()->create();
+    $other = User::factory()->unverified()->create();
+    $admin = createSuperAdmin();
+    $staff = createPlatformUser(['user-view']);
+    $gone = createSuperAdmin();
+    $goneId = $gone->id;
+    $gone->delete();
+    $demoted = createSuperAdmin();
+    DB::table('organization_user')->where('user_id', $demoted->id)->delete();
+
+    $sessions = [
+        'a platform account that is not a super admin started it' => ['impersonating_original_id' => $staff->id, 'impersonating_user_id' => $customer->id],
+        'it names another account as the one viewed' => ['impersonating_original_id' => $admin->id, 'impersonating_user_id' => $other->id],
+        'the super admin who started it is gone' => ['impersonating_original_id' => $goneId, 'impersonating_user_id' => $customer->id],
+        'the super admin who started it is a super admin no more' => ['impersonating_original_id' => $demoted->id, 'impersonating_user_id' => $customer->id],
+        'only half of it is there' => ['impersonating_user_id' => $customer->id],
+    ];
+
+    foreach ($sessions as $case => $session) {
+        $this->actingAs($customer)->withSession($session)->get('/verify-email')->assertOk()->assertDontSee('Confirm Email and Continue');
+        expect($this->actingAs($customer)->withSession($session)->post('/verify-email/confirm-for-them')->status())->toBe(403, $case);
+    }
+
+    // A guest is sent to sign in; asking with GET is no way in either.
+    auth()->logout();
+    $this->flushSession()->post('/verify-email/confirm-for-them')->assertRedirect(route('login'));
+    $this->get('/verify-email/confirm-for-them')->assertStatus(405);
+
+    expect($customer->fresh()->hasVerifiedEmail())->toBeFalse()
+        ->and(ActivityLog::where('action', 'account.verified')->count())->toBe(0);
+});

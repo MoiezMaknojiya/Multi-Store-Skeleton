@@ -199,3 +199,20 @@ test('the way back is offered on the organization picker too, where a member of 
 
     $this->get('/select-organization')->assertOk()->assertSee('Return to Super Admin');
 });
+
+test('the Users page is told where Log In As leads: the dashboard, or "Check your inbox" for an account not confirmed', function () {
+    // The page asks with axios, which followed the redirect into the `verified` wall and read its 403 as a failure —
+    // the super admin stayed on the Users page under a red "Your email address is not verified." while the session
+    // had already become the customer's (owner, 2026-10-06).
+    $admin = createSuperAdmin();
+    $confirmed = User::factory()->create();
+    $waiting = User::factory()->unverified()->create();
+
+    $this->actingAs($admin)->postJson("/users/{$confirmed->id}/impersonate")
+        ->assertOk()->assertExactJson(['redirect' => route('dashboard')]);
+    $this->post('/impersonate/stop');
+
+    $this->actingAs($admin)->postJson("/users/{$waiting->id}/impersonate")
+        ->assertOk()->assertExactJson(['redirect' => route('verification.notice')]);
+    expect(auth()->id())->toBe($waiting->id);
+});

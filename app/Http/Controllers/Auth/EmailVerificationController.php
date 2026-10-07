@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Platform\ImpersonateController;
 use App\Models\ActivityLog;
 use App\Models\User;
 use Illuminate\Database\QueryException;
@@ -35,7 +36,31 @@ class EmailVerificationController extends Controller
         return view('auth.verify-email', [
             'email' => $user->email,
             'removedOn' => $user->created_at?->copy()->addDays(User::UNVERIFIED_DAYS),
+            'canConfirmForThem' => ImpersonateController::superAdminViewingAs($user) !== null,
         ]);
+    }
+
+    /**
+     * A super admin viewing as an account that has not confirmed (owner, 2026-10-06: "super admin jab 'Login As' per
+     * click karne toh usko 'Check your inbox' per le jaye aur waha ek button ho jo super admin ko hi show ho jis per
+     * click karne se email verify ho jaye aur agay chale jaye") confirms its email for it, and goes on into the panel:
+     * a customer the platform knows, whose link went astray. Only the super admin who started the "Log in as" may —
+     * checked again here, whatever the page showed — and the log names them.
+     */
+    public function confirmForThem(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        $admin = ImpersonateController::superAdminViewingAs($user);
+
+        abort_if($admin === null, 403, 'Only a super admin viewing as this account can confirm its email.');
+
+        if (! $user->hasVerifiedEmail()) {
+            $user->markEmailAsVerified();
+
+            ActivityLog::record('account.verified', $user, "Confirmed the email {$user->email} of {$user->name} for them, by Log In As", $admin);
+        }
+
+        return redirect()->route('dashboard')->with('status', "{$user->email} is confirmed.");
     }
 
     /** The link in the signup email: it confirms the address the account holds now. */

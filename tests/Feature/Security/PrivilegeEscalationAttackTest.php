@@ -203,7 +203,7 @@ test('"Log in as" never reaches a super admin, the primary, or the person themse
         ->and($this->postJson("/users/{$second->id}/impersonate")->status())->toBe(403);
 
     // A real impersonation, then the way back: it belongs to the person being viewed as, nobody else.
-    $this->postJson("/users/{$member->id}/impersonate")->assertRedirect();
+    $this->postJson("/users/{$member->id}/impersonate")->assertOk()->assertJsonPath('redirect', route('dashboard'));
     expect(auth()->id())->toBe($member->id);
 
     $this->actingAs($this->staff)->post('/impersonate/stop')->assertRedirect();

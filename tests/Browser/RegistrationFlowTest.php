@@ -94,4 +94,41 @@ class RegistrationFlowTest extends DuskTestCase
             ])->exists());
         });
     }
+
+    /**
+     * A super admin's "Log In As" an account that has not confirmed lands on "Check your inbox", where a button only
+     * they see confirms the email and opens the panel (owner, 2026-10-06). The customer, signed in themselves, never
+     * sees it.
+     */
+    public function test_a_super_admin_logged_in_as_a_customer_who_has_not_confirmed_confirms_it_and_goes_on(): void
+    {
+        $admin = $this->seedSuperAdmin();
+        $organization = Organization::factory()->create(['name' => 'Smart Stop']);
+        $customer = $this->organizationMember($organization, Role::OWNER, 'tosif@example.com');
+        $customer->forceFill(['email_verified_at' => null])->save();
+
+        $this->browse(function (Browser $browser) use ($admin, $customer) {
+            $this->freshSession($browser);
+            $browser->loginAs($customer)->visit('/verify-email')
+                ->waitFor('@verify-email-page')
+                ->assertMissing('@verify-email-confirm-for-them');
+
+            $this->freshSession($browser);
+            $browser->loginAs($admin)->visit('/users');
+            $this->waitForAlpine($browser);
+            $browser->waitForText($customer->email);
+            $browser->waitForReload(fn (Browser $b) => $this->jsClick($b, '@impersonate-'.$customer->id));
+            $browser->waitForLocation('/verify-email')
+                ->assertVisible('@verify-email-impersonating')
+                ->assertSeeIn('@verify-email-confirm-box', 'As a super admin');
+
+            // One press: confirmed, and on into the panel, still viewing as the customer. (By script, as Log In As
+            // above: a pointer's click that lands while the page is still settling can miss the button.)
+            $browser->waitForReload(fn (Browser $b) => $this->jsClick($b, '@verify-email-confirm-for-them'))
+                ->waitForLocation('/dashboard')
+                ->waitForText('tosif@example.com is confirmed.');
+
+            $this->assertTrue($customer->fresh()->hasVerifiedEmail());
+        });
+    }
 }

@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Platform;
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -16,8 +17,13 @@ class ImpersonateController extends Controller
     /** The session keys of an impersonation: who to return to, and whom they are viewing as. */
     public const SESSION_KEYS = ['impersonating_original_id', 'impersonating_user_id'];
 
-    /** Log the current Super Admin in as another (non-Super-Admin) user */
-    public function start(Request $request, User $user): RedirectResponse
+    /**
+     * Log the current Super Admin in as another (non-Super-Admin) user — onto their dashboard, or onto "Check your
+     * inbox" when they have not confirmed their email (where a super admin can confirm it). The Users page asks with
+     * axios, which would follow a redirect into the `verified` wall and read its 403 as a failure: it is told where
+     * to go instead.
+     */
+    public function start(Request $request, User $user): RedirectResponse|JsonResponse
     {
         $admin = auth()->user();
 
@@ -44,7 +50,27 @@ class ImpersonateController extends Controller
             'impersonating_user_id' => $user->id,
         ]);
 
-        return redirect()->route('dashboard');
+        $to = route($user->hasVerifiedEmail() ? 'dashboard' : 'verification.notice');
+
+        return $request->expectsJson() ? response()->json(['redirect' => $to]) : redirect()->to($to);
+    }
+
+    /**
+     * The super admin viewing as $user through "Log in as" — read from the session and checked again against the
+     * database — or null when nobody is: no impersonation, one that names somebody else, or whoever started it is gone
+     * or is no longer a super admin.
+     */
+    public static function superAdminViewingAs(User $user): ?User
+    {
+        $originalId = session('impersonating_original_id');
+
+        if (! $originalId || (int) session('impersonating_user_id') !== $user->id) {
+            return null;
+        }
+
+        $admin = User::find($originalId);
+
+        return $admin !== null && $admin->isSuperAdmin() ? $admin : null;
     }
 
     /** Return from an impersonated session to the original Super Admin */

@@ -15,6 +15,16 @@
             Open it to confirm your email, and your account is ready: screens, pictures, videos and ads.
         </p>
 
+        @if ($canConfirmForThem)
+            {{-- Only a super admin viewing as this account sees it (EmailVerificationController::confirmForThem, which
+                 checks again); the account itself never does. --}}
+            <form method="POST" action="{{ route('verification.confirm-for-them') }}" class="alert-info mt-4" dusk="verify-email-confirm-box">
+                @csrf
+                <p>As a super admin, you can confirm this email yourself.</p>
+                <button type="submit" class="btn-primary-auth mt-3" dusk="verify-email-confirm-for-them">Confirm Email and Continue</button>
+            </form>
+        @endif
+
         @if (session('status') === 'verification-link-sent')
             <p class="alert-success mt-4" role="status" dusk="verify-email-status">A new link is on its way to {{ $email }}.</p>
         @endif

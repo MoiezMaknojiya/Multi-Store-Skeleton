@@ -199,9 +199,10 @@ export function registerUsersTable(Alpine) {
                 if (this.impersonating) return;
                 this.impersonating = true;
                 try {
-                    await axios.post(`/users/${user.id}/impersonate`);
-                    // Stays true on success: the button remains dead while the browser moves on.
-                    window.location.href = '/dashboard';
+                    const { data } = await axios.post(`/users/${user.id}/impersonate`);
+                    // Stays true on success: the button remains dead while the browser moves on — to the dashboard,
+                    // or to "Check your inbox" for an account that has not confirmed its email.
+                    window.location.href = data?.redirect ?? '/dashboard';
                 } catch (error) {
                     window.toast(error.response?.data?.message || 'Could not log in as this person.');
                     this.impersonating = false;

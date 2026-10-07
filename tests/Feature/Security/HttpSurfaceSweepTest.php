@@ -298,8 +298,8 @@ test('an account that has not confirmed its email is offered its profile and the
 
     // The doors a signed-in account keeps before it confirms (owner's rule, 2026-09-29): what it needs to confirm,
     // correct or give up its email, to leave or sign out, to accept an invitation (whose link confirms it too) —
-    // and the way back from "Log in as". A new signed-in route outside `verified` fails here until it is added on
-    // purpose.
+    // and, from "Log in as", the way back and a super admin's Confirm Email (its controller asks who is viewing).
+    // A new signed-in route outside `verified` fails here until it is added on purpose.
     $open = $templates(sweepRouteTable()->filter(fn (RouteDefinition $route) => in_array('auth', $route->gatherMiddleware(), true)
         && ! in_array('verified', $route->gatherMiddleware(), true)));
 
@@ -307,7 +307,7 @@ test('an account that has not confirmed its email is offered its profile and the
         'DELETE profile', 'DELETE profile/email', 'DELETE profile/organizations/{organization}',
         'GET confirm-email/{id}/{hash}', 'GET profile', 'GET verify-email', 'GET verify-email/{id}/{hash}',
         'PATCH profile', 'POST impersonate/stop', 'POST invitations/{token}/accept', 'POST logout',
-        'POST profile/email/resend', 'POST verify-email/resend', 'PUT password',
+        'POST profile/email/resend', 'POST verify-email/confirm-for-them', 'POST verify-email/resend', 'PUT password',
     ]);
 
     // Every other signed-in door sends it to "Check your inbox" — a request that wants JSON is refused — and

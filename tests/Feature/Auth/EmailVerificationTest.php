@@ -145,3 +145,52 @@ test('an account made through an invitation counts as confirmed', function () {
 
     expect($signedUp->fresh()->hasVerifiedEmail())->toBeTrue();
 });
+
+test('a super admin viewing as an account that has not confirmed confirms its email from the page, and goes on', function () {
+    // Owner, 2026-10-06: "Log In As" lands on "Check your inbox", and a button only the super admin sees confirms the
+    // email and opens the panel.
+    $admin = createSuperAdmin();
+    $organization = Organization::factory()->create(['name' => 'Smart Stop']);
+    $customer = createOrganizationMember($organization, Role::OWNER, ['email_verified_at' => null, 'email' => 'tosif@example.com']);
+
+    $this->actingAs($admin)->post("/users/{$customer->id}/impersonate")->assertRedirect(route('verification.notice'));
+    $this->get('/dashboard')->assertRedirect(route('verification.notice'));
+    $this->get('/verify-email')->assertOk()->assertSee('Confirm Email and Continue');
+
+    $this->post('/verify-email/confirm-for-them')
+        ->assertRedirect(route('dashboard'))
+        ->assertSessionHas('status', 'tosif@example.com is confirmed.');
+
+    expect($customer->fresh()->hasVerifiedEmail())->toBeTrue();
+
+    $entry = ActivityLog::where('action', 'account.verified')->sole();
+    expect($entry->actor_id)->toBe($admin->id)
+        ->and($entry->description)->toContain('tosif@example.com')->toContain('by Log In As');
+
+    // Still viewing as the customer, now with the panel open — and "stop" still leads back.
+    $this->get('/dashboard')->assertOk();
+    $this->post('/impersonate/stop')->assertRedirect(route('dashboard'));
+    expect(auth()->id())->toBe($admin->id);
+});
+
+test('the account itself never sees the button, and is refused when it asks to be confirmed', function () {
+    $customer = User::factory()->unverified()->create();
+
+    $this->actingAs($customer)->get('/verify-email')->assertOk()->assertDontSee('Confirm Email and Continue');
+    $this->post('/verify-email/confirm-for-them')->assertForbidden();
+
+    expect($customer->fresh()->hasVerifiedEmail())->toBeFalse()
+        ->and(ActivityLog::where('action', 'account.verified')->count())->toBe(0);
+});
+
+test('confirming an account already confirmed changes nothing and logs nothing', function () {
+    $admin = createSuperAdmin();
+    $customer = createOrganizationMember(Organization::factory()->create());
+    $confirmedAt = $customer->email_verified_at;
+
+    $this->actingAs($admin)->post("/users/{$customer->id}/impersonate");
+    $this->post('/verify-email/confirm-for-them')->assertRedirect(route('dashboard'));
+
+    expect($customer->fresh()->email_verified_at->equalTo($confirmedAt))->toBeTrue()
+        ->and(ActivityLog::where('action', 'account.verified')->count())->toBe(0);
+});

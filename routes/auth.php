@@ -46,6 +46,10 @@ Route::middleware('auth')->group(function () {
     // Every email that confirms an address draws on the account's and the visitor's budgets (User::sendALink),
     // whichever door asks — so none of the doors needs a throttle of its own.
     Route::post('verify-email/resend', [EmailVerificationController::class, 'resend'])->name('verification.send');
+    // A super admin viewing as the account through "Log in as" confirms it for them (owner, 2026-10-06); the
+    // controller reads the impersonation again, so the account itself is refused.
+    Route::post('verify-email/confirm-for-them', [EmailVerificationController::class, 'confirmForThem'])
+        ->middleware('throttle:admin')->name('verification.confirm-for-them');
     Route::get('confirm-email/{id}/{hash}', [EmailVerificationController::class, 'confirmNewEmail'])
         ->whereNumber('id')->middleware('throttle:verification-link')->name('email.confirm');
 
