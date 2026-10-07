@@ -9,6 +9,22 @@
     <div x-data="usersTable({{ Js::from(['isSuperAdmin' => auth()->user()->isSuperAdmin()]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
+        @can('super-admin-tier')
+            {{-- The super admin's two sides of the accounts (owner, 2026-10-07 — "Platform Team aur Organization Members bana
+                 do"): one list, shown whole or one side of it, each saying how many it holds. The open one is aria-pressed,
+                 written as the page opens so the row is right before Alpine starts; tab-link colours it (app.css). --}}
+            <div class="border-b border-gray-200 dark:border-gray-700">
+                <div class="-mb-px flex flex-wrap gap-x-6 gap-y-2" role="group" aria-label="Show accounts">
+                    @foreach (['all' => 'All', 'platform' => 'Platform Team', 'organization' => 'Organization Members'] as $group => $label)
+                        <button type="button" class="tab-link" dusk="accounts-tab-{{ $group }}" @click="showGroup('{{ $group === 'all' ? '' : $group }}')"
+                            aria-pressed="{{ $group === 'all' ? 'true' : 'false' }}" x-bind:aria-pressed="(group || 'all') === '{{ $group }}' ? 'true' : 'false'">
+                            {{ $label }} <span class="ml-1 badge-neutral" x-show="counts" x-cloak x-text="counts?.{{ $group }}" dusk="accounts-count-{{ $group }}"></span>
+                        </button>
+                    @endforeach
+                </div>
+            </div>
+        @endcan
+
         {{-- Inviting to the platform team (the super admin's alone) stands beside the search. --}}
         <x-crud.table-wrapper title="Accounts" searchPlaceholder="Search by name or email" :columns="4">
             @can('super-admin-tier')
@@ -16,15 +32,17 @@
                     <x-crud.add-button label="Invite to Platform Team" @click="openInvite()" dusk="invite-platform-member" />
                 </x-slot>
             @endcan
+            {{-- Account and Joined sort the list (owner, 2026-10-07): the newest accounts first until another is pressed. --}}
             <x-slot name="head">
-                <th class="px-5 py-3 text-left font-semibold">Account</th>
+                <x-crud.sort-header column="name" label="Account" />
                 <th class="px-5 py-3 text-left font-semibold">Access</th>
-                <th class="px-5 py-3 text-left font-semibold">Joined</th>
+                <x-crud.sort-header column="joined" label="Joined" first="desc" />
                 <th class="px-5 py-3 text-right font-semibold">Actions</th>
             </x-slot>
 
             <x-slot name="body">
-                <x-crud.table-empty :columns="4" itemsVar="items" message="No accounts yet." />
+                <x-crud.table-empty :columns="4" itemsVar="items" message="No accounts yet."
+                    filtered="group !== ''" clearFilters="showGroup('')" />
 
                 <template x-for="item in items" :key="item.id">
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50" x-bind:dusk="'account-row-' + item.id">

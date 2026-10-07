@@ -14,9 +14,16 @@ export function registerUsersTable(Alpine) {
         dataKey: 'users',
         entityLabel: 'account',
         deleteModalName: 'confirm-account-deletion',
+        // Newest accounts first; Account and Joined sort it (UserController::sortedBy, owner 2026-10-07).
+        sortable: { by: 'joined', direction: 'desc' },
         extraState: {
             isSuperAdmin: config.isSuperAdmin ?? false,
             impersonating: false,
+
+            /* The super admin's tabs: '' every account, 'platform' the platform team, 'organization' everybody else —
+             * and how many each holds, from the listing's own answer. */
+            group: '',
+            counts: null,
 
             /* Manage organizations, from the platform (super admins): a person's organizations, roles, and adding them to more. */
             accessTarget: null,
@@ -47,6 +54,21 @@ export function registerUsersTable(Alpine) {
         extraMethods: {
             onInit() {
                 if (this.isSuperAdmin) this.fetchInvitations();
+            },
+
+            extraParams() {
+                return this.group ? { group: this.group } : {};
+            },
+
+            afterFetch(data) {
+                this.counts = data.counts ?? null;
+            },
+
+            showGroup(group) {
+                if (this.group === group) return;
+                this.group = group;
+                this.currentPage = 1;
+                this.fetchItems();
             },
 
             initials(name) {

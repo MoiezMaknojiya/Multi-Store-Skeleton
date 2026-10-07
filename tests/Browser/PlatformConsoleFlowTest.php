@@ -371,4 +371,61 @@ class PlatformConsoleFlowTest extends DuskTestCase
                 ->assertMissing('#main-sidebar a[href$="/organizations"]');
         });
     }
+
+    /** Owner, 2026-10-07: "haan Platform Team aur Organization Members bana do, sorting bhi". */
+    public function test_the_super_admin_sees_the_platform_team_or_the_organization_members_and_sorts_them(): void
+    {
+        $admin = $this->seedSuperAdmin();
+        $admin->forceFill(['first_name' => 'Zara', 'last_name' => 'Admin', 'created_at' => now()->subDays(30)])->save();
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($organization, Role::OWNER, 'bilal@example.com');
+        $owner->forceFill(['first_name' => 'Bilal', 'last_name' => 'Owner', 'created_at' => now()->subDays(10)])->save();
+        User::factory()->create(['first_name' => 'Ayesha', 'last_name' => 'New', 'email' => 'ayesha@example.com', 'created_at' => now()->subDay()]);
+
+        $this->browse(function (Browser $browser) use ($admin) {
+            $this->freshSession($browser);
+            $browser->loginAs($admin)->visit('/users');
+            $this->waitForAlpine($browser);
+            $browser->waitForText('Ayesha');
+
+            $names = fn (): array => $browser->script("return [...document.querySelectorAll('[dusk^=\"account-row-\"] td:first-child span[x-text=\"item.name\"]')].map((name) => name.textContent.trim())")[0];
+            $shows = function (array $expected) use ($browser, $names): void {
+                $browser->waitUsing(5, 100, fn () => $names() === $expected);
+            };
+
+            // It opens on every account, newest first, each tab saying how many it holds.
+            $shows(['Ayesha New', 'Bilal Owner', 'Zara Admin']);
+            $browser->assertSeeIn('@accounts-count-all', '3')->assertSeeIn('@accounts-count-platform', '1')->assertSeeIn('@accounts-count-organization', '2')
+                ->assertAttribute('@accounts-tab-all', 'aria-pressed', 'true');
+
+            $this->jsClick($browser, '@accounts-tab-platform');
+            $shows(['Zara Admin']);
+            $browser->assertAttribute('@accounts-tab-platform', 'aria-pressed', 'true')->assertAttribute('@accounts-tab-all', 'aria-pressed', 'false');
+
+            $this->jsClick($browser, '@accounts-tab-organization');
+            $shows(['Ayesha New', 'Bilal Owner']);
+
+            // Account sorts A to Z, then Z to A; Joined goes back to newest first.
+            $this->jsClick($browser, '@sort-name');
+            $shows(['Ayesha New', 'Bilal Owner']);
+            $this->jsClick($browser, '@sort-name');
+            $shows(['Bilal Owner', 'Ayesha New']);
+
+            $this->jsClick($browser, '@accounts-tab-all');
+            $shows(['Zara Admin', 'Bilal Owner', 'Ayesha New']);
+            $this->jsClick($browser, '@sort-joined');
+            $shows(['Ayesha New', 'Bilal Owner', 'Zara Admin']);
+            $this->jsClick($browser, '@sort-joined');
+            $shows(['Zara Admin', 'Bilal Owner', 'Ayesha New']);
+
+            // A search the open tab holds nothing for says so, and Clear Search brings the tab's accounts back.
+            $browser->type('@crud-search', 'Zara');
+            $shows(['Zara Admin']);
+            $this->jsClick($browser, '@accounts-tab-organization');
+            $browser->waitFor('@table-no-match')->assertSeeIn('@table-no-match', 'Nothing matches');
+            $this->jsClick($browser, '@table-clear-search');
+            $shows(['Bilal Owner', 'Ayesha New']);
+            $browser->assertAttribute('@accounts-tab-organization', 'aria-pressed', 'true');
+        });
+    }
 }

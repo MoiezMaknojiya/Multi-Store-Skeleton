@@ -48,15 +48,23 @@ class UserController extends Controller
     public function data(Request $request): JsonResponse
     {
         $viewer = $request->user();
+        $platformTeam = DB::table('organization_user')->where('organization_id', 0)->select('user_id');
 
-        $query = User::query()->orderBy('first_name')->orderBy('last_name');
+        $query = $this->sortedBy(User::query(), $request);
 
         // The platform team is the super admins' business; support sees customers only.
         if (! $viewer->isSuperAdmin()) {
-            $query->whereNotIn('id', DB::table('organization_user')->where('organization_id', 0)->select('user_id'));
+            $query->whereNotIn('id', $platformTeam);
+        } else {
+            // The super admin's tabs (owner, 2026-10-07): the platform team, or everybody outside it — anything else is all.
+            match (self::plainValue($request->input('group'))) {
+                'platform' => $query->whereIn('id', $platformTeam),
+                'organization' => $query->whereNotIn('id', $platformTeam),
+                default => null,
+            };
         }
 
-        return $this->paginatedResponse(
+        $response = $this->paginatedResponse(
             $request, $query, ['first_name', 'last_name', 'email'], 'users',
             ['id', 'first_name', 'last_name', 'email', 'created_at'],
             fn (Collection $users) => $this->attachAccess($users, $viewer),
@@ -71,6 +79,39 @@ class UserController extends Controller
                 }
             }
         );
+
+        // Each tab says how many it holds, whatever is searched: the super admin's alone, who sees both sides.
+        if ($viewer->isSuperAdmin()) {
+            $response->setData([...$response->getData(true), 'counts' => [
+                'all' => User::count(),
+                'platform' => User::whereIn('id', $platformTeam)->count(),
+                'organization' => User::whereNotIn('id', $platformTeam)->count(),
+            ]]);
+        }
+
+        return $response;
+    }
+
+    /**
+     * The accounts in the order their headings ask for (owner, 2026-10-07: "sorting bhi"): `sort` name or joined,
+     * `direction` asc or desc — anything else, or nothing, A to Z by name as the list always was, capitals or not. The
+     * id keeps an order steady between pages.
+     */
+    private function sortedBy(Builder $query, Request $request): Builder
+    {
+        $sort = self::plainValue($request->input('sort'));
+        $asked = self::plainValue($request->input('direction'));
+
+        if ($sort === 'joined') {
+            $direction = $asked === 'asc' ? 'asc' : 'desc';
+
+            return $query->orderBy('created_at', $direction)->orderBy('id', $direction);
+        }
+
+        // By name, whatever the case: Z to A only when asked for by name.
+        $direction = $sort === 'name' && $asked === 'desc' ? 'desc' : 'asc';
+
+        return $query->orderByRaw('lower(first_name) '.$direction)->orderByRaw('lower(last_name) '.$direction)->orderBy('id', $direction);
     }
 
     /** Delete an account: the account, its memberships and what points at it — nothing else (rule 21). */
