@@ -331,4 +331,42 @@ class ScreenPairingTest extends DuskTestCase
             $sortsTo('paired', ['Aisle Board', 'Bar TV', 'Counter TV']);
         });
     }
+
+    /** Owner, 2026-10-07: "screen per online aur offline filter lagao do". */
+    public function test_the_screens_list_shows_the_online_or_the_offline_screens(): void
+    {
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->makeOwner($alpha);
+        Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Counter TV', 'last_seen_at' => now()->subHours(6)]);
+        Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Aisle Board', 'last_seen_at' => now()->subMinute()]);
+        Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Bar TV', 'last_seen_at' => null]);
+
+        $this->browse(function (Browser $browser) use ($owner, $alpha) {
+            $this->freshSession($browser);
+            $browser->loginAs($owner);
+            $this->switchToOrganization($browser, $alpha);
+            $browser->visit('/screens');
+            $this->waitForAlpine($browser);
+            $browser->waitForText('Aisle Board');
+
+            $names = fn (): array => $browser->script("return [...document.querySelectorAll('[dusk^=\"open-screen-\"]')].map((name) => name.textContent.trim()).sort()")[0];
+            $shows = function (string $status, array $expected) use ($browser, $names): void {
+                $browser->select('@screens-filter-status', $status);
+                $browser->waitUsing(5, 100, fn () => $names() === $expected);
+            };
+
+            $shows('online', ['Aisle Board']);
+            $this->assertSame(['Online'], $browser->script("return [...document.querySelectorAll('tbody .badge-success, tbody .badge-warning')].filter((badge) => badge.offsetParent).map((badge) => badge.textContent.trim())")[0]);
+            $shows('offline', ['Bar TV', 'Counter TV']);
+            $shows('', ['Aisle Board', 'Bar TV', 'Counter TV']);
+
+            // A filter that leaves nothing says so, and Clear Filters gives every screen back.
+            Screen::where('name', 'Aisle Board')->update(['last_seen_at' => now()->subHour()]);
+            $browser->select('@screens-filter-status', 'online');
+            $browser->waitFor('@table-no-match')->assertSeeIn('@table-no-match', 'Nothing matches these filters.');
+            $this->jsClick($browser, '@table-clear-filters');
+            $browser->waitUsing(5, 100, fn () => $names() === ['Aisle Board', 'Bar TV', 'Counter TV'])
+                ->assertSelected('@screens-filter-status', '');
+        });
+    }
 }

@@ -67,6 +67,13 @@
                 @can('screen-store')
                     <x-crud.add-button label="Add Screen" @click="openPairModal()" dusk="add-screen" />
                 @endcan
+                {{-- Online and Offline (owner, 2026-10-07): the screens that are up, or the ones to go and look at. --}}
+                <select x-model="filterStatus" @change="applyFilters()" class="form-select sm:w-36"
+                        dusk="screens-filter-status" aria-label="Status">
+                    <option value="">All Screens</option>
+                    <option value="online">Online</option>
+                    <option value="offline">Offline</option>
+                </select>
             </x-slot>
             {{-- Each heading sorts the list (owner, 2026-10-06): newest paired first until another is pressed. --}}
             <x-slot name="head">
@@ -79,7 +86,8 @@
 
             <x-slot name="body">
                 <x-crud.table-empty :columns="5" itemsVar="items" message="No screens yet."
-                    hint="Open {{ route('player') }} on the TV, then press Add Screen and type its code." />
+                    hint="Open {{ route('player') }} on the TV, then press Add Screen and type its code."
+                    filtered="filterStatus !== ''" clearFilters="filterStatus = ''; applyFilters()" />
 
                 <template x-for="item in items" :key="item.id">
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">

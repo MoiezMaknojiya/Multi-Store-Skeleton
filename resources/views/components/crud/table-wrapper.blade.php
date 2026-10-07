@@ -9,7 +9,10 @@
 <div class="card" data-list-card>
     {{-- Header row: the title, then the search and the list's buttons --}}
     @if (filled($title) || $search || isset($actions))
-        <div class="card-header">
+        {{-- Wider than a phone the title and the controls share a line while they fit; when they do not (a tablet, a
+             list with a filter beside its buttons — the Screens page, 2026-10-07), the controls take a line of their
+             own on the right and wrap there, rather than running out of the card. --}}
+        <div class="card-header sm:flex-wrap">
             <div class="min-w-0">
                 @if (filled($title))
                     <h2 class="text-subheading">{{ $title }}</h2>
@@ -19,7 +22,7 @@
                 @endif
             </div>
             {{-- On a phone the line wraps before a button would be squeezed. --}}
-            <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap sm:justify-end">
+            <div class="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto sm:justify-end">
                 {{ $actions ?? '' }}
                 @if ($search)
                     <x-crud.search-input :placeholder="$searchPlaceholder" />

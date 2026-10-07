@@ -154,6 +154,19 @@ class Screen extends Model
             && $this->last_seen_at->gt(now()->subMinutes(self::OFFLINE_AFTER_MINUTES));
     }
 
+    /** The screens is_online calls alive, as a query: the Screens page's Online filter and the dashboard's count. */
+    public function scopeOnline(Builder $query): Builder
+    {
+        return $query->where('last_seen_at', '>', now()->subMinutes(self::OFFLINE_AFTER_MINUTES));
+    }
+
+    /** Every other screen: silent for longer than that, or never heard from at all. */
+    public function scopeOffline(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $silent) => $silent->whereNull('last_seen_at')
+            ->orWhere('last_seen_at', '<=', now()->subMinutes(self::OFFLINE_AFTER_MINUTES)));
+    }
+
     /** True once a device has collected its token. */
     public function isPaired(): bool
     {

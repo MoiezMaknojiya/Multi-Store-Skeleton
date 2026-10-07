@@ -171,7 +171,7 @@ class DashboardSummary
         }
 
         if ($user->can('screen-view')) {
-            $online = Screen::where('last_seen_at', '>', now()->subMinutes(Screen::OFFLINE_AFTER_MINUTES))->count();
+            $online = Screen::online()->count();
             $cards[] = [
                 'key' => 'screens', 'label' => 'Screens', 'value' => Screen::count(),
                 'detail' => "{$online} online now",

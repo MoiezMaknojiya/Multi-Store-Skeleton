@@ -50,6 +50,8 @@ export function registerScreensTable(Alpine) {
         extraState: {
             /* Above the organizations only (null inside one): the organizations a new screen may be paired for. */
             organizations: config.organizations ?? null,
+            /* The Online and Offline filter: '' is every screen. */
+            filterStatus: '',
             /* The model's words for the four ways (Screen::ORIENTATIONS), so the list and the dialogs agree. */
             orientations: config.orientations ?? {},
             browserTimezone: browserTimezone(),
@@ -108,6 +110,15 @@ export function registerScreensTable(Alpine) {
                 /* Sent here to pair a screen (the dashboard's Pair a screen): the code's dialog at once — for somebody
                  * the page offers Add Screen to. */
                 if (takeAddressFlag('pair') && document.querySelector('[dusk="add-screen"]')) this.$nextTick(() => this.openPairModal());
+            },
+
+            extraParams() {
+                return this.filterStatus ? { status: this.filterStatus } : {};
+            },
+
+            applyFilters() {
+                this.currentPage = 1;
+                this.fetchItems();
             },
 
             async loadMediaOptions(screenId) {

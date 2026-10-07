@@ -54,8 +54,14 @@ class ScreenController extends Controller
 
         // The count rides along so the listing can say which screens actually
         // have something to play, without a query per row.
+        // The Online and Offline filter (owner, 2026-10-07): anything else asked for is every screen.
         $query = $this->sortedBy(Screen::visibleTo(auth()->user())->withCount('playlistItems'), $request)
-            ->when($aboveTheOrganizations, fn (Builder $q) => $q->with('organization:id,name'));
+            ->when($aboveTheOrganizations, fn (Builder $q) => $q->with('organization:id,name'))
+            ->when(self::plainValue($request->input('status')), fn (Builder $q, string $status) => match ($status) {
+                'online' => $q->online(),
+                'offline' => $q->offline(),
+                default => $q,
+            });
 
         // Searchable by everything the row actually shows: the name, the device id
         // (the listing prints its last block, and a LIKE finds that inside the whole
