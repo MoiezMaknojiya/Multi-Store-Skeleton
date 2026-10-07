@@ -37,7 +37,7 @@ const AUTOSAVE_MS = 30_000;
 const PRESSABLE = 'button, a[href], summary, [role="button"], [role="menuitem"], input[type="checkbox"], input[type="radio"]';
 
 /** What each kind of font is called under its name in the picker. */
-const FONT_KINDS = { system: 'Built in', sans: 'Sans serif', display: 'Display', script: 'Script', serif: 'Serif', mono: 'Monospace', urdu: 'Urdu & Arabic' };
+const FONT_KINDS = { system: 'Built in', sans: 'Sans serif', display: 'Display', script: 'Script', serif: 'Serif', mono: 'Monospace' };
 
 /** The face a family not installed yet is previewed in: a name of its own, so it never stands in for the family. */
 function previewFamily(family) {

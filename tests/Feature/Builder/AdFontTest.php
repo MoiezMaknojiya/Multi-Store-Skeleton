@@ -69,8 +69,28 @@ test('the picker offers the system faces and our list, saying what is ready', fu
     // The system faces come first and need no download at all.
     expect($fonts->first()['family'])->toBe('Arial')
         ->and($fonts->first()['installed'])->toBeTrue()
-        ->and($fonts->pluck('family'))->toContain('Poppins', 'Playfair Display', 'Anton', 'Noto Nastaliq Urdu')
+        ->and($fonts->pluck('family'))->toContain('Poppins', 'Playfair Display', 'Anton', 'Great Vibes')
         ->and($fonts->firstWhere('family', 'Poppins')['installed'])->toBeFalse();
+});
+
+test('the Urdu and Arabic families are gone from the list, and none of them can be installed', function () {
+    // Owner, 2026-10-07: "ad builder k ander font se urdu aur arabic wala font hata do puri terha se".
+    $gone = ['Noto Nastaliq Urdu', 'Noto Kufi Arabic', 'Cairo', 'Almarai', 'Gulzar', 'Amiri', 'Tajawal', 'Noto Naskh Arabic'];
+    Http::fake();
+
+    $fonts = collect($this->getJson('/builder/fonts')->assertOk()->json('fonts'));
+
+    expect($fonts->pluck('family')->intersect($gone))->toBeEmpty()
+        ->and($fonts->pluck('kind')->unique()->sort()->values()->all())->toBe(['display', 'mono', 'sans', 'script', 'serif', 'system'])
+        ->and($fonts)->toHaveCount(138);
+
+    foreach ($gone as $family) {
+        $this->postJson('/builder/fonts', ['family' => $family])->assertUnprocessable()
+            ->assertJsonValidationErrors(['family' => 'That font is not on the list this app can install.']);
+    }
+
+    Http::assertNothingSent();
+    expect(BuilderFont::count())->toBe(0);
 });
 
 test('picking a font downloads it once and serves it from here', function () {
@@ -288,59 +308,59 @@ test('a weight the family does not have is drawn with the one a browser would pi
     expect($compiled(450))->toContain('base64,'.base64_encode('latin-400'))->not->toContain(base64_encode('latin-700'));
 });
 
-test('only the subsets the words need are carried: an Urdu headline brings the Arabic file, a Latin one does not', function () {
-    Storage::disk('public')->put('fonts/noto-nastaliq-urdu/400-normal-0.woff2', 'arabic-bytes');
-    Storage::disk('public')->put('fonts/noto-nastaliq-urdu/400-normal-1.woff2', 'latin-bytes');
-    Storage::disk('public')->put('fonts/noto-nastaliq-urdu/font.css', implode("\n", [
-        "@font-face{font-family:'Noto Nastaliq Urdu';font-style:normal;font-weight:400;font-display:swap;src:url('http://localhost/storage/fonts/noto-nastaliq-urdu/400-normal-0.woff2') format('woff2');unicode-range:U+0600-06FF, U+FB50-FDFF;}",
-        "@font-face{font-family:'Noto Nastaliq Urdu';font-style:normal;font-weight:400;font-display:swap;src:url('http://localhost/storage/fonts/noto-nastaliq-urdu/400-normal-1.woff2') format('woff2');unicode-range:U+0000-00FF, U+2000-206F;}",
+test('only the subsets the words need are carried: a Cyrillic headline brings the Cyrillic file, a Latin one does not', function () {
+    Storage::disk('public')->put('fonts/roboto/400-normal-0.woff2', 'cyrillic-bytes');
+    Storage::disk('public')->put('fonts/roboto/400-normal-1.woff2', 'latin-bytes');
+    Storage::disk('public')->put('fonts/roboto/font.css', implode("\n", [
+        "@font-face{font-family:'Roboto';font-style:normal;font-weight:400;font-display:swap;src:url('http://localhost/storage/fonts/roboto/400-normal-0.woff2') format('woff2');unicode-range:U+0400-045F, U+0490-0491;}",
+        "@font-face{font-family:'Roboto';font-style:normal;font-weight:400;font-display:swap;src:url('http://localhost/storage/fonts/roboto/400-normal-1.woff2') format('woff2');unicode-range:U+0000-00FF, U+2000-206F;}",
     ]));
     BuilderFont::create([
-        'family' => 'Noto Nastaliq Urdu', 'slug' => 'noto-nastaliq-urdu', 'kind' => 'script', 'weights' => [400],
-        'files' => ['fonts/noto-nastaliq-urdu/400-normal-0.woff2', 'fonts/noto-nastaliq-urdu/400-normal-1.woff2'],
-        'css_path' => 'fonts/noto-nastaliq-urdu/font.css', 'size' => 1,
+        'family' => 'Roboto', 'slug' => 'roboto', 'kind' => 'sans', 'weights' => [400],
+        'files' => ['fonts/roboto/400-normal-0.woff2', 'fonts/roboto/400-normal-1.woff2'],
+        'css_path' => 'fonts/roboto/font.css', 'size' => 1,
     ]);
 
     $compiled = function (string $words): string {
         $document = BuilderAd::blankDocument();
         $document['elements'] = [[
             'id' => 'el_1', 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 900, 'h' => 200, 'z' => 0,
-            'text' => $words, 'style' => ['fontFamily' => 'Noto Nastaliq Urdu'], 'animations' => [],
+            'text' => $words, 'style' => ['fontFamily' => 'Roboto'], 'animations' => [],
         ]];
 
         return app(AdCompiler::class)->compile(BuilderAd::factory()->make(['organization_id' => $this->organization->id, 'document' => $document]));
     };
 
-    expect($compiled('زبردست'))->toContain(base64_encode('arabic-bytes'))->not->toContain(base64_encode('latin-bytes'))
-        ->toContain('unicode-range:U+0600-06FF, U+FB50-FDFF;');
-    expect($compiled('Deal'))->toContain(base64_encode('latin-bytes'))->not->toContain(base64_encode('arabic-bytes'));
-    expect($compiled('زبردست Deal'))->toContain(base64_encode('arabic-bytes'))->toContain(base64_encode('latin-bytes'));
+    expect($compiled('Скидка'))->toContain(base64_encode('cyrillic-bytes'))->not->toContain(base64_encode('latin-bytes'))
+        ->toContain('unicode-range:U+0400-045F, U+0490-0491;');
+    expect($compiled('Deal'))->toContain(base64_encode('latin-bytes'))->not->toContain(base64_encode('cyrillic-bytes'));
+    expect($compiled('Скидка Deal'))->toContain(base64_encode('cyrillic-bytes'))->toContain(base64_encode('latin-bytes'));
 });
 
 test('a variable font — one file for every weight — is carried once, for the whole range', function () {
-    Storage::disk('public')->put('fonts/noto-nastaliq-urdu/400-normal-0.woff2', 'one-variable-file');
-    Storage::disk('public')->put('fonts/noto-nastaliq-urdu/700-normal-1.woff2', 'one-variable-file');
-    Storage::disk('public')->put('fonts/noto-nastaliq-urdu/font.css', implode("\n", [
-        "@font-face{font-family:'Noto Nastaliq Urdu';font-style:normal;font-weight:400;font-display:swap;src:url('http://localhost/storage/fonts/noto-nastaliq-urdu/400-normal-0.woff2') format('woff2');unicode-range:U+0600-06FF;}",
-        "@font-face{font-family:'Noto Nastaliq Urdu';font-style:normal;font-weight:700;font-display:swap;src:url('http://localhost/storage/fonts/noto-nastaliq-urdu/700-normal-1.woff2') format('woff2');unicode-range:U+0600-06FF;}",
+    Storage::disk('public')->put('fonts/montserrat/400-normal-0.woff2', 'one-variable-file');
+    Storage::disk('public')->put('fonts/montserrat/700-normal-1.woff2', 'one-variable-file');
+    Storage::disk('public')->put('fonts/montserrat/font.css', implode("\n", [
+        "@font-face{font-family:'Montserrat';font-style:normal;font-weight:400;font-display:swap;src:url('http://localhost/storage/fonts/montserrat/400-normal-0.woff2') format('woff2');unicode-range:U+0000-00FF;}",
+        "@font-face{font-family:'Montserrat';font-style:normal;font-weight:700;font-display:swap;src:url('http://localhost/storage/fonts/montserrat/700-normal-1.woff2') format('woff2');unicode-range:U+0000-00FF;}",
     ]));
     BuilderFont::create([
-        'family' => 'Noto Nastaliq Urdu', 'slug' => 'noto-nastaliq-urdu', 'kind' => 'urdu', 'weights' => [400, 700],
-        'files' => ['fonts/noto-nastaliq-urdu/400-normal-0.woff2', 'fonts/noto-nastaliq-urdu/700-normal-1.woff2'],
-        'css_path' => 'fonts/noto-nastaliq-urdu/font.css', 'size' => 1,
+        'family' => 'Montserrat', 'slug' => 'montserrat', 'kind' => 'sans', 'weights' => [400, 700],
+        'files' => ['fonts/montserrat/400-normal-0.woff2', 'fonts/montserrat/700-normal-1.woff2'],
+        'css_path' => 'fonts/montserrat/font.css', 'size' => 1,
     ]);
 
     $text = fn (string $id, string $words, int $weight) => [
         'id' => $id, 'type' => 'text', 'x' => 0, 'y' => 0, 'w' => 900, 'h' => 200, 'z' => 0,
-        'text' => $words, 'style' => ['fontFamily' => 'Noto Nastaliq Urdu', 'fontWeight' => $weight], 'animations' => [],
+        'text' => $words, 'style' => ['fontFamily' => 'Montserrat', 'fontWeight' => $weight], 'animations' => [],
     ];
     $document = BuilderAd::blankDocument();
-    $document['elements'] = [$text('el_1', 'زبردست', 400), $text('el_2', 'ڈیل', 700)];
+    $document['elements'] = [$text('el_1', 'Mega', 400), $text('el_2', 'Deal', 700)];
 
     $html = app(AdCompiler::class)->compile(BuilderAd::factory()->make(['organization_id' => $this->organization->id, 'document' => $document]));
 
     expect(substr_count($html, '@font-face'))->toBe(1)
-        ->and($html)->toContain("font-family:'Noto Nastaliq Urdu';font-style:normal;font-weight:400 700;")
+        ->and($html)->toContain("font-family:'Montserrat';font-style:normal;font-weight:400 700;")
         ->and(substr_count($html, base64_encode('one-variable-file')))->toBe(1);
 });
 

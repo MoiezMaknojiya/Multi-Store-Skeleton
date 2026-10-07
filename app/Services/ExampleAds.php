@@ -10,9 +10,9 @@ use Illuminate\Support\Str;
  *
  * Each is an ordinary design document — exactly what the editor would have saved — and between them
  * they use most of stages 3 and 4: stacked background layers (gradients, a tiled picture, blend modes),
- * a framed and filtered picture, shapes with gradient fills, Google fonts, Urdu set right to left, every
- * entrance but blur with their eases, six of the eight loops (the owner's own example among them — a cup
- * that fades in and then floats 10 px up and down for ever), and a CTA that blinks. Not among them: a
+ * a framed and filtered picture, shapes with gradient fills, Google fonts, every entrance but blur with their
+ * eases, six of the eight loops (the owner's own example among them — a cup that fades in and then floats 10 px
+ * up and down for ever), and a CTA that blinks. Not among them: a
  * video, an exit, a custom curve, and the shake and Ken Burns loops.
  *
  * The pictures are ExampleArtwork's; `$assets` maps each piece to its row on the organization's shelf.
@@ -22,7 +22,7 @@ class ExampleAds
     /** The Google families the examples set text in, installed before the ads are made. */
     public function families(): array
     {
-        return ['Anton', 'Poppins', 'Playfair Display', 'Noto Nastaliq Urdu'];
+        return ['Anton', 'Poppins', 'Playfair Display'];
     }
 
     /**
@@ -35,7 +35,7 @@ class ExampleAds
             'Example · Winter Sale' => $this->winterSale($assets, $organizationName),
             'Example · Fresh Coffee' => $this->freshCoffee($assets),
             'Example · Grand Opening' => $this->grandOpening($assets),
-            'Example · Burger Deal (Urdu)' => $this->burgerDeal($assets, $organizationName),
+            'Example · Burger Deal' => $this->burgerDeal($assets, $organizationName),
         ];
     }
 
@@ -216,7 +216,7 @@ class ExampleAds
         ]);
     }
 
-    /** Urdu, right to left, in Nastaliq: a burger that drops in and bounces, then floats; a spinning-in price badge. */
+    /** A burger that drops in and bounces, then floats; a headline that slides in; a spinning-in price badge. */
     private function burgerDeal(array $assets, string $organizationName): array
     {
         $badgeMotion = [
@@ -236,14 +236,14 @@ class ExampleAds
                 'in' => $this->in('bounce', 1.1, 0.2, ['direction' => 'down', 'distance' => 280]),
                 'loop' => $this->loop('float', ['axis' => 'y', 'amount' => 12, 'duration' => 2.2]),
             ]),
-            $this->text('bd_title', 'زبردست ڈیل', [980, 150, 820, 230], $this->type('Noto Nastaliq Urdu', 700, 120, '#ffffff', [
-                'align' => 'right', 'lineHeight' => 1.8,
+            $this->text('bd_title', 'MEGA DEAL', [980, 150, 820, 230], $this->type('Anton', 400, 150, '#ffffff', [
+                'verticalAlign' => 'center', 'lineHeight' => 1.1, 'letterSpacing' => 2,
                 'textShadow' => ['x' => 0, 'y' => 8, 'blur' => 24, 'color' => 'rgba(0,0,0,0.35)'],
             ]), [
                 'in' => $this->in('slide', 0.9, 0.4, ['direction' => 'left', 'distance' => 120, 'ease' => 'power3.out']),
             ]),
-            $this->text('bd_items', 'برگر + فرائز + ڈرنک', [980, 390, 820, 150], $this->type('Noto Nastaliq Urdu', 400, 64, '#ffe8d6', [
-                'align' => 'right', 'lineHeight' => 2,
+            $this->text('bd_items', 'Burger + Fries + Drink', [980, 390, 820, 150], $this->type('Poppins', 600, 56, '#ffe8d6', [
+                'lineHeight' => 1.3,
             ]), [
                 'in' => $this->in('fade', 0.8, 0.8),
             ]),
@@ -253,8 +253,8 @@ class ExampleAds
                 'border' => ['width' => 12, 'style' => 'solid', 'color' => '#ffffff'],
                 'shadow' => ['x' => 0, 'y' => 24, 'blur' => 50, 'spread' => 0, 'color' => 'rgba(0,0,0,0.35)'],
             ], $badgeMotion),
-            $this->text('bd_price', "صرف 999\nروپے", [1400, 560, 380, 380], $this->type('Noto Nastaliq Urdu', 700, 64, '#9d0208', [
-                'align' => 'center', 'verticalAlign' => 'center', 'lineHeight' => 1.7,
+            $this->text('bd_price', "ONLY\nRs 999", [1400, 560, 380, 380], $this->type('Anton', 400, 84, '#9d0208', [
+                'align' => 'center', 'verticalAlign' => 'center', 'lineHeight' => 1.05,
             ]), $badgeMotion),
             $this->text('bd_strip', "Burger Deal  •  {$organizationName}  •  Today only", [0, 985, 1920, 95], $this->type('Poppins', 600, 40, '#ffffff', [
                 'align' => 'center', 'verticalAlign' => 'center', 'background' => 'rgba(0,0,0,0.28)',

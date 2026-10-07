@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Invitation;
 use App\Models\Organization;
 use App\Models\Role;
 use App\Services\DashboardSummary;
@@ -34,8 +35,12 @@ class DashboardController extends Controller
 
         $organizations = $user->organizations()->get();
 
+        // Above every view of an organization's person: the organizations' invitations waiting for their own address
+        // (owner, 2026-10-07), answered right here — the platform's never come here, nor to a platform account.
+        $invitations = Invitation::sentTo($user)->stillOpen()->with(['organization:id,name', 'role:id,name', 'inviter'])->oldest()->get();
+
         if ($organizations->isEmpty()) {
-            return view('dashboard.index', ['view' => 'empty']);
+            return view('dashboard.index', ['view' => 'empty', 'invitations' => $invitations]);
         }
 
         // Smart default: auto-select a single organization; several organizations need a pick. A flash that came
@@ -54,12 +59,14 @@ class DashboardController extends Controller
                 'view' => 'paused',
                 'organization' => $organization,
                 'hasOtherOrganizations' => $organizations->count() > 1,
+                'invitations' => $invitations,
             ]);
         }
 
         return view('dashboard.index', [
             'view' => 'organization',
             'summary' => $summary->forOrganization($organization, $user),
+            'invitations' => $invitations,
         ]);
     }
 

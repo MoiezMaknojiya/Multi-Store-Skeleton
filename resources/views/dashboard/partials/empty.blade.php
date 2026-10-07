@@ -1,6 +1,5 @@
-{{-- A signed-in person who is not a member of any organization yet. Deliberately no list of pending
-     invitations with Accept buttons: public signup does not verify the email, so only the emailed
-     link — which proves the inbox — may accept (docs/ORGANIZATION-SPEC.md §8). --}}
+{{-- A signed-in person who is not a member of any organization yet. An invitation to their own confirmed address
+     shows above this, in "Invitations for you" (dashboard.partials.invitations), and in their inbox. --}}
 <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
 <div class="card p-10 text-center" dusk="dashboard-empty">
     <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-900/30 mb-5">
@@ -10,7 +9,7 @@
     </div>
     <h2 class="text-lg font-semibold text-gray-900 dark:text-white">You're not a member of any organization yet</h2>
     <p class="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-        Invitations arrive by email. Ask an organization's owner to invite {{ auth()->user()->email }}, then open the link in that email.
+        Ask an organization's owner to invite {{ auth()->user()->email }}. The invitation shows up here and in that inbox.
     </p>
     {{-- The one thing to check from here: the address an owner has to invite. --}}
     <a href="{{ route('profile.edit') }}" class="btn-secondary mt-6" dusk="dashboard-empty-settings">Check Your Email in Settings</a>

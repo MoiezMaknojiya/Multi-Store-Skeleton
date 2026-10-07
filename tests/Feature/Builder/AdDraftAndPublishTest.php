@@ -289,7 +289,7 @@ test('a save that changes nothing leaves the ad up to date, and the history alon
 });
 
 test('an ad changed after its publish before versions were kept stays on the screens, marked changed', function () {
-    // The owner's own "Example · Burger Deal (Urdu)" was edited after publishing on 2026-09-20: what it published
+    // The owner's own example burger ad was edited after publishing on 2026-09-20: what it published
     // is still what its screens play, and its next Publish keeps a version.
     $ad = BuilderAd::factory()->withText()->published()->create([
         'organization_id' => $this->organization->id, 'published_document' => null, 'published_name' => null,

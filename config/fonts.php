@@ -27,8 +27,11 @@ return [
     | 2026-10-06 (owner: "achay achay font jo website, banner, poster, flyer, logo and pamphlet mein use
     | honte ho aur google walay ho toh woo add karo"): 87 families more — the ones design guides name most
     | for posters, flyers, banners, logos and menu boards, with a new Script group — each name and its
-    | weights as Google's own CSS2 API answered them that day. None was taken out: a design that uses a
-    | family finds it here, so the editor still draws it.
+    | weights as Google's own CSS2 API answered them that day.
+    |
+    | 2026-10-07 (owner: "ad builder k ander font se urdu aur arabic wala font hata do puri terha se"): the
+    | eight Urdu and Arabic families are gone, and with them their group — 130 Google families remain. None
+    | was installed on the live site, and no design there named one.
     |
     */
 
@@ -172,16 +175,6 @@ return [
         ['name' => 'Roboto Mono', 'kind' => 'mono', 'weights' => [100, 200, 300, 400, 500, 600, 700]],
         ['name' => 'JetBrains Mono', 'kind' => 'mono', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800]],
         ['name' => 'Space Mono', 'kind' => 'mono', 'weights' => [400, 700]],
-
-        // ── Urdu / Arabic script, for an organization that writes in it ────────────
-        ['name' => 'Noto Nastaliq Urdu', 'kind' => 'urdu', 'weights' => [400, 500, 600, 700]],
-        ['name' => 'Noto Kufi Arabic', 'kind' => 'urdu', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800, 900]],
-        ['name' => 'Cairo', 'kind' => 'urdu', 'weights' => [200, 300, 400, 500, 600, 700, 800, 900]],
-        ['name' => 'Almarai', 'kind' => 'urdu', 'weights' => [300, 400, 700, 800]],
-        ['name' => 'Gulzar', 'kind' => 'urdu', 'weights' => [400]],
-        ['name' => 'Amiri', 'kind' => 'urdu', 'weights' => [400, 700]],
-        ['name' => 'Tajawal', 'kind' => 'urdu', 'weights' => [200, 300, 400, 500, 700, 800, 900]],
-        ['name' => 'Noto Naskh Arabic', 'kind' => 'urdu', 'weights' => [400, 500, 600, 700]],
     ],
 
     /*

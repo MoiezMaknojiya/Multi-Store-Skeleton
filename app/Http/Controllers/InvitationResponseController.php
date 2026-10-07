@@ -15,7 +15,8 @@ use Illuminate\Validation\Rules\Password;
 use Illuminate\View\View;
 
 /**
- * The other end of an invitation: the link in the email (docs/ORGANIZATION-SPEC.md rule 16).
+ * The other end of an invitation: the link in the email (docs/ORGANIZATION-SPEC.md rule 16), and the dashboard's
+ * "Invitations for you" card for an account whose inbox is confirmed already (acceptHere, declineHere).
  *
  * Possessing the link is what proves the inbox, so an account created here is marked verified.
  * An account that already exists always signs in with its own password first — the link alone
@@ -71,13 +72,7 @@ class InvitationResponseController extends Controller
         }
 
         if (! $invitation->isForPlatform() && $this->team->isMember($user, $invitation->organization)) {
-            $invitation->delete();
-            session(['current_organization_id' => $invitation->organization_id]);
-
-            ActivityLog::record('invitation.accepted', $invitation->organization,
-                "{$user->name} ({$user->email}) used an invitation to {$invitation->organization->name}, where they were already a member", $user);
-
-            return redirect()->route('dashboard')->with('status', "You are already a member of {$invitation->organization->name}.");
+            return $this->alreadyAMember($invitation, $user);
         }
 
         if ($reason = $this->whyCannotJoin($invitation, $user)) {
@@ -162,6 +157,71 @@ class InvitationResponseController extends Controller
         }
 
         return redirect()->route(auth()->check() ? 'dashboard' : 'login')->with('status', 'Invitation declined.');
+    }
+
+    /**
+     * An organization's invitation accepted on the dashboard (owner, 2026-10-07 — "haan bana do") by the account it was
+     * sent to. Every page of the panel stands behind `verified`, so that account has proved this inbox as the emailed
+     * link would. The platform team's invitations, and anybody else's, are not found here (404).
+     */
+    public function acceptHere(int $invitation): RedirectResponse
+    {
+        $user = auth()->user();
+        $invitation = $this->sentHere($invitation, $user);
+
+        // A page left open past the week: said on the dashboard, nothing joined.
+        if ($invitation->isExpired()) {
+            return redirect()->route('dashboard')->with('invitation-problem',
+                "The invitation to {$invitation->organization->name} has expired. Ask them to send it again.");
+        }
+
+        if ($this->team->isMember($user, $invitation->organization)) {
+            return $this->alreadyAMember($invitation, $user);
+        }
+
+        if ($reason = $this->whyCannotJoin($invitation, $user)) {
+            return redirect()->route('dashboard')->with('invitation-problem', $reason);
+        }
+
+        // False only when a double submit used it a moment ago: the dashboard shows where things stand.
+        return $this->join($invitation, $user)
+            ? redirect()->route('dashboard')->with('status', $this->welcome($invitation))
+            : redirect()->route('dashboard');
+    }
+
+    /** Turned down on the dashboard: the invitation goes and the log says so — nobody is emailed (owner, 2026-10-07). */
+    public function declineHere(int $invitation): RedirectResponse
+    {
+        $user = auth()->user();
+        $invitation = $this->sentHere($invitation, $user);
+        $invitation->delete();
+
+        ActivityLog::record('invitation.declined', $invitation->organization,
+            "{$user->email} declined the invitation to {$invitation->organization->name} on their dashboard", $user);
+
+        return redirect()->route('dashboard')->with('status', 'Invitation declined.');
+    }
+
+    /**
+     * One of the organizations' invitations to this person's own address, with its organization and role still there —
+     * or 404: anybody else's invitation, and the platform team's, are never found here.
+     */
+    private function sentHere(int $id, User $user): Invitation
+    {
+        return Invitation::sentTo($user)->whereHas('organization')->whereHas('role')
+            ->with(['organization', 'role', 'inviter'])->findOrFail($id);
+    }
+
+    /** An invitation to an organization the person is in already: used up, and that organization opened. */
+    private function alreadyAMember(Invitation $invitation, User $user): RedirectResponse
+    {
+        $invitation->delete();
+        session(['current_organization_id' => $invitation->organization_id]);
+
+        ActivityLog::record('invitation.accepted', $invitation->organization,
+            "{$user->name} ({$user->email}) used an invitation to {$invitation->organization->name}, where they were already a member", $user);
+
+        return redirect()->route('dashboard')->with('status', "You are already a member of {$invitation->organization->name}.");
     }
 
     /** The invitation behind a link while it can still be used; null when it is gone or expired. */

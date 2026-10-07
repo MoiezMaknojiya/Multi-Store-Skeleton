@@ -165,3 +165,64 @@ test('brute forcing the link is throttled', function () {
     expect($statuses)->toContain(429)
         ->and(array_slice($statuses, 0, 20))->not->toContain(429);
 });
+
+/*
+| The dashboard's Accept and Decline (owner, 2026-10-07): an invitation is answered there by id, so every id that is not
+| this person's own organization invitation must be as dead as a wrong token.
+*/
+
+test('nobody answers somebody else\'s invitation on the dashboard, nor the platform team\'s, by its id', function () {
+    $person = createOrganizationMember($this->other, Role::OWNER, ['email' => 'sana@example.com']);
+    $somebodyElses = Invitation::factory()->create(['organization_id' => $this->organization->id, 'email' => 'victim@example.com']);
+    $platform = Invitation::factory()->forPlatform()->create(['email' => 'sana@example.com']);
+    $lookAlike = Invitation::factory()->create(['organization_id' => $this->organization->id, 'email' => 'SANA@example.com.evil']);
+
+    $this->actingAs($person)->withSession(['current_organization_id' => $this->other->id]);
+
+    foreach ([$somebodyElses, $platform, $lookAlike] as $invitation) {
+        $this->post("/dashboard/invitations/{$invitation->id}/accept")->assertNotFound();
+        $this->post("/dashboard/invitations/{$invitation->id}/decline")->assertNotFound();
+        expect(Invitation::find($invitation->id))->not->toBeNull();
+    }
+
+    foreach (['0', '999999', '-1', '1e3', 'abc'] as $id) {
+        expect($this->post("/dashboard/invitations/{$id}/accept")->status())->toBe(404);
+    }
+
+    expect(DB::table('organization_user')->where('user_id', $person->id)->count())->toBe(1);
+});
+
+test('an account that has not confirmed its email cannot answer an invitation on the dashboard', function () {
+    $unconfirmed = User::factory()->unverified()->create(['email' => 'squatter@example.com']);
+    $invitation = Invitation::factory()->create(['organization_id' => $this->organization->id, 'email' => 'squatter@example.com']);
+
+    $this->actingAs($unconfirmed)->post("/dashboard/invitations/{$invitation->id}/accept")->assertRedirect(route('verification.notice'));
+    $this->actingAs($unconfirmed)->post("/dashboard/invitations/{$invitation->id}/decline")->assertRedirect(route('verification.notice'));
+    $this->actingAs($unconfirmed)->get('/dashboard')->assertRedirect(route('verification.notice'));
+
+    expect(Invitation::find($invitation->id))->not->toBeNull()
+        ->and(DB::table('organization_user')->where('user_id', $unconfirmed->id)->exists())->toBeFalse();
+});
+
+test('a platform account cannot join an organization from the dashboard either', function () {
+    $admin = createSuperAdmin();
+    $invitation = Invitation::factory()->create(['organization_id' => $this->organization->id, 'email' => $admin->email]);
+
+    $this->actingAs($admin)->post("/dashboard/invitations/{$invitation->id}/accept")
+        ->assertRedirect(route('dashboard'))
+        ->assertSessionHas('invitation-problem', 'Platform accounts cannot join an organization.');
+
+    expect(DB::table('organization_user')->where('user_id', $admin->id)->where('organization_id', $this->organization->id)->exists())->toBeFalse()
+        ->and(Invitation::find($invitation->id))->not->toBeNull();
+});
+
+test('accepting on the dashboard twice makes one membership', function () {
+    $person = createOrganizationMember($this->other, Role::OWNER, ['email' => 'twice@example.com']);
+    $invitation = Invitation::factory()->create(['organization_id' => $this->organization->id, 'email' => 'twice@example.com']);
+
+    $this->actingAs($person)->withSession(['current_organization_id' => $this->other->id]);
+    $this->post("/dashboard/invitations/{$invitation->id}/accept")->assertSessionHas('status', 'Welcome to Alpha Mart!');
+    $this->post("/dashboard/invitations/{$invitation->id}/accept")->assertNotFound();
+
+    expect(DB::table('organization_user')->where('user_id', $person->id)->where('organization_id', $this->organization->id)->count())->toBe(1);
+});

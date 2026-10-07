@@ -491,10 +491,18 @@ Library list — "Platform library" (the default) or an organization — which i
 
 **Dashboard**
 - A signed-in person with no organization sees "You're not a member of any organization yet" and is told to ask an
-  organization's owner to invite their email, then open the link in that email.
-- Deliberately **no** list of pending invitations with Accept buttons. Public signup does not
-  verify the email, so anyone could register somebody else's address and accept that person's
-  invitations from the list. Only the emailed link — which proves the inbox — accepts.
+  organization's owner to invite their email: the invitation shows on the dashboard and in that inbox.
+- **Invitations for you** (owner, 2026-10-07 — "haan bana do, decline par sirf log, dashboard card kaafi ha"): above
+  every dashboard of an organization's person, a card lists the organizations' invitations sent to their own address
+  and still open (`Invitation::sentTo`, `stillOpen`), each with Accept and Decline (`dashboard.invitations.accept`,
+  `dashboard.invitations.decline`, `InvitationResponseController::acceptHere`/`declineHere`). Until 2026-10-07 only the
+  emailed link accepted, because signup did not confirm an email and anybody could have registered somebody else's
+  address; every account now confirms its inbox before the panel opens (the routes stand behind `verified`), and the
+  accounts marked confirmed without proof in 2026-09-29's migration were the owner's own. Accept is the link's own
+  join — the same tier rule, the invitation row's lock, the welcome; Decline asks first, deletes the invitation and
+  logs `invitation.declined`, and nobody is emailed. Anybody else's invitation, the platform team's (answered by its
+  emailed link alone) and one whose organization or role is gone answer 404; one that expired on a page left open is
+  said on the dashboard. Both stay open in a paused organization: they join, or turn down, another one.
 
 **Email:** `InvitationNotification` (markdown mail): "{Inviter} invited you to join {Organization} as {Role}" ·
 Accept button · expiry line.

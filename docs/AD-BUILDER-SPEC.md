@@ -100,7 +100,7 @@ builder_assets
   created_by → users (nullOnDelete), timestamps, index (organization_id, kind)
 
 builder_fonts                     -- stage 2
-  id, family (unique), slug (unique), kind ('sans'|'serif'|'display'|'mono'|'urdu'),
+  id, family (unique), slug (unique), kind ('sans'|'serif'|'display'|'script'|'mono'; 'urdu' until 2026-10-07),
   weights json, files json, css_path, size,
   installed_by → users (nullOnDelete), timestamps
 ```
@@ -319,29 +319,32 @@ so the three can never disagree. **Every key is named in the rules**, because wh
 
 ## 7a. Fonts (stage 2, built)
 
-- **`config/fonts.php` is the list.** 138 Google families grouped by kind (sans · display · script · serif ·
-  mono · urdu), each with the weights Google had when it was added (what the picker shows before a family is
+- **`config/fonts.php` is the list.** 130 Google families grouped by kind (sans · display · script · serif ·
+  mono), each with the weights Google had when it was added (what the picker shows before a family is
   installed), plus eight system faces that need no download. Only a family on that list can be installed, so a
   font name typed by hand can never make the server fetch an arbitrary URL. 87 of them came on 2026-10-06
   (owner: "achay achay font jo website, banner, poster, flyer, logo and pamphlet mein use honte ho") — the
   families design guides name most for posters, flyers, banners, logos and menu boards, with a Script group
   for the first time (Pacifico, Lobster and Permanent Marker moved into it), each name and its weights checked
-  against Google's own CSS2 answers that day. A family is never taken off the list: the picker is the list,
-  and the editor draws only the families the list names.
+  against Google's own CSS2 answers that day. The eight Urdu and Arabic families, and their group, went on
+  2026-10-07 (owner: "ad builder k ander font se urdu aur arabic wala font hata do puri terha se"): none was
+  installed on the live site and no design there named one, and the example burger ad speaks English since.
+  A family taken off the list can no longer be installed, the picker no longer offers it and the editor no
+  longer loads it; a font installed before keeps the pages it was published in.
 - **The picker shows every name in its own letters, large enough to see** (owner, 2026-10-06: "font per uski
   style dikhe"): 20 px, in the family itself once installed; a family not installed yet is drawn in a preview
   of its own name — Google's stylesheet for those letters alone (`&text=`, a few KB), loaded as a face called
   "{family} preview" (`previewFont`), so it can never stand in for the family on the stage — and only for the
   rows the picker scrolls into sight (`watchFontRow`, an IntersectionObserver). A preview that cannot be had
   leaves the row in the panel's font. Above the list, chips show one kind at a time (All · Sans Serif ·
-  Display · Script · Serif · Urdu & Arabic, `aria-pressed`), and each row says its kind in words; the search
+  Display · Script · Serif, `aria-pressed`), and each row says its kind in words; the search
   and the chips stay at the top of the picker while the families scroll under them.
 - **Installing is one request, once, for the whole installation — with every weight the family has**
   (owner, 2026-10-05: Montserrat had 800 on Google and not here). `GoogleFontInstaller` asks Google for all
   nine weights (`wght@100;…;900`, with a browser user-agent, or Google answers in TTF); Google answers with
   exactly the ones the family has (Lato's five, Oswald's 200 to 700, a variable family's nine) and those are
   what `builder_fonts.weights` records. It downloads **every** `@font-face` named — one per weight per
-  subset, because dropping the subsets is how an Urdu advert loses exactly the characters it needed — each
+  subset, because dropping the subsets is how an advert with an accented word loses exactly the characters it needed — each
   file once (a variable family names one file a subset for all its weights), writes them under
   `fonts/{slug}/`, and saves a stylesheet of our own beside them pointing at the local copies. The guard is
   60 files, not 60 blocks: Noto Sans is 72 blocks and 8 files. `builder_fonts` records what is on disk, so
@@ -362,9 +365,8 @@ so the three can never disagree. **Every key is named in the rules**, because wh
   on every screen. A `data:` URL is never a CORS request, and needs nothing from any web server. Only what
   the design can show travels: per family, the installed weight a browser would pick for each weight asked
   for (CSS font matching), and only the subsets whose `unicode-range` covers a character the design writes
-  (both cases, for `text-transform`). A variable font — one file for every weight, like Noto Nastaliq
-  Urdu's 233 KB — is carried once for the range (`font-weight: 400 700`), which halved the Urdu example's
-  page. Only a file the family's own row names is ever read. A family nobody installed is simply a name
+  (both cases, for `text-transform`). A variable font — one file for every weight — is carried once for the
+  range (`font-weight: 400 700`), which halved the page of the example that used one. Only a file the family's own row names is ever read. A family nobody installed is simply a name
   the device resolves — the page never reaches out to Google.
 - A font is not organization content: it belongs to the installation, like a colour. What is organization-scoped is the
   design that names it.
@@ -516,9 +518,9 @@ rewrite what is already there and are not asked.
 | --- | --- |
 | **1a — the canvas** ✅ *(built 2026-09-17)* | `builder_ads` + `builder_assets`, the four `ad-*` permissions, the Builder section with its three tabs, the editor (top bar, Add panel, 1920×1080 stage with zoom and snapping guides, Layers panel, properties panel), Text · Image · Video · Shape, drag / eight resize handles / rotate, z-order, lock, hide, rename, undo/redo with coalescing, the keyboard set, save/load, the Ads gallery with duplicate and password-protected delete, and the Assets shelf with upload and "used by". |
 | **1b — on the television** ✅ *(built 2026-09-17)* | `AdCompiler` (design → one self-contained page, every value read through a reader that can only produce something safe), Publish → a `media` row of `type = html` refreshed in place so playlists keep it, the player's `html` branch (a sandboxed frame), and the whole path proven end to end in a browser: publish → picker → playlist → a television playing the ad. |
-| **2 — words** ✅ *(built 2026-09-17)* | The full typography set in the panel with Elementor's **Show more** (font, size, weight, colour, alignment buttons · line height, letter and word spacing, vertical anchor, case, decoration, italic, padding, a coloured panel with its radius, a text shadow and an outline), `builder_fonts` + `config/fonts.php` (51 curated Google families in five kinds, plus the system faces), and an installer that **downloads a family once and serves it from this server for good** — every subset kept, so an Urdu or Arabic advert keeps its own face, and an organization's television never asks fonts.googleapis.com for anything. |
+| **2 — words** ✅ *(built 2026-09-17)* | The full typography set in the panel with Elementor's **Show more** (font, size, weight, colour, alignment buttons · line height, letter and word spacing, vertical anchor, case, decoration, italic, padding, a coloured panel with its radius, a text shadow and an outline), `builder_fonts` + `config/fonts.php` (51 curated Google families in five kinds, plus the system faces), and an installer that **downloads a family once and serves it from this server for good** — every subset kept, so an advert with accents keeps its own face, and an organization's television never asks fonts.googleapis.com for anything. |
 | **3 — pictures** ✅ *(built 2026-09-18)* | The Stage panel: the stage colour and up to 12 background layers — colour, linear/radial gradient (2–6 stops), picture (cover/contain/actual size or a scale %, tile across/down, nine-point position) and video (cover/contain) — each with opacity, 16 blend modes, show/hide, reorder and duplicate. Pictures and videos: replace, five fits, a focus point, corners, mirror, a frame, a drop shadow and eight filters. Shapes: rectangle or ellipse, one colour or a gradient, frame and shadow. A blend mode on any element. The editor's stage draws all of it with the compiler's own rules (`styles.js`, `background.js`). |
-| **4 — motion** ✅ *(built 2026-09-18)* | An animation library (GSAP 3.15 at first; Anime.js 4.5, MIT, since 2026-09-19 — §8), the shared runtime, and the Animation tab: in/loop/out with every effect in §8, the Ease Visualizer with draggable custom curves, per-element preview and ▶ Play. Plus `php artisan builder:examples {organization}`: four finished ads — Winter Sale, Fresh Coffee, Grand Opening and an Urdu Burger Deal — with their own drawn pictures, stored exactly as the editor would store them. |
+| **4 — motion** ✅ *(built 2026-09-18)* | An animation library (GSAP 3.15 at first; Anime.js 4.5, MIT, since 2026-09-19 — §8), the shared runtime, and the Animation tab: in/loop/out with every effect in §8, the Ease Visualizer with draggable custom curves, per-element preview and ▶ Play. Plus `php artisan builder:examples {organization}`: four finished ads — Winter Sale, Fresh Coffee, Grand Opening and a Burger Deal (in Urdu until 2026-10-07) — with their own drawn pictures, stored exactly as the editor would store them. |
 | **5 — the polish** ✅ *(built 2026-09-18)* | Everything in §10a: many selected and moved as one, marquee, align and distribute, the clipboard with paste style and paste animation, the right-click menu, bring to front / send to back, the Layers panel's drag and rename, rulers and guides with snapping, zoom and pan, the History panel, autosave, the shortcuts list, the empty-stage hint, posters taken in the browser and re-drawn by the server, the sandboxed draft preview, and the platform's organization filter — with the full test sweep, adversarial suite included. |
 
 ### 10a. Stage 5 in detail (planned 2026-09-18, the owner: "sare stages kardo")

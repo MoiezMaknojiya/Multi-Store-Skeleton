@@ -5,6 +5,7 @@ use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\Media;
 use App\Models\Organization;
+use App\Services\ExampleAds;
 use App\Services\ExampleArtwork;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -33,7 +34,7 @@ test('it puts four finished, published ads and their pictures in the organizatio
 
     expect($ads)->toHaveCount(4)
         ->and($ads->pluck('name')->all())->toEqualCanonicalizing([
-            'Example · Winter Sale', 'Example · Fresh Coffee', 'Example · Grand Opening', 'Example · Burger Deal (Urdu)',
+            'Example · Winter Sale', 'Example · Fresh Coffee', 'Example · Grand Opening', 'Example · Burger Deal',
         ])
         ->and($ads->every(fn (BuilderAd $ad) => $ad->isPublished()))->toBeTrue()
         ->and(Media::where('type', Media::TYPE_HTML)->where('organization_id', $this->organization->id)->count())->toBe(4);
@@ -61,13 +62,16 @@ test('it puts four finished, published ads and their pictures in the organizatio
         ->toContain('ad-runtime/anime.min.js')
         ->toContain('ad-runtime/runtime.js');
 
-    // Urdu runs right to left without anybody having to say so.
-    $burger = $ads->firstWhere('name', 'Example · Burger Deal (Urdu)');
+    // The burger speaks English in the examples' own Latin faces (owner, 2026-10-07: the Urdu and Arabic fonts are
+    // gone from the Ad Builder), and the examples ask Google for no other family.
+    $burger = $ads->firstWhere('name', 'Example · Burger Deal');
 
     expect(Storage::disk('public')->get($burger->media->path))
-        ->toContain('dir="auto"')
-        ->toContain('زبردست ڈیل')
-        ->toContain("font-family:'Noto Nastaliq Urdu', sans-serif;");
+        ->toContain('MEGA DEAL')
+        ->toContain('Burger + Fries + Drink')
+        ->toContain("font-family:'Anton', sans-serif;")
+        ->not->toContain('Nastaliq')
+        ->and(app(ExampleAds::class)->families())->toBe(['Anton', 'Poppins', 'Playfair Display']);
 
     // The command's work is in the organization's activity log, by the system.
     expect(ActivityLog::where('organization_id', $this->organization->id)->where('action', 'ad.published')->count())->toBe(4)

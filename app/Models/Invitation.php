@@ -128,6 +128,22 @@ class Invitation extends Model
         return $query->whereNull('organization_id');
     }
 
+    /**
+     * The organizations' invitations sent to this person's own address — the account's, never a new one still waiting
+     * for its link: what the dashboard answers (owner, 2026-10-07). The platform team's are answered by their emailed
+     * link alone.
+     */
+    public function scopeSentTo(Builder $query, User $user): Builder
+    {
+        return $query->whereNotNull('organization_id')->where('email', self::normalizeEmail($user->email));
+    }
+
+    /** Still to be answered: not expired, and its organization and its role still there. */
+    public function scopeStillOpen(Builder $query): Builder
+    {
+        return $query->where('expires_at', '>', now())->whereHas('organization')->whereHas('role');
+    }
+
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);

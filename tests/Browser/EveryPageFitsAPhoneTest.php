@@ -90,14 +90,16 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
             'channel-view', 'channel-store', 'channel-update', 'channel-destroy', 'activity-view',
         ], 'rukhsana.siddiqui.manager@example.com', 'Organization Manager with every permission');
         $ownChannel = Channel::factory()->create(['organization_id' => $alpha->id, 'name' => 'Alpha Weekend Deals and Offers']);
+        // An invitation from another organization with a long name waits above the dashboard, with its Decline question.
+        $invitation = $this->aLongInvitationFor($member);
 
-        $this->browse(function (Browser $browser) use ($member, $alpha, $screen, $ownChannel) {
+        $this->browse(function (Browser $browser) use ($member, $alpha, $screen, $ownChannel, $invitation) {
             $this->freshSession($browser);
             $browser->loginAs($member);
             $this->switchToOrganization($browser, $alpha);
 
             $this->assertEveryPageFits($browser, [
-                '/dashboard' => [],
+                '/dashboard' => ['decline-invitation-'.$invitation->id],
                 '/screens' => ['screen-pair-modal', 'screen-form-modal'],
                 '/screens/'.$screen->id => ['playlist-copy-modal', 'playlist-schedule-modal'],
                 '/media' => ['media-form-modal'],
@@ -122,15 +124,16 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
         // Muhammad Ali works in two organizations, so he is asked which one first; a person just signed up is in none.
         $inTwoOrganizations = User::where('email', 'muhammad.ali.raza.khan@example.com')->firstOrFail();
         $inNoOrganization = User::factory()->create(['first_name' => 'Newly Registered', 'last_name' => 'Team Member']);
+        $invitation = $this->aLongInvitationFor($inNoOrganization);
 
-        $this->browse(function (Browser $browser) use ($inTwoOrganizations, $inNoOrganization) {
+        $this->browse(function (Browser $browser) use ($inTwoOrganizations, $inNoOrganization, $invitation) {
             $this->freshSession($browser);
             $browser->loginAs($inTwoOrganizations)->visit('/select-organization')->assertPathIs('/select-organization');
             $this->assertEveryPageFits($browser, ['/select-organization' => []]);
 
             $this->freshSession($browser);
             $browser->loginAs($inNoOrganization)->visit('/dashboard')->assertPathIs('/dashboard');
-            $this->assertEveryPageFits($browser, ['/dashboard' => []]);
+            $this->assertEveryPageFits($browser, ['/dashboard' => ['decline-invitation-'.$invitation->id]]);
         });
     }
 
@@ -371,6 +374,19 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
         ActivityLog::record('screen.paired', $screen, 'Paired screen Front Counter Menu Board Television', $owner);
 
         return [$alpha, $screen, $platformChannel];
+    }
+
+    /** An invitation to this person from an organization with a long name, as the dashboard's card lists it. */
+    private function aLongInvitationFor(User $user): Invitation
+    {
+        $organization = Organization::factory()->create(['name' => 'Gulshan-e-Iqbal Family Pharmacy and Fresh Groceries']);
+
+        return Invitation::factory()->create([
+            'organization_id' => $organization->id,
+            'email' => $user->email,
+            'role_id' => Role::starter(Role::ADMIN)->id,
+            'invited_by' => $this->organizationMember($organization, Role::OWNER, 'muhammad.abdul.rehman.inviter@example.com')->id,
+        ]);
     }
 
     /**

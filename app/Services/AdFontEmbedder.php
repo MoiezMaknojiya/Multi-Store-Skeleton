@@ -16,8 +16,8 @@ use Illuminate\Support\Facades\Storage;
  *
  * Only what the design can show is embedded: for each family, the installed weight a browser would pick
  * for each weight the design asks for (CSS font matching), and of those only the subsets — latin,
- * arabic, devanagari… — whose `unicode-range` covers a character the design writes. A Latin advert set
- * in an Urdu face does not carry the Urdu glyphs.
+ * latin-ext, cyrillic… — whose `unicode-range` covers a character the design writes. An English advert
+ * does not carry a family's Cyrillic or Vietnamese glyphs.
  */
 class AdFontEmbedder
 {
@@ -121,7 +121,7 @@ class AdFontEmbedder
                     continue;
                 }
 
-                // A variable font is one file for every weight (Noto Nastaliq Urdu's 233 KB, for one):
+                // A variable font is one file for every weight (Montserrat's, for one):
                 // the same bytes for the same subset are carried once, for the whole range of weights.
                 $key = $rule['style'].'|'.$this->rangeText($rule['ranges']).'|'.md5($bytes);
                 $files[$key] ??= ['style' => $rule['style'], 'ranges' => $rule['ranges'], 'bytes' => $bytes, 'weights' => []];

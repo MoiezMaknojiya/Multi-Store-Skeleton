@@ -93,4 +93,74 @@ class InvitationAcceptFlowTest extends DuskTestCase
                 ->assertMissing('@invitation-accept');
         });
     }
+
+    /**
+     * Owner, 2026-10-07: the invitation shows on the dashboard too, for the account it was sent to, and is accepted
+     * there — the Smart Stop case, a person who already works in an organization of their own and never pressed the
+     * email's button.
+     */
+    public function test_an_invitation_is_accepted_on_the_dashboard_without_the_email(): void
+    {
+        $this->seedSuperAdmin();
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $beta = Organization::factory()->create(['name' => 'Beta Deli']);
+        $owner = $this->organizationMember($alpha, Role::OWNER);
+        $person = $this->organizationMember($beta, Role::OWNER, 'sana@example.com');
+
+        [$invitation] = Invitation::open($alpha, 'sana@example.com', Role::starter(Role::ADMIN), $owner);
+
+        $this->browse(function (Browser $browser) use ($person, $alpha, $invitation) {
+            $this->freshSession($browser);
+            $browser->loginAs($person)->visit('/dashboard')
+                ->waitFor('@dashboard-invitations')
+                ->assertSeeIn('@dashboard-invitation-'.$invitation->id, 'Alpha Mart invited you as Admin')
+                ->assertSeeIn('@dashboard-invitations-count', '1');
+
+            $browser->waitForReload(fn (Browser $b) => $this->jsClick($b, '@accept-invitation-'.$invitation->id));
+            $browser->waitForText('Welcome to Alpha Mart!')
+                ->assertSeeIn('@dashboard-organization-name', 'Alpha Mart')
+                ->assertMissing('@dashboard-invitations');
+
+            $this->assertSame(
+                Role::starter(Role::ADMIN)->id,
+                DB::table('organization_user')->where('user_id', $person->id)->where('organization_id', $alpha->id)->value('role_id'),
+                'accepting on the dashboard gives the role the invitation named'
+            );
+            $this->assertNull(Invitation::find($invitation->id));
+        });
+    }
+
+    public function test_an_invitation_is_declined_on_the_dashboard_after_a_question(): void
+    {
+        $this->seedSuperAdmin();
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($alpha, Role::OWNER);
+        $newcomer = User::factory()->create(['email' => 'newcomer@example.com']);
+
+        [$invitation] = Invitation::open($alpha, 'newcomer@example.com', Role::starter(Role::STAFF), $owner);
+
+        $this->browse(function (Browser $browser) use ($newcomer, $alpha, $invitation) {
+            $this->freshSession($browser);
+            $browser->loginAs($newcomer)->visit('/dashboard')
+                ->waitFor('@dashboard-invitation-'.$invitation->id)
+                ->assertPresent('@dashboard-empty');
+
+            // It asks first: Cancel leaves it waiting, and the second question declines.
+            $this->jsClick($browser, '@decline-invitation-'.$invitation->id);
+            $browser->waitFor('@decline-invitation-'.$invitation->id.'-confirm')
+                ->assertSee('Decline the invitation to Alpha Mart?')
+                ->click('@decline-invitation-'.$invitation->id.'-cancel')
+                ->waitUntilMissing('@decline-invitation-'.$invitation->id.'-confirm');
+            $this->assertNotNull(Invitation::find($invitation->id), 'Cancel declines nothing');
+
+            $this->jsClick($browser, '@decline-invitation-'.$invitation->id);
+            $browser->waitFor('@decline-invitation-'.$invitation->id.'-confirm');
+            $browser->waitForReload(fn (Browser $b) => $this->jsClick($b, '@decline-invitation-'.$invitation->id.'-confirm'));
+            $browser->waitForText('Invitation declined.')->assertMissing('@dashboard-invitations');
+
+            $this->assertNull(Invitation::find($invitation->id), 'a declined invitation is gone');
+            $this->assertFalse(DB::table('organization_user')->where('user_id', $newcomer->id)->exists(), 'declining joins nobody');
+            $this->assertDatabaseHas('activity_logs', ['action' => 'invitation.declined', 'organization_id' => $alpha->id, 'actor_id' => $newcomer->id]);
+        });
+    }
 }

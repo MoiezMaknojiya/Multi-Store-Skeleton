@@ -172,9 +172,9 @@ class GoogleFontInstaller
     /**
      * Every @font-face Google sent, as {weight, style, range, url}.
      *
-     * A family arrives as one block per weight PER SUBSET (latin, latin-ext, arabic…), each with its own
-     * `unicode-range`. All of them are kept: dropping the subsets is how an Urdu or Arabic advert ends
-     * up in a fallback face for exactly the characters it needed.
+     * A family arrives as one block per weight PER SUBSET (latin, latin-ext, cyrillic…), each with its own
+     * `unicode-range`. All of them are kept: dropping the subsets is how an advert with an accented or a
+     * Cyrillic word ends up in a fallback face for exactly the characters it needed.
      *
      * @return array<int, array<string, string>>
      */

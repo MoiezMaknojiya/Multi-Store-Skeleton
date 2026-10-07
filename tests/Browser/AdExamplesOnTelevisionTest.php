@@ -26,7 +26,7 @@ class AdExamplesOnTelevisionTest extends DuskTestCase
         'Example · Winter Sale' => ['ws_title', 'WINTER SALE'],
         'Example · Fresh Coffee' => ['fc_title', 'Coffee'],
         'Example · Grand Opening' => ['go_grand', 'GRAND'],
-        'Example · Burger Deal (Urdu)' => ['bd_title', 'زبردست ڈیل'],
+        'Example · Burger Deal' => ['bd_title', 'MEGA DEAL'],
     ];
 
     public function test_the_four_example_ads_play_on_a_television_one_after_another(): void

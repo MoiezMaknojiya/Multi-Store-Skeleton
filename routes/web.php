@@ -106,6 +106,16 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth', 'verified', 'organization.active', 'throttle:admin'])->group(function () {
 
     // -------------------------------------------------------------------
+    // Invitations for you  (owner, 2026-10-07): the dashboard's card answers an organization's invitation sent to
+    // this account's own confirmed address — the emailed link works as before. Open in a paused organization
+    // (EnsureOrganizationIsActive::OPEN): it joins, or turns down, another one.
+    // -------------------------------------------------------------------
+    Route::prefix('dashboard/invitations/{invitation}')->where(['invitation' => '[0-9]+'])->group(function () {
+        Route::post('/accept', [InvitationResponseController::class, 'acceptHere'])->name('dashboard.invitations.accept');
+        Route::post('/decline', [InvitationResponseController::class, 'declineHere'])->name('dashboard.invitations.decline');
+    });
+
+    // -------------------------------------------------------------------
     // Members  (the current organization's team — docs/ORGANIZATION-SPEC.md)
     // Whether an action is allowed ON a particular member (hierarchy, the
     // last Owner) is decided by OrganizationTeam; the gates here say only that the

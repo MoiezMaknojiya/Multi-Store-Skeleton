@@ -987,7 +987,7 @@
              @click.self="fontPickerOpen = false" @keydown.tab="keepFocusIn($event, $refs.fontPanel)" dusk="font-picker">
             <div class="mt-16 max-h-[70vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 focus:outline-none dark:bg-gray-800"
                  role="dialog" aria-modal="true" aria-labelledby="font-picker-title" tabindex="-1" x-ref="fontPanel">
-                {{-- The search and the groups stay in sight while the families scroll under them: a list of 146 is
+                {{-- The search and the groups stay in sight while the families scroll under them: a list of 138 is
                      not scrolled back up to change group. -top-5 and -m-5 reach over the panel's own padding. --}}
                 <div class="sticky -top-5 z-10 -mx-5 -mt-5 bg-white px-5 pt-5 pb-3 dark:bg-gray-800">
                     <div class="flex items-center justify-between gap-4">
@@ -1008,7 +1008,7 @@
 
                     {{-- The groups, one at a time: a picked one is said, not only coloured (aria-pressed). --}}
                     <div class="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Kind of font">
-                        @foreach (['all' => 'All', 'sans' => 'Sans Serif', 'display' => 'Display', 'script' => 'Script', 'serif' => 'Serif', 'urdu' => 'Urdu & Arabic'] as $kind => $label)
+                        @foreach (['all' => 'All', 'sans' => 'Sans Serif', 'display' => 'Display', 'script' => 'Script', 'serif' => 'Serif'] as $kind => $label)
                             <button type="button" @click="fontKind = '{{ $kind }}'"
                                     aria-pressed="{{ $kind === 'all' ? 'true' : 'false' }}" x-bind:aria-pressed="fontKind === '{{ $kind }}' ? 'true' : 'false'"
                                     class="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-600 not-aria-pressed:hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 aria-pressed:border-blue-600 aria-pressed:bg-blue-600 aria-pressed:text-white dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:not-aria-pressed:hover:bg-gray-700 dark:aria-pressed:border-blue-600 dark:aria-pressed:bg-blue-600 dark:aria-pressed:text-white"

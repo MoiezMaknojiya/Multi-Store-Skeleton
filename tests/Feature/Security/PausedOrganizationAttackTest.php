@@ -67,7 +67,7 @@ test('every door of a paused organization is shut to its own Owner, whatever is 
 
     $doors = collect(app('router')->getRoutes()->getRoutes())
         ->filter(fn (Route $route) => in_array('organization.active', $route->gatherMiddleware(), true))
-        ->reject(fn (Route $route) => in_array($route->getName(), ['organization.switch', 'members.leave'], true));
+        ->reject(fn (Route $route) => in_array($route->getName(), ['organization.switch', 'members.leave', 'dashboard.invitations.accept', 'dashboard.invitations.decline'], true));
 
     expect($doors->count())->toBeGreaterThan(80);
 

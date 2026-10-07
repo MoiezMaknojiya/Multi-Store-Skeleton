@@ -21,6 +21,17 @@
         ];
     @endphp
 
+    {{-- An invitation that could not be accepted on the dashboard (expired on a page left open, the other tier) says why here. --}}
+    @if (session('invitation-problem'))
+        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 mb-6">
+            <p class="alert-error" role="alert" dusk="dashboard-invitation-problem">{{ session('invitation-problem') }}</p>
+        </div>
+    @endif
+
+    @if (isset($invitations) && $invitations->isNotEmpty())
+        @include('dashboard.partials.invitations')
+    @endif
+
     @if ($view === 'global')
         @include('dashboard.partials.platform')
     @elseif ($view === 'organization')
