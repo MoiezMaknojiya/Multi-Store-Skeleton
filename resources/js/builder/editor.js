@@ -36,6 +36,14 @@ const AUTOSAVE_MS = 30_000;
 /** Something a key presses: a button, a link, a checkbox. */
 const PRESSABLE = 'button, a[href], summary, [role="button"], [role="menuitem"], input[type="checkbox"], input[type="radio"]';
 
+/** What each kind of font is called under its name in the picker. */
+const FONT_KINDS = { system: 'Built in', sans: 'Sans serif', display: 'Display', script: 'Script', serif: 'Serif', mono: 'Monospace', urdu: 'Urdu & Arabic' };
+
+/** The face a family not installed yet is previewed in: a name of its own, so it never stands in for the family. */
+function previewFamily(family) {
+    return `${family} preview`;
+}
+
 /** A dialog of the panel (Discard changes, Unpublish) is open: its keys are its own, never the stage's. */
 function aDialogIsOpen() {
     return [...document.querySelectorAll('[role="dialog"][aria-modal="true"]')]
@@ -57,6 +65,9 @@ export function registerAdEditor(Alpine) {
         // Where the keyboard was before an overlay of the editor opened, to go back to when it closes — a DOM node,
         // so never in the reactive state.
         const overlay = { returnTo: null };
+        // Which rows of the font picker have come into sight, to preview their families (watchFontRow) — an observer
+        // and DOM nodes, so never in the reactive state either.
+        const fontRows = { observer: null, preview: new WeakMap() };
 
         return {
             ...backgroundPanel(),
@@ -160,6 +171,8 @@ export function registerAdEditor(Alpine) {
             fontsLoaded: false,
             loadingFonts: false,        // the catalogue is on its way (init and the picker both ask)
             installingFamily: null,     // the one being fetched from Google right now
+            fontKind: 'all',            // the picker's group: all, or one kind (FONT_KINDS)
+            fontPreviews: {},           // family → loading | ready | failed: one not installed, drawn in its own letters
             showMoreType: false,        // Elementor's "Show more": the rare controls, one click away
             showFilters: false,
 
@@ -1665,9 +1678,60 @@ export function registerAdEditor(Alpine) {
             get fontResults() {
                 const query = this.fontQuery.trim().toLowerCase();
 
-                return query === ''
-                    ? this.fonts
-                    : this.fonts.filter((font) => font.family.toLowerCase().includes(query));
+                return this.fonts.filter((font) => (this.fontKind === 'all' || font.kind === this.fontKind)
+                    && (query === '' || font.family.toLowerCase().includes(query)));
+            },
+
+            fontKindLabel(kind) {
+                return FONT_KINDS[kind] ?? kind;
+            },
+
+            /** A row's name, in its family once installed, in the family's preview once that is in, else in the panel's. */
+            fontRowStyle(font) {
+                if (font.installed) return { fontFamily: `'${font.family}', sans-serif` };
+
+                return this.fontPreviews[font.family] === 'ready' ? { fontFamily: `'${previewFamily(font.family)}', sans-serif` } : {};
+            },
+
+            /**
+             * A family not installed yet, drawn in its own letters (owner, 2026-10-06: "font per uski style dikhe"):
+             * Google's stylesheet for the letters of its name alone — a few KB — loaded as a face of its own name,
+             * so it never stands in for the family on the stage. Only rows the picker scrolls into sight ask
+             * (watchFontRow); a preview that cannot be had leaves the row in the panel's font.
+             */
+            async previewFont(font) {
+                if (font.installed || this.fontPreviews[font.family]) return;
+
+                this.fontPreviews[font.family] = 'loading';
+                const weight = (font.weights ?? []).includes(400) ? 400 : (font.weights?.[0] ?? 400);
+
+                try {
+                    const response = await fetch(`https://fonts.googleapis.com/css2?family=${encodeURIComponent(font.family)}:wght@${weight}&text=${encodeURIComponent(font.family)}`);
+                    const url = (await response.text()).match(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)/)?.[1];
+
+                    if (!response.ok || !url) throw new Error('No preview for this family.');
+
+                    const face = new FontFace(previewFamily(font.family), `url(${url})`, { weight: String(weight) });
+                    document.fonts.add(await face.load());
+                    this.fontPreviews[font.family] = 'ready';
+                } catch {
+                    this.fontPreviews[font.family] = 'failed';
+                }
+            },
+
+            /** Preview a row's family once the picker scrolls the row into sight, and only then. */
+            watchFontRow(element, font) {
+                if (font.installed) return;
+
+                fontRows.observer ??= new IntersectionObserver((entries) => entries
+                    .filter((entry) => entry.isIntersecting)
+                    .forEach((entry) => {
+                        fontRows.observer.unobserve(entry.target);
+                        fontRows.preview.get(entry.target)?.();
+                    }), { root: this.$refs.fontPanel, rootMargin: '200px 0px' });
+
+                fontRows.preview.set(element, () => this.previewFont(font));
+                fontRows.observer.observe(element);
             },
 
             /**

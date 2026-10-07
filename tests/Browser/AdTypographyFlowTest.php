@@ -122,6 +122,78 @@ class AdTypographyFlowTest extends DuskTestCase
         });
     }
 
+    /**
+     * The picker groups its families and draws every name in its own letters, large enough to see its style (owner,
+     * 2026-10-06): an installed family in itself, one not installed yet in a preview Google sends of the letters of
+     * its name — asked only for the rows in sight. Google is stood in for here (its stylesheet and the face), so the
+     * test needs no internet: what is proved is what the editor asks for and how it draws the answer.
+     */
+    public function test_the_font_picker_groups_its_families_and_shows_each_in_its_own_letters(): void
+    {
+        $this->seedSuperAdmin();
+        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $designer = $this->organizationMember($organization, ['ad-view', 'ad-store', 'ad-update'], 'designer@example.com', 'Designer');
+        $face = Storage::disk('public')->url('fonts/poppins/400.woff2');
+        Storage::disk('public')->put('fonts/poppins/font.css', "@font-face{font-family:'Poppins';font-weight:400;src:url('{$face}') format('woff2');}");
+        Storage::disk('public')->put('fonts/poppins/400.woff2', 'woff2-bytes');
+        BuilderFont::create([
+            'family' => 'Poppins', 'slug' => 'poppins', 'kind' => 'sans', 'weights' => [400],
+            'files' => ['fonts/poppins/400.woff2'], 'css_path' => 'fonts/poppins/font.css', 'size' => 1024,
+        ]);
+
+        $this->browse(function (Browser $browser) use ($designer, $organization) {
+            $this->freshSession($browser);
+            $browser->loginAs($designer);
+            $this->switchToOrganization($browser, $organization);
+            $browser->visit('/builder/create?orientation=landscape');
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@ad-stage');
+
+            $browser->script(<<<'JS'
+                window.previewsAsked = [];
+                const realFetch = window.fetch;
+                window.fetch = (url, ...rest) => {
+                    if (String(url).startsWith('https://fonts.googleapis.com/css2')) {
+                        window.previewsAsked.push(String(url));
+                        return Promise.resolve(new Response("@font-face { src: url(https://fonts.gstatic.com/l/font?kit=preview) format('woff2'); }"));
+                    }
+                    return realFetch(url, ...rest);
+                };
+                window.FontFace = class { constructor(family) { this.family = family; } load() { return Promise.resolve(this); } };
+                document.fonts.add = () => document.fonts;
+            JS);
+
+            $this->jsClick($browser, '@add-text');
+            $browser->waitFor('@text-font');
+            $this->clickAndAwait($browser, '@text-font', fn (Browser $b) => $b->waitFor('@font-picker', 3));
+            $browser->waitFor('@font-poppins')->assertAttribute('@font-kind-all', 'aria-pressed', 'true');
+
+            // An installed family is drawn in itself, at a size its style shows in.
+            // (Quotes taken off: Chrome writes a one-word family without them.)
+            $name = fn (string $dusk): array => $browser->script("const name = document.querySelector('[dusk=\"{$dusk}\"] span span'); return [name.style.fontFamily.replaceAll('\"', ''), getComputedStyle(name).fontSize];")[0];
+            $this->assertSame(['Poppins, sans-serif', '20px'], $name('font-poppins'));
+
+            // A group at a time: Script holds the scripts and nothing else.
+            $this->jsClick($browser, '@font-kind-script');
+            $browser->waitFor('@font-great-vibes')
+                ->assertMissing('@font-poppins')
+                ->assertAttribute('@font-kind-script', 'aria-pressed', 'true')
+                ->assertAttribute('@font-kind-all', 'aria-pressed', 'false')
+                ->assertSeeIn('@font-great-vibes', 'Script');
+
+            // A family not installed is previewed in its own letters, once it is in sight.
+            $browser->waitUsing(5, 100, fn () => str_contains((string) $name('font-great-vibes')[0], 'Great Vibes preview'));
+            $asked = $browser->script("return window.previewsAsked.find((url) => url.includes('family=Great%20Vibes'))")[0];
+            $this->assertStringContainsString('text=Great%20Vibes', (string) $asked);
+
+            // Serif holds the serifs, and All gives every family back.
+            $this->jsClick($browser, '@font-kind-serif');
+            $browser->waitFor('@font-playfair-display')->assertMissing('@font-great-vibes');
+            $this->jsClick($browser, '@font-kind-all');
+            $browser->waitFor('@font-poppins');
+        });
+    }
+
     /** Type a number into a panel field and let Alpine hear about it. */
     private function setNumber(Browser $browser, string $selector, string $value): void
     {

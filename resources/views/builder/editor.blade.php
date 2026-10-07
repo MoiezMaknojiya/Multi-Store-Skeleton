@@ -987,47 +987,63 @@
              @click.self="fontPickerOpen = false" @keydown.tab="keepFocusIn($event, $refs.fontPanel)" dusk="font-picker">
             <div class="mt-16 max-h-[70vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 focus:outline-none dark:bg-gray-800"
                  role="dialog" aria-modal="true" aria-labelledby="font-picker-title" tabindex="-1" x-ref="fontPanel">
-                <div class="flex items-center justify-between gap-4">
-                    <h2 id="font-picker-title" class="text-lg font-medium text-gray-900 dark:text-gray-100">Font</h2>
-                    <div class="flex items-center gap-2">
-                        <input type="search" x-model="fontQuery" placeholder="Search fonts..." autocomplete="off" maxlength="100"
-                               aria-label="Search fonts" x-ref="fontSearch"
-                               class="form-input h-9 w-48" dusk="font-search" />
-                        <button type="button" class="btn-pager" @click="fontPickerOpen = false" aria-label="Close" title="Close (Esc)">
-                            <x-icon name="x-mark" />
-                        </button>
+                {{-- The search and the groups stay in sight while the families scroll under them: a list of 146 is
+                     not scrolled back up to change group. -top-5 and -m-5 reach over the panel's own padding. --}}
+                <div class="sticky -top-5 z-10 -mx-5 -mt-5 bg-white px-5 pt-5 pb-3 dark:bg-gray-800">
+                    <div class="flex items-center justify-between gap-4">
+                        <h2 id="font-picker-title" class="text-lg font-medium text-gray-900 dark:text-gray-100">Font</h2>
+                        <div class="flex items-center gap-2">
+                            <input type="search" x-model="fontQuery" placeholder="Search fonts..." autocomplete="off" maxlength="100"
+                                   aria-label="Search fonts" x-ref="fontSearch"
+                                   class="form-input h-9 w-48" dusk="font-search" />
+                            <button type="button" class="btn-pager" @click="fontPickerOpen = false" aria-label="Close" title="Close (Esc)">
+                                <x-icon name="x-mark" />
+                            </button>
+                        </div>
+                    </div>
+
+                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        Fonts are kept on this server, so screens with no internet still show them.
+                    </p>
+
+                    {{-- The groups, one at a time: a picked one is said, not only coloured (aria-pressed). --}}
+                    <div class="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Kind of font">
+                        @foreach (['all' => 'All', 'sans' => 'Sans Serif', 'display' => 'Display', 'script' => 'Script', 'serif' => 'Serif', 'urdu' => 'Urdu & Arabic'] as $kind => $label)
+                            <button type="button" @click="fontKind = '{{ $kind }}'"
+                                    aria-pressed="{{ $kind === 'all' ? 'true' : 'false' }}" x-bind:aria-pressed="fontKind === '{{ $kind }}' ? 'true' : 'false'"
+                                    class="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-600 not-aria-pressed:hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 aria-pressed:border-blue-600 aria-pressed:bg-blue-600 aria-pressed:text-white dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:not-aria-pressed:hover:bg-gray-700 dark:aria-pressed:border-blue-600 dark:aria-pressed:bg-blue-600 dark:aria-pressed:text-white"
+                                    dusk="font-kind-{{ $kind }}">{{ $label }}</button>
+                        @endforeach
                     </div>
                 </div>
 
-                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    Fonts are kept on this server, so screens with no internet still show them.
-                </p>
-
                 {{-- Loading, a list that could not be fetched, and a search that matched nothing are each said. --}}
-                <p x-show="loadingFonts" x-cloak class="mt-6 flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400" dusk="font-picker-loading">
+                <p x-show="loadingFonts" x-cloak class="mt-3 flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400" dusk="font-picker-loading">
                     <x-spinner class="text-blue-600 dark:text-blue-400" /> Loading fonts&hellip;
                 </p>
-                <div x-show="!loadingFonts && fontsFailed" x-cloak role="alert" class="mt-6 space-y-3 text-center" dusk="font-picker-failed">
+                <div x-show="!loadingFonts && fontsFailed" x-cloak role="alert" class="mt-3 space-y-3 text-center" dusk="font-picker-failed">
                     <p class="text-sm text-gray-700 dark:text-gray-200">Could not load the fonts. Check the connection, then try again.</p>
                     <button type="button" class="btn-row-neutral" @click="retryFonts()">Try Again</button>
                 </div>
-                <div x-show="!loadingFonts && !fontsFailed && fontsLoaded && fontResults.length === 0" x-cloak class="mt-6 space-y-3 text-center" dusk="font-picker-no-match">
+                <div x-show="!loadingFonts && !fontsFailed && fontsLoaded && fontResults.length === 0" x-cloak class="mt-3 space-y-3 text-center" dusk="font-picker-no-match">
                     <p class="text-sm text-gray-700 dark:text-gray-200">No font matches &ldquo;<span class="font-medium" x-text="fontQuery"></span>&rdquo;.</p>
-                    <button type="button" class="btn-row-neutral" @click="fontQuery = ''; $refs.fontSearch.focus()">Clear Search</button>
+                    <button type="button" class="btn-row-neutral" @click="fontQuery = ''; fontKind = 'all'; $refs.fontSearch.focus()">Clear Search</button>
                 </div>
 
                 {{-- A family nobody has installed yet is fetched on the spot by whoever may create or change
                      an ad (the route's own lock); anybody else sees it is not here yet. --}}
-                <div class="mt-4 divide-y divide-gray-100 dark:divide-gray-700">
+                <div class="mt-1 divide-y divide-gray-100 dark:divide-gray-700">
                     <template x-for="font in fontResults" :key="font.family">
                         <button type="button" class="flex w-full items-center justify-between gap-3 rounded px-2 py-2 text-left not-disabled:hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed dark:not-disabled:hover:bg-gray-700/50"
                                 @click="pickFont(font)" x-bind:disabled="installingFamily !== null || (!font.installed && !canInstallFonts)"
+                                x-init="watchFontRow($el, font)"
                                 x-bind:dusk="'font-' + font.family.replace(/ /g, '-').toLowerCase()">
+                            {{-- Each name in its own family, large enough to see its style (owner, 2026-10-06): installed,
+                                 or a preview of its own letters (previewFont). --}}
                             <span class="min-w-0">
-                                <span class="block truncate text-sm text-gray-800 dark:text-white"
-                                      x-bind:style="font.installed ? { fontFamily: font.family + ', sans-serif' } : {}"
-                                      x-text="font.family"></span>
-                                <span class="text-xs text-gray-500 dark:text-gray-400" x-text="font.kind"></span>
+                                <span class="block truncate text-xl leading-snug text-gray-800 dark:text-white"
+                                      x-bind:style="fontRowStyle(font)" x-text="font.family"></span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400" x-text="fontKindLabel(font.kind)"></span>
                             </span>
 
                             <span class="shrink-0 text-xs"

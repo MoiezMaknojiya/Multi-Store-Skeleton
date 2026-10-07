@@ -38,6 +38,8 @@ export function createCrudTable({
                          // server; the modal uses <x-crud.password-confirm>)
     extraState = {},     // Additional reactive properties specific to the entity
     extraMethods = {},   // Additional methods specific to the entity
+    sortable = null,     // { by, direction } the listing starts sorted by, when its headings sort (x-crud.sort-header):
+                         // the server is sent sort and direction, and orders by its own list of them alone
 }) {
     /* A fresh copy of the empty form every time, nested arrays included. A spread copy shared
      * them with defaultForm, so a campaign's ticked screens were
@@ -65,6 +67,8 @@ export function createCrudTable({
         fetchToken: 0,
         refreshFailed: false,   // a quiet refresh failed and has said so; cleared by the next success
         loadFailed: false,      // the list could not be loaded at all: the table says so, with Try again
+        sortBy: sortable?.by ?? null,
+        sortDirection: sortable?.direction ?? 'asc',
 
         /* Merge entity-specific state */
         ...extraState,
@@ -102,6 +106,7 @@ export function createCrudTable({
             }
             try {
                 const params = { search: this.search, page: this.currentPage, per_page: this.perPage };
+                if (this.sortBy) Object.assign(params, { sort: this.sortBy, direction: this.sortDirection });
                 /* Entity-specific listing filters (e.g. the activity log's date range). */
                 if (typeof this.extraParams === 'function') Object.assign(params, this.extraParams());
                 const response = await axios.get(fetchUrl, { params });
@@ -132,6 +137,22 @@ export function createCrudTable({
                 /* Also after a quiet request: one that overtook a normal fetch has to end its "Loading...". */
                 if (requestToken === this.fetchToken) this.loading = false;
             }
+        },
+
+        /* ── Sorting (x-crud.sort-header) ──────────────────────────────── */
+        /* A heading pressed: the rows sorted by it — the other way round when they already are — from page one. */
+        sortOn(column, firstDirection = 'asc') {
+            this.sortDirection = this.sortBy === column ? (this.sortDirection === 'asc' ? 'desc' : 'asc') : firstDirection;
+            this.sortBy = column;
+            this.currentPage = 1;
+            this.fetchItems();
+        },
+
+        /* What aria-sort says of a heading. */
+        sortState(column) {
+            if (this.sortBy !== column) return 'none';
+
+            return this.sortDirection === 'asc' ? 'ascending' : 'descending';
         },
 
         /* ── Pagination ────────────────────────────────────────────────── */

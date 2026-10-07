@@ -54,7 +54,7 @@ class ScreenController extends Controller
 
         // The count rides along so the listing can say which screens actually
         // have something to play, without a query per row.
-        $query = Screen::visibleTo(auth()->user())->withCount('playlistItems')->orderByDesc('created_at')
+        $query = $this->sortedBy(Screen::visibleTo(auth()->user())->withCount('playlistItems'), $request)
             ->when($aboveTheOrganizations, fn (Builder $q) => $q->with('organization:id,name'));
 
         // Searchable by everything the row actually shows: the name, the device id
@@ -84,6 +84,27 @@ class ScreenController extends Controller
                 }
             }
         );
+    }
+
+    /**
+     * The listing in the order its headings ask for (owner, 2026-10-06: "sort by name, status, orientation, paired
+     * date"): `sort` one of name, status, orientation and paired, `direction` asc or desc — anything else, or nothing,
+     * the newest added first, as it always opened. Status by the last heartbeat: desc is online first, and a screen
+     * never seen comes after every one that was (before them, asc). The id keeps an order steady between pages.
+     */
+    private function sortedBy(Builder $query, Request $request): Builder
+    {
+        $direction = self::plainValue($request->input('direction')) === 'asc' ? 'asc' : 'desc';
+
+        match (self::plainValue($request->input('sort'))) {
+            'name' => $query->orderByRaw('lower(name) '.$direction),
+            'status' => $query->orderByRaw('last_seen_at is null '.($direction === 'desc' ? 'asc' : 'desc'))->orderBy('last_seen_at', $direction),
+            'orientation' => $query->orderBy('orientation', $direction)->orderByRaw('lower(name)'),
+            'paired' => $query->orderBy('paired_at', $direction),
+            default => $query->orderByDesc('created_at'),
+        };
+
+        return $query->orderBy('id', $direction);
     }
 
     /**

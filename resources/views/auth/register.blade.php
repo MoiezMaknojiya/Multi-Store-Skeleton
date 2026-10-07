@@ -33,10 +33,11 @@
             <x-auth.form-field name="email" label="Email" type="email" placeholder="Enter your email" maxlength="255" autocomplete="username" :required="true" />
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <x-auth.form-field name="password" label="Password" type="password" :required="true"
+        {{-- One show/hide for both, on the confirmation (owner, 2026-10-06). --}}
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" x-data="passwordToggle()">
+            <x-auth.form-field name="password" label="Password" type="password" :required="true" shared :eye="false"
             placeholder="Create a password" autocomplete="new-password" hint="At least 8 characters." />
-            <x-auth.form-field name="password_confirmation" label="Confirm Password" type="password" :required="true"
+            <x-auth.form-field name="password_confirmation" label="Confirm Password" type="password" :required="true" shared
             placeholder="Confirm your password" autocomplete="new-password" />
         </div>
 

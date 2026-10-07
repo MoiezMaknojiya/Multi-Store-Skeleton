@@ -55,10 +55,11 @@
 
                     <x-auth.form-field name="phone" label="Phone (10 digits)" type="tel" placeholder="1234567890" data-digits="10" inputmode="numeric" autocomplete="tel-national" :required="true" dusk="invitation-phone" />
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <x-auth.form-field name="password" label="Password" type="password" :required="true"
+                    {{-- One show/hide for both, on the confirmation (owner, 2026-10-06). --}}
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" x-data="passwordToggle()">
+                        <x-auth.form-field name="password" label="Password" type="password" :required="true" shared :eye="false"
             placeholder="Create a password" autocomplete="new-password" hint="At least 8 characters." />
-                        <x-auth.form-field name="password_confirmation" label="Confirm Password" type="password" :required="true"
+                        <x-auth.form-field name="password_confirmation" label="Confirm Password" type="password" :required="true" shared
             placeholder="Confirm your password" autocomplete="new-password" />
                     </div>
 

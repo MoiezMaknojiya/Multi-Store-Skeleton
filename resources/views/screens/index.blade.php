@@ -68,11 +68,12 @@
                     <x-crud.add-button label="Add Screen" @click="openPairModal()" dusk="add-screen" />
                 @endcan
             </x-slot>
+            {{-- Each heading sorts the list (owner, 2026-10-06): newest paired first until another is pressed. --}}
             <x-slot name="head">
-                <th class="px-5 py-3 text-left font-semibold">Name</th>
-                <th class="px-5 py-3 text-left font-semibold">Status</th>
-                <th class="px-5 py-3 text-left font-semibold">Orientation</th>
-                <th class="px-5 py-3 text-left font-semibold">Paired</th>
+                <x-crud.sort-header column="name" label="Name" />
+                <x-crud.sort-header column="status" label="Status" first="desc" />
+                <x-crud.sort-header column="orientation" label="Orientation" />
+                <x-crud.sort-header column="paired" label="Paired" first="desc" />
                 <th class="px-5 py-3 text-right font-semibold">Actions</th>
             </x-slot>
 

@@ -319,10 +319,23 @@ so the three can never disagree. **Every key is named in the rules**, because wh
 
 ## 7a. Fonts (stage 2, built)
 
-- **`config/fonts.php` is the list.** 51 Google families grouped by kind (sans · display · serif · mono ·
-  urdu), each with the weights Google had on 2026-10-05 (what the picker shows before a family is installed),
-  plus eight system faces that need no download. Only a family on that list can be installed, so a font name
-  typed by hand can never make the server fetch an arbitrary URL.
+- **`config/fonts.php` is the list.** 138 Google families grouped by kind (sans · display · script · serif ·
+  mono · urdu), each with the weights Google had when it was added (what the picker shows before a family is
+  installed), plus eight system faces that need no download. Only a family on that list can be installed, so a
+  font name typed by hand can never make the server fetch an arbitrary URL. 87 of them came on 2026-10-06
+  (owner: "achay achay font jo website, banner, poster, flyer, logo and pamphlet mein use honte ho") — the
+  families design guides name most for posters, flyers, banners, logos and menu boards, with a Script group
+  for the first time (Pacifico, Lobster and Permanent Marker moved into it), each name and its weights checked
+  against Google's own CSS2 answers that day. A family is never taken off the list: the picker is the list,
+  and the editor draws only the families the list names.
+- **The picker shows every name in its own letters, large enough to see** (owner, 2026-10-06: "font per uski
+  style dikhe"): 20 px, in the family itself once installed; a family not installed yet is drawn in a preview
+  of its own name — Google's stylesheet for those letters alone (`&text=`, a few KB), loaded as a face called
+  "{family} preview" (`previewFont`), so it can never stand in for the family on the stage — and only for the
+  rows the picker scrolls into sight (`watchFontRow`, an IntersectionObserver). A preview that cannot be had
+  leaves the row in the panel's font. Above the list, chips show one kind at a time (All · Sans Serif ·
+  Display · Script · Serif · Urdu & Arabic, `aria-pressed`), and each row says its kind in words; the search
+  and the chips stay at the top of the picker while the families scroll under them.
 - **Installing is one request, once, for the whole installation — with every weight the family has**
   (owner, 2026-10-05: Montserrat had 800 on Google and not here). `GoogleFontInstaller` asks Google for all
   nine weights (`wght@100;…;900`, with a browser user-agent, or Google answers in TTF); Google answers with

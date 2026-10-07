@@ -44,6 +44,8 @@ export function registerScreensTable(Alpine) {
         entityLabel: 'screen',
         formModalName: 'screen-form-modal',
         deleteModalName: 'confirm-screen-deletion',
+        // Newest paired first, as the list always opened; each heading sorts it (ScreenController::sortedBy).
+        sortable: { by: 'paired', direction: 'desc' },
 
         extraState: {
             /* Above the organizations only (null inside one): the organizations a new screen may be paired for. */

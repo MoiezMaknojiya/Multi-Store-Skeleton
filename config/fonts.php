@@ -24,6 +24,12 @@ return [
     | 2026-10-05. Adding a family: put it here with its weights, keep the name exactly as Google spells
     | it, and say which kind it is so the picker can group it. Nothing else to do.
     |
+    | 2026-10-06 (owner: "achay achay font jo website, banner, poster, flyer, logo and pamphlet mein use
+    | honte ho aur google walay ho toh woo add karo"): 87 families more — the ones design guides name most
+    | for posters, flyers, banners, logos and menu boards, with a new Script group — each name and its
+    | weights as Google's own CSS2 API answered them that day. None was taken out: a design that uses a
+    | family finds it here, so the editor still draws it.
+    |
     */
 
     'families' => [
@@ -48,6 +54,27 @@ return [
         ['name' => 'Source Sans 3', 'kind' => 'sans', 'weights' => [200, 300, 400, 500, 600, 700, 800, 900]],
         ['name' => 'Mulish', 'kind' => 'sans', 'weights' => [200, 300, 400, 500, 600, 700, 800, 900]],
         ['name' => 'Karla', 'kind' => 'sans', 'weights' => [200, 300, 400, 500, 600, 700, 800]],
+        ['name' => 'Roboto Condensed', 'kind' => 'sans', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+        ['name' => 'Barlow Condensed', 'kind' => 'sans', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+        ['name' => 'Archivo', 'kind' => 'sans', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+        ['name' => 'Jost', 'kind' => 'sans', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+        ['name' => 'League Spartan', 'kind' => 'sans', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+        ['name' => 'Josefin Sans', 'kind' => 'sans', 'weights' => [100, 200, 300, 400, 500, 600, 700]],
+        ['name' => 'Kanit', 'kind' => 'sans', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+        ['name' => 'Sora', 'kind' => 'sans', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800]],
+        ['name' => 'Space Grotesk', 'kind' => 'sans', 'weights' => [300, 400, 500, 600, 700]],
+        ['name' => 'Bricolage Grotesque', 'kind' => 'sans', 'weights' => [200, 300, 400, 500, 600, 700, 800]],
+        ['name' => 'Lexend', 'kind' => 'sans', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+        ['name' => 'Urbanist', 'kind' => 'sans', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+        ['name' => 'Quicksand', 'kind' => 'sans', 'weights' => [300, 400, 500, 600, 700]],
+        ['name' => 'Comfortaa', 'kind' => 'sans', 'weights' => [300, 400, 500, 600, 700]],
+        ['name' => 'Exo 2', 'kind' => 'sans', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+        ['name' => 'Ubuntu', 'kind' => 'sans', 'weights' => [300, 400, 500, 700]],
+        ['name' => 'Titillium Web', 'kind' => 'sans', 'weights' => [200, 300, 400, 600, 700, 900]],
+        ['name' => 'PT Sans', 'kind' => 'sans', 'weights' => [400, 700]],
+        ['name' => 'Fira Sans', 'kind' => 'sans', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+        ['name' => 'Libre Franklin', 'kind' => 'sans', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+        ['name' => 'Teko', 'kind' => 'sans', 'weights' => [300, 400, 500, 600, 700]],
 
         // ── Display: the ones an advert shouts with ────────────────────────
         ['name' => 'Anton', 'kind' => 'display', 'weights' => [400]],
@@ -60,13 +87,60 @@ return [
         ['name' => 'Fredoka', 'kind' => 'display', 'weights' => [300, 400, 500, 600, 700]],
         ['name' => 'Baloo 2', 'kind' => 'display', 'weights' => [400, 500, 600, 700, 800]],
         ['name' => 'Chewy', 'kind' => 'display', 'weights' => [400]],
-        ['name' => 'Lobster', 'kind' => 'display', 'weights' => [400]],
-        ['name' => 'Pacifico', 'kind' => 'display', 'weights' => [400]],
-        ['name' => 'Permanent Marker', 'kind' => 'display', 'weights' => [400]],
         ['name' => 'Passion One', 'kind' => 'display', 'weights' => [400, 700, 900]],
         ['name' => 'Luckiest Guy', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Bungee', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Black Ops One', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Russo One', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Bowlby One', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Ultra', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Bangers', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Concert One', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Paytone One', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Lilita One', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Staatliches', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Fjalla One', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Changa One', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Shrikhand', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Bagel Fat One', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Monoton', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Sigmar', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Dela Gothic One', 'kind' => 'display', 'weights' => [400]],
+        ['name' => 'Unbounded', 'kind' => 'display', 'weights' => [200, 300, 400, 500, 600, 700, 800, 900]],
+        ['name' => 'Big Shoulders Display', 'kind' => 'display', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+        ['name' => 'Bevan', 'kind' => 'display', 'weights' => [400]],
 
-        // ── Serif: prices, names, anything that wants to look settled ─────
+        // ── Script and handwriting: menus, flyers, logos — a name, a word, never a paragraph ──
+        ['name' => 'Pacifico', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Lobster', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Permanent Marker', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Dancing Script', 'kind' => 'script', 'weights' => [400, 500, 600, 700]],
+        ['name' => 'Great Vibes', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Sacramento', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Satisfy', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Caveat', 'kind' => 'script', 'weights' => [400, 500, 600, 700]],
+        ['name' => 'Kaushan Script', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Yellowtail', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Allura', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Parisienne', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Courgette', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Cookie', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Damion', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Amatic SC', 'kind' => 'script', 'weights' => [400, 700]],
+        ['name' => 'Indie Flower', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Shadows Into Light', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Patrick Hand', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Marck Script', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Alex Brush', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Lobster Two', 'kind' => 'script', 'weights' => [400, 700]],
+        ['name' => 'Oleo Script', 'kind' => 'script', 'weights' => [400, 700]],
+        ['name' => 'Berkshire Swash', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Playball', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Grand Hotel', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Pinyon Script', 'kind' => 'script', 'weights' => [400]],
+        ['name' => 'Rock Salt', 'kind' => 'script', 'weights' => [400]],
+
+        // ── Serif and slab: prices, names, anything that wants to look settled ─────
         ['name' => 'Playfair Display', 'kind' => 'serif', 'weights' => [400, 500, 600, 700, 800, 900]],
         ['name' => 'Merriweather', 'kind' => 'serif', 'weights' => [300, 400, 500, 600, 700, 800, 900]],
         ['name' => 'Lora', 'kind' => 'serif', 'weights' => [400, 500, 600, 700]],
@@ -76,6 +150,23 @@ return [
         ['name' => 'DM Serif Display', 'kind' => 'serif', 'weights' => [400]],
         ['name' => 'Abril Fatface', 'kind' => 'serif', 'weights' => [400]],
         ['name' => 'Noto Serif', 'kind' => 'serif', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+        ['name' => 'EB Garamond', 'kind' => 'serif', 'weights' => [400, 500, 600, 700, 800]],
+        ['name' => 'Bodoni Moda', 'kind' => 'serif', 'weights' => [400, 500, 600, 700, 800, 900]],
+        ['name' => 'Fraunces', 'kind' => 'serif', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+        ['name' => 'Crimson Text', 'kind' => 'serif', 'weights' => [400, 600, 700]],
+        ['name' => 'Prata', 'kind' => 'serif', 'weights' => [400]],
+        ['name' => 'Cinzel', 'kind' => 'serif', 'weights' => [400, 500, 600, 700, 800, 900]],
+        ['name' => 'Marcellus', 'kind' => 'serif', 'weights' => [400]],
+        ['name' => 'Italiana', 'kind' => 'serif', 'weights' => [400]],
+        ['name' => 'Yeseva One', 'kind' => 'serif', 'weights' => [400]],
+        ['name' => 'Rozha One', 'kind' => 'serif', 'weights' => [400]],
+        ['name' => 'Arvo', 'kind' => 'serif', 'weights' => [400, 700]],
+        ['name' => 'Roboto Slab', 'kind' => 'serif', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800, 900]],
+        ['name' => 'Zilla Slab', 'kind' => 'serif', 'weights' => [300, 400, 500, 600, 700]],
+        ['name' => 'PT Serif', 'kind' => 'serif', 'weights' => [400, 700]],
+        ['name' => 'Source Serif 4', 'kind' => 'serif', 'weights' => [200, 300, 400, 500, 600, 700, 800, 900]],
+        ['name' => 'Instrument Serif', 'kind' => 'serif', 'weights' => [400]],
+        ['name' => 'Spectral', 'kind' => 'serif', 'weights' => [200, 300, 400, 500, 600, 700, 800]],
 
         // ── Monospace and numerals ────────────────────────────────────────
         ['name' => 'Roboto Mono', 'kind' => 'mono', 'weights' => [100, 200, 300, 400, 500, 600, 700]],
@@ -87,6 +178,10 @@ return [
         ['name' => 'Noto Kufi Arabic', 'kind' => 'urdu', 'weights' => [100, 200, 300, 400, 500, 600, 700, 800, 900]],
         ['name' => 'Cairo', 'kind' => 'urdu', 'weights' => [200, 300, 400, 500, 600, 700, 800, 900]],
         ['name' => 'Almarai', 'kind' => 'urdu', 'weights' => [300, 400, 700, 800]],
+        ['name' => 'Gulzar', 'kind' => 'urdu', 'weights' => [400]],
+        ['name' => 'Amiri', 'kind' => 'urdu', 'weights' => [400, 700]],
+        ['name' => 'Tajawal', 'kind' => 'urdu', 'weights' => [200, 300, 400, 500, 700, 800, 900]],
+        ['name' => 'Noto Naskh Arabic', 'kind' => 'urdu', 'weights' => [400, 500, 600, 700]],
     ],
 
     /*

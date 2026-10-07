@@ -286,4 +286,49 @@ class ScreenPairingTest extends DuskTestCase
                 ->assertDontSee('Alpha Only TV');
         });
     }
+
+    /**
+     * Each heading sorts the list, and says which way (owner, 2026-10-06: "sort by name, status, orientation, paired
+     * date"): newest paired first as the page opens; a heading pressed sorts by it, pressed again the other way.
+     */
+    public function test_the_screens_list_is_sorted_by_whichever_heading_is_pressed(): void
+    {
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->makeOwner($alpha);
+        Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Counter TV', 'paired_at' => now()->subDay(), 'last_seen_at' => now()->subHours(6)]);
+        Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Aisle Board', 'paired_at' => now()->subDays(3), 'last_seen_at' => now()->subMinute()]);
+        Screen::factory()->create(['organization_id' => $alpha->id, 'name' => 'Bar TV', 'paired_at' => now()->subDays(2), 'last_seen_at' => null]);
+
+        $this->browse(function (Browser $browser) use ($owner, $alpha) {
+            $this->freshSession($browser);
+            $browser->loginAs($owner);
+            $this->switchToOrganization($browser, $alpha);
+            $browser->visit('/screens');
+            $this->waitForAlpine($browser);
+            $browser->waitForText('Aisle Board');
+
+            $order = fn (): array => $browser->script("return [...document.querySelectorAll('[dusk^=\"open-screen-\"]')].map((name) => name.textContent.trim())")[0];
+            $sorted = fn (string $column): string => (string) $browser->script("return document.querySelector('[dusk=\"sort-{$column}\"]').closest('th').getAttribute('aria-sort')")[0];
+            $sortsTo = function (string $column, array $names) use ($browser, $order): void {
+                $this->jsClick($browser, '@sort-'.$column);
+                $browser->waitUsing(5, 100, fn () => $order() === $names);
+            };
+
+            $this->assertSame(['Counter TV', 'Bar TV', 'Aisle Board'], $order());
+            $this->assertSame('descending', $sorted('paired'));
+
+            $sortsTo('name', ['Aisle Board', 'Bar TV', 'Counter TV']);
+            $this->assertSame(['ascending', 'none'], [$sorted('name'), $sorted('paired')]);
+
+            $sortsTo('name', ['Counter TV', 'Bar TV', 'Aisle Board']);
+            $this->assertSame('descending', $sorted('name'));
+
+            // Status: online first, a screen never seen last.
+            $sortsTo('status', ['Aisle Board', 'Counter TV', 'Bar TV']);
+            $this->assertSame('descending', $sorted('status'));
+
+            $sortsTo('paired', ['Counter TV', 'Bar TV', 'Aisle Board']);
+            $sortsTo('paired', ['Aisle Board', 'Bar TV', 'Counter TV']);
+        });
+    }
 }

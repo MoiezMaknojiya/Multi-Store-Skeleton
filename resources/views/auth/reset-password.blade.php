@@ -14,11 +14,14 @@
         <x-auth.form-field name="email" label="Email" type="email" :value="$email"
             maxlength="255" autocomplete="username" :required="true" />
 
-        <x-auth.form-field name="password" label="Password" type="password" :required="true" autofocus
-            placeholder="Choose a new password" autocomplete="new-password" hint="At least 8 characters." />
+        {{-- One show/hide for both, on the confirmation (owner, 2026-10-06). --}}
+        <div class="space-y-5" x-data="passwordToggle()">
+            <x-auth.form-field name="password" label="Password" type="password" :required="true" autofocus shared :eye="false"
+                placeholder="Choose a new password" autocomplete="new-password" hint="At least 8 characters." />
 
-        <x-auth.form-field name="password_confirmation" label="Confirm Password" type="password" :required="true"
-            placeholder="Confirm your new password" autocomplete="new-password" />
+            <x-auth.form-field name="password_confirmation" label="Confirm Password" type="password" :required="true" shared
+                placeholder="Confirm your new password" autocomplete="new-password" />
+        </div>
 
         <button type="submit" class="btn-primary-auth" dusk="reset-password-submit">
             {{ __('Reset Password') }}
