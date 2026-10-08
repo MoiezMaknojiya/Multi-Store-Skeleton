@@ -259,10 +259,13 @@ class OrganizationController extends Controller
         $mayUpdate = $actor->can('organization-update');
         $mayDestroy = $actor->can('organization-destroy');
         $mayCreate = $actor->can('organization-store');
+        $mayReadBilling = $actor->can('billing-view');
 
         $organizations->each(fn (Organization $organization) => $organization->can = [
             'update' => $mayUpdate,
             'destroy' => $mayDestroy,
+            // Billing beside Edit (docs/BILLING-SPEC.md §4); its switches ask Change Billing, which the dialog is told when it opens.
+            'billing' => $mayReadBilling,
             // Offered only while the organization has no Owner at all.
             'invite_owner' => $mayCreate && (int) $organization->owners_count === 0,
         ]);

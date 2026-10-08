@@ -82,29 +82,18 @@ export function registerBuilderAssetsTable(Alpine) {
                 return bytesInWords(asset.size ?? 0);
             },
 
-            /** Named by any ad — this organization's, or another organization's or the platform's for a file shared with every organization. */
+            /** Named by an ad of its own shelf: an organization's file by its organization's ads, the platform's by the platform's. */
             isUsed(asset) {
-                return (asset.used_by ?? []).length > 0 || Number(asset.used_elsewhere ?? 0) > 0 || Number(asset.used_by_platform ?? 0) > 0;
+                return (asset.used_by ?? []).length > 0;
             },
 
-            /**
-             * "Used by Winter sale, Eid offer" — or nothing at all, which is why it can be deleted. Another organization's ads
-             * and the platform's using a shared file are counted, never named.
-             */
+            /** "Used by Winter sale, Eid offer" — or nothing at all, which is why it can be deleted. */
             usageLabel(asset) {
                 const used = asset.used_by ?? [];
-                const elsewhere = Number(asset.used_elsewhere ?? 0);
-                const platform = Number(asset.used_by_platform ?? 0);
-                const others = [
-                    elsewhere > 0 ? `${elsewhere} ${elsewhere === 1 ? 'ad' : 'ads'} of other organizations` : '',
-                    platform > 0 ? `${platform} platform ${platform === 1 ? 'ad' : 'ads'}` : '',
-                ].filter(Boolean).join(' and ');
 
-                if (used.length === 0) return others ? `Used by ${others}` : 'Not used yet';
+                if (used.length === 0) return 'Not used yet';
 
-                const named = used.length <= 2 ? used.join(', ') : `${used.slice(0, 2).join(', ')} +${used.length - 2}`;
-
-                return others ? `Used by ${named} and ${others}` : `Used by ${named}`;
+                return `Used by ${used.length <= 2 ? used.join(', ') : `${used.slice(0, 2).join(', ')} +${used.length - 2}`}`;
             },
         },
     })());

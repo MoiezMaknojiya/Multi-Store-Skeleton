@@ -60,10 +60,12 @@ class AdBuilderFlowTest extends DuskTestCase
             $this->jsClick($browser, '@new-ad-cancel');
             $browser->waitUntilMissing('@new-ad-landscape');
 
-            /* ── 2. A new ad: which way is the screen? Then the stage, a television's ─ */
+            /* ── 2. A new ad: which way is the screen? How to start? Then the stage, a television's ─ */
             $this->jsClick($browser, '@new-ad');
             $browser->waitFor('@new-ad-landscape')->assertVisible('@new-ad-portrait');
-            $this->clickAndAwait($browser, '@new-ad-landscape', fn (Browser $b) => $b->waitFor('@ad-stage', 5));
+            $this->jsClick($browser, '@new-ad-landscape');
+            $browser->waitFor('@new-ad-own')->assertVisible('@new-ad-premium');
+            $this->clickAndAwait($browser, '@new-ad-own', fn (Browser $b) => $b->waitFor('@ad-stage', 5));
             $this->waitForAlpine($browser);
             $browser->assertSee('1920 × 1080')
                 ->assertSeeIn('@ad-orientation', 'Landscape');
@@ -315,10 +317,11 @@ class AdBuilderFlowTest extends DuskTestCase
 
     /**
      * The owner's own steps (2026-10-01): above the organizations a new ad is for All organizations, a picture dropped into the picker
-     * goes to the shelf shared with every organization at once — no "choose the organization first" — and once the ad is published an
-     * organization's designer finds it "From the platform", copies it, and opens the copy as their own.
+     * goes to the platform's shelf at once — no "choose the organization first" — and once the ad is published an organization's
+     * designer finds it under Create Ad's Premium Template (2026-10-07), uses it, and works on the copy as their own, its picture
+     * copied onto their own shelf.
      */
-    public function test_the_platform_makes_an_ad_for_every_organization_and_an_organization_copies_it(): void
+    public function test_the_platform_makes_an_ad_for_every_organization_and_an_organization_uses_it_as_a_template(): void
     {
         $admin = $this->seedSuperAdmin();
         $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
@@ -355,41 +358,49 @@ class AdBuilderFlowTest extends DuskTestCase
             $browser->assertDisabled('@ad-organization');
 
             $this->jsClick($browser, '@ad-publish');
-            $browser->waitForText('every organization sees it now');
+            $browser->waitForText('every organization finds it under Premium Template now');
             $browser->waitUsing(20, 250, fn () => $ad->fresh()->isPublished());
             $this->assertNull($ad->fresh()->media->organization_id);
 
-            // An organization's designer finds it, from the platform, and copies it — it is not theirs to change or delete.
+            // An organization's designer does not find it among their ads: it is under Create Ad, a Premium Template.
             $this->freshSession($browser);
             $browser->loginAs($designer);
             $this->switchToOrganization($browser, $organization);
             $browser->visit('/builder');
             $this->waitForAlpine($browser);
-            $browser->waitFor('@ad-card-'.$ad->id)
-                ->assertSeeIn('@ad-owner-'.$ad->id, 'From the platform')
-                ->assertMissing('@edit-ad-'.$ad->id)
-                ->assertMissing('@delete-ad-'.$ad->id);
+            $browser->waitFor('@ads-empty')->assertMissing('@ad-card-'.$ad->id);
 
-            $this->jsClick($browser, '@duplicate-ad-'.$ad->id);
-            $browser->waitForText('Copied to your ads');
-            $browser->waitUsing(20, 250, fn () => BuilderAd::where('organization_id', $organization->id)->exists());
-            $copy = BuilderAd::firstWhere('organization_id', $organization->id);
-            $this->assertSame('Winter sale', $copy->name);
+            $this->jsClick($browser, '@new-ad');
+            $browser->waitFor('@new-ad-landscape');
+            $this->jsClick($browser, '@new-ad-landscape');
+            $browser->waitFor('@new-ad-premium');
+            $this->jsClick($browser, '@new-ad-premium');
+            $browser->waitFor('@template-'.$ad->id)->assertSeeIn('@template-'.$ad->id, 'Winter sale')
+                ->assertVisible('@template-preview-'.$ad->id)
+                ->screenshot('premium-templates');
 
-            // The copy is theirs, to open and change.
-            $browser->waitFor('@edit-ad-'.$copy->id)->screenshot('shared-ad-copied');
-            $browser->visit('/builder/'.$copy->id);
+            $this->clickAndAwait($browser, '@use-template-'.$ad->id, fn (Browser $b) => $b->waitFor('@ad-stage', 10));
             $this->waitForAlpine($browser);
-            $browser->waitFor('@ad-stage')->assertMissing('@ad-organization')->assertMissing('@ad-owner');
+            $copy = BuilderAd::where('organization_id', $organization->id)->sole();
+            $this->assertSame('Winter sale', $copy->name);
+            $this->assertStringEndsWith('/builder/'.$copy->id, $browser->driver->getCurrentURL());
+
+            // The copy is theirs, and so is its picture: a copy on their own shelf, the one on the stage.
+            $own = BuilderAsset::where('organization_id', $organization->id)->sole();
+            $this->assertSame($asset->id, $own->copied_from_id);
+            $this->assertSame($own->id, $copy->document['elements'][0]['assetId'] ?? null);
+            $browser->assertMissing('@ad-organization')->assertMissing('@ad-owner')->waitFor('[dusk^="element-"]');
+            $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
+            $browser->waitFor('@pick-asset-'.$own->id)->assertMissing('@pick-asset-'.$asset->id);
         });
     }
 
     /**
-     * Above the organizations an upload goes to the organization chosen in the Organization list — or, with none chosen, it is shared with
-     * every organization (owner, 2026-09-29: "sub store k liya upload karna ho"), and an organization's designer finds it on their
-     * shelf, marked as the platform's, and in the editor's picker.
+     * Above the organizations an upload goes to the organization chosen in the Organization list — or, with none chosen, it is the
+     * platform's (owner, 2026-09-29), for its ads for every organization: an organization's designer finds neither the platform's file
+     * nor another organization's on their shelf or in the editor's picker (owner, 2026-10-07: their own files alone).
      */
-    public function test_the_platform_shares_a_picture_with_every_organization_or_gives_it_to_the_organization_chosen(): void
+    public function test_the_platform_keeps_a_picture_for_itself_or_gives_it_to_the_organization_chosen(): void
     {
         $admin = $this->seedSuperAdmin();
         $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
@@ -406,16 +417,16 @@ class AdBuilderFlowTest extends DuskTestCase
                 ->assertSelected('@assets-filter-organization', '')      // "All organizations": the shared shelf, with no wall
                 ->assertMissing('@storage-meter');
 
-            /* ── 1. All organizations: the picture is shared with every organization ────── */
+            /* ── 1. All organizations: the picture is the platform's ────── */
             $this->uploadThrough($browser, 'asset', $brandPicture);
             $browser->waitUsing(20, 250, fn () => BuilderAsset::count() === 1);
             $brand = BuilderAsset::sole();
-            $this->assertNull($brand->organization_id, 'the picture was not shared with every organization');
+            $this->assertNull($brand->organization_id, 'the picture did not stay the platform\'s');
             $browser->waitFor('@asset-card-'.$brand->id)->assertSeeIn('@asset-owner-'.$brand->id, 'Every organization');
 
             /* ── 2. One organization chosen: the picture is that organization's alone ───── */
             $browser->select('@assets-filter-organization', (string) $beta->id)
-                ->waitFor('@asset-card-'.$brand->id)                // an organization's shelf shows the shared file too
+                ->waitUntilMissing('@asset-card-'.$brand->id)       // an organization's shelf is its own files alone
                 ->waitFor('@storage-meter');                        // and the organization's own 512 MB where the note once was
             $this->uploadThrough($browser, 'asset', $menuPicture);
             $browser->waitUsing(20, 250, fn () => BuilderAsset::count() === 2);
@@ -423,23 +434,22 @@ class AdBuilderFlowTest extends DuskTestCase
             $this->assertSame($beta->id, $menu->organization_id, 'the picture went to an organization other than the one chosen');
             $browser->waitFor('@asset-card-'.$menu->id)->assertSeeIn('@asset-owner-'.$menu->id, 'Beta Deli');
 
-            /* ── 3. Alpha's designer: the shared file, marked, and no Delete on it; Beta's is not theirs ── */
+            /* ── 3. Alpha's designer: neither the platform's file nor Beta's is on their shelf ── */
             $this->freshSession($browser);
             $browser->loginAs($designer);
             $this->switchToOrganization($browser, $alpha);
             $browser->visit('/builder/assets');
             $this->waitForAlpine($browser);
-            $browser->waitFor('@asset-card-'.$brand->id)
-                ->assertSeeIn('@asset-owner-'.$brand->id, 'From the platform')
-                ->assertMissing('@delete-asset-'.$brand->id)
+            $browser->waitFor('@assets-empty')
+                ->assertMissing('@asset-card-'.$brand->id)
                 ->assertMissing('@asset-card-'.$menu->id);
 
-            /* ── 4. …and puts it on a stage ─────────────────────────────── */
+            /* ── 4. …nor in the editor's picker ─────────────────────────── */
             $browser->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
             $browser->waitFor('@ad-stage');
             $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
-            $browser->waitFor('@pick-asset-'.$brand->id)->assertMissing('@pick-asset-'.$menu->id);
+            $browser->pause(300)->assertMissing('@pick-asset-'.$brand->id)->assertMissing('@pick-asset-'.$menu->id);
         });
     }
 

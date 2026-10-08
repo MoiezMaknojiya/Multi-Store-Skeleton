@@ -1036,8 +1036,8 @@ class AdCompiler
     /* ── Readers ───────────────────────────────────────────────────────── */
 
     /**
-     * Every asset the design names, keyed by id — this organization's own and those the platform shares with every organization; for
-     * an ad shared with every organization, the shared ones alone.
+     * Every asset the design names, keyed by id — from its own shelf alone (BuilderAsset::onShelfOf): an organization's ad its
+     * organization's files, an ad for every organization the platform's.
      */
     private function assetsFor(BuilderAd $ad, array $elements, array $stage): Collection
     {

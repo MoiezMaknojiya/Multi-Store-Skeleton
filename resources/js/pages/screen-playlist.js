@@ -9,6 +9,7 @@
 import axios from 'axios';
 import { dayLabel, toAmPm, windowLabel } from '../core/clock.js';
 import { PlaylistItemDefaults } from '../core/playlist-defaults.js';
+import { isARepeatPress } from '../core/click-beside.js';
 
 /** A rule as the editor holds it. day_mode and time_mode are UI ideas only — the server stores
  *  the dates, the repeat and the two times, and infers nothing from a mode. */
@@ -102,9 +103,15 @@ export function registerScreenPlaylist(Alpine) {
         // with the save that was already happening.
         version: null,
         available: [],
+        /* How many files the library offers in all, whatever the search says: the number on its tab. */
+        availableTotal: null,
         /* Every channel this screen could carry, and the one whose ads are unfolded. */
         channels: [],
         openChannelId: null,
+        /* Which tab of the card beside the playlist is open: 'library' or 'channels' (openPickerTab). */
+        pickerTab: 'library',
+        /* Platform Channels locked for the organization (docs/BILLING-SPEC.md §6): its platform channels offer Unlock, not Add. */
+        channelsLocked: false,
         search: '',
         availableToken: 0,
         loading: true,
@@ -195,6 +202,7 @@ export function registerScreenPlaylist(Alpine) {
                 });
                 if (token !== this.availableToken) return;
                 this.available = data.media;
+                this.availableTotal = data.total;
             } catch (error) {
                 if (token !== this.availableToken) return;
                 if (error.response?.status !== 403) {
@@ -209,6 +217,7 @@ export function registerScreenPlaylist(Alpine) {
             try {
                 const { data } = await axios.get(`/screens/${this.screenId}/available-channels`);
                 this.channels = data.channels;
+                this.channelsLocked = data.platform_channels_locked === true;
             } catch (error) {
                 // Someone who may only look at a playlist is not given the list, and has
                 // no use for it.
@@ -219,9 +228,10 @@ export function registerScreenPlaylist(Alpine) {
         },
 
         /* ── Editing ───────────────────────────────────────────────────── */
-        addItem(media) {
-            // Not while a save is on its way: its answer replaces the list, and this line would go with it.
-            if (this.saving) return;
+        addItem(media, event) {
+            // Not while a save is on its way: its answer replaces the list, and this line would go with it. And once
+            // for a double click: its second press is the same choice, not a second line (isARepeatPress).
+            if (this.saving || isARepeatPress(event)) return;
 
             this.items.push({
                 key: this.nextKey++,
@@ -230,7 +240,6 @@ export function registerScreenPlaylist(Alpine) {
                 type: media.type,
                 orientation: media.orientation ?? null,
                 thumbnail_url: media.thumbnail_url,
-                from_platform: media.from_platform === true,
                 // A picture stays up for as long as the line says. A video runs to its own end — its
                 // measured length, or a generous backstop for one nobody could measure (never an image's
                 // six seconds, which would cut it off) — and an Ad Builder page for the length its design
@@ -258,8 +267,8 @@ export function registerScreenPlaylist(Alpine) {
          * carries no length of its own: it lasts as long as the ads it plays that day,
          * and new ones arrive without anybody coming back here.
          */
-        addChannel(channel) {
-            if (this.saving) return;
+        addChannel(channel, event) {
+            if (this.saving || channel.locked || isARepeatPress(event)) return;
 
             this.items.push({
                 key: this.nextKey++,
@@ -800,6 +809,12 @@ export function registerScreenPlaylist(Alpine) {
 
         channelWarning(channel) {
             return ! channel.channel_active || ! channel.ads_count;
+        },
+
+        /* The tab drawn open: the library whenever the screen has no channel to carry, since then there is no
+         * Channels tab to be on. */
+        openPickerTab() {
+            return this.pickerTab === 'channels' && this.channels.length > 0 ? 'channels' : 'library';
         },
 
         toggleChannelAds(id) {

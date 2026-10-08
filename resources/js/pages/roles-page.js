@@ -21,6 +21,7 @@ const GROUPS = {
     screen: 'Screens',
     media: 'Media library',
     ad: 'Ad Builder',
+    billing: 'Billing',
     channel: 'Channels',
     user: 'Accounts',
     activity: 'Activity log',

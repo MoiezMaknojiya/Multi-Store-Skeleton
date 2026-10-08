@@ -125,6 +125,7 @@ class EveryButtonWorksTest extends DuskTestCase
                 '/roles',
                 '/activity',
                 '/settings/organization',
+                '/settings/billing',
                 '/profile',
             ]);
         });

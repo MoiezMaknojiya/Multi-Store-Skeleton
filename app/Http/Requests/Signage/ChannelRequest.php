@@ -45,7 +45,7 @@ class ChannelRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // An organization's Channels box lists the platform's channels and the organization's own, so a name has to
+            // A screen's Channels tab lists the platform's channels and the organization's own, so a name has to
             // tell the channel apart from every other one in that list.
             // `bail` because the closure below assumes the rules before it held: a name posted as an
             // array (name[]=x) would otherwise reach the query and bind an array as a string.

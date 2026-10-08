@@ -31,7 +31,7 @@
         {{-- The platform's channel seen from inside an organization: there to look at (owner, 2026-09-19). --}}
         @if ($readOnly)
             <p class="alert-info" dusk="channel-read-only-note">
-                From the platform. Put it on a screen from that screen's Channels box.
+                From the platform. Put it on a screen from that screen's Channels tab.
             </p>
         @endif
 

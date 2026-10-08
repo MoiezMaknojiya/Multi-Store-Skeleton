@@ -62,7 +62,7 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
             $this->assertEveryPageFits($browser, [
                 '/dashboard' => [],
                 '/users' => ['invite-platform-member', 'manage-organizations', 'confirm-account-deletion', 'confirm-remove-platform-role', 'confirm-revoke-platform-invitation'],
-                '/organizations' => ['organization-form-modal', 'invite-organization-owner', 'confirm-organization-deletion', 'confirm-organization-ads'],
+                '/organizations' => ['organization-form-modal', 'invite-organization-owner', 'confirm-organization-deletion', 'confirm-organization-ads', 'organization-billing'],
                 '/roles' => ['role-form', 'role-permissions', 'confirm-role-deletion'],
                 '/permissions' => ['permission-form-modal', 'confirm-permission-deletion'],
                 '/activity' => ['confirm-activity-maintenance'],
@@ -101,16 +101,18 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
             $this->assertEveryPageFits($browser, [
                 '/dashboard' => ['decline-invitation-'.$invitation->id],
                 '/screens' => ['screen-pair-modal', 'screen-form-modal'],
-                '/screens/'.$screen->id => ['playlist-copy-modal', 'playlist-schedule-modal'],
+                '/screens/'.$screen->id => ['playlist-copy-modal', 'playlist-schedule-modal', 'unlock-platform-channels'],
                 '/media' => ['media-form-modal'],
                 '/channels' => ['channel-form-modal', 'confirm-channel-deletion'],
                 '/channels/'.$ownChannel->id => ['channel-ad-modal'],
-                '/builder' => ['new-ad-orientation', 'confirm-ad-deletion'],
+                // Inside an organization Create Ad also has the Premium Templates (owner, 2026-10-07), and their unlock dialog.
+                '/builder' => ['new-ad-orientation', 'premium-templates', 'unlock-premium-templates', 'confirm-ad-deletion'],
                 '/builder/assets' => ['confirm-asset-deletion'],
                 '/members' => ['invite-member', 'change-member-role', 'remove-member', 'leave-organization', 'revoke-invitation'],
                 '/roles' => ['role-form', 'confirm-role-deletion'],
                 '/activity' => [],
                 '/settings/organization' => ['open-organization', 'confirm-organization-deletion'],
+                '/settings/billing' => [],
                 '/profile' => ['confirm-user-deletion'],
             ]);
         });

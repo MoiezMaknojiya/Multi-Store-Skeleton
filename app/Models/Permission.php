@@ -19,6 +19,7 @@ class Permission extends Model
         'screen-view', 'screen-store', 'screen-update', 'screen-destroy', 'screen-playlist',
         'media-view', 'media-store', 'media-update', 'media-destroy',
         'ad-view', 'ad-store', 'ad-update', 'ad-destroy',
+        'billing-view',
     ];
 
     /**
@@ -32,6 +33,8 @@ class Permission extends Model
         'organization-view', 'organization-store', 'organization-destroy',
         'channel-view', 'channel-store', 'channel-update', 'channel-destroy',
         'activity-view', 'activity-destroy',
+        // The Premium Templates and Platform Channels switches (docs/BILLING-SPEC.md): never an organization's own to turn.
+        'billing-update',
     ];
 
     /**
@@ -89,6 +92,8 @@ class Permission extends Model
         'ad-store' => 'Create Ads',
         'ad-update' => 'Update Ads',
         'ad-destroy' => 'Delete Ads',
+        'billing-view' => 'View Billing',
+        'billing-update' => 'Change Billing',
         'user-view' => 'View Accounts',
         'user-destroy' => 'Delete Accounts',
         'organization-view' => 'View Organizations',

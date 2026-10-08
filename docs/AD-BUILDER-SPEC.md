@@ -142,6 +142,10 @@ Assets permission of 2026-09-29 is gone, §4) — from every organization's shel
 or the platform's, uses it. An organization's shelf counts the other organizations' ads using a shared file and never names them, so
 one organization never learns another's designs.
 
+**Since 2026-10-07** (the addendum of that day, Premium Templates) the platform's files are its own ads' alone: an organization's
+shelf, its editor's picker and its pages hold its own files only — uploaded, or copied in with a template it used — and nothing
+of the platform's is listed, counted or named to an organization any more.
+
 ---
 
 ## 4. Permissions
@@ -725,10 +729,10 @@ the organization's mistake, not a rule to enforce (owner: "woo toh store owner k
 SAYS it instead of refusing: the playlist page marks a line, or a picker row, whose orientation is not the
 screen's — "Portrait · shows with bars at the sides on this screen" — and every tile and row that names a
 type names the orientation beside it (the holding-picture list, the channel pickers and rows, the library).
-The Channels box's "Show ads" tiles carry the same note, and the holding-picture list names a file the other
+The Channels tab's "Show ads" tiles carry the same note, and the holding-picture list names a file the other
 way round from the screen as the form has it — either way — with a note under the list for the one chosen.
 An upright picture is shown **whole** in every list (`object-contain`, never cut to its middle band): the
-playlist rows and picker, the Channels box and its ads, a channel's ads and its Add-ad picker, the library, the
+playlist rows and picker, the Channels tab and its ads, a channel's ads and its Add-ad picker, the library, the
 campaigns and the Ad Builder's shelf.
 
 **Pasting between shapes.** The clipboard is shared between ads. Pasted elements that land wholly off the stage
@@ -1142,3 +1146,44 @@ agar woo channel mein use ho rae toh nahi ayegi" (docs/CHANNEL-CONTENT-SPEC.md �
   channel shows it, no playlist is offered it.
 - Copy still makes it the organization's own to change. The words of 2026-10-01 above, "an organization plays it from
   its own copy", no longer hold.
+
+## Addendum — 2026-10-07: Premium Templates, and every organization's files its own
+
+The owner: "jab orientation select kare us k bad usko two option show ho "Create You Own" Ya Phir "Preminum template"
+preminum template mein sare all organization walay template ajaye. Jab Woo Preminum template se select kare toh uski copy
+ban jaye aur srif ushi k asset dikhe. ab asset mein sare asset nahi dikhen gay. bs jo organization upload karega ya phir us
+ne jo preminum template se copy karen hongay. us se yeh honga k agar subscription khatam bhi ho jati ha toh woo select
+tempate uska ho gaya chalta rahe aur agar super admin agar kabhi woo template delete ya depreciate kare toh super admin
+wala delete ho jaye assest aur organization wala rahe." Billing comes later (the Premium switch, Locked/Unlocked per
+organization, agreed the same day, is NOT part of this step: until it exists every organization may use a template).
+
+- **Create Ad, inside an organization.** The dialog asks which way the screen is (§12), then **Create Your Own** (the
+  editor on an empty stage, as before) or **Premium Template**: a gallery of the platform's published ads for every
+  organization of that shape (`builder_ads.organization_id` NULL, published — the published name and poster, newest
+  first, a search), each with Preview (the published version, in a new tab) and **Use This Template**. Above the
+  organizations Create Ad is as it was: the platform's designs ARE the templates.
+- **Use This Template** (`POST /builder/templates/{ad}`, `can:ad-store`, inside an organization alone — 404 above the
+  organizations, for a draft, an unpublished ad or an organization's ad) makes the organization's own ad from the template's
+  published version (`App\Services\TemplateCopier`): its name kept while the organization has no ad so called, its poster
+  copied, and **every picture and video it names copied onto the organization's own shelf**, the copy's document
+  pointing at the copies (`assetId` in elements and background layers). A file the organization already holds a copy of
+  (`builder_assets.copied_from_id`, the platform file it came from; NULL once that file is deleted) is used again, never
+  copied twice. Everything new is counted to the organization's 512 MB under its lock (`OrganizationStorage::withRoom`)
+  and asked of the server's reserve (`DiskGuard`); without room nothing is written and the answer says how much is needed.
+  Logged `ad.copied` in the organization. The answer carries `redirect`, the copy's editor.
+- **Every organization's files are its own.** An organization's shelf (`BuilderAsset::onShelfOf`, `visibleTo`) is its own
+  files alone — uploaded, or copied in with a template — in the Assets page, the editor's picker and the compiler; the
+  platform's shared files are the platform's ads' alone. An organization's Ads page lists its own ads alone: the platform's
+  are reached through Premium Template, never listed, opened or copied from the gallery (`BuilderAd::visibleTo`; the
+  template's Preview reads `BuilderAd::premiumTemplates`). So a template's copy depends on nothing of the platform's: the
+  platform deleting or unpublishing the template, or deleting its files (allowed once no platform ad uses them), leaves
+  every organization's copy and its files as they are, and so will the subscription running out.
+- **What was there before** (migration `2026_10_07_200100`): every organization's ad that named a shared file — on live none
+  by the deploy, the owner having deleted Smart Stop's two drafts that did — gets the organization's own copy of each (`copied_from_id` set), its draft
+  and its published version pointing at the copies, and a published one is written again from its published version so
+  its page shows the copies. `down()` points them back at the shared files and deletes the copies.
+- **Tests.** `PremiumTemplatesTest` (the gallery, the copy and its files, reuse, the wall, storage, what deleting the
+  template or its files leaves), `PremiumTemplateAttackTest` (ids that are no template, another organization's ad, the platform
+  side, shapes, two uses at the same moment into the last megabytes), `OwnFilesMigrationTest` (both ways), and in the browser
+  `PremiumTemplateFlowTest` (the owner's steps with a real mouse, a double click on Use This Template making one copy, a
+  slow line, a full organization, a phone).

@@ -97,6 +97,10 @@
                                 <button type="button" class="btn-row-success" x-show="item.can.invite_owner"
                                     x-bind:aria-label="'Invite an owner for ' + item.name"
                                     @click="openInviteOwner(item)" x-bind:dusk="'invite-owner-' + item.id">Invite Owner</button>
+                                {{-- Beside Edit (owner, 2026-10-08 — "har organization ki row per edit k barabar mein"). --}}
+                                <button type="button" class="btn-row-neutral" x-show="item.can.billing"
+                                    x-bind:aria-label="'Billing of ' + item.name"
+                                    @click="openBilling(item)" x-bind:dusk="'billing-organization-' + item.id">Billing</button>
                                 <button type="button" class="btn-row-neutral" x-show="item.can.update"
                                     x-bind:aria-label="'Edit ' + item.name"
                                     @click="openFormModal(item)" x-bind:dusk="'edit-organization-' + item.id">Edit</button>
@@ -275,5 +279,94 @@
                 </form>
             </div>
         </x-modal>
+
+        {{-- Billing of one organization (docs/BILLING-SPEC.md §4): the summary BillingSummary gives its own Settings → Billing tab, and —
+             with Change Billing — a switch for each feature, saved together. Until billing starts the platform turns them; then Stripe. --}}
+        @can('billing-view')
+            <x-modal name="organization-billing" :show="false" maxWidth="2xl" focusable>
+                <form @submit.prevent="saveBilling()" class="p-6" novalidate dusk="organization-billing">
+                    <div class="flex items-center gap-2">
+                        <x-icon name="credit-card" class="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                        <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
+                            x-text="'Billing · ' + (billingOrganization?.name ?? '')">Billing</h2>
+                    </div>
+                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                        @can('billing-update')
+                            Unlock or lock what <span x-text="billingOrganization?.name"></span> has paid for. Its people see the same on their Billing tab, without the switches.
+                        @else
+                            What <span x-text="billingOrganization?.name"></span> uses, and what it will cost once billing starts.
+                        @endcan
+                    </p>
+
+                    <template x-if="billingLoading">
+                        <p class="py-10 text-center text-sm text-muted-soft">
+                            <span class="inline-flex items-center gap-2"><x-spinner class="text-blue-600 dark:text-blue-400" /> Loading...</span>
+                        </p>
+                    </template>
+                    <template x-if="!billingLoading && billingFailed">
+                        <div class="py-8 text-center space-y-3" role="alert">
+                            <p class="text-sm text-gray-700 dark:text-gray-200">Could not load the billing. Check the connection, then try again.</p>
+                            <button type="button" class="btn-row-neutral" @click="loadBilling()">Try Again</button>
+                        </div>
+                    </template>
+
+                    <div x-show="!billingLoading && billing" x-cloak class="mt-4 divide-y divide-gray-100 border-t border-gray-100 dark:divide-gray-700 dark:border-gray-700">
+                        <div class="flex flex-wrap items-center justify-between gap-3 py-4">
+                            <div class="min-w-0 flex-1">
+                                <p class="text-sm font-medium text-gray-900 dark:text-white">Screens</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400" dusk="organization-billing-screens" x-text="screensLine()"></p>
+                            </div>
+                            <p class="shrink-0 text-sm font-semibold text-gray-900 dark:text-white" dusk="organization-billing-total"
+                               x-text="'$' + (billing?.monthly_total ?? 0) + ' / month'"></p>
+                        </div>
+
+                        @foreach (['premium_templates' => 'Premium Templates', 'platform_channels' => 'Platform Channels'] as $feature => $title)
+                            <div class="flex flex-wrap items-center justify-between gap-3 py-4">
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-sm font-medium text-gray-900 dark:text-white" id="billing-{{ $feature }}-label">
+                                        {{ $title }} · $<span x-text="billing?.features.{{ $feature }}.price"></span>
+                                    </p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400" x-text="featureLine('{{ $feature }}')"></p>
+                                </div>
+                                @can('billing-update')
+                                    {{-- A switch: its colours by its own state (aria-checked), so nothing flashes before Alpine starts. --}}
+                                    <button type="button" role="switch" aria-labelledby="billing-{{ $feature }}-label"
+                                            x-bind:aria-checked="billingForm.{{ $feature }}_unlocked ? 'true' : 'false'" aria-checked="false"
+                                            @click="billingForm.{{ $feature }}_unlocked = !billingForm.{{ $feature }}_unlocked"
+                                            x-bind:disabled="savingBilling"
+                                            dusk="billing-switch-{{ $feature }}"
+                                            class="group relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full bg-gray-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 aria-checked:bg-blue-600 dark:bg-gray-600 dark:aria-checked:bg-blue-500">
+                                        <span aria-hidden="true" class="inline-block h-5 w-5 translate-x-0.5 rounded-full bg-white shadow transition-transform group-aria-checked:translate-x-5"></span>
+                                    </button>
+                                @else
+                                    <span x-bind:class="billing?.features.{{ $feature }}.unlocked ? 'badge-success' : 'badge-warning'"
+                                          x-text="billing?.features.{{ $feature }}.unlocked ? 'Unlocked' : 'Locked'"></span>
+                                @endcan
+                            </div>
+                        @endforeach
+
+                        <div class="flex flex-wrap items-center justify-between gap-3 py-4">
+                            <div class="min-w-0 flex-1">
+                                <p class="text-sm font-medium text-gray-900 dark:text-white">Their own ads and uploads</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Always free</p>
+                            </div>
+                            <span class="badge-neutral shrink-0">Free</span>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 flex flex-wrap justify-end gap-3">
+                        <x-secondary-button x-on:click="$dispatch('close-modal', 'organization-billing')" dusk="organization-billing-cancel">
+                            @can('billing-update') Cancel @else Close @endcan
+                        </x-secondary-button>
+                        @can('billing-update')
+                            <x-primary-button x-bind:disabled="savingBilling || !billingChanged()" dusk="organization-billing-save">
+                                <x-spinner x-show="savingBilling" x-cloak />
+                                <span x-text="savingBilling ? 'Saving...' : 'Save Changes'">Save Changes</span>
+                            </x-primary-button>
+                        @endcan
+                    </div>
+                </form>
+            </x-modal>
+        @endcan
     </div>
 </x-app-layout>

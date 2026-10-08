@@ -112,6 +112,6 @@ test('the pages inside an organization say organization', function () {
     assertEveryPageSaysOrganization($this, [
         '/dashboard', '/screens', '/screens/'.$screen->id, '/media', '/channels', '/channels/'.$channel->id,
         '/builder', '/builder/assets', '/builder/create?orientation=landscape', '/members', '/roles', '/activity',
-        '/settings/organization', '/profile',
+        '/settings/organization', '/settings/billing', '/profile',
     ]);
 });

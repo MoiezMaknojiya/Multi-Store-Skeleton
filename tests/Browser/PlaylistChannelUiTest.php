@@ -57,8 +57,14 @@ class PlaylistChannelUiTest extends DuskTestCase
             $browser->visit('/screens/'.$screen->id);
             $this->waitForAlpine($browser);
 
-            // -- The box, under the library, says what the channel will play --------
-            $browser->waitFor('@channel-picker')
+            // -- The Channels tab, beside the library's, says what the channel will play --------
+            // The card opens on the library: the channels wait behind their own tab.
+            $browser->waitFor('@picker-tab-channels')
+                ->assertSeeIn('@picker-count-channels', '1')
+                ->assertMissing('@channel-picker')
+                ->click('@picker-tab-channels')
+                ->waitFor('@channel-picker')
+                ->assertMissing('@media-picker')
                 ->assertSeeIn('@channel-picker-info-'.$gama->id, '2 ads · 1 each time, about 10 secs');
 
             $this->jsClick($browser, '@channel-preview-'.$gama->id);

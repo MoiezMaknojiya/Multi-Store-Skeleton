@@ -18,12 +18,14 @@ use Illuminate\Support\Facades\Storage;
  * background loop — that only means anything inside a design. Same organization wall, same disk, its own folder
  * (`builder/{organization}/assets/…`).
  *
- * An asset with no organization (`organization_id` NULL, `builder/platform/assets/…`) is the platform's, shared with every organization
- * (owner, 2026-09-29): every organization's designs may use it, it counts to no organization's 512 MB, and it is deleted above the
- * organizations alone, with Delete Ads (owner, 2026-10-01: an organization sees and uses it, "srif delete nahi kar sakta ha") — from
- * every organization's shelf at once, and never while any organization's ad, or the platform's, uses it.
+ * An asset with no organization (`organization_id` NULL, `builder/platform/assets/…`) is the platform's: its ads for every
+ * organization — the Premium Templates — use it, it counts to no organization's 512 MB, and it is deleted above the organizations
+ * alone, with Delete Ads, never while a platform ad uses it. An organization's shelf is its own files alone (owner, 2026-10-07):
+ * what it uploaded, and what came with a template it used — the organization's own copy of the platform's file
+ * (`copied_from_id`), which stays whatever the platform does with its own.
  *
  * @property int|null $organization_id
+ * @property int|null $copied_from_id
  */
 class BuilderAsset extends Model
 {
@@ -43,7 +45,7 @@ class BuilderAsset extends Model
     public const MAX_VIDEO_SECONDS = 30;
 
     protected $fillable = [
-        'organization_id', 'title', 'kind', 'mime_type', 'disk', 'path', 'thumbnail_path',
+        'organization_id', 'copied_from_id', 'title', 'kind', 'mime_type', 'disk', 'path', 'thumbnail_path',
         'size', 'width', 'height', 'duration_seconds', 'created_by',
     ];
 
@@ -94,9 +96,8 @@ class BuilderAsset extends Model
     }
 
     /**
-     * Above the organizations every organization's and the shared ones; inside an organization its own and the shared ones; with no organization
-     * selected, none. What may be DONE to one is the controller's to ask (a shared one is deleted with its own
-     * permission).
+     * Above the organizations every organization's and the platform's; inside an organization its own alone; with no organization
+     * selected, none. What may be DONE to one is the controller's to ask.
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
@@ -110,17 +111,16 @@ class BuilderAsset extends Model
     }
 
     /**
-     * What an organization's designs may use: its own and what the platform shares with every organization. An ad shared with every
-     * organization ($organizationId null) uses the shared files alone: an organization's own file would show in no other organization's copy.
+     * What a design may use: an organization's ad its organization's own files alone (owner, 2026-10-07 — "bs jo organization
+     * upload karega ya phir us ne jo preminum template se copy karen hongay"), an ad for every organization ($organizationId
+     * null) the platform's alone.
      */
     public function scopeOnShelfOf(Builder $query, ?int $organizationId): Builder
     {
-        return $organizationId === null
-            ? $query->whereNull('organization_id')
-            : $query->where(fn (Builder $query) => $query->where('organization_id', $organizationId)->orWhereNull('organization_id'));
+        return $organizationId === null ? $query->whereNull('organization_id') : $query->where('organization_id', $organizationId);
     }
 
-    /** The platform's, shared with every organization — no organization's own. */
+    /** The platform's, for its ads for every organization — no organization's own. */
     public function isShared(): bool
     {
         return $this->organization_id === null;

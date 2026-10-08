@@ -50,6 +50,9 @@ class Organization extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'accepts_network_ads' => 'boolean',
+        // What the organization has unlocked (docs/BILLING-SPEC.md): switched by the platform alone, never through $fillable.
+        'premium_templates_unlocked' => 'boolean',
+        'platform_channels_unlocked' => 'boolean',
     ];
 
     protected static function booted(): void

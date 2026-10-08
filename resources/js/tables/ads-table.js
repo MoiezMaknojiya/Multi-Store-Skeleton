@@ -3,7 +3,8 @@
  *
  * Unlike the other listings there is no form modal — an ad is made in the editor, not in a dialog — so
  * this adds only the two row actions the gallery offers beside Edit: Copy (a draft to work from) and
- * Delete (a big delete, so the shared password confirmation).
+ * Delete (a big delete, so the shared password confirmation). And Create Ad's questions: which way the screen is, and,
+ * inside an organization, how to start — Create Your Own or a Premium Template (owner, 2026-10-07).
  */
 import axios from 'axios';
 import { takeAddressFlag } from '../core/address-flag.js';
@@ -23,13 +24,32 @@ export function registerAdsTable(Alpine) {
             busyId: null,
             /* Above the organizations: one organization, or every organization (empty). */
             filterOrganization: '',
+
+            /* ── Create Ad ──────────────────────────────────────────────── */
+            /* 'orientation', then inside an organization 'start' (Create Your Own or Premium Template). */
+            newAdStep: 'orientation',
+            newAdOrientation: null,
+            /* The Premium Templates of the shape chosen, and where their list stands: idle | loading | ready | failed. */
+            templates: [],
+            templatesState: 'idle',
+            /* Premium Templates locked for the organization (docs/BILLING-SPEC.md §6): every template shown, Contact Us to Unlock on each. */
+            templatesLocked: false,
+            templateSearch: '',
+            templatesAsked: 0,
+            /* The template being copied: every Use This Template waits for it, and the page leaves for the editor. */
+            usingTemplateId: null,
         },
 
         extraMethods: {
             /** Sent here to start a new ad (/builder/create with no shape chosen): New ad's question, at once. */
             onInit() {
                 // The dialog is on the page only for somebody who may create an ad.
-                if (takeAddressFlag('new')) this.$nextTick(() => this.$dispatch('open-modal', 'new-ad-orientation'));
+                if (takeAddressFlag('new')) this.$nextTick(() => this.startNewAd());
+
+                // Back from the editor a template opened, the browser may show this page as it was left: the button free again.
+                window.addEventListener('pageshow', (event) => {
+                    if (event.persisted) this.usingTemplateId = null;
+                });
             },
 
             /* ── Listing filters ───────────────────────────────────────── */
@@ -67,6 +87,88 @@ export function registerAdsTable(Alpine) {
                     window.toast(error.response?.data?.message ?? 'Could not copy this ad.');
                 } finally {
                     this.busyId = null;
+                }
+            },
+
+            /* ── Create Ad ─────────────────────────────────────────────── */
+
+            /** Create Ad's first question, asked afresh every time. */
+            startNewAd() {
+                this.newAdStep = 'orientation';
+                this.newAdOrientation = null;
+                this.$dispatch('open-modal', 'new-ad-orientation');
+            },
+
+            /** Inside an organization the shape leads to the second question: how to start — where the keyboard goes too. */
+            chooseOrientation(orientation) {
+                this.newAdOrientation = orientation;
+                this.newAdStep = 'start';
+                this.$nextTick(() => document.getElementById('new-ad-own')?.focus());
+            },
+
+            /** Back to the shape, the keyboard on the one chosen. */
+            backToOrientation() {
+                this.newAdStep = 'orientation';
+                this.$nextTick(() => document.getElementById(`new-ad-${this.newAdOrientation ?? 'landscape'}`)?.focus());
+            },
+
+            /**
+             * The rest of the double click that chose the shape lands on what took the shape's place — Create Your Own, Premium
+             * Template — and must not choose it as well; nor may a double click on Preview open two tabs.
+             */
+            ignoreRepeatPress(event) {
+                if (isARepeatPress(event)) event.preventDefault();
+            },
+
+            /** Premium Template: the gallery of the shape chosen, in a dialog as wide as the window. */
+            openTemplates(event) {
+                if (isARepeatPress(event)) return;
+                this.templates = [];
+                this.templateSearch = '';
+                this.$dispatch('close-modal', 'new-ad-orientation');
+                this.$dispatch('open-modal', 'premium-templates');
+                this.loadTemplates();
+            },
+
+            /** Back to how to start, with the shape kept. */
+            backToStart() {
+                if (this.usingTemplateId !== null) return;
+                this.$dispatch('close-modal', 'premium-templates');
+                this.newAdStep = 'start';
+                this.$dispatch('open-modal', 'new-ad-orientation');
+            },
+
+            /** The templates of the shape chosen — the newest search's answer alone, however the answers arrive. */
+            async loadTemplates() {
+                const asked = ++this.templatesAsked;
+                this.templatesState = 'loading';
+
+                try {
+                    const { data } = await axios.get('/builder/templates', {
+                        params: { orientation: this.newAdOrientation, search: this.templateSearch || undefined },
+                    });
+                    if (asked !== this.templatesAsked) return;
+                    this.templates = data.templates;
+                    this.templatesLocked = data.locked === true;
+                    this.templatesState = 'ready';
+                } catch {
+                    if (asked !== this.templatesAsked) return;
+                    this.templates = [];
+                    this.templatesState = 'failed';
+                }
+            },
+
+            /** Use This Template: the organization's own ad, files and all, opened in the editor. Once for a double click. */
+            async useTemplate(template, event) {
+                if (this.usingTemplateId !== null || isARepeatPress(event)) return;
+                this.usingTemplateId = template.id;
+
+                try {
+                    const { data } = await axios.post(`/builder/templates/${template.id}`);
+                    window.location.assign(data.redirect);
+                } catch (error) {
+                    this.usingTemplateId = null;
+                    window.toast(error.response?.data?.message ?? 'Could not use this template.');
                 }
             },
         },

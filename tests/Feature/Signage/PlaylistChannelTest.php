@@ -98,7 +98,7 @@ test('a screen in another organization is still out of reach', function () {
         ->getJson("/screens/{$theirs->id}/available-channels")->assertNotFound();
 });
 
-test('the playlist page carries the Channels box', function () {
+test('the playlist page carries the Channels tab', function () {
     $this->actingAs($this->owner)->withSession(['current_organization_id' => $this->organization->id])
         ->get("/screens/{$this->screen->id}")->assertOk()->assertSee('channel-picker', false);
 });

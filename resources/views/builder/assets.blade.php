@@ -7,7 +7,7 @@
     <div x-data="builderAssetsTable({{ Js::from(['storage' => $storage]) }})" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
         {{-- The organization's storage where a note once stood (owner, 2026-09-30), the organization list and the search beside it. The
-             meter shows only for an organization's shelf: the platform's shared one (All organizations) has no wall. --}}
+             meter shows only for an organization's shelf: the platform's own (All organizations) has no wall. --}}
         <div class="flex flex-wrap items-center justify-between gap-3">
             {{-- The shelf counts toward the organization's 512 MB like its library does. --}}
             <x-storage-meter class="w-full sm:w-96" :initial="$storage" />
@@ -30,8 +30,8 @@
         @can('ad-store')
             {{-- The shared uploader (docs/UPLOADS-SPEC.md): each picture or video joins the shelf as it arrives. The
                  page listens here, not on the box: an expression on the box runs with the box's own `this`. --}}
-            {{-- Above the organizations an organization chosen in the Organization list gets the file; with All organizations it is shared with every
-                 organization. --}}
+            {{-- Above the organizations an organization chosen in the Organization list gets the file; with All organizations it is the
+                 platform's, for its ads for every organization (the Premium Templates). --}}
             <div x-on:upload-added="onUploaded($event.detail)" dusk="upload-asset">
                 <x-upload-dropzone purpose="asset" mode="add" :multiple="true" add-url="/builder/assets" dusk="asset"
                     :max-video-seconds="\App\Models\BuilderAsset::MAX_VIDEO_SECONDS"
@@ -92,7 +92,7 @@
                                           x-bind:dusk="'asset-details-' + item.id" x-text="assetDetails(item)"></span>
                                 </div>
 
-                                {{-- An organization's own file with Delete Ads; a shared one only above the organizations: the row says
+                                {{-- An organization's own file with Delete Ads; the platform's only above the organizations: the row says
                                      which this person may (can_delete), the controller asks again. --}}
                                 @can('ad-destroy')
                                     <button type="button" x-show="item.can_delete" x-cloak @click="askToDelete(item)"
@@ -108,8 +108,8 @@
                                 <p class="truncate text-sm font-medium text-gray-800 dark:text-white" x-bind:title="item.title"
                                    x-bind:dusk="'asset-title-' + item.id" x-text="item.title"></p>
 
-                                {{-- Two pills: whose it is (above the organizations its organization or "Every organization"; inside an organization, the
-                                     platform's) and whether an ad uses it — green in use, grey not yet. --}}
+                                {{-- Two pills: whose it is (above the organizations: its organization, or "Every organization" for the platform's;
+                                     an organization's shelf is its own alone) and whether an ad uses it — green in use, grey not yet. --}}
                                 <div class="flex flex-wrap items-center gap-1">
                                     <span x-show="item.owner_label" x-cloak x-bind:class="item.shared ? 'badge-info' : 'badge-neutral'"
                                           x-text="item.owner_label" x-bind:dusk="'asset-owner-' + item.id"></span>
@@ -132,8 +132,8 @@
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Delete this file?</h2>
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
                     <span class="font-medium" x-text="selectedItem?.title"></span> goes for good. No ad uses it.
-                    <span x-show="selectedItem?.shared" x-cloak dusk="confirm-asset-deletion-shared">It is shared with every
-                        organization, so it goes from every organization's shelf.</span>
+                    <span x-show="selectedItem?.shared" x-cloak dusk="confirm-asset-deletion-shared">It is the platform's: the copies
+                        organizations made with a template stay theirs.</span>
                 </p>
 
                 <div class="mt-6 flex flex-wrap justify-end gap-3">

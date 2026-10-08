@@ -1,9 +1,11 @@
-{{-- The Settings tabs (owner's rules, 2026-09-17): the person's own profile, and Organizations — for an organization member working
-     in an organization whose role there holds View Organizations (User::hasOrganizationsTab). Each tab is a page of its own, so every
-     plain form on them keeps returning to where it was sent from. --}}
+{{-- The Settings tabs (owner's rules, 2026-09-17): the person's own profile, Organizations — for an organization member working
+     in an organization whose role there holds View Organizations (User::hasOrganizationsTab) — and Billing, with View Billing there
+     (owner, 2026-10-08; User::hasBillingTab). Each tab is a page of its own, so every plain form on them keeps returning to where
+     it was sent from. --}}
 @props(['active'])
 
 @php($__organizationTab = auth()->user()->hasOrganizationsTab())
+@php($__billingTab = auth()->user()->hasBillingTab())
 
 <nav class="flex gap-6 border-b border-gray-200 dark:border-gray-700" aria-label="Settings" dusk="settings-tabs">
     {{-- The open tab is the one with aria-current; tab-link colours it (app.css). --}}
@@ -13,5 +15,10 @@
     @if ($__organizationTab)
         <a href="{{ route('organization-settings.edit') }}" dusk="settings-tab-organization" class="tab-link"
            @if ($active === 'organization') aria-current="page" @endif>Organizations</a>
+    @endif
+
+    @if ($__billingTab)
+        <a href="{{ route('billing.show') }}" dusk="settings-tab-billing" class="tab-link"
+           @if ($active === 'billing') aria-current="page" @endif>Billing</a>
     @endif
 </nav>

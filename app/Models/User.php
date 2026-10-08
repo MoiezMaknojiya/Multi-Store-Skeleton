@@ -296,6 +296,15 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * Whether Settings has a Billing tab for this person (owner, 2026-10-08 — "organization mein billing profile k ander ho"; docs/
+     * BILLING-SPEC.md §3): an organization member working in an organization whose role there holds View Billing.
+     */
+    public function hasBillingTab(): bool
+    {
+        return $this->globalRole() === null && (bool) session('current_organization_id') && $this->can('billing-view');
+    }
+
+    /**
      * The platform role, held on the organization_id = 0 row, if any: Super-Admin, or any role the
      * super admin made for the platform team.
      */

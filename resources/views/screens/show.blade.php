@@ -108,7 +108,8 @@
                             <div class="flex-1 min-w-0">
                                 <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 min-w-0 text-sm font-medium text-gray-800 dark:text-white">
                                     <span class="truncate" x-text="item.title"></span>
-                                    {{-- The platform's file, which the organization's Media page never lists. --}}
+                                    {{-- A platform file from before the Content Library became the organization's own (docs/BILLING-SPEC.md §5),
+                                         left where no copy could be made: said, so the save's refusal names something the page shows. --}}
                                     <span x-show="item.from_platform" x-cloak class="badge-neutral shrink-0"
                                           x-bind:dusk="'playlist-platform-' + index">From the platform</span>
                                 </p>
@@ -199,24 +200,38 @@
                 </div>
             </div>
 
-            {{-- The right-hand column: the organization's own files and the platform's, and below them the channels it
-                 may carry — the same kind of box, so adding either one reads the same. Both are
-                 for adding to the playlist, and their lists answer screen-playlist alone, so
-                 somebody who may only look at the playlist is not shown two boxes that stay empty. --}}
+            {{-- The right-hand column: ONE card with two tabs (owner, 2026-10-07 — "Content library aur channel us ek
+                 card kar k tab bana du"): the organization's own files and the platform's, and the channels it may
+                 carry — the same kind of row, so adding either one reads the same. Both are for adding to the
+                 playlist, and their lists answer screen-playlist alone, so somebody who may only look at the
+                 playlist is not shown a card that stays empty. The Channels tab is there only while the screen has
+                 a channel to carry (the platform's or the organization's own), and the card opens on the library. --}}
             @can('screen-playlist')
-            <div class="space-y-6">
-
-            {{-- ── Library picker ───────────────────────────────────────── --}}
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="text-subheading">Content library</h2>
-                    <div class="w-full max-w-xs">
-                        <input x-model="search" type="search" placeholder="Search files..." aria-label="Search files" autocomplete="new-password" maxlength="255"
-                            dusk="media-picker-search" class="form-input" />
+            <div class="card self-start" dusk="playlist-picker">
+                {{-- A tab list with its two panels, so a screen reader says "tab, 1 of 2" and which list is open; the
+                     open tab is the one with aria-selected, written as the page opens (the library) so the row is
+                     right before Alpine starts, and tab-link colours it (app.css). --}}
+                <div class="border-b border-gray-100 px-5 pt-4 dark:border-gray-700">
+                    <div class="-mb-px flex flex-wrap gap-x-6" role="tablist" aria-label="Add to the playlist">
+                        <button type="button" role="tab" id="picker-tab-library" aria-controls="picker-panel-library" dusk="picker-tab-library"
+                            class="tab-link" @click="pickerTab = 'library'"
+                            aria-selected="true" :aria-selected="openPickerTab() === 'library' ? 'true' : 'false'">
+                            Content Library <span class="ml-1 badge-neutral" x-show="availableTotal !== null" x-cloak x-text="availableTotal" dusk="picker-count-library"></span>
+                        </button>
+                        <button type="button" role="tab" id="picker-tab-channels" aria-controls="picker-panel-channels" dusk="picker-tab-channels"
+                            class="tab-link" @click="pickerTab = 'channels'" x-show="channels.length > 0" x-cloak
+                            aria-selected="false" :aria-selected="openPickerTab() === 'channels' ? 'true' : 'false'">
+                            Channels <span class="ml-1 badge-neutral" x-text="channels.length" dusk="picker-count-channels"></span>
+                        </button>
                     </div>
                 </div>
 
-                <div class="p-4 space-y-2" dusk="media-picker">
+            {{-- ── Content Library ──────────────────────────────────────── --}}
+                <div x-show="openPickerTab() === 'library'" id="picker-panel-library" role="tabpanel" aria-labelledby="picker-tab-library"
+                     class="p-4 space-y-2" dusk="media-picker">
+                    <input x-model="search" type="search" placeholder="Search files..." aria-label="Search files" autocomplete="new-password" maxlength="255"
+                        dusk="media-picker-search" class="form-input" />
+
                     {{-- The picker leaves them out rather than offering and refusing them (owner, 2026-09-26). --}}
                     <p class="text-xs text-muted-soft" dusk="picker-channel-note">
                         Files in a channel are not listed, so nothing plays twice.
@@ -256,10 +271,6 @@
                             <div class="flex-1 min-w-0">
                                 <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 min-w-0 text-sm font-medium text-gray-800 dark:text-white">
                                     <span class="truncate" x-text="media.title"></span>
-                                    {{-- The platform's own file, offered to every organization's screens (owner, 2026-10-05);
-                                         below the name when there is no room beside it, so neither is cut short. --}}
-                                    <span x-show="media.from_platform" x-cloak class="badge-neutral shrink-0"
-                                          x-bind:dusk="'picker-platform-' + media.id">From the platform</span>
                                 </p>
                                 <p class="text-xs text-gray-500 dark:text-gray-400">
                                     <span x-text="typeLabel(media)"></span>
@@ -271,27 +282,30 @@
                                 </p>
                             </div>
 
-                            <button @click="addItem(media)" x-bind:dusk="'playlist-add-' + media.id" x-bind:disabled="saving"
+                            <button @click="addItem(media, $event)" x-bind:dusk="'playlist-add-' + media.id" x-bind:disabled="saving"
                                 class="btn-row-neutral" x-bind:aria-label="'Add ' + media.title + ' to the playlist'">Add</button>
                         </div>
                     </template>
                 </div>
-            </div>
 
             {{-- ── Channels ─────────────────────────────────────────────────
                  Ads the platform offers every organization, plus this organization's own channels — a wholesaler's
                  promotions, a season — that this organization may choose to carry. Adding one puts ONE line on the
                  playlist, and that line plays whatever the channel is running that day,
-                 exactly where it stands. Not shown at all while there are no channels. --}}
-            <div class="card" x-show="channels.length > 0" x-cloak dusk="channel-picker">
-                <div class="card-header">
-                    <div>
-                        <h2 class="text-subheading">Channels</h2>
-                        <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Add one once &mdash; its new ads arrive on their own.</p>
-                    </div>
-                </div>
+                 exactly where it stands. Its tab is not shown at all while there are no channels. --}}
+                <div x-show="openPickerTab() === 'channels'" x-cloak id="picker-panel-channels" role="tabpanel" aria-labelledby="picker-tab-channels"
+                     class="p-4 space-y-2" dusk="channel-picker">
+                    <p class="text-xs text-muted-soft">Add one once &mdash; its new ads arrive on their own.</p>
 
-                <div class="p-4 space-y-2">
+                    {{-- Locked (docs/BILLING-SPEC.md §6): the platform's channels are shown, with Unlock in place of Add. --}}
+                    <div x-show="channelsLocked && channels.some((channel) => channel.locked)" x-cloak class="alert-warning flex items-start gap-3" dusk="channels-locked">
+                        <x-icon name="lock-closed" class="mt-0.5 h-4 w-4 shrink-0" />
+                        <div>
+                            <p class="font-semibold">Platform channels are locked for {{ $screen->organization?->name }}.</p>
+                            <p class="mt-0.5">See what they play. To put them on your screens, unlock every platform channel for ${{ \App\Services\BillingSummary::PLATFORM_CHANNELS_PRICE }}: contact us.</p>
+                        </div>
+                    </div>
+
                     <template x-for="channel in channels" :key="channel.id">
                         <div class="rounded-md border border-gray-200 dark:border-gray-700">
                             <div class="flex items-center gap-3 p-2">
@@ -312,6 +326,8 @@
                                              the name when there is no room beside it, so neither is cut short. --}}
                                         <span x-show="channel.is_organization_channel" class="badge-neutral shrink-0"
                                               x-bind:dusk="'channel-picker-own-' + channel.id">This organization</span>
+                                        <span x-show="channel.locked" x-cloak class="badge-warning inline-flex shrink-0 items-center gap-1"
+                                              x-bind:dusk="'channel-picker-premium-' + channel.id"><x-icon name="lock-closed" class="h-3 w-3" /> Premium</span>
                                     </p>
                                     <p class="text-xs"
                                        x-bind:class="channelWarning(channel) ? 'text-amber-700 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'"
@@ -325,8 +341,13 @@
                                         x-bind:aria-expanded="(openChannelId === channel.id).toString()"
                                         x-text="openChannelId === channel.id ? 'Hide Ads' : 'Show Ads'"></button>
 
-                                <button @click="addChannel(channel)" x-bind:dusk="'playlist-add-channel-' + channel.id" x-bind:disabled="saving"
+                                <button @click="addChannel(channel, $event)" x-bind:dusk="'playlist-add-channel-' + channel.id" x-bind:disabled="saving"
+                                    x-show="!channel.locked"
                                     class="btn-row-neutral" x-bind:aria-label="'Add the channel ' + channel.title + ' to the playlist'">Add</button>
+                                <button type="button" x-show="channel.locked" x-cloak @click="$dispatch('open-modal', 'unlock-platform-channels')"
+                                    x-bind:dusk="'unlock-channel-' + channel.id"
+                                    class="btn-row-neutral inline-flex items-center gap-1" x-bind:aria-label="'Unlock the channel ' + channel.title">
+                                    <x-icon name="lock-closed" class="h-3 w-3" /> Unlock</button>
                             </div>
 
                             {{-- What adding it would actually play, today. --}}
@@ -356,10 +377,12 @@
                     </template>
                 </div>
             </div>
-
-            </div>
             @endcan
         </div>
+
+        @can('screen-playlist')
+            <x-billing.unlock-dialog name="unlock-platform-channels" feature="platform_channels" :organization="$screen->organization?->name" />
+        @endcan
 
         {{-- ── When one item plays ──────────────────────────────────────── --}}
         <x-modal name="playlist-schedule-modal" :show="false" maxWidth="3xl" persistent>

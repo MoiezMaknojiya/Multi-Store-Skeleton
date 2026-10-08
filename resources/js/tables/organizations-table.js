@@ -31,6 +31,15 @@ export function registerOrganizationsTable(Alpine) {
             selectedOrganizationIds: [],
             pendingAdsAccepts: null,   // what the confirm modal is about to do
             savingAds: false,
+
+            /* Billing of one organization (docs/BILLING-SPEC.md §4): its summary, and the two switches as they stand in the dialog. */
+            billingOrganization: null,
+            billing: null,
+            billingForm: { premium_templates_unlocked: true, platform_channels_unlocked: true },
+            billingLoading: false,
+            billingFailed: false,
+            billingAsked: 0,
+            savingBilling: false,
         },
         defaultForm: {
             name: '', street: '', suite: '', city: '',
@@ -65,6 +74,84 @@ export function registerOrganizationsTable(Alpine) {
         }),
 
         extraMethods: {
+            /* ── Billing ───────────────────────────────────────────────── */
+
+            openBilling(organization) {
+                this.billingOrganization = organization;
+                this.billing = null;
+                this.$dispatch('open-modal', 'organization-billing');
+                this.loadBilling();
+            },
+
+            /** The organization's summary — the newest asked for alone, should another row's Billing be pressed meanwhile. */
+            async loadBilling() {
+                const asked = ++this.billingAsked;
+                const organization = this.billingOrganization;
+                this.billingLoading = true;
+                this.billingFailed = false;
+
+                try {
+                    const { data } = await axios.get(`/organizations/${organization.id}/billing`);
+                    if (asked !== this.billingAsked) return;
+                    this.showBilling(data.billing);
+                } catch {
+                    if (asked !== this.billingAsked) return;
+                    this.billingFailed = true;
+                } finally {
+                    if (asked === this.billingAsked) this.billingLoading = false;
+                }
+            },
+
+            showBilling(billing) {
+                this.billing = billing;
+                this.billingForm = {
+                    premium_templates_unlocked: billing.features.premium_templates.unlocked,
+                    platform_channels_unlocked: billing.features.platform_channels.unlocked,
+                };
+            },
+
+            /** "4 screens: the first is free, then $5 a month each" */
+            screensLine() {
+                const count = this.billing?.screen_count ?? 0;
+                if (count === 0) return 'No screens yet: the first one is free';
+
+                return `${count} ${count === 1 ? 'screen' : 'screens'}: the first is free, then $${this.billing.screen_price} a month each`;
+            },
+
+            /** What the switch says the organization may do, as it stands in the dialog. */
+            featureLine(feature) {
+                const name = this.billingOrganization?.name ?? '';
+                const unlocked = this.billingForm[`${feature}_unlocked`];
+
+                return feature === 'premium_templates'
+                    ? (unlocked ? `Unlocked: ${name} can use every template` : `Locked: ${name} sees the templates and cannot use them`)
+                    : (unlocked ? `Unlocked: ${name} can put every platform channel on its screens` : `Locked: ${name} sees the platform channels and cannot add them`);
+            },
+
+            billingChanged() {
+                const features = this.billing?.features;
+
+                return !!features && (this.billingForm.premium_templates_unlocked !== features.premium_templates.unlocked
+                    || this.billingForm.platform_channels_unlocked !== features.platform_channels.unlocked);
+            },
+
+            async saveBilling() {
+                if (this.savingBilling || !this.billingChanged()) return;
+                this.savingBilling = true;
+                const organization = this.billingOrganization;
+
+                try {
+                    const { data } = await axios.put(`/organizations/${organization.id}/billing`, this.billingForm);
+                    if (this.billingOrganization?.id === organization.id) this.showBilling(data.billing);
+                    window.toast(data.message, 'success');
+                    this.$dispatch('close-modal', 'organization-billing');
+                } catch (error) {
+                    window.toast(error.response?.data?.message ?? 'Could not save the billing.');
+                } finally {
+                    this.savingBilling = false;
+                }
+            },
+
             /* ── Owners ────────────────────────────────────────────────── */
 
             openInviteOwner(organization) {

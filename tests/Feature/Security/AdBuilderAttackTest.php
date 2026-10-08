@@ -110,22 +110,21 @@ test('another organization’s asset cannot be deleted by its id, and the shelf 
     expect($titles->all())->toBe(['Our logo']);
 });
 
-test('an organization’s person never makes a file shared, and never deletes a shared one', function () {
+test('an organization’s person never makes a file the platform’s, and never reaches one', function () {
     // Whatever the request says, an organization's person's upload is their organization's own.
     $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png'), 'organization_id' => ''])->assertOk();
     expect(BuilderAsset::sole()->organization_id)->toBe($this->organization->id);
 
-    $shared = BuilderAsset::factory()->create(['organization_id' => null, 'title' => 'Brand kit', 'path' => 'builder/platform/assets/brand.png']);
+    $platform = BuilderAsset::factory()->create(['organization_id' => null, 'title' => 'Brand kit', 'path' => 'builder/platform/assets/brand.png']);
 
-    // Delete Ads deletes the organization's own; a shared file is the platform's alone to delete (owner, 2026-10-01).
-    $this->deleteJson("/builder/assets/{$shared->id}")->assertForbidden();
+    // The platform's file is not on an organization's shelf at all (owner, 2026-10-07): not listed, not deleted.
+    $this->deleteJson("/builder/assets/{$platform->id}")->assertNotFound();
 
-    // And what the shelf says of a shared file another organization's ad uses names nothing of that organization.
-    $document = attackDocument([['id' => 'a', 'type' => 'image', 'x' => 0, 'y' => 0, 'w' => 100, 'h' => 100, 'z' => 0, 'assetId' => $shared->id]]);
+    $document = attackDocument([['id' => 'a', 'type' => 'image', 'x' => 0, 'y' => 0, 'w' => 100, 'h' => 100, 'z' => 0, 'assetId' => $platform->id]]);
     BuilderAd::factory()->create(['organization_id' => $this->other->id, 'name' => 'Beta private launch', 'document' => $document]);
 
-    expect(json_encode($this->getJson('/builder/assets/data')->assertOk()->json()))->not->toContain('Beta private launch')
-        ->and(BuilderAsset::find($shared->id))->not->toBeNull();
+    expect(json_encode($this->getJson('/builder/assets/data')->assertOk()->json()))->not->toContain('Beta private launch')->not->toContain('Brand kit')
+        ->and(BuilderAsset::find($platform->id))->not->toBeNull();
 });
 
 test('naming another organization in the listings’ filter finds nothing of it', function () {
@@ -144,8 +143,10 @@ test('an organization’s person never makes an ad for every organization, whate
     $id = $this->postJson('/builder', ['name' => 'For everyone?', 'document' => attackDocument(), 'organization_id' => null])->assertOk()->json('ad.id');
     expect(BuilderAd::find($id)->organization_id)->toBe($this->organization->id);
 
+    // The platform's ad is no row of theirs to copy; Use This Template makes the organization's own.
     $shared = BuilderAd::factory()->published()->create(['organization_id' => null, 'name' => 'Platform sale']);
-    $copyId = $this->postJson("/builder/{$shared->id}/duplicate")->assertOk()->json('ad.id');
+    $this->postJson("/builder/{$shared->id}/duplicate")->assertNotFound();
+    $copyId = $this->postJson("/builder/templates/{$shared->id}", ['organization_id' => null])->assertOk()->json('ad.id');
 
     expect(BuilderAd::find($copyId)->organization_id)->toBe($this->organization->id)
         ->and(BuilderAd::whereNull('organization_id')->count())->toBe(1);
@@ -167,17 +168,18 @@ test('the platform’s unpublished ad is nothing to an organization: not listed,
         ->and($draft->fresh()->name)->toBe('Coming soon');
 });
 
-test('an organization’s copy of the platform’s ad is that organization’s alone', function () {
+test('an organization’s copy of a Premium Template is that organization’s alone', function () {
     $shared = BuilderAd::factory()->published()->create(['organization_id' => null, 'name' => 'Platform sale']);
 
     $this->actingAs(createOrganizationUser($this->other, ['ad-view', 'ad-store'], 'Beta designer'))->withSession(['current_organization_id' => $this->other->id]);
-    $theirs = $this->postJson("/builder/{$shared->id}/duplicate")->assertOk()->json('ad.id');
+    $theirs = $this->postJson("/builder/templates/{$shared->id}")->assertOk()->json('ad.id');
 
     $this->actingAs($this->designer)->withSession(['current_organization_id' => $this->organization->id]);
     $this->get("/builder/{$theirs}")->assertNotFound();
     $this->postJson("/builder/{$theirs}/duplicate")->assertNotFound();
+    $this->postJson("/builder/templates/{$theirs}")->assertNotFound();
 
-    expect(collect($this->getJson('/builder/data')->json('ads'))->pluck('id')->all())->toBe([$shared->id]);
+    expect($this->getJson('/builder/data')->json('ads'))->toBe([]);
 });
 
 /* ── Getting code into the page ──────────────────────────────────────── */

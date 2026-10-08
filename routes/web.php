@@ -6,12 +6,15 @@ use App\Http\Controllers\Advertising\NetworkAdsController;
 use App\Http\Controllers\Builder\BuilderAssetController;
 use App\Http\Controllers\Builder\BuilderController;
 use App\Http\Controllers\Builder\BuilderFontController;
+use App\Http\Controllers\Builder\PremiumTemplateController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InvitationResponseController;
+use App\Http\Controllers\Organization\BillingController;
 use App\Http\Controllers\Organization\InvitationController;
 use App\Http\Controllers\Organization\MemberController;
 use App\Http\Controllers\Organization\OrganizationSettingsController;
 use App\Http\Controllers\Platform\ImpersonateController;
+use App\Http\Controllers\Platform\OrganizationBillingController;
 use App\Http\Controllers\Platform\OrganizationController;
 use App\Http\Controllers\Platform\PermissionController;
 use App\Http\Controllers\Platform\PlatformInvitationController;
@@ -147,6 +150,10 @@ Route::middleware(['auth', 'verified', 'organization.active', 'throttle:admin'])
         Route::delete('/', [OrganizationSettingsController::class, 'destroy'])->middleware('can:organization-destroy')->name('organization-settings.destroy');
     });
 
+    // Settings → Billing (owner, 2026-10-08; docs/BILLING-SPEC.md §3): what the organization the person works in uses, and what it
+    // will cost once billing starts. A page to read; the switches are the platform's (organizations.billing.*).
+    Route::get('/settings/billing', [BillingController::class, 'show'])->middleware('can:billing-view')->name('billing.show');
+
     // -------------------------------------------------------------------
     // Users  (every account, from the platform's side — owner's rule,
     // 2026-09-17: an organization's people are its Members page)
@@ -197,6 +204,9 @@ Route::middleware(['auth', 'verified', 'organization.active', 'throttle:admin'])
         Route::delete('/{organization}', [OrganizationController::class, 'destroy'])->whereNumber('organization')->middleware('can:organization-destroy')->name('organizations.destroy');
         // An Owner for an organization that has none: a member of it is made Owner at once, anybody else is invited
         Route::post('/{organization}/owner-invitation', [OrganizationController::class, 'inviteOwner'])->whereNumber('organization')->middleware(['can:organization-store', 'throttle:invitations'])->name('organizations.owner-invitation');
+        // Billing beside Edit (docs/BILLING-SPEC.md §4): the summary with View Billing, the two switches with Change Billing
+        Route::get('/{organization}/billing', [OrganizationBillingController::class, 'show'])->whereNumber('organization')->middleware('can:billing-view')->name('organizations.billing.show');
+        Route::put('/{organization}/billing', [OrganizationBillingController::class, 'update'])->whereNumber('organization')->middleware('can:billing-update')->name('organizations.billing.update');
     });
 
     // -------------------------------------------------------------------
@@ -357,6 +367,12 @@ Route::middleware(['auth', 'verified', 'organization.active', 'throttle:admin'])
 
         // The Create tab: the editor with an empty stage
         Route::get('/create', [BuilderController::class, 'create'])->middleware('can:ad-store')->name('builder.create');
+
+        // Premium Templates (docs/AD-BUILDER-SPEC.md, the addendum of 2026-10-07): Create Ad's other way, inside an
+        // organization alone — the platform's published ads for every organization of one shape, and Use This Template,
+        // which makes one the organization's own, files and all. Above the organizations both are a 404 (the controller asks)
+        Route::get('/templates', [PremiumTemplateController::class, 'index'])->middleware('can:ad-store')->name('builder.templates');
+        Route::post('/templates/{ad}', [PremiumTemplateController::class, 'use'])->whereNumber('ad')->middleware('can:ad-store')->name('builder.templates.use');
 
         Route::post('/', [BuilderController::class, 'store'])->middleware('can:ad-store')->name('builder.store');
         // An ad the platform shares with every organization is changed above the organizations alone (the controller asks)

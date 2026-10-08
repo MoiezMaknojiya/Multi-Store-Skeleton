@@ -2,8 +2,6 @@
 
 namespace Tests\Browser;
 
-use App\Models\Channel;
-use App\Models\ChannelAd;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\PlaylistItem;
@@ -664,10 +662,10 @@ class PlaylistFlowTest extends DuskTestCase
     }
 
     /**
-     * The platform's library reaches every organization's screens (owner, 2026-10-05), marked as the platform's —
-     * all but a file a channel holds, which would play twice on a screen that carries the channel.
+     * The Content Library is the organization's own (owner, 2026-10-07; docs/BILLING-SPEC.md §5): the platform's library reaches no
+     * organization's picker. A line left from before still says whose it is, and the save names it to be taken out.
      */
-    public function test_the_picker_offers_the_platform_s_files_too_but_none_a_channel_holds(): void
+    public function test_the_picker_offers_none_of_the_platform_s_files_and_a_line_left_from_before_is_named(): void
     {
         $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
         $owner = $this->makeOwner($alpha);
@@ -676,33 +674,27 @@ class PlaylistFlowTest extends DuskTestCase
         // No thumbnails: the page must not ask for files these rows only pretend to have.
         $own = Media::factory()->create(['organization_id' => $alpha->id, 'title' => 'Alpha Poster', 'thumbnail_path' => null]);
         $platform = Media::factory()->platformOwned()->create(['title' => 'Platform Promo', 'thumbnail_path' => null]);
-        $inAChannel = Media::factory()->platformOwned()->create(['title' => 'Channel Promo', 'thumbnail_path' => null]);
-        ChannelAd::factory()->create(['channel_id' => Channel::factory()->create(['name' => 'GAMA'])->id, 'media_id' => $inAChannel->id]);
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $platform->id, 'position' => 0, 'duration_seconds' => 10]);
 
-        $this->browse(function (Browser $browser) use ($owner, $alpha, $screen, $own, $platform) {
+        $this->browse(function (Browser $browser) use ($owner, $alpha, $screen, $own) {
             $this->freshSession($browser);
             $browser->loginAs($owner);
             $this->switchToOrganization($browser, $alpha);
 
             $browser->visit("/screens/{$screen->id}");
             $this->waitForAlpine($browser);
-            $browser->within('@media-picker', fn (Browser $picker) => $picker->waitForText('Platform Promo')
-                ->assertSee('Alpha Poster')
-                ->assertDontSee('Channel Promo'));
-            $browser->assertSeeIn('@picker-platform-'.$platform->id, 'From the platform')
-                ->assertMissing('@picker-platform-'.$own->id);
+            $browser->within('@media-picker', fn (Browser $picker) => $picker->waitForText('Alpha Poster')->assertDontSee('Platform Promo'));
 
-            // Added and saved like the organization's own file, and the line says whose it is.
-            $this->jsClick($browser, '@playlist-add-'.$platform->id);
-            $browser->waitFor('@playlist-platform-0');
+            // The line from before says it is the platform's; saved with it, the page is told which line to take out.
+            $browser->waitFor('@playlist-platform-0')->assertSeeIn('@playlist-platform-0', 'From the platform');
+            $this->jsClick($browser, '@playlist-add-'.$own->id);
             $this->jsClick($browser, '@playlist-save');
-            $browser->waitUsing(10, 200, fn () => PlaylistItem::where('screen_id', $screen->id)->pluck('media_id')->all() === [$platform->id]);
+            $browser->waitForText("Platform Promo is the platform's", 10);
 
-            $browser->refresh();
-            $this->waitForAlpine($browser);
-            $browser->waitFor('@playlist-platform-0')
-                ->assertSeeIn('@playlist-platform-0', 'From the platform')
-                ->screenshot('playlist-platform-file');
+            $this->jsClick($browser, '@playlist-remove-0');
+            $this->jsClick($browser, '@playlist-save');
+            $browser->waitUsing(10, 200, fn () => PlaylistItem::where('screen_id', $screen->id)->pluck('media_id')->all() === [$own->id]);
+            $browser->screenshot('playlist-own-library');
         });
     }
 }

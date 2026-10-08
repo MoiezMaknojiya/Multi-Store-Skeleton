@@ -24,9 +24,9 @@ use Illuminate\View\View;
  * The Assets page: everything the Builder's ads are made of (docs/AD-BUILDER-SPEC.md §3).
  *
  * Its own shelf, not the organization's media library — the library is what an organization PLAYS, this is raw material
- * that only means something inside a design. Same organization wall as everything else — and above it, the shelf the
- * platform shares with every organization (owner, 2026-09-29): an upload with no organization chosen goes there, every organization's
- * designs may use it, and it is deleted above the organizations alone (owner, 2026-10-01).
+ * that only means something inside a design. Same organization wall as everything else: an organization's shelf is its own files
+ * alone — uploaded, or copied in with a Premium Template (owner, 2026-10-07). Above the organizations an upload with no
+ * organization chosen is the platform's (owner, 2026-09-29), for its ads for every organization, and deleted there alone.
  */
 class BuilderAssetController extends Controller
 {
@@ -36,9 +36,9 @@ class BuilderAssetController extends Controller
 
     public function index(): View
     {
-        // Above the organizations the shelf lists every organization's and the shared files, or one organization's and the shared (owner,
+        // Above the organizations the shelf lists every organization's and the platform's files, or one organization's (owner,
         // 2026-09-29: All organizations is where a file for every organization goes, so there is no second option saying the same); an
-        // organization's own people see theirs and the shared ones.
+        // organization's own people see their own alone (owner, 2026-10-07).
         $organizations = $this->aboveTheOrganizations()
             ? Organization::orderBy('name')->get(['id', 'name'])->toArray()
             : [];
@@ -68,7 +68,7 @@ class BuilderAssetController extends Controller
     /** The shelf, newest first, each row saying whose it is, which ads use it and whether this person may delete it. */
     public function data(Request $request): JsonResponse
     {
-        // An organization's id — that organization's files and the shared ones; nothing lists everything in reach.
+        // An organization's id — that organization's files alone.
         $filters = $request->validate(['organization_id' => ['nullable', 'integer', 'min:1']]);
         $shelf = isset($filters['organization_id']) ? (int) $filters['organization_id'] : null;
 
@@ -89,9 +89,7 @@ class BuilderAssetController extends Controller
                 $usage = $this->usageFor($rows);
 
                 $rows->each(function (BuilderAsset $asset) use ($usage) {
-                    $asset->setAttribute('used_by', $usage[$asset->id]['names'] ?? []);
-                    $asset->setAttribute('used_elsewhere', $usage[$asset->id]['elsewhere'] ?? 0);
-                    $asset->setAttribute('used_by_platform', $usage[$asset->id]['platform'] ?? 0);
+                    $asset->setAttribute('used_by', $usage[$asset->id] ?? []);
                     // Why it may not be deleted yet, in destroy's own words, so the shelf says it before any
                     // confirmation (destroy decides again).
                     $asset->setAttribute('in_use_message', isset($usage[$asset->id]) ? $this->stillUsedMessage($usage[$asset->id]) : null);
@@ -143,16 +141,14 @@ class BuilderAssetController extends Controller
 
     /**
      * Take a file off the shelf — refused while an ad still uses it, and the refusal says which ads, so
-     * nobody has to hunt for the one design that breaks (the same courtesy a held role gets). A shared file
-     * goes from every organization's shelf, so only the platform deletes it, and any organization's ad keeps it.
+     * nobody has to hunt for the one design that breaks (the same courtesy a held role gets). The platform's file is
+     * deleted above the organizations alone; the organizations' copies of it are theirs, and stay.
      */
     public function destroy(BuilderAsset $asset): JsonResponse
     {
         $asset = BuilderAsset::visibleTo(auth()->user())->findOrFail($asset->id);
 
-        abort_unless($this->mayDelete($asset), 403, $asset->isShared() && ! $this->aboveTheOrganizations()
-            ? 'A file shared with every organization is the platform\'s: only the platform deletes it.'
-            : 'Deleting a file needs the Delete Ads permission.');
+        abort_unless($this->mayDelete($asset), 403, 'Deleting a file needs the Delete Ads permission.');
 
         $usage = $this->usageFor(collect([$asset]))[$asset->id] ?? null;
 
@@ -162,54 +158,51 @@ class BuilderAssetController extends Controller
 
         $title = $asset->title;
         $shared = $asset->isShared();
-        // An organization's file belongs to its organization's log; a shared one's to where the person deleting it stands.
-        $organizationId = $asset->organization_id ?? $this->standingOrganizationId();
+        // An organization's file belongs to its organization's log; the platform's to none.
+        $organizationId = $asset->organization_id;
 
         // Inside a transaction, so the model's hook really does unlink the files after the row is gone —
         // outside one, "after commit" means at once, before the DELETE has run.
         DB::transaction(fn () => $asset->delete());
 
         ActivityLog::record('ad_asset.deleted', null, $shared
-            ? "Deleted {$title}, shared with every organization, from the ad builder"
+            ? "Deleted {$title}, the platform's, from the ad builder"
             : "Deleted ad asset {$title}", organizationId: $organizationId);
 
-        return response()->json(['message' => 'Deleted', 'storage' => $this->quota->summary($shared ? $this->standingOrganizationId() : $organizationId)]);
+        return response()->json(['message' => 'Deleted', 'storage' => $this->quota->summary($organizationId)]);
     }
 
     /**
-     * Which ads name these assets, as {assetId: {names: [ad name, …], elsewhere: n}}.
+     * Which ads name these assets, as {assetId: [ad name, …]}.
      *
-     * An id inside the document is what "used" means, so the documents are read and searched: an organization's own file in
-     * its organization's designs only, a shared file in every organization's and the platform's own ads for every organization. An organization's
-     * person is told the names of their own organization's ads and only the number of other organizations' and of the platform's (one
-     * organization never learns another's designs, nor the platform's unpublished ones); above the organizations every ad is named,
-     * with the organization's name or "every organization".
+     * An id inside the document is what "used" means, so the documents are read and searched, the draft and the version on the
+     * screens alike: an organization's file in its organization's designs, the platform's in the platform's ads for every
+     * organization — an organization's designs use its own files alone (owner, 2026-10-07), copies of the platform's included.
+     * So everybody who may delete a file may also open every ad that keeps it.
      *
      * @param  Collection<int, BuilderAsset>  $assets
-     * @return array<int, array{names: array<int, string>, elsewhere: int, platform: int}>
+     * @return array<int, list<string>>
      */
     private function usageFor(Collection $assets): array
     {
-        $shared = $assets->filter(fn (BuilderAsset $asset) => $asset->isShared())->pluck('id')->all();
+        $platform = $assets->filter(fn (BuilderAsset $asset) => $asset->isShared())->pluck('id')->all();
         $byOrganization = $assets->reject(fn (BuilderAsset $asset) => $asset->isShared())
             ->groupBy(fn (BuilderAsset $asset) => (int) $asset->organization_id)
             ->map(fn (Collection $group) => $group->pluck('id')->all());
 
-        if ($shared === [] && $byOrganization->isEmpty()) {
+        if ($platform === [] && $byOrganization->isEmpty()) {
             return [];
         }
 
-        $viewerOrganization = $this->aboveTheOrganizations() ? null : $this->standingOrganizationId();
         $usage = [];
 
         BuilderAd::query()
-            // Only a shared file is looked for past its own organization.
-            ->when($shared === [], fn (Builder $query) => $query->whereIn('organization_id', $byOrganization->keys()->all()))
-            ->with('organization:id,name')
+            ->where(fn (Builder $query) => $query->whereIn('organization_id', $byOrganization->keys()->all())
+                ->when($platform !== [], fn (Builder $query) => $query->orWhereNull('organization_id')))
             ->select(['id', 'organization_id', 'name', 'document', 'published_document'])
             ->lazyById(200)
-            ->each(function (BuilderAd $ad) use ($shared, $byOrganization, $viewerOrganization, &$usage) {
-                $candidates = [...$shared, ...($byOrganization->get((int) $ad->organization_id) ?? [])];
+            ->each(function (BuilderAd $ad) use ($platform, $byOrganization, &$usage) {
+                $candidates = $ad->isShared() ? $platform : ($byOrganization->get((int) $ad->organization_id) ?? []);
 
                 // The draft and the version on the screens alike: a file only the published page still shows is in
                 // use on every television carrying it (the brute-force round, 2026-09-29 — deleting it broke them).
@@ -222,23 +215,8 @@ class BuilderAssetController extends Controller
                 foreach ($candidates as $assetId) {
                     // The document keeps asset ids as numbers under `assetId`, in elements and in background
                     // layers alike, so one search covers both.
-                    if (preg_match('/"assetId":\s*'.$assetId.'\b/', $document) !== 1) {
-                        continue;
-                    }
-
-                    $usage[$assetId] ??= ['names' => [], 'elsewhere' => 0, 'platform' => 0];
-                    $sharedFile = in_array($assetId, $shared, true);
-
-                    if ($viewerOrganization !== null && $ad->isShared()) {
-                        $usage[$assetId]['platform']++;
-                    } elseif ($viewerOrganization !== null && (int) $ad->organization_id !== $viewerOrganization) {
-                        $usage[$assetId]['elsewhere']++;
-                    } else {
-                        $usage[$assetId]['names'][] = match (true) {
-                            $viewerOrganization !== null || ! $sharedFile => $ad->name,
-                            $ad->organization !== null => "{$ad->name} ({$ad->organization->name})",
-                            default => "{$ad->name} (every organization)",
-                        };
+                    if (preg_match('/"assetId":\s*'.$assetId.'\b/', $document) === 1) {
+                        $usage[$assetId][] = $ad->name;
                     }
                 }
             });
@@ -247,54 +225,31 @@ class BuilderAssetController extends Controller
     }
 
     /**
-     * Why a file in use stays: the ads the person may see by name, those of other organizations counted — and nobody is told
-     * to take a file out of ads they cannot open.
+     * Why a file in use stays: the ads that keep it, by name.
      *
-     * @param  array{names: array<int, string>, elsewhere: int, platform?: int}  $usage
+     * @param  list<string>  $names
      */
-    private function stillUsedMessage(array $usage): string
+    private function stillUsedMessage(array $names): string
     {
-        $names = $usage['names'];
-        $elsewhere = $usage['elsewhere'];
-        $platform = $usage['platform'] ?? 0;
-        $others = implode(' and ', array_filter([
-            match (true) {
-                $elsewhere === 0 => null,
-                $elsewhere === 1 => 'an ad of another organization',
-                default => "{$elsewhere} ads of other organizations",
-            },
-            match (true) {
-                $platform === 0 => null,
-                $platform === 1 => 'an ad the platform shares',
-                default => "{$platform} ads the platform shares",
-            },
-        ]));
-
-        if ($names === []) {
-            return "Still used by {$others}, so it stays: it can go once no organization's ad uses it.";
-        }
-
         $named = implode(', ', array_slice($names, 0, 3)).(count($names) > 3 ? ' and '.(count($names) - 3).' more' : '');
 
-        return $others !== ''
-            ? "Still used by {$named}, and by {$others}, so it stays: it can go once no organization's ad uses it."
-            : "Still used by {$named}. Take it out of those ads first, and publish the ones whose screens still show it.";
+        return "Still used by {$named}. Take it out of those ads first, and publish the ones whose screens still show it.";
     }
 
-    /** Delete Ads — and, for a file shared with every organization, standing above the organizations. */
+    /** Delete Ads — and, for the platform's file, standing above the organizations (an organization never sees one). */
     private function mayDelete(BuilderAsset $asset): bool
     {
         return Gate::allows('ad-destroy') && (! $asset->isShared() || $this->aboveTheOrganizations());
     }
 
-    /** Whose file this is, in the words of the person looking: above the organizations its organization or "Every organization", inside one the platform's. */
+    /** Whose file this is, above the organizations: its organization, or "Every organization" for the platform's own. */
     private function ownerLabel(BuilderAsset $asset): ?string
     {
-        if ($this->aboveTheOrganizations()) {
-            return $asset->isShared() ? 'Every organization' : $asset->organization?->name;
+        if (! $this->aboveTheOrganizations()) {
+            return null;
         }
 
-        return $asset->isShared() ? 'From the platform' : null;
+        return $asset->isShared() ? 'Every organization' : $asset->organization?->name;
     }
 
     /**
@@ -336,12 +291,6 @@ class BuilderAssetController extends Controller
     private function aboveTheOrganizations(): bool
     {
         return auth()->user()->globalRole() !== null;
-    }
-
-    /** The organization an organization's person is working in; none above the organizations. */
-    private function standingOrganizationId(): ?int
-    {
-        return $this->aboveTheOrganizations() ? null : ((int) session('current_organization_id') ?: null);
     }
 
     /** The name the person typed, or the file's own name without its extension. */

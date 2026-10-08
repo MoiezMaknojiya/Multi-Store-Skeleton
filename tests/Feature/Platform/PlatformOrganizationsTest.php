@@ -44,7 +44,7 @@ test('the platform sees every organization with its members — and is offered I
     // (owner's rule, 2026-09-17); more Owners come from the organization's own Members page, or Users → Organizations.
     expect($rows['Alpha Mart']['members_count'])->toBe(2)
         ->and($rows['Alpha Mart'])->not->toHaveKey('owners')->not->toHaveKey('owner_invitation')
-        ->and($rows['Alpha Mart']['can'])->toBe(['update' => true, 'destroy' => true, 'invite_owner' => false])
+        ->and($rows['Alpha Mart']['can'])->toBe(['update' => true, 'destroy' => true, 'billing' => true, 'invite_owner' => false])
         ->and($rows['Beta Deli']['can']['invite_owner'])->toBeTrue()
         ->and($rows['Gamma Grill']['can']['invite_owner'])->toBeTrue();
 

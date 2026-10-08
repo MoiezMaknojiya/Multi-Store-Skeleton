@@ -240,7 +240,14 @@ the right** — a file is picked first and described after, and Save ends up und
 `tests/Browser/EveryPageFitsAPhoneTest` opens the dialog by its button at a desk, a short laptop, a tablet on
 its side and a phone, with a library longer than one page, and holds it to all of the above.
 
-## 8d. The platform's library on every playlist (owner, 2026-10-05)
+## 8d. The platform's library on every playlist (owner, 2026-10-05) — replaced on 2026-10-07
+
+**Replaced** (owner, 2026-10-07; docs/BILLING-SPEC.md §5): a screen's Content Library is its organization's own again, and a
+platform file reaches a television inside a platform channel alone; what the platform makes for every organization reaches one as a
+Premium Template, copied. The lines that played a platform file were given the organization's own copy (migration
+`2026_10_08_100200`). What follows is what held from 2026-10-05 to then; its tests are gone with it (`ContentLibraryIsOwnTest` holds
+the new rule).
+
 
 "platform library mein jo bhi kuch upload karu woo har screen ki content playlist mein ani chahiye ... aur agar woo
 channel mein use ho rae toh nahi ayegi."

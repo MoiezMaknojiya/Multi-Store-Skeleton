@@ -121,10 +121,10 @@ class BuilderAd extends Model
 
     /**
      * The ads a person sees from where they stand: above the organizations, every organization's and the shared ones (each row
-     * saying whose it is); inside an organization, that organization's own and the ones the platform shares with every organization once
-     * they are published (owner, 2026-10-01: an unfinished design stays the platform's). Never another organization's own;
-     * with no organization selected, none at all. What may be DONE to one is the controller's to ask: a shared one is only
-     * ever seen, used and copied inside an organization.
+     * saying whose it is); inside an organization, that organization's own alone (owner, 2026-10-07: the platform's ads for every
+     * organization are Premium Templates, reached through Create Ad — premiumTemplates — and used as a copy of the organization's
+     * own). Never another organization's; with no organization selected, none at all. What may be DONE to one is the
+     * controller's to ask.
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
@@ -134,12 +134,16 @@ class BuilderAd extends Model
 
         $organizationId = (int) session('current_organization_id');
 
-        if ($organizationId <= 0) {
-            return $query->whereRaw('0 = 1');
-        }
+        return $organizationId > 0 ? $query->where('organization_id', $organizationId) : $query->whereRaw('0 = 1');
+    }
 
-        return $query->where(fn (Builder $query) => $query->where('organization_id', $organizationId)
-            ->orWhere(fn (Builder $shared) => $shared->whereNull('organization_id')->whereNotNull('media_id')->whereNotNull('published_at')));
+    /**
+     * The Premium Templates: the platform's ads for every organization, once published (owner, 2026-10-01: an unfinished
+     * design stays the platform's) — what Create Ad's Premium Template offers an organization, as it was published.
+     */
+    public function scopePremiumTemplates(Builder $query): Builder
+    {
+        return $query->whereNull('organization_id')->whereNotNull('media_id')->whereNotNull('published_at')->whereNotNull('published_document');
     }
 
     /** The platform's, made for every organization — no organization's own. */
@@ -321,6 +325,94 @@ class BuilderAd extends Model
             ],
             'elements' => [],
         ];
+    }
+
+    /**
+     * "Winter sale" → "Winter sale (copy)", and "(copy 2)" after that, among the ads of the place the copy goes to. A
+     * Premium Template's copy keeps the name while the organization has no ad called so: it is the organization's first.
+     */
+    public static function nameForCopy(string $name, ?int $organizationId, bool $keepItIfFree = false): string
+    {
+        $base = preg_replace('/ \(copy( \d+)?\)$/', '', $name) ?? $name;
+        $taken = BuilderAd::query()
+            ->when($organizationId === null, fn (Builder $query) => $query->whereNull('organization_id'), fn (Builder $query) => $query->where('organization_id', $organizationId))
+            ->pluck('name')
+            ->all();
+
+        if ($keepItIfFree && ! in_array($name, $taken, true)) {
+            return mb_substr($name, 0, 120);
+        }
+
+        if (! in_array("{$base} (copy)", $taken, true)) {
+            return mb_substr("{$base} (copy)", 0, 120);
+        }
+
+        for ($i = 2; $i < 100; $i++) {
+            if (! in_array("{$base} (copy {$i})", $taken, true)) {
+                return mb_substr("{$base} (copy {$i})", 0, 120);
+            }
+        }
+
+        return mb_substr("{$base} (copy)", 0, 120);
+    }
+
+    /**
+     * Every shelf file a design names: an element's `assetId` and a background layer's, as the compiler reads them.
+     *
+     * @return list<int>
+     */
+    public static function assetIdsIn(?array $document): array
+    {
+        $ids = [];
+
+        foreach (self::assetHolders($document ?? []) as $holder) {
+            $id = $holder['assetId'] ?? null;
+
+            if (is_int($id) || (is_string($id) && ctype_digit($id))) {
+                $ids[(int) $id] = (int) $id;
+            }
+        }
+
+        return array_values($ids);
+    }
+
+    /**
+     * The design with each file it names swapped for the one $swaps gives (old id => new id); a file $swaps does not
+     * name is taken off its element or layer, so a copy never points at a file outside its own shelf.
+     *
+     * @param  array<int, int>  $swaps
+     */
+    public static function withAssetsSwapped(array $document, array $swaps): array
+    {
+        $swap = function (mixed $holder) use ($swaps): mixed {
+            if (! is_array($holder) || ! array_key_exists('assetId', $holder) || $holder['assetId'] === null) {
+                return $holder;
+            }
+
+            $id = $holder['assetId'];
+            $holder['assetId'] = (is_int($id) || (is_string($id) && ctype_digit($id))) ? ($swaps[(int) $id] ?? null) : null;
+
+            return $holder;
+        };
+
+        if (is_array($document['elements'] ?? null)) {
+            $document['elements'] = array_map($swap, $document['elements']);
+        }
+
+        if (is_array($document['stage']['background']['layers'] ?? null)) {
+            $document['stage']['background']['layers'] = array_map($swap, $document['stage']['background']['layers']);
+        }
+
+        return $document;
+    }
+
+    /** @return list<array<string, mixed>> the elements and the background layers, where a design names its files */
+    private static function assetHolders(array $document): array
+    {
+        $elements = is_array($document['elements'] ?? null) ? $document['elements'] : [];
+        $layers = is_array($document['stage']['background']['layers'] ?? null) ? $document['stage']['background']['layers'] : [];
+
+        return array_values(array_filter([...$elements, ...$layers], 'is_array'));
     }
 
     /**

@@ -134,7 +134,7 @@ test('a new screen cannot be planted in another organization by naming it', func
         ->and(Screen::where('organization_id', $this->beta->id)->pluck('name')->all())->toBe(['Beta TV']);
 });
 
-test('the platform’s library reaches this organization’s playlists alone, and another organization’s files nothing here', function () {
+test('neither the platform’s library nor another organization’s files reach anything of this organization by id', function () {
     // docs/CHANNEL-CONTENT-SPEC.md: a channel holds library files by id, so an id is the thing to attack.
     $platformFile = Media::factory()->platformOwned()->create(['title' => 'Platform promo']);
     $platformChannel = Channel::factory()->create(['name' => 'GAMA']);
@@ -163,20 +163,18 @@ test('the platform’s library reaches this organization’s playlists alone, an
     $this->putJson("/media/{$platformFile->id}", ['title' => 'Taken'])->assertNotFound();
     $this->deleteJson("/media/{$platformFile->id}")->assertNotFound();
 
-    // Another organization's file goes on no playlist here, beside the platform's or not.
+    // Neither goes on a playlist here: the Content Library is the organization's own (docs/BILLING-SPEC.md §5).
     $version = $this->getJson("/screens/{$this->alphaScreen->id}/playlist")->assertOk()->json('version');
-    $this->putJson("/screens/{$this->alphaScreen->id}/playlist", [
-        'version' => $version, 'items' => [['media_id' => $platformFile->id, 'duration_seconds' => 10], ['media_id' => $this->betaMedia->id, 'duration_seconds' => 10]],
-    ])->assertStatus(422);
 
-    // The platform's file alone does (owner, 2026-10-05: offered to every organization's screens).
-    $this->putJson("/screens/{$this->alphaScreen->id}/playlist", [
-        'version' => $version, 'items' => [['media_id' => $platformFile->id, 'duration_seconds' => 10]],
-    ])->assertOk();
+    foreach ([$platformFile, $this->betaMedia] as $foreign) {
+        $this->putJson("/screens/{$this->alphaScreen->id}/playlist", [
+            'version' => $version, 'items' => [['media_id' => $foreign->id, 'duration_seconds' => 10]],
+        ])->assertStatus(422);
+    }
 
     expect(ChannelAd::whereIn('channel_id', [$alphaChannel->id, $platformChannel->id])->exists())->toBeFalse()
         ->and($platformFile->fresh()->title)->toBe('Platform promo')
-        ->and(PlaylistItem::where('screen_id', $this->alphaScreen->id)->pluck('media_id')->all())->toBe([$platformFile->id]);
+        ->and(PlaylistItem::where('screen_id', $this->alphaScreen->id)->exists())->toBeFalse();
 });
 
 test('a role of another organization cannot be handed out here, however it is posted', function () {

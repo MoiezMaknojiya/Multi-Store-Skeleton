@@ -1075,8 +1075,8 @@
                 </div>
 
                 {{-- A new picture or video straight from here (owner, 2026-09-30): it joins this ad's shelf — the organization
-                     the person works in, or above the organizations the ad's organization, or with All organizations the shelf shared with every
-                     organization (owner, 2026-10-01) — and is there to pick the moment it is in, under the same rules as the
+                     the person works in, or above the organizations the ad's organization, or with All organizations the platform's own
+                     (owner, 2026-10-01) — and is there to pick the moment it is in, under the same rules as the
                      Assets page (30-second videos, the organization's 512 MB). The editor listens here, not on the box: an
                      expression on the box runs with the box's own `this`. --}}
                 @can('ad-store')

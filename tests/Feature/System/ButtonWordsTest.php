@@ -145,7 +145,7 @@ test('every button inside an organization says its words in Title Case', functio
     $ad = BuilderAd::factory()->create(['organization_id' => $organization->id]);
 
     $pages = ['/dashboard', '/screens', "/screens/{$screen->id}", '/media', '/channels', "/channels/{$channel->id}",
-        '/builder', '/builder/assets', "/builder/{$ad->id}", '/members', '/roles', '/activity', '/settings/organization', '/profile'];
+        '/builder', '/builder/assets', "/builder/{$ad->id}", '/members', '/roles', '/activity', '/settings/organization', '/settings/billing', '/profile'];
 
     $wrong = wordsNotTitleCased($pages, fn (string $page) => $this->actingAs($owner)
         ->withSession(['current_organization_id' => $organization->id])->get($page)->assertOk()->getContent());

@@ -11,7 +11,7 @@
         {{-- A bound :title — the wrapper echoes it itself, and an echo here as well escaped an organization's name twice. The
              one fact that governs the page is its line under the title; Add Channel stands beside the search. --}}
         <x-crud.table-wrapper :title="$organization ? 'Channels of '.$organization->name : 'All Channels'" searchPlaceholder="Search channels..." :columns="6"
-            :description="$organization ? 'Put a channel on a screen from that screen\'s Channels box.' : 'Every organization can put these on its screens.'">
+            :description="$organization ? 'Put a channel on a screen from that screen\'s Channels tab.' : 'Every organization can put these on its screens.'">
             @can('channel-store')
                 <x-slot name="actions">
                     <x-crud.add-button label="Add Channel" @click="openFormModal()" dusk="add-channel" />

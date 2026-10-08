@@ -36,9 +36,9 @@ use Illuminate\View\View;
  * An ad belongs to an organization, like everything else an organization makes, and the platform works above them all:
  * `BuilderAd::visibleTo` decides which, so an organization's person never sees another organization's design and a super
  * admin sees every one with the organization's name beside it. The platform may also make an ad for every organization (owner,
- * 2026-10-01): every organization sees it once it is published and copies it into its own Ads, and only above the organizations is
- * it changed or deleted — with the ordinary Update Ads and Delete Ads there; an organization's people see, use and copy it,
- * nothing more ("srif delete nahi kar sakta ha"). Each action asks it of the ad (mayUpdate, mayDelete).
+ * 2026-10-01), changed and deleted above the organizations alone, with the ordinary Update Ads and Delete Ads there. Published,
+ * it is a Premium Template (owner, 2026-10-07): an organization finds it under Create Ad and makes its own copy, files and all
+ * (PremiumTemplateController) — it is never listed, opened or copied from an organization's Ads page.
  */
 class BuilderController extends Controller
 {
@@ -46,10 +46,18 @@ class BuilderController extends Controller
 
     public function __construct(private readonly MediaStorage $storage, private readonly OrganizationStorage $quota) {}
 
-    /** The Ads page: everything this person may open — and, above the organizations, a filter by organization. */
+    /**
+     * The Ads page: everything this person may open — and, above the organizations, a filter by organization. Inside an
+     * organization its Create Ad also offers the Premium Templates (PremiumTemplateController).
+     */
     public function index(): View
     {
-        return view('builder.index', ['organizations' => $this->organizationsToFilterBy()]);
+        return view('builder.index', [
+            'organizations' => $this->organizationsToFilterBy(),
+            'aboveTheOrganizations' => $this->aboveTheOrganizations(),
+            // Said in the Premium Templates' lock and its unlock dialog (docs/BILLING-SPEC.md §6).
+            'organizationName' => $this->aboveTheOrganizations() ? null : Organization::whereKey($this->standingOrganizationId())->value('name'),
+        ]);
     }
 
     /** The saved ads, newest first. */
@@ -67,7 +75,6 @@ class BuilderController extends Controller
         return $this->paginatedResponse(
             $request,
             $query,
-            // An organization finds the platform's ad by the name it was published under, which is the one its card shows.
             ['name', 'published_name'],
             'ads',
             ['*'],
@@ -86,18 +93,6 @@ class BuilderController extends Controller
                     $ad->setAttribute('shared', $ad->isShared());
                     $ad->setAttribute('owner_label', $this->ownerLabel($ad));
                     $ad->setAttribute('can', ['update' => $this->mayUpdate($ad), 'copy' => $this->mayCopy($ad), 'delete' => $this->mayDelete($ad)]);
-
-                    // Inside an organization the platform's ad is the platform's: shown as it was published — never its unfinished
-                    // changes — and with nobody's name from above the organizations (as the platform's channels are shown).
-                    if ($ad->isShared() && ! $this->aboveTheOrganizations()) {
-                        $ad->setAttribute('updated_by_name', null);
-                        $ad->makeHidden(['created_by', 'updated_by']);
-
-                        if ($this->showsPublishedVersion($ad)) {
-                            $ad->setAttribute('name', $ad->published_name ?? $ad->name);
-                            $ad->setAttribute('thumbnail_path', $ad->media?->thumbnail_path);
-                        }
-                    }
 
                     // The listing shows a poster and a name — never the whole design, draft or published.
                     $ad->makeHidden(['document', 'published_document', 'published_name', 'media']);
@@ -214,27 +209,21 @@ class BuilderController extends Controller
     }
 
     /**
-     * A copy to work from, with its own name. The copy is a draft even if the original was published.
-     *
-     * Inside an organization a copy is that organization's own, whichever ad it was made from — the platform's shared ones included
-     * (owner, 2026-10-01: "woo copy kar sake"), and then it is of what the organization was shown: the version the platform
-     * published, never its unfinished changes, under that name while the organization has no ad called so. Above the organizations a
-     * copy stays where its original is: a shared ad's copy is shared too, as every ad made there with no organization is.
+     * A copy to work from, with its own name, where its original is: an organization's in that organization, a shared ad's shared
+     * too. The copy is a draft even if the original was published. (An organization makes its own of the platform's ad with
+     * Use This Template, which copies its files as well — PremiumTemplateController.)
      */
     public function duplicate(BuilderAd $ad): JsonResponse
     {
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
-        $organizationId = $this->aboveTheOrganizations() ? $ad->organization_id : $this->standingOrganizationId();
-        $fromThePlatform = $ad->isShared() && $organizationId !== null;
-        $published = $fromThePlatform && $ad->isPublished() && $ad->published_document !== null;
-        $name = $published ? ($ad->published_name ?? $ad->name) : $ad->name;
-        $original = $published ? $ad->media?->thumbnail_path : $ad->thumbnail_path;
+        $organizationId = $ad->organization_id;
+        $original = $ad->thumbnail_path;
 
         $copy = BuilderAd::create([
             'organization_id' => $organizationId,
-            'name' => $this->copyName($name, $organizationId, keepItIfFree: $fromThePlatform),
+            'name' => BuilderAd::nameForCopy($ad->name, $organizationId),
             'orientation' => $ad->orientation,
-            'document' => $published ? $ad->published_document : $ad->document,
+            'document' => $ad->document,
             'created_by' => auth()->id(),
             'updated_by' => auth()->id(),
         ]);
@@ -253,14 +242,10 @@ class BuilderController extends Controller
             });
         }
 
-        if ($fromThePlatform) {
-            ActivityLog::record('ad.copied', $copy, "Copied ad {$name} from the platform".($copy->name !== $name ? " as {$copy->name}" : ''));
-        } else {
-            ActivityLog::record('ad.duplicated', $copy, "Duplicated ad {$ad->name} as {$copy->name}", organizationId: $this->logOrganizationOf($copy));
-        }
+        ActivityLog::record('ad.duplicated', $copy, "Duplicated ad {$ad->name} as {$copy->name}", organizationId: $this->logOrganizationOf($copy));
 
         return response()->json([
-            'message' => $fromThePlatform ? 'Copied to your ads' : 'Ad duplicated',
+            'message' => 'Ad duplicated',
             'ad' => $this->summary($copy),
         ]);
     }
@@ -276,15 +261,22 @@ class BuilderController extends Controller
      */
     public function preview(Request $request, BuilderAd $ad, AdCompiler $compiler): Response
     {
-        // Whoever may look at the ads, and whoever may change this one: previewing is part of designing.
-        abort_unless(auth()->user()->canAny(['ad-view', 'ad-update']), 403);
+        // Whoever may look at the ads, and whoever may change this one: previewing is part of designing — and whoever may
+        // make an ad, for a Premium Template.
+        abort_unless(auth()->user()->canAny(['ad-view', 'ad-update', 'ad-store']), 403);
 
-        $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
+        $own = BuilderAd::visibleTo(auth()->user())->find($ad->id);
 
-        // An organization is shown the platform's ad as it was published, as its gallery shows it — never the changes the
-        // platform has not published yet. Only read, never saved.
-        if ($this->showsPublishedVersion($ad) && $ad->published_document !== null) {
-            $ad = (clone $ad)->forceFill(['document' => $ad->published_document, 'name' => $ad->published_name ?? $ad->name]);
+        if ($own !== null) {
+            abort_unless(auth()->user()->canAny(['ad-view', 'ad-update']), 403);
+            $ad = $own;
+        } else {
+            // Inside an organization a Premium Template is shown as it was published — never the changes the platform has not
+            // published yet — to whoever may make an ad from it. Only read, never saved.
+            abort_if($this->aboveTheOrganizations(), 404);
+            $template = BuilderAd::premiumTemplates()->findOrFail($ad->id);
+            abort_unless(auth()->user()->can('ad-store'), 403);
+            $ad = (clone $template)->forceFill(['document' => $template->published_document, 'name' => $template->published_name ?? $template->name]);
         }
 
         // A preview reloads itself at the ad's length for as long as its tab is open: it is compiled again only when
@@ -333,9 +325,8 @@ class BuilderController extends Controller
 
         return response()->json([
             'message' => match (true) {
-                // Its page is in the platform's library, where only the platform's channels reach it; every organization now
-                // sees this version, and copies it to play it on its own screens.
-                $ad->isShared() => 'Published — every organization sees it now and can copy it',
+                // A Premium Template now: every organization finds this version under Create Ad.
+                $ad->isShared() => 'Published — every organization finds it under Premium Template now',
                 $screens > 0 => "Published — {$screens} ".($screens === 1 ? 'screen is' : 'screens are').' now showing the new version',
                 default => 'Published to your media library, ready for a playlist',
             },
@@ -365,11 +356,11 @@ class BuilderController extends Controller
         ActivityLog::record('ad.unpublished', $ad, "Unpublished ad {$ad->name}".($reach !== '' ? " — taken off {$reach}" : ''),
             organizationId: $this->logOrganizationOf($ad));
 
-        // A shared ad leaves every organization's Ads too, until it is published again; the copies organizations made stay theirs.
+        // A shared ad is no Premium Template until it is published again; the copies organizations made stay theirs.
         $message = $reach !== '' ? "Unpublished — taken off {$reach}" : 'Unpublished — it is a draft again';
 
         return response()->json([
-            'message' => $ad->isShared() ? "{$message}. Organizations no longer see it" : $message,
+            'message' => $ad->isShared() ? "{$message}. It is no Premium Template until it is published again" : $message,
             'ad' => $this->summary($ad->fresh()),
         ]);
     }
@@ -406,10 +397,8 @@ class BuilderController extends Controller
     {
         $ad = BuilderAd::visibleTo(auth()->user())->findOrFail($ad->id);
 
-        // A shared ad goes from every organization at once: the platform's alone to delete (owner, 2026-10-01).
-        abort_unless($this->mayDelete($ad), 403, $ad->isShared() && ! $this->aboveTheOrganizations()
-            ? 'An ad for every organization is the platform\'s: only the platform deletes it.'
-            : 'Deleting an ad needs the Delete Ads permission.');
+        // An ad for every organization is the platform's alone to delete (owner, 2026-10-01).
+        abort_unless($this->mayDelete($ad), 403, 'Deleting an ad needs the Delete Ads permission.');
 
         // Its published page is a library row; a channel showing it would lose the ad without anybody
         // deciding so (owner, 2026-09-19). Refused before the password, like every other refusal.
@@ -428,7 +417,7 @@ class BuilderController extends Controller
 
         DB::transaction(fn () => $ad->delete());
 
-        // The copies organizations made of a shared ad are theirs, and stay.
+        // The copies organizations made of a Premium Template are theirs, files and all, and stay.
         ActivityLog::record('ad.deleted', null, $shared ? "Deleted ad {$name}, shared with every organization" : "Deleted ad {$name}", organizationId: $organizationId);
 
         return response()->json([
@@ -439,9 +428,9 @@ class BuilderController extends Controller
     }
 
     /**
-     * The pictures and videos the editor may put on the stage: the ad's organization's own and those the platform shares
-     * with every organization (owner, 2026-09-29) — for an ad shared with every organization, the shared ones alone. A new ad's are
-     * everything in reach, and the editor keeps to the shelf of the organization chosen for it (onThisShelf).
+     * The pictures and videos the editor may put on the stage: the ad's organization's own alone (owner, 2026-10-07), and for an
+     * ad for every organization the platform's alone (BuilderAsset::onShelfOf). A new ad's are everything in reach, and the
+     * editor keeps to the shelf of the organization chosen for it (onThisShelf).
      */
     private function assetsForEditor(?BuilderAd $ad = null): array
     {
@@ -453,7 +442,7 @@ class BuilderController extends Controller
             ->toArray();
     }
 
-    /** Update Ads — and, for an ad the platform shares with every organization, standing above the organizations. */
+    /** Update Ads — and, for an ad for every organization, standing above the organizations (an organization never sees one). */
     private function mayUpdate(BuilderAd $ad): bool
     {
         return Gate::allows('ad-update') && (! $ad->isShared() || $this->aboveTheOrganizations());
@@ -465,7 +454,7 @@ class BuilderController extends Controller
         return Gate::allows('ad-destroy') && (! $ad->isShared() || $this->aboveTheOrganizations());
     }
 
-    /** Create Ads: inside an organization the copy is the organization's own, above the organizations it stays where its original is. */
+    /** Create Ads: the copy is made where its original is. */
     private function mayCopy(BuilderAd $ad): bool
     {
         return Gate::allows('ad-store');
@@ -474,25 +463,13 @@ class BuilderController extends Controller
     /** Changing, publishing and taking an ad off: refused with the reason, never as a bare 403. */
     private function authorizeChange(BuilderAd $ad): void
     {
-        abort_unless($this->mayUpdate($ad), 403, $ad->isShared() && ! $this->aboveTheOrganizations()
-            ? 'An ad for every organization is the platform\'s: copy it to change it.'
-            : 'Changing an ad needs the Update Ads permission.');
+        abort_unless($this->mayUpdate($ad), 403, 'Changing an ad needs the Update Ads permission.');
     }
 
-    /** Whether an organization's person is shown the version the platform published rather than its draft: always, inside an organization. */
-    private function showsPublishedVersion(BuilderAd $ad): bool
-    {
-        return $ad->isShared() && $ad->isPublished() && ! $this->aboveTheOrganizations();
-    }
-
-    /** Whose ad this is, for a shared one: above the organizations "Every organization", inside an organization "From the platform". */
+    /** Whose ad this is, for one made for every organization: "Every organization" (only the platform ever lists one). */
     private function ownerLabel(BuilderAd $ad): ?string
     {
-        if (! $ad->isShared()) {
-            return null;
-        }
-
-        return $this->aboveTheOrganizations() ? 'Every organization' : 'From the platform';
+        return $ad->isShared() ? 'Every organization' : null;
     }
 
     /** The organization a log entry belongs to: the ad's organization, or for a shared ad the organization the person is working in (if any). */
@@ -565,35 +542,6 @@ class BuilderController extends Controller
         // published ad read as edited since — a draft, off every screen (BuilderAd::isPublished()).
         $this->storage->storePosterWithin($ad->organization_id, "{$ad->storageDirectory()}/poster.jpg", $dataUri,
             fn (string $path) => BuilderAd::withoutTimestamps(fn () => $ad->update(['thumbnail_path' => $path])));
-    }
-
-    /**
-     * "Winter sale" → "Winter sale (copy)", and "(copy 2)" after that, among the ads of the place the copy goes to. An
-     * organization's copy of the platform's ad keeps the name while the organization has no ad called so: it is the organization's first.
-     */
-    private function copyName(string $name, ?int $organizationId, bool $keepItIfFree = false): string
-    {
-        $base = preg_replace('/ \(copy( \d+)?\)$/', '', $name) ?? $name;
-        $taken = BuilderAd::query()
-            ->when($organizationId === null, fn (Builder $query) => $query->whereNull('organization_id'), fn (Builder $query) => $query->where('organization_id', $organizationId))
-            ->pluck('name')
-            ->all();
-
-        if ($keepItIfFree && ! in_array($name, $taken, true)) {
-            return mb_substr($name, 0, 120);
-        }
-
-        if (! in_array("{$base} (copy)", $taken, true)) {
-            return mb_substr("{$base} (copy)", 0, 120);
-        }
-
-        for ($i = 2; $i < 100; $i++) {
-            if (! in_array("{$base} (copy {$i})", $taken, true)) {
-                return mb_substr("{$base} (copy {$i})", 0, 120);
-            }
-        }
-
-        return mb_substr("{$base} (copy)", 0, 120);
     }
 
     /**

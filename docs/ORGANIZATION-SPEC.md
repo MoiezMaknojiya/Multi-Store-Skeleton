@@ -465,7 +465,7 @@ invalid state.
 
 **Channels page**: above the organizations every channel, badged "Every organization" or "{organization} only"; inside an organization "Channels of
 {organization}", its own — and the platform's, badged "From the platform", with Ads but no Edit or Delete. The playlist's
-Channels box marks an organization's own channel "This organization".
+Channels tab marks an organization's own channel "This organization".
 
 **Media Library page**: inside an organization, the organization's library. Above the organizations one library at a time, chosen in the
 Library list — "Platform library" (the default) or an organization — which is also where an upload lands.

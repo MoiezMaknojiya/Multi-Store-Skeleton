@@ -90,6 +90,7 @@ class EveryPageRendersTest extends DuskTestCase
                 '/roles',
                 '/activity',
                 '/settings/organization',
+                '/settings/billing',         // Settings → Billing (docs/BILLING-SPEC.md §3)
                 '/profile',
             ]);
         });

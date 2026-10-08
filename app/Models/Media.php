@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\Storage;
 /**
  * A file in a media library. A library belongs to an organization (`organization_id` set) — its inventory, which every
  * colleague may put on the organization's screens — or to the platform (`organization_id` NULL, docs/CHANNEL-CONTENT-SPEC.md),
- * whose files reach a television inside a channel or on any organization's playlist (playableOn). An organization never
+ * whose files reach a television inside a platform channel alone — a screen's playlist holds its own organization's files (playableOn,
+ * owner 2026-10-07; `copied_from_id` names the platform row an organization's copy came from). An organization never
  * lists, changes or deletes the platform's rows, and nothing here ever crosses from one organization to another.
  */
 class Media extends Model
@@ -93,16 +94,13 @@ class Media extends Model
     }
 
     /**
-     * The files a screen's playlist may hold: its own organization's library and the platform's, which is offered to
-     * every organization's screens (owner, 2026-10-05: "platform library mein jo bhi kuch upload karu woo har screen
-     * ki content playlist mein ani chahiye") — never another organization's. A file a channel holds is still kept off
-     * every playlist (scopeInNoChannel), the platform's too.
+     * The files a screen's playlist may hold: its own organization's library alone (owner, 2026-10-07; docs/BILLING-SPEC.md §5 —
+     * what the platform makes for every organization reaches it as a Premium Template, copied, or in a platform channel). Never the
+     * platform's, never another organization's; and a file a channel holds is kept off every playlist (scopeInNoChannel).
      */
     public function scopePlayableOn(Builder $query, Screen $screen): Builder
     {
-        return $query->where(fn (Builder $library) => $library
-            ->where('organization_id', $screen->organization_id)
-            ->orWhereNull('organization_id'));
+        return $query->where('organization_id', $screen->organization_id);
     }
 
     /**

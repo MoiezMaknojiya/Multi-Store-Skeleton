@@ -75,7 +75,10 @@ class AdOrientationFlowTest extends DuskTestCase
                 ->assertVisible('@new-ad-landscape')
                 ->assertSee('which way is the screen')
                 ->screenshot('new-ad-orientation-chooser');
-            $this->clickAndAwait($panel, '@new-ad-portrait', fn (Browser $b) => $b->waitFor('@ad-stage', 5));
+            // Inside an organization the shape leads to how to start (owner, 2026-10-07): Create Your Own opens the stage.
+            $this->jsClick($panel, '@new-ad-portrait');
+            $panel->waitFor('@new-ad-own')->assertSeeIn('@new-ad-shape', 'Portrait · 1080 × 1920')->assertVisible('@new-ad-premium');
+            $this->clickAndAwait($panel, '@new-ad-own', fn (Browser $b) => $b->waitFor('@ad-stage', 5));
             $this->waitForAlpine($panel);
 
             $panel->assertSeeIn('@ad-orientation', 'Portrait')

@@ -481,12 +481,13 @@ test('the Media page lists photographs and videos alone: an ad’s page is the A
     $this->deleteJson("/media/{$page->id}")->assertNotFound();
     expect($page->fresh()->title)->not->toBe('Renamed');
 
-    // A screen's Content library offers it — the organization's own and the platform's — while no channel shows it.
+    // A screen's Content library offers it while no channel shows it — the organization's own alone, never the platform's
+    // (docs/BILLING-SPEC.md §5: a platform ad reaches an organization as a Premium Template).
     $offered = fn () => collect($this->getJson("/screens/{$screen->id}/available-media")->assertOk()->json('media'))->pluck('id')->all();
-    expect($offered())->toContain($page->id, $platformPage->id, $photo->id);
+    expect($offered())->toContain($page->id, $photo->id)->not->toContain($platformPage->id);
 
     ChannelAd::factory()->create(['channel_id' => Channel::factory()->create(['organization_id' => $organization->id])->id, 'media_id' => $page->id]);
-    expect($offered())->not->toContain($page->id)->toContain($platformPage->id);
+    expect($offered())->not->toContain($page->id)->not->toContain($platformPage->id);
 
     // Above the organizations the platform's own library is read the same way.
     $this->flushSession();

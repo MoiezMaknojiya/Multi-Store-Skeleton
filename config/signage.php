@@ -80,4 +80,12 @@ return [
     /** How long a sign-up form stays good to send: a sealed moment older than this is a stale page or a replay. */
     'signup_form_lifetime_seconds' => 2 * 60 * 60,
 
+    /**
+     * Where an organization asks to unlock Premium Templates or Platform Channels, or about billing (docs/BILLING-SPEC.md §3):
+     * shown on Settings → Billing and in the unlock dialog. Empty until the owner gives them, and then the pages say
+     * "Contact us" alone (BillingSummary::contact).
+     */
+    'billing_contact_email' => env('SIGNAGE_BILLING_EMAIL', ''),
+    'billing_contact_phone' => env('SIGNAGE_BILLING_PHONE', ''),
+
 ];

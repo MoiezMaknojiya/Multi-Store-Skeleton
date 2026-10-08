@@ -16,10 +16,10 @@ test('the catalogue lists cover every labelled permission exactly once', functio
     expect($listed->sort()->values()->all())->toBe(collect(array_keys(Permission::LABELS))->sort()->values()->all());
 
     // What an organization's role may carry beyond its own permissions is a part of the platform list — all of it but
-    // the accounts (an organization's people are its Members page) and the yearly maintenance that drops every organization's
-    // history at once.
+    // the accounts (an organization's people are its Members page), the yearly maintenance that drops every organization's
+    // history at once, and the billing switches (an organization never unlocks itself, docs/BILLING-SPEC.md).
     expect(collect(Permission::ORGANIZATION_SCOPED)->diff(Permission::PLATFORM))->toBeEmpty()
-        ->and(collect(Permission::PLATFORM)->diff(Permission::ORGANIZATION_SCOPED)->values()->all())->toBe(['user-view', 'user-destroy', 'activity-destroy']);
+        ->and(collect(Permission::PLATFORM)->diff(Permission::ORGANIZATION_SCOPED)->values()->all())->toBe(['user-view', 'user-destroy', 'activity-destroy', 'billing-update']);
 });
 
 test('the seeder adds the Super-Admin role, holding the whole catalogue, and its account — over what the migrations installed', function () {

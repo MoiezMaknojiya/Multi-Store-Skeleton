@@ -47,7 +47,7 @@ class EveryQuestionSurvivesADoubleClickTest extends DuskTestCase
             $this->switchToOrganization($browser, $alpha);
 
             $this->pressEveryQuestion($browser, ['/dashboard', '/screens', '/screens/'.$screen->id, '/media', '/channels', '/channels/'.$ownChannel->id,
-                '/builder', '/builder/assets', '/members', '/roles', '/settings/organization', '/profile']);
+                '/builder', '/builder/assets', '/members', '/roles', '/settings/organization', '/settings/billing', '/profile']);
         });
     }
 

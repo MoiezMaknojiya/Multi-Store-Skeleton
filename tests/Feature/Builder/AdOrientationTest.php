@@ -48,11 +48,23 @@ function orientedDocument(string $orientation): array
 }
 
 test('a new ad asks which way the screen is mounted before the editor opens — then opens a stage of that shape', function () {
-    // No Create tab: an address with no shape goes to the Ads page, whose New ad dialog offers both ways.
+    // No Create tab: an address with no shape goes to the Ads page, whose Create Ad dialog offers both ways — inside an
+    // organization as the first of two questions, then Create Your Own or Premium Template (owner, 2026-10-07).
     $this->get('/builder/create')->assertRedirect(route('builder.index', ['new' => 1]));
     $this->get(route('builder.index', ['new' => 1]))->assertOk()
+        ->assertSee("chooseOrientation('landscape')", false)
+        ->assertSee("chooseOrientation('portrait')", false)
+        ->assertSee("'".route('builder.create')."?orientation=' + newAdOrientation", false)
+        ->assertSee('Create Your Own')
+        ->assertSee('Premium Template');
+
+    // Above the organizations the two are links straight to the editor, and there is no second question.
+    $this->actingAs(createSuperAdmin())->flushSession();
+    $this->get(route('builder.index', ['new' => 1]))->assertOk()
         ->assertSee(route('builder.create', ['orientation' => 'landscape']), false)
-        ->assertSee(route('builder.create', ['orientation' => 'portrait']), false);
+        ->assertSee(route('builder.create', ['orientation' => 'portrait']), false)
+        ->assertDontSee('Create Your Own')
+        ->assertDontSee('dusk="premium-templates"', false);
 
     $this->get('/builder/create?orientation=landscape')->assertOk()
         ->assertViewIs('builder.editor')

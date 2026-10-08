@@ -588,18 +588,14 @@ export function registerAdEditor(Alpine) {
             },
 
             /**
-             * Whether an asset is on this ad's shelf: a file the platform shares with every organization always is (owner,
-             * 2026-09-29). For the platform team building for an organization, only that organization's own besides, because the
-             * compiler only ever uses an ad's own organization's files and the shared ones; an organization's own people are only
-             * ever handed their own organization's and the shared. The picker and a paste both ask.
+             * Whether an asset is on this ad's shelf, as the compiler reads it: an organization's ad uses its organization's own
+             * files alone — uploaded, or copied in with a Premium Template (owner, 2026-10-07) — and an ad for every organization the
+             * platform's alone. An organization's own people are only ever handed their own. The picker and a paste both ask.
              */
             onThisShelf(asset) {
-                if (!asset.organization_id) return true;
-                // An ad for every organization uses the shared files alone: an organization's own would show in no other organization's copy.
-                if (this.isShared()) return false;
-                if (this.choosesOrganization && !this.organizationId) return false;
+                if (this.isShared()) return !asset.organization_id;
 
-                return !this.organizationId || asset.organization_id === this.organizationId;
+                return Boolean(asset.organization_id) && (!this.organizationId || asset.organization_id === this.organizationId);
             },
 
             /** Made for every organization: a saved ad as the server says, a new one while All organizations is chosen. */
@@ -622,7 +618,7 @@ export function registerAdEditor(Alpine) {
 
                 if (lost > 0) {
                     window.toast(`${lost} ${lost === 1 ? 'file on the stage' : 'files on the stage'} will not show: `
-                        + (this.isShared() ? 'an ad for every organization uses shared files only.' : 'they belong to another organization.'));
+                        + (this.isShared() ? 'an ad for every organization uses the platform\'s files only.' : 'they are not this organization\'s.'));
                 }
             },
 

@@ -49,9 +49,8 @@ class PlaylistController extends Controller
     }
 
     /**
-     * The media this screen is allowed to play: its own organization's library, and the platform's — offered to
-     * every screen of every organization (owner, 2026-10-05: "platform library mein jo bhi kuch upload karu woo har
-     * screen ki content playlist mein ani chahiye").
+     * The media this screen is allowed to play: its own organization's library alone (owner, 2026-10-07; docs/BILLING-SPEC.md §5 —
+     * what the platform makes for every organization reaches a screen as a Premium Template, copied, or in a platform channel).
      *
      * Its own endpoint, gated by the playlist permission, so someone who may
      * change playlists does not also need media-view — a permission is meant to
@@ -70,15 +69,18 @@ class PlaylistController extends Controller
         // again — nor any file a channel shows, an ad included (owner's rule, 2026-09-26, the platform's files
         // too): it would play twice on a screen that also carries the channel. Publish alone decides the rest
         // (owner, 2026-10-01).
-        $media = Media::playableOn($screen)
-            ->withoutDrafts()
-            ->inNoChannel()
+        $offered = Media::playableOn($screen)->withoutDrafts()->inNoChannel();
+
+        $media = (clone $offered)
             ->when($search !== '', fn (Builder $q) => $q->where('title', 'like', "%{$search}%"))
             ->orderByDesc('created_at')
             ->limit(100)
             ->get(['id', 'organization_id', 'title', 'type', 'duration_seconds', 'orientation', 'disk', 'path', 'thumbnail_path']);
 
         return response()->json([
+            // Every file the library offers, whatever the search says and however many are listed: the number on
+            // the Content Library tab, which stays put while somebody types.
+            'total' => $offered->count(),
             'media' => $media->map(fn (Media $item) => [
                 'id' => $item->id,
                 'title' => $item->title,
@@ -86,8 +88,6 @@ class PlaylistController extends Controller
                 'orientation' => $item->orientation,
                 'duration_seconds' => $item->duration_seconds,
                 'thumbnail_url' => $item->thumbnail_url,
-                // The platform's own file: the tile says so, as a shared ad's card does.
-                'from_platform' => $item->organization_id === null,
             ])->all(),
         ]);
     }
@@ -106,12 +106,18 @@ class PlaylistController extends Controller
         $today = $screen->localTime();
 
         $channels = Channel::availableTo($screen)->with('ads')->orderBy('name')->get();
+        // Platform Channels locked for the organization (docs/BILLING-SPEC.md §6): its platform channels are shown with Unlock in
+        // place of Add — Show Ads still works — and its own channels stay free.
+        $locked = $screen->organization !== null && ! $screen->organization->platform_channels_unlocked;
 
         return response()->json([
+            'platform_channels_locked' => $locked,
+            'organization_name' => $screen->organization?->name,
             'channels' => $channels->map(fn (Channel $channel) => [
                 'id' => $channel->id,
                 // The organization's own channel, told apart in the box from the platform's.
                 'is_organization_channel' => $channel->organization_id !== null,
+                'locked' => $locked && $channel->organization_id === null,
                 ...$this->channelSummary($channel, $today),
                 // "Show ads" in the box: exactly what adding this channel would play.
                 'ads' => $channel->runningAdsOn($today)->map(fn (ChannelAd $ad) => [
@@ -167,6 +173,7 @@ class PlaylistController extends Controller
         $this->assertFilesAreInNoChannel($items);
         $this->assertPicturesStayUpLongEnough($items);
         $this->assertChannelsAreAvailable($screen, $items);
+        $this->assertPlatformChannelsMayBeAdded($screen, $items);
 
         // A save replaces the WHOLE list, so a client working from a stale copy
         // would quietly wipe out whatever changed in the meantime — a colleague
@@ -237,8 +244,14 @@ class PlaylistController extends Controller
         // old one is worse than none of them changing.
         $items = $this->itemsForCopy($screen);
 
-        // A line from before 2026-09-26 whose file a channel shows would carry the double play to every target.
+        // A line from before 2026-09-26 whose file a channel shows would carry the double play to every target, and one from
+        // before the Content Library became the organization's own (docs/BILLING-SPEC.md §5) a platform file.
         $this->assertFilesAreInNoChannel($items);
+        $this->assertMediaBelongsToTheSameOrganization($screen, $items);
+
+        foreach ($targets as $target) {
+            $this->assertPlatformChannelsMayBeAdded($target, $items);
+        }
 
         DB::transaction(function () use ($targets, $items) {
             $this->assertFilesAreInNoChannelUnderLock($items);
@@ -345,9 +358,10 @@ class PlaylistController extends Controller
     }
 
     /**
-     * A screen can only play its own organization's files and the platform's. Without this, a client could
-     * post any media id it liked and an organization would end up showing another organization's
-     * content — the organization wall applied to the one place it is easy to forget.
+     * A screen can only play its own organization's files. Without this, a client could post any media id it liked and an
+     * organization would end up showing another organization's content — the organization wall applied to the one place it is
+     * easy to forget. A platform file is named: a line from before the Content Library became the organization's own
+     * (docs/BILLING-SPEC.md §5) is taken out by its title.
      */
     private function assertMediaBelongsToTheSameOrganization(Screen $screen, array $items): void
     {
@@ -361,9 +375,39 @@ class PlaylistController extends Controller
 
         $allowed = Media::playableOn($screen)->whereIn('id', $ids)->count();
 
-        if ($allowed !== $ids->count()) {
+        if ($allowed === $ids->count()) {
+            return;
+        }
+
+        $platform = Media::platformOwned()->whereIn('id', $ids)->value('title');
+
+        throw ValidationException::withMessages([
+            'items' => $platform !== null
+                ? "{$platform} is the platform's, and the Content Library holds your own files alone. Take its line out."
+                : 'One of those files is not in this organization\'s library.',
+        ]);
+    }
+
+    /**
+     * Platform Channels locked for the screen's organization (docs/BILLING-SPEC.md §6): no platform channel goes onto a screen that
+     * does not carry it yet — a line already there keeps its place and plays on. The page offers Unlock in place of Add; this is
+     * the wall behind it, for a save and for a copy onto another screen alike.
+     */
+    private function assertPlatformChannelsMayBeAdded(Screen $screen, array $items): void
+    {
+        $organization = $screen->organization;
+        $ids = collect($items)->pluck('channel_id')->reject(fn (int|string|null $id) => $id === null)->map(fn (int|string $id) => (int) $id)->unique();
+
+        if ($organization === null || $organization->platform_channels_unlocked || $ids->isEmpty()) {
+            return;
+        }
+
+        $carried = $screen->playlistItems()->whereNotNull('channel_id')->pluck('channel_id')->map(fn (int|string $id) => (int) $id);
+        $added = Channel::whereNull('organization_id')->whereIn('id', $ids->diff($carried))->orderBy('name')->value('name');
+
+        if ($added !== null) {
             throw ValidationException::withMessages([
-                'items' => 'One of those files is not in this organization\'s library or the platform\'s.',
+                'items' => "{$added} is a platform channel, and Platform Channels are locked for {$organization->name}. Contact us to unlock them.",
             ]);
         }
     }
