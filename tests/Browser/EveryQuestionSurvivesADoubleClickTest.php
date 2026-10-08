@@ -69,6 +69,31 @@ class EveryQuestionSurvivesADoubleClickTest extends DuskTestCase
     }
 
     /**
+     * A menu, a disclosure and a switch turn once for a double press (owner, 2026-10-08: the Billing switch went on and off at
+     * one press of a mouse that sends two) — the second press used to turn each straight back.
+     */
+    public function test_a_double_press_turns_a_menu_or_a_disclosure_once(): void
+    {
+        $admin = $this->seedSuperAdmin();
+
+        $this->browse(function (Browser $browser) use ($admin) {
+            $this->freshSession($browser);
+            $browser->loginAs($admin)->visit('/organizations');
+            $this->waitForAlpine($browser);
+
+            $group = 'button[aria-label="Expand Users"]';
+            $browser->waitFor($group)->assertAttribute($group, 'aria-expanded', 'false');
+            $this->presses($browser, $this->centreOf($browser, $group), 2);
+            $browser->pause(300)->assertAttribute('button[aria-label="Collapse Users"]', 'aria-expanded', 'true');
+
+            $this->presses($browser, $this->centreOf($browser, '[dusk="user-menu"]'), 2);
+            $browser->pause(300)->assertAttribute('@user-menu', 'aria-expanded', 'true');
+            $this->key($browser, 'Escape');
+            $browser->pause(200)->assertAttribute('@user-menu', 'aria-expanded', 'false');
+        });
+    }
+
+    /**
      * On each page: find every button whose press opens a dialog, then double-press it and the dialog's Cancel.
      *
      * @param  list<string>  $pages

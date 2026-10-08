@@ -6,10 +6,15 @@
  *    which must not shut it (isAClickBeside);
  *  - shut by the first press (Cancel, Close, Delete Ad, a font picked), the dialog is gone from under the pointer, and
  *    the second press lands on whatever lay beneath it — another row's Delete, a poster that opens the editor — which
- *    must not hear it (registerStrayClickGuard, told by noteShut).
+ *    must not hear it (registerStrayClickGuard, told by noteShut);
+ *  - on a switch, a toggle or a menu button the second press turns it straight back (owner, 2026-10-08: the Billing
+ *    switch went on and off at one press of a mouse that sends two), so it is dropped too (registerStrayClickGuard).
  * Within a double click's time, the second press is the same gesture as the first: never a new one.
  */
 const DOUBLE_CLICK_MS = 500;
+
+/** What one press turns: a switch, a toggle and a menu or disclosure button. */
+const TOGGLES = '[role="switch"], [aria-pressed], [aria-expanded]';
 
 let shutAt = -Infinity;
 
@@ -28,7 +33,10 @@ export function noteShut() {
     shutAt = performance.now();
 }
 
-/** The rest of a multi-click that shut a dialog is dropped before anything on the page beneath hears it. */
+/**
+ * The rest of a multi-click that shut a dialog is dropped before anything on the page beneath hears it, and so is the rest
+ * of one on a toggle — its click only: its dblclick still goes through (a layer's name is renamed by one).
+ */
 export function registerStrayClickGuard() {
     const dropTheRest = (event) => {
         if (event.detail > 1 && performance.now() - shutAt < DOUBLE_CLICK_MS) {
@@ -36,7 +44,14 @@ export function registerStrayClickGuard() {
             event.stopImmediatePropagation();
         }
     };
+    const turnOnce = (event) => {
+        if (event.detail > 1 && event.target.closest?.(TOGGLES)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        }
+    };
 
     document.addEventListener('click', dropTheRest, true);
+    document.addEventListener('click', turnOnce, true);
     document.addEventListener('dblclick', dropTheRest, true);
 }

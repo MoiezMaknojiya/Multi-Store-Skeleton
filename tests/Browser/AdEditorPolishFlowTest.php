@@ -182,8 +182,16 @@ class AdEditorPolishFlowTest extends DuskTestCase
             JS);
             $browser->waitUntil(self::EDITOR.'.layers.map(e => e.id).join() === "a,c,b"', 5);
 
-            // Double-click a name, type, Enter.
-            $browser->script('document.querySelector(\'[dusk="layer-name-b"]\').dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));');
+            // Double-click a name with a real mouse — a layer's name is pressed (aria-pressed), so the rest of the double
+            // click's clicks are dropped (core/click-beside.js) while its dblclick still renames — then type, Enter.
+            $at = $browser->script('const r = document.querySelector(\'[dusk="layer-name-b"]\').getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)];')[0];
+            $tools = new ChromeDevToolsDriver($browser->driver);
+            foreach ([1, 2] as $press) {
+                foreach (['mousePressed', 'mouseReleased'] as $type) {
+                    $tools->execute('Input.dispatchMouseEvent', ['type' => $type, 'x' => $at[0], 'y' => $at[1], 'button' => 'left',
+                        'buttons' => $type === 'mousePressed' ? 1 : 0, 'clickCount' => $press]);
+                }
+            }
             $browser->waitFor('@layer-rename-b');
             $browser->script(<<<'JS'
                 const input = document.querySelector('[dusk="layer-rename-b"]');

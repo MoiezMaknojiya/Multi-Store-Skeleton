@@ -84,9 +84,14 @@ class BillingFlowTest extends DuskTestCase
                 ->assertDisabled('@organization-billing-save')
                 ->assertAttribute('@billing-switch-premium_templates', 'aria-checked', 'true');
 
-            // A double press on a switch turns it twice: back as it was, nothing to save.
+            // A double press turns a switch once (owner, 2026-10-08: it went on and off at one press of a mouse that sends
+            // two), and so does a triple; a press after the double click's time turns it back.
             $this->presses($browser, $this->centreOf($browser, '[dusk="billing-switch-premium_templates"]'), 2);
+            $browser->pause(300)->assertAttribute('@billing-switch-premium_templates', 'aria-checked', 'false')->assertEnabled('@organization-billing-save');
+            $browser->pause(400);
+            $this->presses($browser, $this->centreOf($browser, '[dusk="billing-switch-premium_templates"]'), 3);
             $browser->pause(300)->assertAttribute('@billing-switch-premium_templates', 'aria-checked', 'true')->assertDisabled('@organization-billing-save');
+            $browser->pause(400);
 
             // One press locks it; the line says what that means; Save, pressed three times, sends once.
             $this->presses($browser, $this->centreOf($browser, '[dusk="billing-switch-premium_templates"]'), 1);
