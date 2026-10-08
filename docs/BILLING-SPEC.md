@@ -79,14 +79,17 @@ Templates" or "Unlock Platform Channels", the $10, the contact lines, Close).
   `POST /builder/templates/{ad}` (403 with the same words). Copies made before stay the organization's.
 - **Platform Channels locked:** the screen's Channels tab shows the platform's channels with a Premium badge, Show Ads works,
   **Unlock** in place of Add; the organization's own channels are free. The server refuses a playlist save or a copy to other screens
-  that would put a platform channel on a screen that does not carry it yet (422, the line named); a line already there keeps playing
-  and stays on the playlist (owner's billing talk, to be looked at again when Stripe comes).
+  that would put a platform channel on a screen that does not carry it yet (422, the line named). A line already there **stays on
+  the playlist and plays nothing** (owner, 2026-10-08, from the mockup): the screen's answer and its offline timeline leave it out
+  (`ScheduleResolver`), so a screen with nothing else shows its holding picture, or black; the playlist draws it in amber with a
+  Premium badge, "locked: not playing on the screen", a note above the lines naming it, and only **Unlock** (the same dialog) and ×.
+  Unlocked again, nobody touches the playlist: it plays on the screen's next answer, within 30 seconds.
 
 ## 7. Tests
 
 `BillingTest` (the summary's sums, the first screen free, the tab and who sees it, the platform's dialog and its switches, the
 log), `BillingAttackTest` (an organization unlocking itself, a platform role without Change Billing, another organization's billing, ids
 and shapes), `ContentLibraryIsOwnTest` (the picker and the save), `PlatformLinesMigrationTest` (both ways), `PremiumLocksTest` (both
-locks, server and payloads), and in the browser `BillingFlowTest` (the tab, the platform dialog pressed hard, the locked gallery and
-Channels tab, the unlock dialog, a phone) — plus the lists of `EveryPageRendersTest`, `EveryButtonWorksTest`,
+locks, server and payloads, and a locked line left out of the TV's answer and timeline), and in the browser `BillingFlowTest` (the tab, the platform dialog pressed hard, the locked gallery and
+Channels tab, the unlock dialog, the locked line with ×, ↑ and ↓ double-pressed, a phone) — plus the lists of `EveryPageRendersTest`, `EveryButtonWorksTest`,
 `EveryPageFitsAPhoneTest` and `EveryQuestionSurvivesADoubleClickTest`.

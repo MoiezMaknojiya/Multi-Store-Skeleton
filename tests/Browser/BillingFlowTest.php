@@ -8,6 +8,7 @@ use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
 use App\Models\Organization;
+use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
 use Facebook\WebDriver\Chrome\ChromeDevToolsDriver;
@@ -198,6 +199,104 @@ class BillingFlowTest extends DuskTestCase
             $this->assertSame(1, (int) $browser->script('return Alpine.$data(document.querySelector(\'[x-data^="screenPlaylist"]\')).items.filter((i) => i.type === "channel").length;')[0]);
             $this->assertCalm($browser);
         });
+    }
+
+    public function test_a_locked_platform_channel_line_stays_marked_and_plays_again_once_unlocked(): void
+    {
+        [$owner, $smart] = $this->smartStop();
+        $gama = Channel::factory()->create(['name' => 'GAMA']);
+        ChannelAd::factory()->lasting(10)->showing(['thumbnail_path' => null])->create(['channel_id' => $gama->id, 'title' => 'Monster', 'position' => 0]);
+        $screen = Screen::where('organization_id', $smart->id)->orderBy('id')->first();
+        $toast = Media::where('organization_id', $smart->id)->sole();
+        $coffee = Media::factory()->create(['organization_id' => $smart->id, 'title' => 'Iced coffee', 'thumbnail_path' => null]);
+        $tea = Media::factory()->create(['organization_id' => $smart->id, 'title' => 'Masala tea', 'thumbnail_path' => null]);
+        foreach ([$toast, $coffee, $tea] as $position => $file) {
+            PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $file->id, 'duration_seconds' => 10, 'position' => $position]);
+        }
+        PlaylistItem::create(['screen_id' => $screen->id, 'channel_id' => $gama->id, 'position' => 3]);
+        $smart->forceFill(['platform_channels_unlocked' => false])->save();
+
+        $this->browse(function (Browser $browser) use ($owner, $smart, $screen, $gama, $coffee) {
+            $this->freshSession($browser);
+            $browser->loginAs($owner);
+            $this->switchToOrganization($browser, $smart);
+
+            $browser->visit('/screens/'.$screen->id);
+            $this->waitForAlpine($browser);
+            $this->watch($browser);
+
+            // The line keeps its place, says it is locked, and offers Unlock and its removal alone.
+            $browser->waitFor('@playlist-locked')
+                ->assertSeeIn('@playlist-locked', 'GAMA is not playing: Platform Channels are locked for Smart Stop.')
+                ->assertSeeIn('@playlist-locked', 'Its line stays here. Unlock Platform Channels and it plays again by itself, or take it out.')
+                ->assertVisible('@playlist-premium-3')
+                ->assertSeeIn('@playlist-channel-info-3', 'locked: not playing on the screen')
+                ->assertMissing('@playlist-schedule-3')->assertMissing('@playlist-up-3')->assertMissing('@playlist-down-3')
+                ->assertMissing('@playlist-length-3')
+                ->assertVisible('@playlist-unlock-3')->assertVisible('@playlist-remove-3')
+                ->assertVisible('@playlist-schedule-0')->assertMissing('@playlist-unlock-0')->assertMissing('@playlist-premium-0')
+                ->assertSeeIn('@playlist-summary', '4 items · 3 playing')
+                ->screenshot('billing-locked-line');
+
+            // A double press on Unlock opens the dialog once; a double press on its Close shuts it and reaches nothing beneath.
+            $this->presses($browser, $this->centreOf($browser, '[dusk="playlist-unlock-3"]'), 2);
+            $browser->waitFor('@unlock-platform-channels')->pause(400)
+                ->assertSeeIn('@unlock-platform-channels', 'Unlock Platform Channels');
+            $this->presses($browser, $this->centreOf($browser, '[dusk="unlock-platform-channels-close"]'), 2);
+            $browser->waitUntilMissing('@unlock-platform-channels')->pause(400);
+            $this->assertSame(4, $this->lineCount($browser));
+            $browser->assertButtonDisabled('@playlist-save');
+
+            // One line out, so the page holds a change and its lines stand still from here on.
+            $this->presses($browser, $this->centreOf($browser, '[dusk="playlist-remove-0"]'), 1);
+            $browser->pause(800);
+            $this->assertSame(3, $this->lineCount($browser));
+
+            // A double press on ↑ moves the line once — not up, and then the line it swapped with back up over it.
+            $this->presses($browser, $this->centreOf($browser, '[dusk="playlist-up-1"]'), 2);
+            $browser->pause(800);
+            $this->assertSame(['Masala tea', 'Iced coffee', 'GAMA'], $this->lineTitles($browser), 'A double press on ↑ undid itself');
+
+            // A double press on the first line's × takes that line alone, though the next one moves up under the pointer.
+            // (Past a double click's time from the dialog shutting, so its guard is not what keeps the second press off.)
+            $this->presses($browser, $this->centreOf($browser, '[dusk="playlist-remove-0"]'), 2);
+            $browser->pause(300);
+            $this->assertSame(['Iced coffee', 'GAMA'], $this->lineTitles($browser), 'A double press on × took two lines');
+            $browser->assertVisible('@playlist-unlock-1');
+
+            // Saved as it stands, the locked line stays where it is.
+            $this->presses($browser, $this->centreOf($browser, '[dusk="playlist-save"]'), 1);
+            $browser->waitUsing(10, 200, fn () => PlaylistItem::where('screen_id', $screen->id)->count() === 2);
+            $lines = PlaylistItem::where('screen_id', $screen->id)->orderBy('position')->get();
+            $this->assertSame([null, $gama->id], $lines->pluck('channel_id')->all());
+            $this->assertSame([$coffee->id, null], $lines->pluck('media_id')->all());
+
+            // On a phone the line and the note fit.
+            $browser->resize(375, 812)->pause(300);
+            $this->assertFitsThePhone($browser, '[dusk="playlist-line-1"]');
+            $this->assertFitsThePhone($browser, '[dusk="playlist-locked"]');
+            $browser->screenshot('billing-locked-line-phone')->resize(1440, 900);
+
+            // Unlocked, the same line plays again: nothing on the page is changed by hand.
+            $smart->forceFill(['platform_channels_unlocked' => true])->save();
+            $browser->visit('/screens/'.$screen->id);
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@playlist-schedule-1')
+                ->assertMissing('@playlist-locked')->assertMissing('@playlist-unlock-1')->assertMissing('@playlist-premium-1')
+                ->assertVisible('@playlist-length-1')
+                ->assertDontSeeIn('@playlist-summary', 'playing');
+            $this->assertCalm($browser);
+        });
+    }
+
+    private function lineTitles(Browser $browser): array
+    {
+        return $browser->script('return Alpine.$data(document.querySelector(\'[x-data^="screenPlaylist"]\')).items.map((i) => i.title);')[0];
+    }
+
+    private function lineCount(Browser $browser): int
+    {
+        return (int) $browser->script('return Alpine.$data(document.querySelector(\'[x-data^="screenPlaylist"]\')).items.length;')[0];
     }
 
     /* ── The organizations, set up ─────────────────────────────────────── */

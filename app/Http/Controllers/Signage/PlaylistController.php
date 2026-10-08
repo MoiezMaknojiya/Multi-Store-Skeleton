@@ -747,6 +747,7 @@ class PlaylistController extends Controller
         // Channel lines are described against the screen's own today — the calendar
         // the television itself is answered with.
         $today = $screen->localTime();
+        $platformChannelsLocked = $screen->organization !== null && ! $screen->organization->platform_channels_unlocked;
 
         return $screen->playlistItems()->with(['media.builderAd', 'channel.ads', 'scheduleRules'])->get()
             ->map(fn (PlaylistItem $item) => [
@@ -759,7 +760,11 @@ class PlaylistController extends Controller
                 'duration_seconds' => $item->media?->ownLength()
                     ?? ($item->media_id !== null ? PlaylistItem::secondsForAPicture($item->duration_seconds) : null),
                 'runs_own_length' => $item->media?->ownLength() !== null,
-                ...($item->channel !== null ? $this->channelSummary($item->channel, $today) : [
+                ...($item->channel !== null ? [
+                    ...$this->channelSummary($item->channel, $today),
+                    // A platform channel while Platform Channels are locked (docs/BILLING-SPEC.md §6): kept here, played nowhere.
+                    'locked' => $platformChannelsLocked && $item->channel->isPlatformChannel(),
+                ] : [
                     'title' => $item->media?->title,
                     'type' => $item->media?->type,
                     // Which way the file is: the page says when it is not the screen's way, because that

@@ -88,13 +88,28 @@
                         </p>
                     </template>
 
+                    {{-- Platform Channels locked (docs/BILLING-SPEC.md §6, owner 2026-10-08): their lines stay, and play nothing until
+                         unlocked again — said once, above the lines. --}}
+                    <div x-show="lockedLines().length > 0" x-cloak class="alert-warning flex items-start gap-3" dusk="playlist-locked">
+                        <x-icon name="lock-closed" class="mt-0.5 h-4 w-4 shrink-0" />
+                        <div>
+                            <p class="font-semibold"><span x-text="lockedNames()"></span> not playing: Platform Channels are locked for {{ $screen->organization?->name }}.</p>
+                            <p class="mt-0.5" x-text="lockedLines().length === 1
+                                ? 'Its line stays here. Unlock Platform Channels and it plays again by itself{{ auth()->user()->can('screen-playlist') ? ', or take it out' : '' }}.'
+                                : 'Their lines stay here. Unlock Platform Channels and they play again by themselves{{ auth()->user()->can('screen-playlist') ? ', or take them out' : '' }}.'"></p>
+                        </div>
+                    </div>
+
                     <template x-for="(item, index) in items" :key="item.key">
-                        {{-- A line that is not playing — an Ad Builder page taken off the screens (unpublished) — is drawn faded. --}}
-                        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 p-2 rounded-md border border-gray-200 dark:border-gray-700"
-                             x-bind:class="item.is_draft ? 'opacity-60' : ''">
+                        {{-- A line that is not playing — an Ad Builder page taken off the screens (unpublished) — is drawn faded; a
+                             locked platform channel's in the lock's amber. --}}
+                        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 p-2 rounded-md border"
+                             x-bind:class="[item.is_draft ? 'opacity-60' : '', item.locked ? 'border-amber-200 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10' : 'border-gray-200 dark:border-gray-700']"
+                             x-bind:dusk="'playlist-line-' + index">
                             <span class="w-6 text-xs text-gray-500 text-center dark:text-gray-400" x-text="index + 1"></span>
 
-                            <div class="w-20 h-12 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                            <div class="w-20 h-12 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0"
+                                 x-bind:class="item.locked ? 'opacity-60' : ''">
                                 {{-- An upright picture is shown whole, not cut to its middle (docs/AD-BUILDER-SPEC.md §12). --}}
                                 <template x-if="item.thumbnail_url">
                                     <img :src="item.thumbnail_url" :alt="item.title" class="w-full h-full"
@@ -112,6 +127,8 @@
                                          left where no copy could be made: said, so the save's refusal names something the page shows. --}}
                                     <span x-show="item.from_platform" x-cloak class="badge-neutral shrink-0"
                                           x-bind:dusk="'playlist-platform-' + index">From the platform</span>
+                                    <span x-show="item.locked" x-cloak class="badge-warning inline-flex shrink-0 items-center gap-1"
+                                          x-bind:dusk="'playlist-premium-' + index"><x-icon name="lock-closed" class="h-3 w-3" /> Premium</span>
                                 </p>
                                 <p class="text-xs text-gray-500 dark:text-gray-400">
                                     <span x-text="typeLabel(item)"></span>
@@ -125,8 +142,8 @@
                                          plainly when that is nothing: paused, or no ads running. --}}
                                     <template x-if="item.type === 'channel'">
                                         <span x-bind:dusk="'playlist-channel-info-' + index"
-                                              x-bind:class="channelWarning(item) ? 'text-amber-700 dark:text-amber-400' : ''"
-                                              x-text="' · ' + channelInfo(item)"></span>
+                                              x-bind:class="item.locked || channelWarning(item) ? 'text-amber-700 dark:text-amber-400' : ''"
+                                              x-text="' · ' + (item.locked ? 'locked: not playing on the screen' : channelInfo(item))"></span>
                                     </template>
                                 </p>
                                 {{-- Only shown when the item HAS a schedule. An item
@@ -167,7 +184,7 @@
                                             <span class="text-xs text-gray-500 dark:text-gray-400">secs</span>
                                         </span>
                                     </template>
-                                    <template x-if="!isTimed(item)">
+                                    <template x-if="!isTimed(item) && !item.locked">
                                         <span class="text-sm text-gray-500 whitespace-nowrap dark:text-gray-400"
                                               x-bind:dusk="'playlist-length-' + index"
                                               x-text="(item.type === 'channel' ? '~' : '') + formatDuration(lineSeconds(item))"></span>
@@ -177,19 +194,27 @@
                                 @can('screen-playlist')
                                 {{-- Each button names the line it acts on, and the red × stands a little apart. --}}
                                 <div class="flex items-center gap-2">
-                                    {{-- Still while a save is on its way: its answer replaces the list. --}}
+                                    {{-- Still while a save is on its way: its answer replaces the list. A locked line offers Unlock and its
+                                         removal alone: it plays nothing to schedule or move. --}}
                                     <button @click="openSchedule(index)" x-bind:dusk="'playlist-schedule-' + index" x-bind:disabled="saving"
+                                        x-show="!item.locked"
                                         class="btn-row-neutral" title="When this item plays"
                                         x-bind:aria-label="'Schedule for ' + item.title">Schedule</button>
-                                    <button @click="moveUp(index)" x-bind:disabled="index === 0 || saving"
+                                    <button @click="moveUp(index, $event)" x-bind:disabled="index === 0 || saving"
+                                        x-show="!item.locked"
                                         x-bind:dusk="'playlist-up-' + index"
                                         class="btn-row-neutral" title="Move up"
                                         x-bind:aria-label="'Move ' + item.title + ' up'"><span aria-hidden="true">&uarr;</span></button>
-                                    <button @click="moveDown(index)" x-bind:disabled="index === items.length - 1 || saving"
+                                    <button @click="moveDown(index, $event)" x-bind:disabled="index === items.length - 1 || saving"
+                                        x-show="!item.locked"
                                         x-bind:dusk="'playlist-down-' + index"
                                         class="btn-row-neutral" title="Move down"
                                         x-bind:aria-label="'Move ' + item.title + ' down'"><span aria-hidden="true">&darr;</span></button>
-                                    <button @click="removeItem(index)" x-bind:dusk="'playlist-remove-' + index" x-bind:disabled="saving"
+                                    <button type="button" x-show="item.locked" x-cloak @click="$dispatch('open-modal', 'unlock-platform-channels')"
+                                        x-bind:dusk="'playlist-unlock-' + index"
+                                        class="btn-row-neutral inline-flex items-center gap-1" x-bind:aria-label="'Unlock ' + item.title">
+                                        <x-icon name="lock-closed" class="h-3 w-3" /> Unlock</button>
+                                    <button @click="removeItem(index, $event)" x-bind:dusk="'playlist-remove-' + index" x-bind:disabled="saving"
                                         class="btn-row-danger ml-2" title="Remove"
                                         x-bind:aria-label="'Remove ' + item.title + ' from the playlist'"><span aria-hidden="true">&times;</span></button>
                                 </div>

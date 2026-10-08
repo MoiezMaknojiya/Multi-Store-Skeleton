@@ -287,21 +287,23 @@ export function registerScreenPlaylist(Alpine) {
             this.dirty = true;
         },
 
-        removeItem(index) {
-            if (this.saving) return;
+        // Once for a double click (isARepeatPress): the line under the pointer after the first press is the NEXT one —
+        // a double press on × took two lines, and one on ↑ moved the line and then the one it swapped with back.
+        removeItem(index, event) {
+            if (this.saving || isARepeatPress(event)) return;
 
             this.items.splice(index, 1);
             this.dirty = true;
         },
 
-        moveUp(index) {
-            if (index === 0 || this.saving) return;
+        moveUp(index, event) {
+            if (index === 0 || this.saving || isARepeatPress(event)) return;
             [this.items[index - 1], this.items[index]] = [this.items[index], this.items[index - 1]];
             this.dirty = true;
         },
 
-        moveDown(index) {
-            if (index >= this.items.length - 1 || this.saving) return;
+        moveDown(index, event) {
+            if (index >= this.items.length - 1 || this.saving || isARepeatPress(event)) return;
             [this.items[index + 1], this.items[index]] = [this.items[index], this.items[index + 1]];
             this.dirty = true;
         },
@@ -789,9 +791,25 @@ export function registerScreenPlaylist(Alpine) {
         /** How long one line holds the screen: a file its seconds, a channel about one
          *  pass of its ads (they rotate when a pass plays only some of them). */
         lineSeconds(item) {
+            // A platform channel while Platform Channels are locked plays nothing (docs/BILLING-SPEC.md §6).
+            if (item.locked) return 0;
+
             return item.type === 'channel'
                 ? (Number(item.pass_seconds) || 0)
                 : (Number(item.duration_seconds) || 0);
+        },
+
+        /** The lines kept on the playlist that play nothing while Platform Channels are locked. */
+        lockedLines() {
+            return this.items.filter((item) => item.locked);
+        },
+
+        /** "GAMA is" / "GAMA and Deals are" — the note above the lines. */
+        lockedNames() {
+            const names = this.lockedLines().map((item) => item.title);
+            const listed = names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+
+            return `${listed} ${names.length === 1 ? 'is' : 'are'}`;
         },
 
         /** "5 ads · 2 each time, about 20 secs" — or, plainly, why it will play nothing.
@@ -833,7 +851,10 @@ export function registerScreenPlaylist(Alpine) {
         summary() {
             const seconds = this.items.reduce((total, item) => total + this.lineSeconds(item), 0);
             const count = `${this.items.length} ${this.items.length === 1 ? 'item' : 'items'}`;
-            return `${count} · ${this.formatDuration(seconds)}`;
+            const resting = this.items.filter((item) => item.locked || item.is_draft).length;
+            const playing = resting > 0 ? ` · ${this.items.length - resting} playing` : '';
+
+            return `${count}${playing} · ${this.formatDuration(seconds)}`;
         },
 
         formatDuration(seconds) {

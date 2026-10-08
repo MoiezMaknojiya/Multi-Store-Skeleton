@@ -107,10 +107,18 @@ class ScheduleResolver
         // itself when there is no live file for it to ride along with.
         $channelsMayRideAlong = $dueFileIds->isNotEmpty() || $liveFiles->isEmpty();
 
+        // Platform Channels locked for the organization (docs/BILLING-SPEC.md §6, owner 2026-10-08): a platform channel's line keeps
+        // its place on the playlist and plays nothing until they are unlocked again — then it plays by itself.
+        $platformChannelsLocked = $screen->organization !== null && ! $screen->organization->platform_channels_unlocked;
+
         $due = $playlist
-            ->filter(function (PlaylistItem $item) use ($local, $dueFileIds, $channelsMayRideAlong) {
+            ->filter(function (PlaylistItem $item) use ($local, $dueFileIds, $channelsMayRideAlong, $platformChannelsLocked) {
                 if ($item->media !== null) {
                     return $dueFileIds->has($item->id);
+                }
+
+                if ($platformChannelsLocked && $item->channel->isPlatformChannel()) {
+                    return false;
                 }
 
                 $ads = $item->channel->liveAdsOn($local);
