@@ -16,7 +16,7 @@ sub ki honti ha professional kaam chiya", "har organization ki row per edit k ba
 | Every further screen | $5 a month | Counted, never refused, until billing starts. |
 | Premium Templates | $10 | Every platform ad for every organization, used as the organization's own copy (Use This Template). |
 | Platform Channels | $10 | Every channel the platform makes for every organization (GAMA and any other). |
-| The organization's own ads, uploads and channels | Free | Whatever the organization makes itself, or the platform makes for that one organization. |
+| The organization's own ads, uploads and channels | Free | Whatever the organization makes itself, or the platform makes for that one organization — a channel too: Add Channel above the organizations has an Organization list (All organizations, or one), 2026-10-08. |
 
 Whether each $10 is monthly or paid once is decided when Stripe comes. The prices live once, in `App\Services\BillingSummary`.
 

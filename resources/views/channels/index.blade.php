@@ -11,7 +11,7 @@
         {{-- A bound :title — the wrapper echoes it itself, and an echo here as well escaped an organization's name twice. The
              one fact that governs the page is its line under the title; Add Channel stands beside the search. --}}
         <x-crud.table-wrapper :title="$organization ? 'Channels of '.$organization->name : 'All Channels'" searchPlaceholder="Search channels..." :columns="6"
-            :description="$organization ? 'Put a channel on a screen from that screen\'s Channels tab.' : 'Every organization can put these on its screens.'">
+            :description="$organization ? 'Put a channel on a screen from that screen\'s Channels tab.' : 'A channel for All organizations reaches every organization; one made for an organization reaches it alone.'">
             @can('channel-store')
                 <x-slot name="actions">
                     <x-crud.add-button label="Add Channel" @click="openFormModal()" dusk="add-channel" />
@@ -129,6 +129,27 @@
                 {{-- novalidate: the ads-per-pass field's own min and max would stop the save with the browser's
                      bubble before saveItem could say it under the field, as every form here does (validate.js). --}}
                 <form @submit.prevent="saveItem" novalidate dusk="channel-form" class="mt-4 space-y-4">
+                    {{-- Above the organizations, whom a new channel is for (owner, 2026-10-08): All organizations — the platform's,
+                         unlocked with Platform Channels — or one organization, as that organization's own channel, free. Said once, at
+                         its making: its ads come from that organization's library. --}}
+                    @if ($organizations !== [])
+                        <div x-show="!editingItem">
+                            <x-crud.form-field label="Organization" field="organization_id">
+                                <select x-model="form.organization_id" dusk="channel-organization" class="form-select">
+                                    <option value="">All organizations</option>
+                                    @foreach ($organizations as $choice)
+                                        <option value="{{ $choice['id'] }}">{{ $choice['name'] }}</option>
+                                    @endforeach
+                                </select>
+                            </x-crud.form-field>
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" dusk="channel-organization-hint" x-text="organizationHint()"></p>
+                        </div>
+                        <p x-show="editingItem" x-cloak class="text-sm text-gray-600 dark:text-gray-400" dusk="channel-organization-fixed">
+                            For <span class="font-medium text-gray-900 dark:text-gray-100" x-text="editingItem?.organization_name ?? 'every organization'"></span>.
+                            Whom a channel is for stays as it was made.
+                        </p>
+                    @endif
+
                     <x-crud.form-field label="Channel name" field="name" :required="true">
                         <x-text-input x-model="form.name" dusk="channel-name"
                                       placeholder="GAMA Wholesale" autocomplete="off" maxlength="120" />

@@ -6,9 +6,12 @@ use App\Models\Channel;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
- * Create and rename a channel, and say how much of it plays each time.
+ * Create and rename a channel, and say how much of it plays each time. Above the organizations a new channel is made for All
+ * organizations — the platform's, unlocked with Platform Channels — or for one organization, as that organization's own and free
+ * (owner, 2026-10-08; docs/BILLING-SPEC.md §1). Which, is said once, at its making.
  */
 class ChannelRequest extends FormRequest
 {
@@ -68,12 +71,18 @@ class ChannelRequest extends FormRequest
             }],
             'ads_per_pass' => ['nullable', 'integer', 'min:1', 'max:'.Channel::MAX_ADS_PER_PASS],
             'is_active' => ['sometimes', 'boolean'],
+            // Read on a new channel made above the organizations alone (channelOrganizationId); none is All organizations.
+            // Anywhere else it is no field of the form, and is dropped unread.
+            'organization_id' => $this->user()->globalRole() !== null && $this->route('channel') === null
+                ? ['bail', 'nullable', 'integer', 'min:1', Rule::exists('organizations', 'id')]
+                : ['exclude'],
         ];
     }
 
     /**
-     * The organization the channel belongs to: an edited channel's own; a new one's is the organization it is made in —
-     * none when it is made above the organizations.
+     * The organization the channel belongs to: an edited channel's own, whatever is posted (it is fixed once made); a new one's the
+     * organization it is made in — or, above the organizations, the one chosen in the form's Organization list, none being All
+     * organizations.
      */
     public function channelOrganizationId(): ?int
     {
@@ -83,7 +92,13 @@ class ChannelRequest extends FormRequest
             return $channel->organization_id;
         }
 
-        return $this->user()->globalRole() !== null ? null : ((int) session('current_organization_id') ?: null);
+        if ($this->user()->globalRole() !== null) {
+            $chosen = $this->input('organization_id');
+
+            return is_numeric($chosen) && (int) $chosen > 0 ? (int) $chosen : null;
+        }
+
+        return (int) session('current_organization_id') ?: null;
     }
 
     /**
@@ -98,6 +113,9 @@ class ChannelRequest extends FormRequest
             'ads_per_pass.max' => 'Enter a number from 1 to '.Channel::MAX_ADS_PER_PASS.', or leave it blank to play every ad.',
             'name.required' => 'Channel name is required.',
             'name.max' => 'Channel name may not be longer than 120 characters.',
+            'organization_id.integer' => 'Choose All organizations or one organization from the list.',
+            'organization_id.min' => 'Choose All organizations or one organization from the list.',
+            'organization_id.exists' => 'That organization no longer exists. Reload the page and choose again.',
         ];
     }
 }

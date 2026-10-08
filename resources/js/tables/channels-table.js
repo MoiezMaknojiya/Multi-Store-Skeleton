@@ -23,7 +23,8 @@ export function registerChannelsTable(Alpine) {
             formModalName: 'channel-form-modal',
             deleteModalName: 'confirm-channel-deletion',
             deleteNeedsPassword: true,
-            defaultForm: { name: '', ads_per_pass: '', is_active: true },
+            // organization_id: above the organizations, whom a new channel is for — '' for All organizations (ChannelRequest).
+            defaultForm: { name: '', ads_per_pass: '', is_active: true, organization_id: '' },
 
             extraState: { maxAdsPerPass },
 
@@ -48,6 +49,13 @@ export function registerChannelsTable(Alpine) {
             }),
 
             extraMethods: {
+                /** What the Organization list's choice means, under it: the platform's, paid; or one organization's own, free. */
+                organizationHint() {
+                    return this.form.organization_id
+                        ? `Free: that organization's own channel, for its screens alone.`
+                        : `For every organization's screens, once its Platform Channels are unlocked ($10).`;
+                },
+
                 /** "5 ads · 3 running today" — an ad outside its dates is on no screen. */
                 adsLabel(channel) {
                     const total = channel.ads_count ?? 0;

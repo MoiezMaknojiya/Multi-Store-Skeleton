@@ -38,10 +38,14 @@ class ChannelController extends Controller
 
     public function index(Request $request): View
     {
+        $aboveTheOrganizations = $request->user()->globalRole() !== null;
+
         return view('channels.index', [
             'maxAdsPerPass' => Channel::MAX_ADS_PER_PASS,
             // The organization whose own channels these are; null above the organizations.
-            'organization' => $request->user()->globalRole() !== null ? null : $this->currentOrganization(),
+            'organization' => $aboveTheOrganizations ? null : $this->currentOrganization(),
+            // Above the organizations Add Channel asks whom it is for: All organizations, or one of these (owner, 2026-10-08).
+            'organizations' => $aboveTheOrganizations ? Organization::orderBy('name')->get(['id', 'name'])->toArray() : [],
         ]);
     }
 
@@ -94,12 +98,19 @@ class ChannelController extends Controller
 
     public function store(ChannelRequest $request): JsonResponse
     {
-        // Made above the organizations it is the platform's; made inside an organization it is that organization's own.
-        $organizationId = $request->user()->globalRole() !== null ? null : $this->currentOrganization()->id;
+        // Made inside an organization it is that organization's own. Above the organizations it is the platform's, for every
+        // organization — or, with one organization chosen, that organization's own (owner, 2026-10-08: free, for its screens alone).
+        $organizationId = $request->user()->globalRole() !== null ? $request->channelOrganizationId() : $this->currentOrganization()->id;
 
-        $channel = Channel::create([...$request->validated(), 'organization_id' => $organizationId, 'created_by' => auth()->id()]);
+        $channel = Channel::create([
+            ...collect($request->validated())->except('organization_id')->all(),
+            'organization_id' => $organizationId,
+            'created_by' => auth()->id(),
+        ]);
 
-        ActivityLog::record('channel.created', $channel, "Created channel {$channel->name}");
+        ActivityLog::record('channel.created', $channel, $request->user()->globalRole() !== null && $channel->organization !== null
+            ? "Created channel {$channel->name} for {$channel->organization->name}"
+            : "Created channel {$channel->name}");
 
         return response()->json(['message' => 'Channel created', 'channel' => $channel->fresh()]);
     }
@@ -107,7 +118,8 @@ class ChannelController extends Controller
     /** ChannelRequest has already answered 404 for a channel out of reach. */
     public function update(ChannelRequest $request, Channel $channel): JsonResponse
     {
-        $channel->update($request->validated());
+        // Whom a channel is for is fixed once it is made: its ads were chosen from that organization's library.
+        $channel->update(collect($request->validated())->except('organization_id')->all());
 
         ActivityLog::record('channel.updated', $channel, "Updated channel {$channel->name}");
 
