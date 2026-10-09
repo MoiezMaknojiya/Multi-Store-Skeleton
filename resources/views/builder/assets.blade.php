@@ -4,22 +4,30 @@
         <h1 class="page-title">{{ __('Assets') }}</h1>
     </x-slot>
 
-    <div x-data="builderAssetsTable({{ Js::from(['storage' => $storage]) }})" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    {{-- Above the organizations the page opens on the platform's own files (owner, 2026-10-08). --}}
+    <div x-data="builderAssetsTable({{ Js::from(['storage' => $storage, 'owner' => $aboveTheOrganizations ? 'platform' : '']) }})" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        {{-- The organization's storage where a note once stood (owner, 2026-09-30), the organization list and the search beside it. The
-             meter shows only for an organization's shelf: the platform's own (All organizations) has no wall. --}}
+        {{-- The organization's storage where a note once stood (owner, 2026-09-30), the Owner list and the search beside it. The
+             meter shows only for an organization's shelf: the platform's own has no wall. --}}
         <div class="flex flex-wrap items-center justify-between gap-3">
             {{-- The shelf counts toward the organization's 512 MB like its library does. --}}
             <x-storage-meter class="w-full sm:w-96" :initial="$storage" />
 
             <div class="ml-auto flex flex-wrap items-center gap-3">
+                {{-- Whose files, as on the Ads page (owner, 2026-10-08): the platform's, all of them with their owner on each, or one
+                     organization's. --}}
                 @if ($aboveTheOrganizations)
                     <select x-model="filterOrganization" @change="applyFilters()" class="form-select sm:w-52"
-                            dusk="assets-filter-organization" aria-label="Organization">
-                        <option value="">All organizations</option>
-                        @foreach ($organizations as $organization)
-                            <option value="{{ $organization['id'] }}">{{ $organization['name'] }}</option>
-                        @endforeach
+                            dusk="assets-filter-organization" aria-label="Owner">
+                        <option value="platform">Platform</option>
+                        <option value="">All</option>
+                        @if ($organizations !== [])
+                            <optgroup label="Organizations">
+                                @foreach ($organizations as $organization)
+                                    <option value="{{ $organization['id'] }}">{{ $organization['name'] }}</option>
+                                @endforeach
+                            </optgroup>
+                        @endif
                     </select>
                 @endif
 
@@ -30,12 +38,17 @@
         @can('ad-store')
             {{-- The shared uploader (docs/UPLOADS-SPEC.md): each picture or video joins the shelf as it arrives. The
                  page listens here, not on the box: an expression on the box runs with the box's own `this`. --}}
-            {{-- Above the organizations an organization chosen in the Organization list gets the file; with All organizations it is the
-                 platform's, for its ads for every organization (the Premium Templates). --}}
-            <div x-on:upload-added="onUploaded($event.detail)" dusk="upload-asset">
+            {{-- Above the organizations an organization chosen in the Owner list gets the file; with Platform or All it is the
+                 platform's, for its ads for every organization (the Premium Templates) — which All says, as it lists everybody's. --}}
+            <div x-on:upload-added="onUploaded($event.detail)" dusk="upload-asset" class="space-y-2">
+                @if ($aboveTheOrganizations)
+                    <p x-show="filterOrganization === ''" x-cloak class="text-sm text-gray-600 dark:text-gray-400" dusk="assets-upload-target">
+                        New files go to the Platform.
+                    </p>
+                @endif
                 <x-upload-dropzone purpose="asset" mode="add" :multiple="true" add-url="/builder/assets" dusk="asset"
                     :max-video-seconds="\App\Models\BuilderAsset::MAX_VIDEO_SECONDS"
-                    context="{ organization: filterOrganization || null, fields: filterOrganization ? { organization_id: filterOrganization } : {}, storage: storage }"
+                    context="{ organization: ['', 'platform'].includes(filterOrganization) ? null : filterOrganization, fields: ['', 'platform'].includes(filterOrganization) ? {} : { organization_id: filterOrganization }, storage: storage }"
                     hint="JPG, PNG, GIF, WEBP, MP4 or WEBM, up to 250 MB each. Videos up to 30 seconds." />
             </div>
         @endcan

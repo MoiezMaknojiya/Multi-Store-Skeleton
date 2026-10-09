@@ -69,6 +69,8 @@ class TemplateCopier
 
                     return BuilderAd::create([
                         'organization_id' => $organizationId,
+                        // So the copy says where it came from: above the organizations it looks like its template.
+                        'copied_from_id' => $template->id,
                         'name' => $name,
                         'orientation' => $template->orientation,
                         'document' => BuilderAd::withAssetsSwapped($document, $swaps),

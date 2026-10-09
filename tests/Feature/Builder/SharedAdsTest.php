@@ -115,8 +115,8 @@ test('an ad for every organization is the platform\'s: no organization, its own 
 
     // Above the organizations its card and its editor say whose it is.
     $row = collect($this->getJson('/builder/data')->assertOk()->json('ads'))->firstWhere('id', $ad->id);
-    expect($row)->toMatchArray(['shared' => true, 'owner_label' => 'Every organization', 'can' => ['update' => true, 'copy' => true, 'delete' => true]]);
-    $this->get("/builder/{$ad->id}")->assertOk()->assertSee('dusk="ad-owner"', false)->assertSee('Every organization')->assertDontSee('dusk="ad-organization"', false);
+    expect($row)->toMatchArray(['shared' => true, 'owner_label' => 'Premium Template', 'from_template' => false, 'can' => ['update' => true, 'copy' => true, 'delete' => true]]);
+    $this->get("/builder/{$ad->id}")->assertOk()->assertSee('dusk="ad-owner">Premium Template<', false)->assertDontSee('dusk="ad-organization"', false);
 });
 
 test('an organization\'s Ads page lists its own ads alone: the platform\'s, published or not, are nothing there to open, copy, change or delete', function () {
@@ -162,11 +162,19 @@ test('above the organizations the platform\'s ads are changed with Update Ads an
     $this->actingAs($platform);
     $this->flushSession();
 
+    // All: every card says whose it is (owner, 2026-10-08) — a published one a Premium Template, a draft the Platform's, and
+    // Beta Deli's copy Beta Deli's, made from a template.
     $seen = collect($this->getJson('/builder/data')->assertOk()->json('ads'))->keyBy('id');
-    expect($seen[$ad->id])->toMatchArray(['owner_label' => 'Every organization', 'can' => ['update' => true, 'copy' => true, 'delete' => true]])
-        ->and($seen->has($draft->id))->toBeTrue();
+    expect($seen[$ad->id])->toMatchArray(['owner_label' => 'Premium Template', 'can' => ['update' => true, 'copy' => true, 'delete' => true]])
+        ->and($seen[$draft->id]['owner_label'])->toBe('Platform')
+        ->and($seen[$copyId])->toMatchArray(['owner_label' => 'Beta Deli', 'shared' => false, 'from_template' => true]);
 
-    $this->get("/builder/{$ad->id}")->assertOk()->assertSee('Every organization');
+    // Platform, where the page opens: the platform's own alone; an organization: its own alone.
+    expect(collect($this->getJson('/builder/data?organization_id=platform')->assertOk()->json('ads'))->pluck('id')->sort()->values()->all())
+        ->toBe(collect([$ad->id, $draft->id])->sort()->values()->all())
+        ->and(collect($this->getJson('/builder/data?organization_id='.$this->other->id)->assertOk()->json('ads'))->pluck('id')->all())->toBe([$copyId]);
+
+    $this->get("/builder/{$ad->id}")->assertOk()->assertSee('dusk="ad-owner">Premium Template<', false);
     $this->putJson("/builder/{$ad->id}", ['name' => 'Winter sale', 'document' => everyOrganizationDocument('Twenty percent off')])->assertOk()
         ->assertJsonPath('message', 'Changes saved — organizations keep the published version until you publish them');
     $this->postJson("/builder/{$ad->id}/publish")->assertOk()->assertJsonPath('message', 'Published — every organization finds it under Premium Template now');
@@ -207,7 +215,7 @@ test('above the organizations a copy of the platform\'s ad stays the platform\'s
     $this->flushSession();
 
     expect(collect($this->getJson('/builder/data')->assertOk()->json('ads'))->firstWhere('id', $ad->id))
-        ->toMatchArray(['owner_label' => 'Every organization', 'can' => ['update' => false, 'copy' => false, 'delete' => false]]);
+        ->toMatchArray(['owner_label' => 'Premium Template', 'can' => ['update' => false, 'copy' => false, 'delete' => false]]);
 
     $this->postJson("/builder/{$ad->id}/duplicate")->assertForbidden();
     $this->putJson("/builder/{$ad->id}", ['name' => 'X', 'document' => everyOrganizationDocument('X')])->assertForbidden();

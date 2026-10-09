@@ -240,12 +240,14 @@ test('the platform deleting the template and its files leaves the organization\'
     $template = premiumTemplate('Burger menu', [$logo->id]);
     $copy = BuilderAd::find($this->postJson("/builder/templates/{$template->id}")->assertOk()->json('ad.id'));
     $own = BuilderAsset::where('organization_id', $this->organization->id)->sole();
+    expect($copy->copied_from_id)->toBe($template->id);
 
     $this->actingAs(createSuperAdmin())->flushSession();
     $this->deleteJson("/builder/{$template->id}", ['password' => 'password'])->assertOk();
     $this->deleteJson("/builder/assets/{$logo->id}")->assertOk();
 
     expect(BuilderAd::find($copy->id))->not->toBeNull()
+        ->and(BuilderAd::find($copy->id)->copied_from_id)->toBeNull()
         ->and(BuilderAsset::find($own->id)?->copied_from_id)->toBeNull();
     Storage::disk('public')->assertExists([$own->path, $own->thumbnail_path, $copy->thumbnail_path]);
     Storage::disk('public')->assertMissing($logo->path);
@@ -255,6 +257,32 @@ test('the platform deleting the template and its files leaves the organization\'
     $this->postJson("/builder/{$copy->id}/publish")->assertOk();
 
     expect(Storage::disk('public')->get($copy->fresh()->media->path))->toContain(basename($own->path))->not->toContain(basename($logo->path));
+});
+
+test('a copy says it was made from a Premium Template, inside the organization and above it, where its organization is named', function () {
+    $template = premiumTemplate('Burger menu', [templateFile()->id]);
+    $copyId = $this->postJson("/builder/templates/{$template->id}")->assertOk()->json('ad.id');
+    $mine = BuilderAd::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Our deals']);
+    $duplicate = $this->postJson("/builder/{$copyId}/duplicate")->assertOk()->json('ad.id');
+
+    // Inside the organization every ad is its own: no owner said, the copy says where it came from, its own duplicate does not.
+    $inside = collect($this->getJson('/builder/data')->assertOk()->json('ads'))->keyBy('id');
+    expect($inside[$copyId])->toMatchArray(['from_template' => true, 'owner_label' => null])
+        ->and($inside[$mine->id]['from_template'])->toBeFalse()
+        ->and($inside[$duplicate]['from_template'])->toBeFalse();
+
+    // Above the organizations the copy is named by its organization, beside the template it looks like.
+    $this->actingAs(createSuperAdmin())->flushSession();
+    $above = collect($this->getJson('/builder/data')->assertOk()->json('ads'))->keyBy('id');
+    expect($above[$copyId])->toMatchArray(['from_template' => true, 'owner_label' => 'Alpha Mart'])
+        ->and($above[$template->id])->toMatchArray(['from_template' => false, 'owner_label' => 'Premium Template']);
+    $this->get("/builder/{$copyId}")->assertOk()->assertSee('dusk="ad-owner">Alpha Mart<', false);
+
+    // The listing asks for an owner in the words of the Owner list alone.
+    foreach (['nope', '0', 'Platform', '1.5'] as $value) {
+        $this->getJson('/builder/data?organization_id='.urlencode($value))->assertStatus(422);
+    }
+    $this->getJson('/builder/data?organization_id[]=platform')->assertStatus(422);
 });
 
 test('a deleted organization takes its copies with it, and the platform\'s files stay', function () {

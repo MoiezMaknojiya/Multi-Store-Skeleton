@@ -36,14 +36,14 @@ class BuilderAssetController extends Controller
 
     public function index(): View
     {
-        // Above the organizations the shelf lists every organization's and the platform's files, or one organization's (owner,
-        // 2026-09-29: All organizations is where a file for every organization goes, so there is no second option saying the same); an
-        // organization's own people see their own alone (owner, 2026-10-07).
+        // Above the organizations the Owner list (owner, 2026-10-08): the platform's files, where the page opens and where an upload
+        // goes; All, every file with its owner on it; or one organization's. An organization's own people see their own alone (owner,
+        // 2026-10-07).
         $organizations = $this->aboveTheOrganizations()
             ? Organization::orderBy('name')->get(['id', 'name'])->toArray()
             : [];
 
-        // The shelf's storage comes with the page (none for All organizations, where the platform's shared files have no wall),
+        // The shelf's storage comes with the page (none for the platform's files, which have no wall),
         // so the meter is there at once instead of pushing the drop box down when the list arrives.
         return view('builder.assets', [
             'organizations' => $organizations,
@@ -54,7 +54,7 @@ class BuilderAssetController extends Controller
 
     /**
      * The storage of the organization the shelf is showing: inside an organization its own; above the organizations the organization chosen
-     * in the Organization list, or none while All organizations is listed.
+     * in the Owner list, or none while the platform's files or all of them are listed.
      *
      * @return array{used: int, limit: int}|null
      */
@@ -68,12 +68,14 @@ class BuilderAssetController extends Controller
     /** The shelf, newest first, each row saying whose it is, which ads use it and whether this person may delete it. */
     public function data(Request $request): JsonResponse
     {
-        // An organization's id — that organization's files alone.
-        $filters = $request->validate(['organization_id' => ['nullable', 'integer', 'min:1']]);
-        $shelf = isset($filters['organization_id']) ? (int) $filters['organization_id'] : null;
+        // The Owner list, as on the Ads page: the platform's files (`platform`), one organization's (its id), or everything.
+        $filters = $request->validate(['organization_id' => ['nullable', 'regex:/^(platform|[1-9][0-9]{0,9})$/']]);
+        $owner = $filters['organization_id'] ?? null;
+        $shelf = $owner !== null && $owner !== 'platform' ? (int) $owner : null;
 
         // Only ever narrows what visibleTo allows — see BuilderController::data.
         $query = BuilderAsset::visibleTo(auth()->user())
+            ->when($owner === 'platform', fn (Builder $query) => $query->onShelfOf(null))
             ->when($shelf !== null, fn (Builder $query) => $query->onShelfOf($shelf))
             ->with('organization:id,name')
             ->latest();
@@ -249,13 +251,13 @@ class BuilderAssetController extends Controller
             return null;
         }
 
-        return $asset->isShared() ? 'Every organization' : $asset->organization?->name;
+        return $asset->isShared() ? 'Platform' : $asset->organization?->name;
     }
 
     /**
      * Which shelf the file goes on — the same answer BuilderController gives for a new ad. An organization's person
      * uploads to the organization they are working in. The platform team stands in no organization: the page sends the organization
-     * chosen in its Organization list, which has to exist — or none, and the file is shared with every organization.
+     * chosen in its Owner list, which has to exist — or none (Platform, or All), and the file is the platform's.
      *
      * @param  array<string, mixed>  $validated
      */

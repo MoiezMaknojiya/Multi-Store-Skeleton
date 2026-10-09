@@ -414,15 +414,21 @@ class AdBuilderFlowTest extends DuskTestCase
             $browser->loginAs($admin)->visit('/builder/assets');
             $this->waitForAlpine($browser);
             $browser->waitFor('@assets-empty')
-                ->assertSelected('@assets-filter-organization', '')      // "All organizations": the shared shelf, with no wall
-                ->assertMissing('@storage-meter');
+                ->assertSelected('@assets-filter-organization', 'platform')      // the platform's own shelf, with no wall (owner, 2026-10-08)
+                ->assertMissing('@storage-meter')
+                ->assertMissing('@assets-upload-target');
 
-            /* ── 1. All organizations: the picture is the platform's ────── */
+            /* ── 1. Platform: the picture is the platform's ────── */
             $this->uploadThrough($browser, 'asset', $brandPicture);
             $browser->waitUsing(20, 250, fn () => BuilderAsset::count() === 1);
             $brand = BuilderAsset::sole();
             $this->assertNull($brand->organization_id, 'the picture did not stay the platform\'s');
-            $browser->waitFor('@asset-card-'.$brand->id)->assertSeeIn('@asset-owner-'.$brand->id, 'Every organization');
+            $browser->waitFor('@asset-card-'.$brand->id)->assertSeeIn('@asset-owner-'.$brand->id, 'Platform');
+
+            // All lists everybody's, and says where a new file goes.
+            $browser->select('@assets-filter-organization', '')
+                ->waitFor('@assets-upload-target')->assertSeeIn('@assets-upload-target', 'New files go to the Platform.')
+                ->waitFor('@asset-card-'.$brand->id)->assertMissing('@storage-meter');
 
             /* ── 2. One organization chosen: the picture is that organization's alone ───── */
             $browser->select('@assets-filter-organization', (string) $beta->id)

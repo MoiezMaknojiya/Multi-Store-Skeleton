@@ -456,17 +456,34 @@ class AdEditorPolishFlowTest extends DuskTestCase
         $beta = Organization::factory()->create(['name' => 'Beta Deli']);
         $mine = BuilderAd::factory()->withText()->create(['organization_id' => $alpha->id, 'name' => 'Alpha sale']);
         $theirs = BuilderAd::factory()->withText()->create(['organization_id' => $beta->id, 'name' => 'Beta sale']);
+        $template = BuilderAd::factory()->withText()->published()->create(['organization_id' => null, 'name' => 'Burger menu']);
+        $draft = BuilderAd::factory()->withText()->create(['organization_id' => null, 'name' => 'Spring menu']);
 
-        $this->browse(function (Browser $browser) use ($admin, $beta, $mine, $theirs) {
+        $this->browse(function (Browser $browser) use ($admin, $beta, $mine, $theirs, $template, $draft) {
             $this->freshSession($browser);
             $browser->loginAs($admin);
 
+            // The page opens on the platform's own ads (owner, 2026-10-08), each saying it is the platform's.
             $browser->visit('/builder');
             $this->waitForAlpine($browser);
-            $browser->waitFor('@ad-card-'.$mine->id)->assertVisible('@ad-card-'.$theirs->id);
+            $browser->waitFor('@ad-card-'.$template->id)
+                ->assertSelected('@ads-filter-organization', 'platform')
+                ->assertVisible('@ad-card-'.$draft->id)->assertMissing('@ad-card-'.$mine->id)
+                ->assertSeeIn('@ad-owner-'.$template->id, 'Premium Template')
+                ->assertSeeIn('@ad-owner-'.$draft->id, 'Platform');
 
-            $browser->script('const f = document.querySelector(\'[dusk="ads-filter-organization"]\'); f.value = "'.$beta->id.'"; f.dispatchEvent(new Event("change", { bubbles: true }));');
-            $browser->waitFor('@ad-card-'.$theirs->id, 10)->waitUntilMissing('@ad-card-'.$mine->id, 5);
+            // All: everybody's, every card saying whose.
+            $browser->select('@ads-filter-organization', '')
+                ->waitFor('@ad-card-'.$mine->id, 10)->assertVisible('@ad-card-'.$theirs->id)->assertVisible('@ad-card-'.$template->id)
+                ->assertSeeIn('@ad-owner-'.$mine->id, 'Alpha Mart')
+                ->assertSeeIn('@ad-owner-'.$theirs->id, 'Beta Deli')
+                ->assertSeeIn('@ad-owner-'.$template->id, 'Premium Template')
+                ->screenshot('ads-owner-all');
+
+            // One organization: its own alone. A filter loads the list afresh ("Loading..."), so its card is waited for.
+            $browser->select('@ads-filter-organization', (string) $beta->id)
+                ->waitUntilMissing('@ad-card-'.$mine->id, 10)->waitFor('@ad-card-'.$theirs->id, 10)
+                ->assertMissing('@ad-card-'.$template->id)->assertMissing('@ad-card-'.$draft->id);
         });
     }
 

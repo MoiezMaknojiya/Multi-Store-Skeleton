@@ -18,8 +18,9 @@ export function registerBuilderAssetsTable(Alpine) {
         extraState: {
             // Several files arriving together refresh the list once.
             refreshTimer: null,
-            /* Above the organizations: one organization (its id), or All organizations (''), where an upload is shared with every organization. */
-            filterOrganization: '',
+            /* Above the organizations the Owner list: the platform's ('platform', where the page opens), all of them (''), or one
+             * organization (its id). An upload goes to the organization chosen, and to the platform with the other two. */
+            filterOrganization: config.owner ?? '',
             /* How full the organization on the shelf is ({used, limit}): its own inside an organization, the one chosen above. The page
              * brings the first answer, so the meter is there at once. */
             storage: config.storage ?? null,

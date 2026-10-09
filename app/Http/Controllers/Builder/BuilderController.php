@@ -63,12 +63,16 @@ class BuilderController extends Controller
     /** The saved ads, newest first. */
     public function data(Request $request): JsonResponse
     {
-        $filters = $request->validate(['organization_id' => ['nullable', 'integer', 'min:1']]);
+        // Above the organizations the Owner list (owner, 2026-10-08): the platform's own ads (`platform`, where the page opens), one
+        // organization's (its id), or all of them (nothing sent).
+        $filters = $request->validate(['organization_id' => ['nullable', 'regex:/^(platform|[1-9][0-9]{0,9})$/']]);
+        $owner = $filters['organization_id'] ?? null;
 
         // The filter only ever NARROWS what visibleTo allows: inside an organization, asking for another organization's
         // ads finds none, because the organization's own wall is already on the query.
         $query = BuilderAd::visibleTo(auth()->user())
-            ->when($filters['organization_id'] ?? null, fn (Builder $query, int|string $organizationId) => $query->where('organization_id', $organizationId))
+            ->when($owner === 'platform', fn (Builder $query) => $query->whereNull('organization_id'))
+            ->when($owner !== null && $owner !== 'platform', fn (Builder $query) => $query->where('organization_id', (int) $owner))
             ->with(['organization:id,name', 'updater:id,first_name,last_name', 'media:id,thumbnail_path'])
             ->latest('updated_at');
 
@@ -92,6 +96,7 @@ class BuilderController extends Controller
                     $ad->setAttribute('in_channels_message', $ad->media_id === null ? null : ($refusals[$ad->media_id] ?? null));
                     $ad->setAttribute('shared', $ad->isShared());
                     $ad->setAttribute('owner_label', $this->ownerLabel($ad));
+                    $ad->setAttribute('from_template', $ad->copied_from_id !== null);
                     $ad->setAttribute('can', ['update' => $this->mayUpdate($ad), 'copy' => $this->mayCopy($ad), 'delete' => $this->mayDelete($ad)]);
 
                     // The listing shows a poster and a name — never the whole design, draft or published.
@@ -139,7 +144,7 @@ class BuilderController extends Controller
             'orientation' => $ad->orientation,
             'document' => $ad->document,
             'assets' => $this->assetsForEditor($ad),
-            'ownerLabel' => $this->ownerLabel($ad) ?? ($this->aboveTheOrganizations() ? $ad->organization?->name : null),
+            'ownerLabel' => $this->ownerLabel($ad),
         ]);
     }
 
@@ -467,9 +472,22 @@ class BuilderController extends Controller
     }
 
     /** Whose ad this is, for one made for every organization: "Every organization" (only the platform ever lists one). */
+    /**
+     * Whose the ad is, on its card above the organizations, where a template and an organization's copy of it look alike (owner,
+     * 2026-10-08): the platform's — a Premium Template once published — or the organization's name. Inside an organization every
+     * ad is its own, so nothing is said.
+     */
     private function ownerLabel(BuilderAd $ad): ?string
     {
-        return $ad->isShared() ? 'Every organization' : null;
+        if (! $this->aboveTheOrganizations()) {
+            return null;
+        }
+
+        if ($ad->isShared()) {
+            return $ad->isPublished() ? 'Premium Template' : 'Platform';
+        }
+
+        return $ad->organization?->name;
     }
 
     /** The organization a log entry belongs to: the ad's organization, or for a shared ad the organization the person is working in (if any). */

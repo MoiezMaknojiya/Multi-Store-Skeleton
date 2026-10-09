@@ -3,7 +3,8 @@
         <h1 class="page-title">{{ __('Ad Builder') }}</h1>
     </x-slot>
 
-    <div x-data="adsTable()" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    {{-- Above the organizations the page opens on the platform's own ads (owner, 2026-10-08). --}}
+    <div x-data="adsTable({{ Js::from(['owner' => $aboveTheOrganizations ? 'platform' : '']) }})" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
         {{-- Create Ad, then the organization list (above the organizations; an organization sees its own only) and the search, on one line:
              the button first, as on every page (owner, 2026-09-30). --}}
@@ -15,13 +16,20 @@
                     <x-crud.add-button label="Create Ad" dusk="new-ad" @click="startNewAd()" />
                 @endcan
 
-                @if ($organizations !== [])
+                {{-- Whose ads (owner, 2026-10-08 — a template and an organization's copy of it look alike under "All
+                     organizations"): the platform's, where the page opens, all of them, each card saying whose, or one organization's. --}}
+                @if ($aboveTheOrganizations)
                     <select x-model="filterOrganization" @change="applyFilters()" class="form-select sm:w-44"
-                            dusk="ads-filter-organization" aria-label="Organization">
-                        <option value="">All organizations</option>
-                        @foreach ($organizations as $organization)
-                            <option value="{{ $organization['id'] }}">{{ $organization['name'] }}</option>
-                        @endforeach
+                            dusk="ads-filter-organization" aria-label="Owner">
+                        <option value="platform">Platform</option>
+                        <option value="">All</option>
+                        @if ($organizations !== [])
+                            <optgroup label="Organizations">
+                                @foreach ($organizations as $organization)
+                                    <option value="{{ $organization['id'] }}">{{ $organization['name'] }}</option>
+                                @endforeach
+                            </optgroup>
+                        @endif
                     </select>
                 @endif
 
@@ -126,26 +134,26 @@
                                            class="truncate font-medium text-gray-800 dark:text-white" x-text="item.name"></p>
                                     @endcan
 
-                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                        <span x-show="item.organization_name" x-cloak x-text="item.organization_name + ' · '"></span>
-                                        <span x-text="item.updated_by_name ? 'by ' + item.updated_by_name : ''"></span>
-                                    </p>
+                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" x-bind:dusk="'ad-byline-' + item.id"
+                                       x-text="byline(item)"></p>
 
-                                    {{-- Made for every organization (owner, 2026-10-01) — a Premium Template once published: "Every organization",
-                                         as the Assets page says it of the platform's file. Only the platform lists one. --}}
-                                    <span x-show="item.shared" x-cloak class="badge-info mr-1 mt-2 inline-block"
-                                          x-bind:dusk="'ad-owner-' + item.id" x-text="item.owner_label"></span>
+                                    {{-- Above the organizations every card says whose it is (owner, 2026-10-08): the platform's — a Premium
+                                         Template once published — or the organization's. --}}
+                                    <div class="mt-2 flex flex-wrap gap-1">
+                                        <span x-show="item.owner_label" x-cloak x-bind:class="item.shared ? 'badge-info' : 'badge-neutral'"
+                                              x-bind:dusk="'ad-owner-' + item.id" x-text="item.owner_label"></span>
 
-                                    {{-- The industry's draft/publish model (docs/AD-BUILDER-SPEC.md §9): a changed ad
-                                         stays on the screens as it was published until the changes are published. --}}
-                                    <span class="mt-2 inline-block" x-show="!item.shared || item.can?.update" x-cloak
-                                          x-bind:class="{ published: 'badge-success', changed: 'badge-warning' }[item.status] ?? 'badge-neutral'"
-                                          x-bind:dusk="'ad-status-' + item.id"
-                                          x-bind:title="{
-                                              published: 'On the screens, exactly as designed',
-                                              changed: 'On the screens as last published — the newer changes are not published yet',
-                                          }[item.status] ?? 'Not on any screen'"
-                                          x-text="{ published: 'Published', changed: 'Changes not published' }[item.status] ?? 'Draft'"></span>
+                                        {{-- The industry's draft/publish model (docs/AD-BUILDER-SPEC.md §9): a changed ad
+                                             stays on the screens as it was published until the changes are published. --}}
+                                        <span x-show="!item.shared || item.can?.update" x-cloak
+                                              x-bind:class="{ published: 'badge-success', changed: 'badge-warning' }[item.status] ?? 'badge-neutral'"
+                                              x-bind:dusk="'ad-status-' + item.id"
+                                              x-bind:title="{
+                                                  published: 'On the screens, exactly as designed',
+                                                  changed: 'On the screens as last published — the newer changes are not published yet',
+                                              }[item.status] ?? 'Not on any screen'"
+                                              x-text="{ published: 'Published', changed: 'Changes not published' }[item.status] ?? 'Draft'"></span>
+                                    </div>
                                 </div>
 
                                 {{-- Each names the ad it acts on. A design a channel shows is not deleted: said at once,

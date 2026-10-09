@@ -1187,3 +1187,30 @@ organization, agreed the same day, is NOT part of this step: until it exists eve
   side, shapes, two uses at the same moment into the last megabytes), `OwnFilesMigrationTest` (both ways), and in the browser
   `PremiumTemplateFlowTest` (the owner's steps with a real mouse, a double click on Use This Template making one copy, a
   slow line, a full organization, a phone).
+
+## Addendum — 2026-10-08: whose an ad or a file is, above the organizations
+
+The owner found that with "All organizations" chosen on the Ads page, a Premium Template and an organization's copy of it look
+alike. Same poster, same name. The fix came from a mockup the owner approved: "uper jo create ad k barabar mein dropdown ha us mein
+dal k dikhao", then "theek ha bana do".
+
+- **The Owner list.** It replaces "All organizations", beside Create Ad on the Ads page and beside the search on the Assets page.
+  - **Platform** is the platform's own ads or files. Above the organizations the page opens here.
+  - **All** is everybody's.
+  - Under an **Organizations** heading, each organization lists its own.
+  - The listing reads `organization_id` as `platform`, nothing (All), or an organization's id. Anything else is refused (422).
+- **Every card says whose it is**, above the organizations, in the pill the editor shows too.
+  - A published platform ad says "Premium Template". A platform draft says "Platform". An organization's ad says its organization's name.
+  - On the Assets page a platform file says "Platform".
+  - Inside an organization nothing is said, since everything there is its own.
+- **A copy names its template.** Use This Template writes `builder_ads.copied_from_id`, and the card says "Copied from a Premium
+  Template · by …". The column is NULL once the template is deleted.
+  - Migration `2026_10_08_100400` named the copies that `2026_10_08_100200` had made. It found them through their published pages' `media.copied_from_id`.
+  - An organization's own Copy of a copy does not say it.
+- **Where an upload goes.** On the Assets page, an upload goes to the organization chosen. With Platform or All chosen it goes to the
+  platform's shelf, and with All the page says so: "New files go to the Platform." The meter shows for an organization only.
+- **Tests.**
+  - `SharedAdsTest` and `SharedAssetsTest` cover the three choices, the labels and the shapes refused.
+  - `PremiumTemplatesTest` covers a copy naming its template, the name gone with the template, and the pill above the organizations.
+  - `AdCopiedFromMigrationTest` runs the migration both ways.
+  - In the browser, `AdEditorPolishFlowTest` covers Platform, All and one organization with their pills. `AdBuilderFlowTest` covers the Assets page's choices and where an upload goes.

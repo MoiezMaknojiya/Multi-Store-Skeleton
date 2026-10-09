@@ -162,7 +162,7 @@ test('Delete Ads deletes an organization\'s own file inside it, and the platform
     expect(BuilderAsset::whereKey([$platform->id, $own->id])->count())->toBe(0);
 });
 
-test('above the organizations the Organization list shows everything, or one organization\'s own files', function () {
+test('above the organizations the Owner list shows the platform\'s files, everything, or one organization\'s own files', function () {
     $platform = shareAFile($this);
     $alpha = BuilderAsset::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Alpha logo']);
     $beta = BuilderAsset::factory()->create(['organization_id' => $this->other->id, 'title' => 'Beta logo']);
@@ -170,14 +170,19 @@ test('above the organizations the Organization list shows everything, or one org
     $ids = fn (string $query) => collect($this->getJson('/builder/assets/data'.$query)->assertOk()->json('assets'))->pluck('id')->sort()->values()->all();
 
     expect($ids(''))->toBe(collect([$platform->id, $alpha->id, $beta->id])->sort()->values()->all())
+        ->and($ids('?organization_id=platform'))->toBe([$platform->id])
         ->and($ids('?organization_id='.$this->other->id))->toBe([$beta->id]);
 
+    // Every file says whose it is (owner, 2026-10-08), and the platform's files have no wall to meter.
     $labels = collect($this->getJson('/builder/assets/data')->json('assets'))->pluck('owner_label', 'id');
-    expect($labels[$platform->id])->toBe('Every organization')->and($labels[$beta->id])->toBe('Beta Deli');
+    expect($labels[$platform->id])->toBe('Platform')->and($labels[$beta->id])->toBe('Beta Deli')
+        ->and($this->getJson('/builder/assets/data?organization_id=platform')->json('storage'))->toBeNull();
 
-    // All organizations is the one option for the platform's files: there is no "shared" to ask for besides.
-    $this->getJson('/builder/assets/data?organization_id=nope')->assertStatus(422);
-    $this->getJson('/builder/assets/data?organization_id=shared')->assertStatus(422);
+    // Platform is the one word for the platform's files: nothing else that is no organization's id is asked for.
+    foreach (['nope', 'shared', '0', 'Platform', '-1', '1.5'] as $value) {
+        $this->getJson('/builder/assets/data?organization_id='.urlencode($value))->assertStatus(422);
+    }
+    $this->getJson('/builder/assets/data?organization_id[]=platform')->assertStatus(422);
 });
 
 test('above the organizations an organization\'s file in use says which of its ads use it, and stays', function () {

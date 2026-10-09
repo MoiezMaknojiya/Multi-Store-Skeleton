@@ -12,7 +12,7 @@ import { isARepeatPress } from '../core/click-beside.js';
 import { createCrudTable } from '../core/crud-table-base.js';
 
 export function registerAdsTable(Alpine) {
-    Alpine.data('adsTable', createCrudTable({
+    Alpine.data('adsTable', (config = {}) => createCrudTable({
         fetchUrl: '/builder/data',
         dataKey: 'ads',
         entityLabel: 'ad',
@@ -22,8 +22,9 @@ export function registerAdsTable(Alpine) {
         extraState: {
             /* The card whose Copy is in flight, so only that button goes quiet. */
             busyId: null,
-            /* Above the organizations: one organization, or every organization (empty). */
-            filterOrganization: '',
+            /* Above the organizations the Owner list: the platform's ('platform', where the page opens), one organization (its id), or
+             * all of them (empty). */
+            filterOrganization: config.owner ?? '',
 
             /* ── Create Ad ──────────────────────────────────────────────── */
             /* 'orientation', then inside an organization 'start' (Create Your Own or Premium Template). */
@@ -60,6 +61,12 @@ export function registerAdsTable(Alpine) {
             applyFilters() {
                 this.currentPage = 1;
                 this.fetchItems();
+            },
+
+            /** "Copied from a Premium Template · by Ali Raza": where the ad came from, and who changed it last. */
+            byline(ad) {
+                return [ad.from_template ? 'Copied from a Premium Template' : null, ad.updated_by_name ? `by ${ad.updated_by_name}` : null]
+                    .filter(Boolean).join(' · ');
             },
 
             /** A design whose published page a channel shows cannot be deleted (the server refuses it too): said at
@@ -172,5 +179,5 @@ export function registerAdsTable(Alpine) {
                 }
             },
         },
-    }));
+    })());
 }

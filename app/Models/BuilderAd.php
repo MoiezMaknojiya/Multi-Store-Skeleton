@@ -75,7 +75,7 @@ class BuilderAd extends Model
     public const MAX_SECONDS = 300;
 
     protected $fillable = [
-        'organization_id', 'name', 'orientation', 'document', 'thumbnail_path', 'media_id', 'published_at',
+        'organization_id', 'copied_from_id', 'name', 'orientation', 'document', 'thumbnail_path', 'media_id', 'published_at',
         'created_by', 'updated_by',
     ];
 
