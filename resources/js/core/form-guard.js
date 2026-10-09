@@ -18,6 +18,16 @@ export function registerFormGuard() {
         }
         form.dataset.submitted = 'true';
 
+        /* Whose page sent it (RefuseAStaleTab): a form left open after the session changed in another tab is sent back, not done. */
+        const context = document.querySelector('meta[name="session-context"]')?.content;
+        if (context && (form.method || '').toLowerCase() === 'post' && !form.querySelector('input[name="_context"]')) {
+            const field = document.createElement('input');
+            field.type = 'hidden';
+            field.name = '_context';
+            field.value = context;
+            form.appendChild(field);
+        }
+
         /* Disabled a tick later: the browser serializes the form's data right after
          * this event finishes, and a submit button disabled before that would drop
          * its name/value from the request. */

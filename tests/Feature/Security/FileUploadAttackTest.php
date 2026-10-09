@@ -175,7 +175,8 @@ test('a video’s poster is stored only as a picture the server drew — never t
 });
 
 test('an upload with no organization in the session is refused, not filed somewhere else', function () {
-    $this->actingAs($this->uploader);
+    // One of two organizations, none chosen: a lone organization is chosen for its person (ChooseTheOnlyOrganization).
+    $this->actingAs(inASecondOrganization($this->uploader));
     $this->flushSession();
 
     // Permissions are read through the membership of the organization in the session: with no organization there is

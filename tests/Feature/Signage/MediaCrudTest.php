@@ -69,7 +69,8 @@ test('another organization\'s media is unreachable, not just hidden', function (
 
 test('with no organization selected an organization user cannot reach the library at all', function () {
     $organization = Organization::factory()->create();
-    $actor = createOrganizationUser($organization, ['media-view']);
+    // One of two organizations, none chosen: a lone organization is chosen for its person (ChooseTheOnlyOrganization).
+    $actor = inASecondOrganization(createOrganizationUser($organization, ['media-view']));
     Media::factory()->create(['organization_id' => $organization->id]);
 
     // Permissions resolve against the CURRENT organization's role, so with no organization in
@@ -185,7 +186,7 @@ test('an organization member with no organization selected cannot upload at all'
     // organization's person has no library of their own to fall back on.
     Storage::fake('public');
     $organization = Organization::factory()->create();
-    $member = createOrganizationUser($organization, ['media-store']);
+    $member = inASecondOrganization(createOrganizationUser($organization, ['media-store']));
 
     $this->actingAs($member)
         ->postJson('/media', ['file' => UploadedFile::fake()->image('menu.jpg')])

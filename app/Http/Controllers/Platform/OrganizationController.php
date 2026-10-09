@@ -226,7 +226,8 @@ class OrganizationController extends Controller
 
         ActivityLog::record('organization.switched', $organization, "Switched into organization {$organization->name}");
 
-        return redirect()->route('dashboard')->with('status', "Switched to {$organization->name}.");
+        // Back to the page that sent the person to choose (bootstrap/app.php), or the dashboard.
+        return redirect()->intended(route('dashboard'))->with('status', "Switched to {$organization->name}.");
     }
 
     /** @return array<string, array<int, mixed>> */

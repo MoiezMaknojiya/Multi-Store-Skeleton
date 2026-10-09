@@ -8,13 +8,28 @@
  *    the second press lands on whatever lay beneath it — another row's Delete, a poster that opens the editor — which
  *    must not hear it (registerStrayClickGuard, told by noteShut);
  *  - on a switch, a toggle or a menu button the second press turns it straight back (owner, 2026-10-08: the Billing
- *    switch went on and off at one press of a mouse that sends two), so it is dropped too (registerStrayClickGuard).
+ *    switch went on and off at one press of a mouse that sends two), so it is dropped too (registerStrayClickGuard);
+ *  - a select's list, or a date's, a time's or a colour's picker, is the browser's own: the first press opens it and the
+ *    second shuts it, before any page can stop it (owner, 2026-10-09: "single click per dropdown ... khul k band ho jata
+ *    ha"), so one the first press opened is opened again at once (registerStrayClickGuard).
  * Within a double click's time, the second press is the same gesture as the first: never a new one.
  */
 const DOUBLE_CLICK_MS = 500;
 
 /** What one press turns: a switch, a toggle and a menu or disclosure button. */
 const TOGGLES = '[role="switch"], [aria-pressed], [aria-expanded]';
+
+/** What the browser opens a picker of its own for. */
+const PICKERS = 'select, input[type="date"], input[type="time"], input[type="datetime-local"], input[type="month"], input[type="week"], input[type="color"]';
+
+/** Whether a picker is open now — false in a browser that cannot say (no :open). */
+function pickerIsOpen(element) {
+    try {
+        return element.matches(':open');
+    } catch {
+        return false;
+    }
+}
 
 let shutAt = -Infinity;
 
@@ -50,8 +65,32 @@ export function registerStrayClickGuard() {
             event.stopImmediatePropagation();
         }
     };
+    // The first press says whether it opened the picker (read once the browser has done it); the rest of the multi-click
+    // opens one it shut again. A first press that opened nothing — a day picked out of a date's text — leaves the rest alone.
+    let openedByTheFirstPress = null;
+    const keepThePickerOpen = (event) => {
+        const picker = event.target.closest?.(PICKERS);
+
+        if (!picker) return;
+
+        if (event.detail <= 1) {
+            openedByTheFirstPress = null;
+            setTimeout(() => { openedByTheFirstPress = pickerIsOpen(picker) ? picker : null; }, 0);
+
+            return;
+        }
+
+        if (picker === openedByTheFirstPress && !pickerIsOpen(picker) && typeof picker.showPicker === 'function') {
+            try {
+                picker.showPicker();
+            } catch {
+                // Not allowed here: the browser's own way stands.
+            }
+        }
+    };
 
     document.addEventListener('click', dropTheRest, true);
     document.addEventListener('click', turnOnce, true);
+    document.addEventListener('click', keepThePickerOpen, true);
     document.addEventListener('dblclick', dropTheRest, true);
 }

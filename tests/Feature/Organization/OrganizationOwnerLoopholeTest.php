@@ -298,7 +298,8 @@ test('a logged-in session opens no device endpoint, and no screen hands out its 
 });
 
 test('with no organization selected, an Owner can reach nothing at all', function () {
-    $this->actingAs($this->owner->fresh())->withSession(['current_organization_id' => null]);
+    // One of two organizations, none chosen: a lone organization is chosen for its person (ChooseTheOnlyOrganization).
+    $this->actingAs(inASecondOrganization($this->owner->fresh()))->withSession(['current_organization_id' => null]);
 
     $this->getJson('/screens/data')->assertForbidden();
     $this->getJson('/media/data')->assertForbidden();

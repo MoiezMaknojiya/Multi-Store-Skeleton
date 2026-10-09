@@ -114,8 +114,9 @@ test('the platform\'s side, a session naming another organization, and a guest g
     $this->getJson('/builder/templates?orientation=landscape')->assertNotFound();
     $this->postJson("/builder/templates/{$template->id}")->assertNotFound();
 
-    // A session naming an organization the person is not a member of.
-    $this->actingAs($this->designer)->withSession(['current_organization_id' => $this->other->id]);
+    // A session naming an organization the person is not a member of. (One of two organizations: a lone one would be chosen
+    // in its place, ChooseTheOnlyOrganization.)
+    $this->actingAs(inASecondOrganization($this->designer))->withSession(['current_organization_id' => $this->other->id]);
     $this->postJson("/builder/templates/{$template->id}")->assertStatus(403);
 
     // No organization at all.

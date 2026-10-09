@@ -130,6 +130,18 @@ function createOrganizationMember(Organization $organization, string $roleKey = 
 }
 
 /**
+ * A second organization for $user, so a session with none chosen stays that way. A person of one organization is put in it
+ * from their first request (ChooseTheOnlyOrganization), which would hide what a test of "no organization chosen" means to show.
+ */
+function inASecondOrganization(User $user): User
+{
+    $elsewhere = Organization::factory()->create(['name' => 'Elsewhere '.$user->id]);
+    $user->organizations()->attach($elsewhere->id, ['role_id' => Role::starter(Role::VIEWER)->id]);
+
+    return $user;
+}
+
+/**
  * Create a member of the platform team: a global role with the given permissions, held on the
  * organization_id = 0 row. Not a super admin.
  */

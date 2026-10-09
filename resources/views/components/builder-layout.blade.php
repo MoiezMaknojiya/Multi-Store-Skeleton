@@ -5,6 +5,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    {{-- Whose this page is, sent back with every request so a tab left open after the session changed elsewhere is refused (RefuseAStaleTab). --}}
+    @auth<meta name="session-context" content="{{ \App\Http\Middleware\RefuseAStaleTab::contextFor(request()) }}">@endauth
     <title>{{ __('Ad Builder') }} · {{ config('app.name', 'Laravel') }}</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">

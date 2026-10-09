@@ -51,7 +51,9 @@ test('a Viewer leaves an organization from the profile, and it drops out of thei
 });
 
 test('the last Owner stays; an Owner with a co-owner may go', function () {
-    $owner = createOrganizationMember($this->alpha, Role::OWNER);
+    // One of two organizations, none chosen, so "Your organizations" is on the profile: working in Alpha Mart, an Owner holds
+    // View Organizations and finds it on Settings → Organizations instead (ChooseTheOnlyOrganization chooses a lone one).
+    $owner = inASecondOrganization(createOrganizationMember($this->alpha, Role::OWNER));
 
     $this->actingAs($owner)->from('/profile')->delete("/profile/organizations/{$this->alpha->id}")
         ->assertRedirect(route('profile.edit'))

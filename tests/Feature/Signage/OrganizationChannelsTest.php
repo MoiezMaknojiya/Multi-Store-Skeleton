@@ -103,7 +103,8 @@ test("inside an organization the platform's channel counts this organization's s
 });
 
 test('with no organization selected an organization member sees no channels at all', function () {
-    $this->actingAs($this->keeper)->getJson('/channels/data')->assertForbidden();
+    // One of two organizations, none chosen: a lone organization is chosen for its person (ChooseTheOnlyOrganization).
+    $this->actingAs(inASecondOrganization($this->keeper))->getJson('/channels/data')->assertForbidden();
 });
 
 test('above the organizations every channel is listed, each saying whose screens it reaches', function () {

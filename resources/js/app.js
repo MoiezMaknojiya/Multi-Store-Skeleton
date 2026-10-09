@@ -49,6 +49,15 @@ const toastTimers = new Map();
 Alpine.store('toasts', {
     items: [],
     push(message, type = 'error') {
+        // The same words already showing are shown once, their time started again: a refusal the page and the shared
+        // request handler both say (bootstrap.js) is one toast.
+        const showing = this.items.find(t => t.message === message && t.type === type);
+        if (showing) {
+            this.release(showing.id);
+
+            return;
+        }
+
         const id = Date.now() + Math.random();
         this.items.push({ id, message, type });
         this.release(id);

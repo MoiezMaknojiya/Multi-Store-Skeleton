@@ -99,8 +99,11 @@ test('a session naming a paused organization the person is not in neither opens 
     $this->actingAs($outsider)->withSession(['current_organization_id' => $this->organization->id])
         ->get('/dashboard')->assertOk()->assertDontSee('Alpha Mart')->assertDontSee('dusk="dashboard-paused"', false);
 
+    // The session's Alpha Mart, which they are not in, is forgotten and their own Beta Mart chosen (ChooseTheOnlyOrganization):
+    // their own library answers, and nothing of Alpha Mart's.
     $response = $this->actingAs($outsider->fresh())->withSession(['current_organization_id' => $this->organization->id])->getJson('/media/data');
-    expect($response->status())->toBeIn([403, 404])
+    expect($response->status())->toBe(200)
+        ->and(session('current_organization_id'))->toBe($beta->id)
         ->and($response->getContent())->not->toContain('Alpha Mart');
 });
 

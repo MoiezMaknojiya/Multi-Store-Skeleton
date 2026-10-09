@@ -94,6 +94,41 @@ class EveryQuestionSurvivesADoubleClickTest extends DuskTestCase
     }
 
     /**
+     * A select's list is the browser's own: the first press opens it and the second shuts it (owner, 2026-10-09: "single
+     * click per dropdown ... khul k band ho jata ha"). A double or triple press leaves it open; two presses apart still shut it.
+     */
+    public function test_a_double_press_leaves_a_select_open(): void
+    {
+        $admin = $this->seedSuperAdmin();
+
+        $this->browse(function (Browser $browser) use ($admin) {
+            $this->freshSession($browser);
+            $browser->loginAs($admin)->visit('/builder');
+            $this->waitForAlpine($browser);
+            $select = '[dusk="ads-filter-organization"]';
+            $browser->waitFor($select)->pause(300);
+            $isOpen = fn () => (bool) $browser->script('return document.querySelector('.json_encode($select).').matches(":open");')[0];
+
+            foreach ([2 => 'a double press', 3 => 'a triple press'] as $times => $what) {
+                $this->presses($browser, $this->centreOf($browser, $select), $times);
+                $browser->pause(500);
+                $this->assertTrue($isOpen(), "{$what} shut the select's list");
+                $this->key($browser, 'Escape');
+                $browser->pause(600);
+                $this->assertFalse($isOpen());
+            }
+
+            // Two presses a moment apart are two choices: open, then shut.
+            $this->presses($browser, $this->centreOf($browser, $select), 1);
+            $browser->pause(700);
+            $this->assertTrue($isOpen());
+            $this->presses($browser, $this->centreOf($browser, $select), 1);
+            $browser->pause(400);
+            $this->assertFalse($isOpen(), 'a second press of its own did not shut the list');
+        });
+    }
+
+    /**
      * On each page: find every button whose press opens a dialog, then double-press it and the dialog's Cancel.
      *
      * @param  list<string>  $pages

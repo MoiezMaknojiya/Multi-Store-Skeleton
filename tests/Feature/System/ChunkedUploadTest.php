@@ -136,7 +136,8 @@ test('nothing is opened that the door would refuse, and each refusal says why', 
     $theirs = Channel::factory()->create(['organization_id' => Organization::factory()->create()->id]);
     Tus::open($this, 100, ['name' => 'a.jpg', 'purpose' => 'channel', 'channel' => $theirs->id])->assertNotFound();
 
-    // An organization's person with no organization chosen has nowhere to put it.
+    // An organization's person with no organization chosen (one of two: a lone one is chosen for them) has nowhere to put it.
+    inASecondOrganization(auth()->user());
     $this->withSession(['current_organization_id' => null]);
     Tus::open($this, 100, ['name' => 'a.jpg', 'purpose' => 'media'])->assertForbidden();
 

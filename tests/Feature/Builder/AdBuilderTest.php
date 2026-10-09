@@ -205,7 +205,8 @@ test('another organization’s ad is not there at all', function () {
 });
 
 test('with no organization selected, an ad cannot be made at all', function () {
-    $this->actingAs($this->designer->fresh());
+    // One of two organizations, none chosen: a lone organization is chosen for its person (ChooseTheOnlyOrganization).
+    $this->actingAs(inASecondOrganization($this->designer->fresh()));
     $this->flushSession();
 
     // No organization in the session means no permissions either, so the door is shut before the question arises.

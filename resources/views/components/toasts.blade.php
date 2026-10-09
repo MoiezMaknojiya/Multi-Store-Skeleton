@@ -39,3 +39,9 @@
         document.addEventListener('alpine:initialized', () => window.toast({{ Js::from($__toast) }}, 'success'));
     </script>
 @endif
+{{-- A plain form sent from a page left open while the session changed in another tab: sent back here, not done (RefuseAStaleTab). --}}
+@if (is_string(session('stale_tab')))
+    <script>
+        document.addEventListener('alpine:initialized', () => window.toast({{ Js::from(session('stale_tab')) }}, 'error'));
+    </script>
+@endif

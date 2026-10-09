@@ -282,6 +282,8 @@ export function registerUploadDropzone(Alpine) {
                         allowedMetaFields: META_FIELDS,
                         headers: {
                             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+                            // Whose page it is, as every request of the page says it (RefuseAStaleTab).
+                            'X-Session-Context': document.querySelector('meta[name="session-context"]')?.content ?? '',
                             'X-Requested-With': 'XMLHttpRequest',
                             Accept: 'application/json',
                         },
@@ -512,6 +514,7 @@ export function registerUploadDropzone(Alpine) {
                     headers: {
                         'Tus-Resumable': '1.0.0',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+                        'X-Session-Context': document.querySelector('meta[name="session-context"]')?.content ?? '',
                         Accept: 'application/json',
                     },
                 }).catch(() => {});

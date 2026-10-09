@@ -212,7 +212,8 @@ test('the listings never leak another organization’s rows, whatever is searche
 });
 
 test('with no organization in the session an organization member reaches nothing at all', function () {
-    $this->actingAs($this->attacker);
+    // One of two organizations, none chosen: a lone organization is chosen for its person (ChooseTheOnlyOrganization).
+    $this->actingAs(inASecondOrganization($this->attacker));
     $this->flushSession();
 
     // A permission is read through the membership of the organization in the session (User::contextPermissionNames).
@@ -221,13 +222,16 @@ test('with no organization in the session an organization member reaches nothing
         expect($this->getJson("/{$resource}/data")->status())->toBe(403, "/{$resource}/data");
     }
 
-    $this->get('/settings/organization')->assertForbidden();
+    // A page is sent to choose an organization rather than refused (bootstrap/app.php); a page's own request is refused.
+    $this->get('/settings/organization')->assertRedirect('/select-organization');
     $this->putJson("/screens/{$this->alphaScreen->id}", ['name' => 'x', 'orientation' => 'landscape'])->assertForbidden();
     expect($this->alphaScreen->fresh()->name)->not->toBe('x');
 });
 
 test('a stale or invented organization id in the session opens nothing and breaks nothing', function () {
-    // Beta (a real organization they do not belong to), 0 (the platform's sentinel) and ids that are not organizations.
+    // Beta (a real organization they do not belong to), 0 (the platform's sentinel) and ids that are not organizations. A
+    // person of one organization has it chosen again in their place (ChooseTheOnlyOrganization): with two, nothing is chosen.
+    inASecondOrganization($this->attacker);
     foreach ([$this->beta->id, 0, -1, 999999] as $stale) {
         $this->actingAs($this->attacker)->withSession(['current_organization_id' => $stale]);
 
