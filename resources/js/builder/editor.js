@@ -89,9 +89,8 @@ export function registerAdEditor(Alpine) {
             }),
             assets: config.assets ?? [],
             organizationId: config.organizationId ?? null,
-            /* The platform team making a NEW ad says which organization it is for — All organizations first, an ad for every
-             * organization (owner, 2026-10-01) — and the shelf follows the choice, so nothing from another organization can be
-             * placed and then lost when the ad is saved. */
+            /* The platform team's NEW ad is for the organization Create Ad asked for beside its shape, or for every organization
+             * when none was (owner, 2026-10-09), and the shelf is that one's, so nothing from another can be placed and lost. */
             choosesOrganization: config.choosesOrganization ?? false,
             /* Made for every organization: its shelf is the files shared with every organization alone. */
             shared: config.shared ?? false,
@@ -598,28 +597,9 @@ export function registerAdEditor(Alpine) {
                 return Boolean(asset.organization_id) && (!this.organizationId || asset.organization_id === this.organizationId);
             },
 
-            /** Made for every organization: a saved ad as the server says, a new one while All organizations is chosen. */
+            /** Made for every organization: a saved ad as the server says, a new one when Create Ad named no organization. */
             isShared() {
                 return this.adId ? this.shared : (this.choosesOrganization && !this.organizationId);
-            },
-
-            /**
-             * A new ad's organization chosen again: the picker's storage meter was the other organization's, and a file already on the
-             * stage that is not on the new shelf would show on no screen, so it is said at once.
-             */
-            organizationChanged() {
-                this.shelfStorage = null;
-
-                const ids = [
-                    ...(this.doc.elements ?? []).map((element) => element.assetId),
-                    ...(this.doc.stage?.background?.layers ?? []).map((layer) => layer?.assetId),
-                ].filter((id) => id);
-                const lost = this.assets.filter((asset) => ids.includes(asset.id) && !this.onThisShelf(asset)).length;
-
-                if (lost > 0) {
-                    window.toast(`${lost} ${lost === 1 ? 'file on the stage' : 'files on the stage'} will not show: `
-                        + (this.isShared() ? 'an ad for every organization uses the platform\'s files only.' : 'they are not this organization\'s.'));
-                }
             },
 
             /** A file uploaded from the picker is on the shelf at once, first in the grid, ready to pick. */

@@ -1214,3 +1214,25 @@ dal k dikhao", then "theek ha bana do".
   - `PremiumTemplatesTest` covers a copy naming its template, the name gone with the template, and the pill above the organizations.
   - `AdCopiedFromMigrationTest` runs the migration both ways.
   - In the browser, `AdEditorPolishFlowTest` covers Platform, All and one organization with their pills. `AdBuilderFlowTest` covers the Assets page's choices and where an upload goes.
+
+## Addendum — 2026-10-09: whose a new ad is, asked with its shape
+
+The owner: "jab super admin mein ad builder k ander orientation select karte han wahi per organization select karne ka do ander
+mat do woo hard ha." Choosing the organization inside the editor was hard to find, so it moved into Create Ad's dialog. This
+replaces the editor's Organization list described on 2026-10-01.
+
+- **Create Ad asks For**, above the organizations only, above Landscape and Portrait.
+  - The list offers **Platform** first, then each organization under an **Organizations** heading.
+  - It starts at what the Ads page's Owner list shows: that organization when one is chosen, Platform otherwise (All too). It is
+    asked afresh every time the dialog opens, so a choice left with Cancel is forgotten.
+  - A line under it says what the choice means: a Premium Template every organization can copy, or the organization's own files and screens.
+- **The shape opens the editor for it.** Landscape or Portrait goes to `builder.create` with `organization_id` added for an
+  organization, and none for the platform.
+  - The address is read above the organizations alone. An organization's own people are never asked, and an organization they
+    name there is not listened to.
+  - An organization that is not there, nought, a word or a list sends the person back to the Ads page with the question open.
+- **The editor only says whose it is.** There is no list in it any more: the badge beside the shape says "Platform", or the
+  organization's name. The shelf, the picker's uploader and the first save all follow the choice.
+- **Tests.** `NewAdOwnerTest` (the dialog's list, the editor for an organization or the platform, the addresses refused, an
+  organization's person ignored) and, in the browser, `NewAdOwnerFlowTest` (real mouse presses, a double one among them: the For
+  list following the Owner list, an ad saved for Alpha Mart and one for the platform, a choice left with Cancel forgotten).

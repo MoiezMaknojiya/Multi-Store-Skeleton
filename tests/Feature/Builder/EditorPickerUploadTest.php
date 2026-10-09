@@ -9,7 +9,7 @@ use App\Models\Organization;
 |--------------------------------------------------------------------------
 |
 | The box is in the picker for whoever may add to the shelf — Create Ads, as the shelf's own upload asks — and not
-| for anybody else; above the organizations a new ad is for All organizations until an organization is chosen, so a file goes to the shared
+| for anybody else; above the organizations a new ad Create Ad named no organization for is the platform's, so a file goes to the shared
 | shelf at once; and only the editor's page asks for the editor's script.
 |
 */
@@ -60,14 +60,16 @@ test('an organization\'s designer finds the box in the picker; somebody who may 
 });
 
 test('above the organizations a new ad is for every organization at once: the picker takes a file with no organization chosen first', function () {
-    // The Organization list starts at All organizations (owner, 2026-10-01), so a file dropped into the picker goes to the shelf shared
-    // with every organization at once — the error the owner met ("Choose the organization this ad is for first") is never said.
+    // With no organization named in Create Ad the ad is the platform's (owner, 2026-10-01 and 2026-10-09), so a file dropped into the
+    // picker goes to the shelf shared with every organization at once — the error the owner met ("Choose the organization this ad is
+    // for first") is never said, and the editor has no list to choose with any more, only the badge.
     foreach ([createSuperAdmin(), createPlatformUser(['ad-view', 'ad-store', 'ad-update'], 'Platform designer')] as $person) {
         $html = editorPage($person, null);
 
         expect(alpineConfig($html, 'uploadDropzone', 'picker-dropzone'))->not->toHaveKey('needsOrganization')
             ->and(alpineConfig($html, 'adEditor'))->toMatchArray(['canUpload' => true, 'choosesOrganization' => true, 'organizationId' => null])
-            ->and($html)->toContain('<option value="">All organizations</option>')
+            ->and($html)->toContain('dusk="ad-owner"')
+            ->not->toContain('dusk="ad-organization"')
             ->not->toContain('Choose the organization this ad is for first');
     }
 });

@@ -1,6 +1,7 @@
 {{-- Which way is the screen mounted? (docs/AD-BUILDER-SPEC.md §12) — the two choices in the Ads page's Create Ad dialog. Above
-     the organizations they are links, so the editor opens on a stage of that shape; inside an organization ($asksHowToStart) the
-     dialog asks next how to start — Create Your Own or Premium Template (owner, 2026-10-07). --}}
+     the organizations they are links, so the editor opens on a stage of that shape for the organization the dialog's For list
+     names (owner, 2026-10-09); inside an organization ($asksHowToStart) the dialog asks next how to start — Create Your Own or
+     Premium Template (owner, 2026-10-07). --}}
 @php
     $shapes = [
         'landscape' => ['Landscape', '1920 × 1080 · a television the usual way round', 'w-32'],
@@ -13,7 +14,8 @@
         @if ($asksHowToStart)
             <button type="button" @click="chooseOrientation('{{ $shape }}')" id="new-ad-{{ $shape }}" dusk="new-ad-{{ $shape }}" class="{{ $choice }}">
         @else
-            <a href="{{ route('builder.create', ['orientation' => $shape]) }}" dusk="new-ad-{{ $shape }}" class="{{ $choice }}">
+            <a href="{{ route('builder.create', ['orientation' => $shape]) }}" x-bind:href="'{{ route('builder.create', ['orientation' => $shape]) }}' + newAdOwnerQuery()"
+               id="new-ad-{{ $shape }}" dusk="new-ad-{{ $shape }}" class="{{ $choice }}">
         @endif
             <span class="mx-auto block h-[72px] {{ $width }} rounded-md border-4 border-gray-700 bg-gray-900 group-hover:border-blue-600 dark:border-gray-300" aria-hidden="true"></span>
             <span class="mt-3 block font-semibold text-gray-900 dark:text-gray-100">{{ $label }}</span>

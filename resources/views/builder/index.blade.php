@@ -207,6 +207,27 @@
                             Chosen once, for this ad: it cannot be changed after.
                         </p>
 
+                        {{-- Above the organizations whose ad it is, asked with its shape (owner, 2026-10-09 — "orientation select karte
+                             han wahi per organization select karne ka do"): the Owner list's choice first, the platform's otherwise. --}}
+                        @if ($aboveTheOrganizations)
+                            <div class="mt-5">
+                                <x-input-label for="new-ad-owner" value="For" />
+                                <select id="new-ad-owner" x-model="newAdOwner" class="form-select mt-1" dusk="new-ad-owner"
+                                        aria-describedby="new-ad-owner-hint">
+                                    <option value="platform">Platform</option>
+                                    @if ($organizations !== [])
+                                        <optgroup label="Organizations">
+                                            @foreach ($organizations as $organization)
+                                                <option value="{{ $organization['id'] }}">{{ $organization['name'] }}</option>
+                                            @endforeach
+                                        </optgroup>
+                                    @endif
+                                </select>
+                                <p id="new-ad-owner-hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400" dusk="new-ad-owner-hint"
+                                   x-text="newAdOwner === 'platform' ? 'Published, it is a Premium Template every organization can copy.' : 'Made with this organization\'s own files, for its screens.'">Published, it is a Premium Template every organization can copy.</p>
+                            </div>
+                        @endif
+
                         <div class="mt-5">
                             @include('builder.partials.orientation-choice', ['asksHowToStart' => ! $aboveTheOrganizations])
                         </div>

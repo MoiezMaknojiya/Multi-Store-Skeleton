@@ -30,6 +30,8 @@ export function registerAdsTable(Alpine) {
             /* 'orientation', then inside an organization 'start' (Create Your Own or Premium Template). */
             newAdStep: 'orientation',
             newAdOrientation: null,
+            /* Above the organizations whose new ad it is (owner, 2026-10-09): 'platform', or an organization's id. */
+            newAdOwner: 'platform',
             /* The Premium Templates of the shape chosen, and where their list stands: idle | loading | ready | failed. */
             templates: [],
             templatesState: 'idle',
@@ -99,11 +101,17 @@ export function registerAdsTable(Alpine) {
 
             /* ── Create Ad ─────────────────────────────────────────────── */
 
-            /** Create Ad's first question, asked afresh every time. */
+            /** Create Ad's first question, asked afresh every time — for the organization the Owner list shows, if it shows one. */
             startNewAd() {
                 this.newAdStep = 'orientation';
                 this.newAdOrientation = null;
+                this.newAdOwner = /^[1-9][0-9]*$/.test(String(this.filterOrganization)) ? String(this.filterOrganization) : 'platform';
                 this.$dispatch('open-modal', 'new-ad-orientation');
+            },
+
+            /** The editor's address names the organization chosen; the platform's ad names none. */
+            newAdOwnerQuery() {
+                return this.newAdOwner !== 'platform' ? `&organization_id=${encodeURIComponent(this.newAdOwner)}` : '';
             },
 
             /** Inside an organization the shape leads to the second question: how to start — where the keyboard goes too. */

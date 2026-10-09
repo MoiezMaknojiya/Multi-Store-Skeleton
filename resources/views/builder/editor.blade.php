@@ -1,11 +1,12 @@
 @php
-    // The platform team stands in no organization, so a new ad asks which organization it is for (the controller hands
-    // them the organizations). An organization's own people never see this: they are already working somewhere.
+    // The platform team stands in no organization, so a new ad is for the organization Create Ad asked for beside its shape, or
+    // the platform's (owner, 2026-10-09). An organization's own people never choose: they are already working somewhere.
     $platformUser = auth()->user()->globalRole() !== null;
-    $organizations = $ad ? [] : ($organizations ?? []);
-    // An ad for every organization (owner, 2026-10-01): a new one is made with All organizations, first in the Organization list above the
-    // organizations; a saved one names no organization, and only the platform opens it here — an organization's people copy it instead.
+    $newAdOrganizationId ??= null;
+    // An ad for every organization (owner, 2026-10-01) names no organization, and only the platform opens it here — an
+    // organization's people copy it instead. The badge beside the shape says whose it is, a new ad's as a saved one's.
     $sharedAd = $ad !== null && $ad->organization_id === null;
+    $forThePlatform = $ad !== null ? $sharedAd : ($platformUser && $newAdOrganizationId === null);
     $ownerLabel ??= null;
 
     // The panel's lists are the server's own (AdCompiler, AdAnimations): every option is a value the
@@ -113,7 +114,7 @@
              'orientation' => $orientation,
              'document' => $document,
              'assets' => $assets,
-             'organizationId' => $platformUser ? ($ad?->organization_id) : null,
+             'organizationId' => $platformUser ? ($ad !== null ? $ad->organization_id : $newAdOrganizationId) : null,
              'choosesOrganization' => $platformUser && ! $ad,
              'shared' => $sharedAd,
              // Where the ad stands with the screens (docs/AD-BUILDER-SPEC.md §9): on them or not, whether they
@@ -172,18 +173,11 @@
                           : 'For a screen the usual way round (1920 × 1080). Chosen when the ad was made; it cannot change.'"
                       x-text="orientation === 'portrait' ? 'Portrait' : 'Landscape'"></span>
 
-                {{-- Above the organizations a new ad says whose it is — All organizations first (owner, 2026-10-01), as the Assets
-                     page's list does — and the first save fixes it. A saved ad says it beside its shape. --}}
-                @if ($platformUser && ! $ad)
-                    <select x-model.number="organizationId" @change="organizationChanged()" x-bind:disabled="!!adId" class="form-select h-9 w-44"
-                            dusk="ad-organization" aria-label="Organization" x-bind:title="adId ? 'Chosen with the first save' : ''">
-                        <option value="">All organizations</option>
-                        @foreach ($organizations as $organization)
-                            <option value="{{ $organization['id'] }}">{{ $organization['name'] }}</option>
-                        @endforeach
-                    </select>
-                @elseif ($ownerLabel)
-                    <span class="{{ $sharedAd ? 'badge-info' : 'badge-neutral' }} shrink-0" dusk="ad-owner">{{ $ownerLabel }}</span>
+                {{-- Above the organizations, whose ad it is: chosen with its shape in Create Ad (owner, 2026-10-09), said here beside
+                     the shape, and never changed after. --}}
+                @if ($ownerLabel)
+                    <span class="{{ $forThePlatform ? 'badge-info' : 'badge-neutral' }} shrink-0" title="Chosen with its shape in Create Ad; it cannot change"
+                          dusk="ad-owner">{{ $ownerLabel }}</span>
                 @endif
 
                 {{-- Shrinks before anything else does: on a narrow bar each line is cut short, never drawn over

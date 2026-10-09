@@ -122,12 +122,26 @@ class BuilderController extends Controller
             return redirect()->route('builder.index', ['new' => 1]);
         }
 
+        // Above the organizations whose ad it is was chosen with its shape, in Create Ad (owner, 2026-10-09: "orientation select
+        // karte han wahi per organization select karne ka do, ander mat do woo hard ha"): the platform's when no organization is
+        // named, or that organization's. One that is not there sends the question back.
+        $organization = null;
+        if ($this->aboveTheOrganizations() && $request->query('organization_id') !== null) {
+            $asked = self::plainValue($request->query('organization_id'));
+            $organization = ctype_digit($asked) ? Organization::find((int) $asked, ['id', 'name']) : null;
+
+            if ($organization === null) {
+                return redirect()->route('builder.index', ['new' => 1]);
+            }
+        }
+
         return view('builder.editor', [
             'ad' => null,
             'orientation' => $orientation,
             'document' => BuilderAd::blankDocument($orientation),
-            'assets' => $this->assetsForEditor(),
-            'organizations' => $this->organizationsToFilterBy(),
+            'assets' => $this->assetsForEditor(newFor: $organization?->id),
+            'newAdOrganizationId' => $organization?->id,
+            'ownerLabel' => $this->aboveTheOrganizations() ? ($organization?->name ?? 'Platform') : null,
         ]);
     }
 
@@ -434,13 +448,13 @@ class BuilderController extends Controller
 
     /**
      * The pictures and videos the editor may put on the stage: the ad's organization's own alone (owner, 2026-10-07), and for an
-     * ad for every organization the platform's alone (BuilderAsset::onShelfOf). A new ad's are everything in reach, and the
-     * editor keeps to the shelf of the organization chosen for it (onThisShelf).
+     * ad for every organization the platform's alone (BuilderAsset::onShelfOf). A new ad's are its organization's own inside one,
+     * and above the organizations the shelf of whom Create Ad chose for it ($newFor; the platform's when none).
      */
-    private function assetsForEditor(?BuilderAd $ad = null): array
+    private function assetsForEditor(?BuilderAd $ad = null, ?int $newFor = null): array
     {
         return BuilderAsset::visibleTo(auth()->user())
-            ->when($ad !== null, fn (Builder $query) => $query->onShelfOf($ad->organization_id))
+            ->when($ad !== null || $this->aboveTheOrganizations(), fn (Builder $query) => $query->onShelfOf($ad !== null ? $ad->organization_id : $newFor))
             ->latest()
             ->limit(200)
             ->get(['id', 'organization_id', 'title', 'kind', 'disk', 'path', 'thumbnail_path', 'width', 'height', 'duration_seconds'])

@@ -299,8 +299,8 @@ class AdBuilderFlowTest extends DuskTestCase
             $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
             $browser->waitFor('@pick-asset-'.$asset->id)->assertMissing('@picker-upload');
 
-            // Above the organizations a new ad is for All organizations (owner, 2026-10-01): the file goes to the shelf shared with
-            // every organization at once, and nothing asks for an organization first.
+            // Above the organizations a new ad that Create Ad named no organization for is the platform's (owner, 2026-10-01 and
+            // 2026-10-09): the file goes to the shelf shared with every organization at once, and nothing asks for an organization first.
             $this->freshSession($browser);
             $browser->loginAs($platformDesigner)->visit('/builder/create?orientation=landscape');
             $this->waitForAlpine($browser);
@@ -316,7 +316,7 @@ class AdBuilderFlowTest extends DuskTestCase
     }
 
     /**
-     * The owner's own steps (2026-10-01): above the organizations a new ad is for All organizations, a picture dropped into the picker
+     * The owner's own steps (2026-10-01): above the organizations a new ad is the platform's, a picture dropped into the picker
      * goes to the platform's shelf at once — no "choose the organization first" — and once the ad is published an organization's
      * designer finds it under Create Ad's Premium Template (2026-10-07), uses it, and works on the copy as their own, its picture
      * copied onto their own shelf.
@@ -333,8 +333,8 @@ class AdBuilderFlowTest extends DuskTestCase
             $this->waitForAlpine($browser);
             $browser->waitFor('@ad-stage');
 
-            // All organizations comes first, and is what a new ad is for.
-            $this->assertSame('All organizations', $browser->script('return document.querySelector(\'[dusk="ad-organization"]\').selectedOptions[0].textContent.trim();')[0]);
+            // With no organization named, the new ad is the platform's, and the editor says so beside the shape: no list to change it.
+            $browser->assertSeeIn('@ad-owner', 'Platform')->assertMissing('@ad-organization');
 
             $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
             $this->uploadThrough($browser, 'picker', $this->fixtureImage('Brand logo.png', 30, 90, 200));
@@ -355,7 +355,7 @@ class AdBuilderFlowTest extends DuskTestCase
             $this->assertSame($asset->id, $ad->document['elements'][0]['assetId'] ?? null);
 
             // Saved, it stays whose it was made for.
-            $browser->assertDisabled('@ad-organization');
+            $browser->assertSeeIn('@ad-owner', 'Platform');
 
             $this->jsClick($browser, '@ad-publish');
             $browser->waitForText('every organization finds it under Premium Template now');
@@ -389,7 +389,7 @@ class AdBuilderFlowTest extends DuskTestCase
             $own = BuilderAsset::where('organization_id', $organization->id)->sole();
             $this->assertSame($asset->id, $own->copied_from_id);
             $this->assertSame($own->id, $copy->document['elements'][0]['assetId'] ?? null);
-            $browser->assertMissing('@ad-organization')->assertMissing('@ad-owner')->waitFor('[dusk^="element-"]');
+            $browser->assertMissing('@ad-owner')->waitFor('[dusk^="element-"]');
             $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
             $browser->waitFor('@pick-asset-'.$own->id)->assertMissing('@pick-asset-'.$asset->id);
         });
