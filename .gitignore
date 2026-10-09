@@ -35,6 +35,9 @@ yarn-error.log*
 pnpm-debug.log*
 /.phpunit.cache
 repomix-output*
+# graphify's knowledge graph of the project (graph.html, graph.json, caches): per machine, and
+# out of Tailwind's reach — Tailwind scans every file that is not ignored.
+/graphify-out
 .phpunit.result.cache
 .pint.cache
 .php-cs-fixer.cache
