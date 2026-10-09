@@ -266,7 +266,7 @@ test('a guest is offered nothing but the public doors', function () {
     // The pages a person with no session is allowed to open. Pages only: every write is the last test's.
     $public = [
         'login', 'register', 'password.request', 'password.reset', 'invitations.show',
-        'player', 'player.manifest', 'device.pair-status', 'device.playlist',
+        'player', 'player.manifest', 'site.manifest', 'device.pair-status', 'device.playlist',
         'up',   // Laravel's own health check, public on purpose
     ];
 

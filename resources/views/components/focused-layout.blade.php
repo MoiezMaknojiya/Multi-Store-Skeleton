@@ -9,6 +9,7 @@
     @auth<meta name="session-context" content="{{ \App\Http\Middleware\RefuseAStaleTab::contextFor(request()) }}">@endauth
     @php($__pageTitle = trim(preg_replace('/\s+/', ' ', html_entity_decode(strip_tags((string) ($header ?? '')), ENT_QUOTES | ENT_HTML5))))
     <title>{{ $__pageTitle !== '' ? $__pageTitle.' · ' : '' }}{{ config('app.name', 'Laravel') }}</title>
+    <x-favicons />
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap" rel="stylesheet">
@@ -35,11 +36,7 @@
         {{-- Slim top bar --}}
         <header class="flex items-center justify-between h-16 px-4 sm:px-6 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
             <a href="{{ route('dashboard') }}" class="flex items-center gap-2 text-gray-800 dark:text-white font-semibold">
-                <span class="inline-flex items-center justify-center w-8 h-8 rounded-xs bg-blue-600 text-white" aria-hidden="true">
-                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                </span>
+                <img src="/brand/logo.svg" alt="" width="32" height="32" class="h-8 w-8">
                 {{ config('app.name', 'Laravel') }}
             </a>
 

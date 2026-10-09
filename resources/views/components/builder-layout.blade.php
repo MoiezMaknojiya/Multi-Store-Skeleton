@@ -8,6 +8,7 @@
     {{-- Whose this page is, sent back with every request so a tab left open after the session changed elsewhere is refused (RefuseAStaleTab). --}}
     @auth<meta name="session-context" content="{{ \App\Http\Middleware\RefuseAStaleTab::contextFor(request()) }}">@endauth
     <title>{{ __('Ad Builder') }} · {{ config('app.name', 'Laravel') }}</title>
+    <x-favicons />
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap" rel="stylesheet">

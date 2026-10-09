@@ -10,8 +10,10 @@
          the player and open it full screen with no browser bar, and its worker keeps it playing offline. --}}
     <link rel="manifest" href="{{ route('player.manifest') }}">
     <meta name="theme-color" content="#000000">
-    <link rel="icon" type="image/png" sizes="192x192" href="/player-icons/icon-192.png">
-    <link rel="apple-touch-icon" href="/player-icons/icon-192.png">
+    {{-- The app's own icons (scripts/make-brand-icons.php): the player's manifest names the same pictures. --}}
+    <link rel="icon" href="/favicon.ico" sizes="32x32">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
     {{-- A watchdog (docs/AD-BUILDER-SPEC.md §15): a page whose script never ran — a deploy's new script
          that could not be fetched, a browser that choked on it — would sit on "Starting up..." for ever,

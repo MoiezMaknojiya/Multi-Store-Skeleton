@@ -9,6 +9,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex">
     <title>@yield('title') · {{ config('app.name', 'Laravel') }}</title>
+    <x-favicons />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap" rel="stylesheet">
     <script>
@@ -26,7 +27,7 @@
         main { width: 100%; max-width: 28rem; text-align: center; }
         .brand { display: inline-flex; align-items: center; gap: .5rem; font-weight: 600; color: var(--text); text-decoration: none; }
         .brand:focus-visible, .btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-        .tile { display: inline-flex; width: 2rem; height: 2rem; align-items: center; justify-content: center; border-radius: .125rem; background: var(--brand); }
+        .brand img { flex: none; }
         .card { margin-top: 1.5rem; padding: 2.5rem 1.5rem; background: var(--card); border: 1px solid var(--line); border-radius: .75rem;
             box-shadow: 0 1px 2px rgba(16, 24, 40, .05); }
         .code { margin: 0; font-size: .875rem; font-weight: 600; letter-spacing: .05em; color: var(--brand); }
@@ -44,9 +45,7 @@
 <body>
     <main>
         <a class="brand" href="{{ url('/dashboard') }}">
-            <span class="tile" aria-hidden="true">
-                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ffffff"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-            </span>
+            <img src="/brand/logo.svg" alt="" width="32" height="32">
             {{ config('app.name', 'Laravel') }}
         </a>
 

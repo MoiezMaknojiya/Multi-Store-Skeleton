@@ -10,6 +10,7 @@
     {{-- The tab says which page it is ("Screens · The Display Solution"): the page's own title, or its header's words. --}}
     @php($__pageTitle = trim(preg_replace('/\s+/', ' ', html_entity_decode(strip_tags((string) ($title ?? $header ?? '')), ENT_QUOTES | ENT_HTML5))))
     <title>{{ $__pageTitle !== '' ? $__pageTitle.' · ' : '' }}{{ config('app.name', 'Laravel') }}</title>
+    <x-favicons />
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap" rel="stylesheet">

@@ -220,10 +220,11 @@ test('the player is a web app: its manifest names the app and opens the player f
         ->assertJsonPath('start_url', '/player')
         ->assertJsonPath('display', 'fullscreen')
         ->assertJsonPath('scope', '/player')
-        ->assertJsonPath('icons.0.src', '/player-icons/icon-192.png');
+        ->assertJsonPath('icons.0.src', '/icon-192.png')
+        ->assertJsonPath('icons.2.purpose', 'maskable');
 
     expect(file_exists(public_path('player-sw.js')))->toBeTrue()
-        ->and(file_exists(public_path('player-icons/icon-512.png')))->toBeTrue();
+        ->and(file_exists(public_path('icon-maskable-512.png')))->toBeTrue();
 
     // The player page links the manifest, and every address in the worker is a real one of this app.
     $this->get('/player')->assertOk()->assertSee('rel="manifest"', false)->assertSee('/player.webmanifest', false);

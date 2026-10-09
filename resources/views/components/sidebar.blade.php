@@ -8,11 +8,7 @@
 
     {{-- Logo Section --}}
     <div class="flex items-center gap-3 px-5 py-3 border-b border-gray-200 dark:border-gray-700 min-h-[64px]">
-        <div class="w-9 h-9 rounded-xs bg-blue-600 flex items-center justify-center flex-shrink-0">
-            <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-        </div>
+        <img src="/brand/logo.svg" alt="" width="36" height="36" class="h-9 w-9 flex-shrink-0">
         <span x-show="sidebarOpen" data-sidebar-label
             class="text-gray-900 dark:text-white text-lg font-bold tracking-tight whitespace-nowrap">{{ config('app.name') }}</span>
     </div>

@@ -41,6 +41,26 @@ Route::get('/', function () {
 // -----------------------------------------------------------------------
 Route::view('/player', 'player.index')->name('player');
 
+// The icons every manifest names, drawn from the owner's logo by scripts/make-brand-icons.php: as they are, and one whose
+// drawing stays inside the central circle a launcher's mask keeps.
+$appIcons = [
+    ['src' => '/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any'],
+    ['src' => '/icon-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any'],
+    ['src' => '/icon-maskable-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'maskable'],
+];
+
+// The panel's manifest: a phone's "Add to Home screen" gets the logo and the app's name. A route rather than a file in
+// public/, so it carries the name the app is configured with.
+Route::get('/site.webmanifest', fn () => response()->json([
+    'name' => config('app.name'),
+    'short_name' => config('app.name'),
+    'start_url' => '/dashboard',
+    'display' => 'browser',
+    'background_color' => '#ffffff',
+    'theme_color' => '#2563eb',
+    'icons' => $appIcons,
+])->header('Content-Type', 'application/manifest+json'))->name('site.manifest');
+
 // The player's web-app manifest (docs/AD-BUILDER-SPEC.md §15): a route rather than a file in public/, so it
 // carries the app's own name. Its icons and its service worker (public/player-sw.js) are plain files.
 Route::get('/player.webmanifest', fn () => response()->json([
@@ -53,10 +73,7 @@ Route::get('/player.webmanifest', fn () => response()->json([
     'orientation' => 'any',
     'background_color' => '#000000',
     'theme_color' => '#000000',
-    'icons' => [
-        ['src' => '/player-icons/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any'],
-        ['src' => '/player-icons/icon-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any maskable'],
-    ],
+    'icons' => $appIcons,
 ])->header('Content-Type', 'application/manifest+json'))->name('player.manifest');
 
 // -----------------------------------------------------------------------

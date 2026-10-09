@@ -1015,8 +1015,8 @@ anywhere else the player is exactly what it was — online only — because ever
 whatever turned it into JSON, a MySQL row or a limiter's key.
 
 **The web-app manifest.** `/player.webmanifest` (a route, so it carries the app's own name: `start_url`
-`/player`, `display: fullscreen`, `orientation: any`, a dark theme, icons drawn by
-`scripts/draw-player-icons.php` into `public/player-icons/`) is linked from the player page, so a
+`/player`, `display: fullscreen`, `orientation: any`, a dark theme, and since 2026-10-09 the app's own icons —
+the owner's logo, drawn by `scripts/make-brand-icons.php` into `public/`, a maskable one among them) is linked from the player page, so a
 television or Android box can "install" the player and open it full screen with no browser bar — the
 progressive part of the request. nginx serves `player-sw.js` with `Cache-Control: no-cache`, so a set
 asking for a new worker is given it.
