@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Http\Requests\Signage\StoreMediaRequest;
 use App\Models\Channel;
 use App\Models\Organization;
+use App\Models\PlayerAppRelease;
 use App\Models\Upload;
 use App\Models\User;
 use Closure;
@@ -66,13 +67,19 @@ class ChunkedUploads
 
         $extension = Str::contains($filename, '.') ? Str::lower(Str::afterLast($filename, '.')) : '';
 
-        abort_unless(in_array($extension, explode(',', StoreMediaRequest::ALLOWED_MIMES), true), 415,
-            'Only '.StoreMediaRequest::FORMATS_IN_WORDS.' can be uploaded.');
+        // The TV app (Developer → TV App) is an APK of its own size; every other place takes pictures and videos.
+        if ($purpose === 'app-release') {
+            abort_unless($extension === 'apk', 415, PlayerAppRelease::ONLY_AN_APK);
+        } else {
+            abort_unless(in_array($extension, explode(',', StoreMediaRequest::ALLOWED_MIMES), true), 415,
+                'Only '.StoreMediaRequest::FORMATS_IN_WORDS.' can be uploaded.');
+        }
 
         if ($size < 1) {
             throw ValidationException::withMessages(['file' => 'The file is empty.']);
         }
 
+        abort_if($purpose === 'app-release' && $size > PlayerAppRelease::MAX_BYTES, 413, PlayerAppRelease::tooLargeMessage());
         abort_if($size > self::maxSize(), 413, StoreMediaRequest::tooLargeMessage());
 
         abort_if(Upload::where('user_id', $user->id)->open()->count() >= self::MAX_OPEN_PER_USER, 429,
@@ -224,7 +231,16 @@ class ChunkedUploads
             'channel' => $this->channelLibrary($user, $meta['channel'] ?? null),
             'campaign' => $this->adsNetwork(),
             'asset' => $this->shelfFor($user, $meta['organization'] ?? null),
+            'app-release' => $this->tvApp($user),
         };
+    }
+
+    /** A new version of the TV app: the super admin's alone, and no organization's storage. */
+    private function tvApp(User $user): ?int
+    {
+        abort_unless(Gate::forUser($user)->allows('super-admin-tier') && $user->can('player-app-store'), 403);
+
+        return null;
     }
 
     /** The Media page's library: the organization the person works in, or — above the organizations — the one the page chose. */

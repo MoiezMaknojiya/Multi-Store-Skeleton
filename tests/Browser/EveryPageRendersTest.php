@@ -5,6 +5,7 @@ namespace Tests\Browser;
 use App\Models\Channel;
 use App\Models\Organization;
 use App\Models\Permission;
+use App\Models\PlayerAppRelease;
 use App\Models\Screen;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Str;
@@ -29,6 +30,8 @@ class EveryPageRendersTest extends DuskTestCase
     public function test_every_page_above_the_organizations_renders_with_a_clean_console(): void
     {
         $admin = $this->seedSuperAdmin();
+        // A version of the TV app, so Developer draws its row (the file is never fetched here).
+        PlayerAppRelease::create(['version_code' => 1, 'version_name' => '1.0', 'path' => 'player-app/TheDisplaySolution-1.0-1.apk', 'size' => 9_000_000, 'sha256' => str_repeat('a', 64), 'notes' => 'The first release.']);
         Organization::factory()->create(['name' => 'Alpha Mart']);
         // One of the platform's own channels, so the page of the ads it carries has one to open.
         $channel = Channel::factory()->create(['name' => 'GAMA Wholesale']);
@@ -44,6 +47,7 @@ class EveryPageRendersTest extends DuskTestCase
                 '/permissions',
                 '/roles',
                 '/activity',
+                '/developer',
                 '/channels',
                 '/channels/'.$channel->id,   // one channel's ads
                 '/campaigns',

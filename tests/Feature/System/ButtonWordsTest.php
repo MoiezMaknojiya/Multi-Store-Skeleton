@@ -128,7 +128,7 @@ test('every button above the organizations says its words in Title Case', functi
     Organization::factory()->create(['name' => 'Alpha Mart']);
     $channel = Channel::factory()->create();
 
-    $pages = ['/dashboard', '/users', '/organizations', '/permissions', '/roles', '/activity', '/channels', "/channels/{$channel->id}",
+    $pages = ['/dashboard', '/users', '/organizations', '/permissions', '/roles', '/activity', '/developer', '/channels', "/channels/{$channel->id}",
         '/campaigns', '/builder', '/builder/assets', '/builder/create?orientation=landscape', '/media', '/screens', '/profile'];
 
     $wrong = wordsNotTitleCased($pages, fn (string $page) => $this->actingAs($admin)->get($page)->assertOk()->getContent());

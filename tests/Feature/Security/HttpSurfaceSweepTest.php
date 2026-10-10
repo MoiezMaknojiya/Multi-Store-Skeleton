@@ -9,6 +9,7 @@ use App\Models\Invitation;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\Permission;
+use App\Models\PlayerAppRelease;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
@@ -72,6 +73,11 @@ function sweepFixtures(): array
     $design = BuilderAd::factory()->withText()->create(['organization_id' => $organization->id]);
     $asset = BuilderAsset::factory()->create(['organization_id' => $organization->id]);
     $campaign = Campaign::factory()->create();
+    // A version of the TV app (Developer → TV App), its file never written: the sweep only asks nothing answers 500.
+    $release = PlayerAppRelease::create([
+        'version_code' => $code = (int) PlayerAppRelease::max('version_code') + 1, 'version_name' => "1.$code",
+        'path' => "player-app/sweep-{$code}.apk", 'size' => 10, 'sha256' => str_repeat('a', 64),
+    ]);
     $invitation = Invitation::factory()->create(['organization_id' => $organization->id]);
     $role = Role::create(['name' => 'Sweep Role', 'organization_id' => $organization->id]);
     $permission = Permission::firstWhere('name', 'screen-view');
@@ -106,6 +112,7 @@ function sweepFixtures(): array
             'ad' => ['channels' => $channelAd->id, 'builder' => $design->id],
             'asset' => $asset->id,
             'campaign' => $campaign->id,
+            'release' => $release->id,
             'upload' => $upload->id,
             'token' => str_repeat('a', 64),
             // An email link's account and address hash (verification, a changed address) — unsigned here, so it
@@ -266,7 +273,7 @@ test('a guest is offered nothing but the public doors', function () {
     // The pages a person with no session is allowed to open. Pages only: every write is the last test's.
     $public = [
         'login', 'register', 'password.request', 'password.reset', 'invitations.show',
-        'player', 'player.manifest', 'site.manifest', 'device.pair-status', 'device.playlist',
+        'player', 'player.manifest', 'site.manifest', 'player-app.latest', 'device.pair-status', 'device.playlist',
         'up',   // Laravel's own health check, public on purpose
     ];
 

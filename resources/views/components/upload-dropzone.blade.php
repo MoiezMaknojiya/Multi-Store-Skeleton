@@ -15,6 +15,9 @@
     'hint' => null,
     'maxVideoSeconds' => \App\Models\Media::MAX_VIDEO_SECONDS,
     'videoNoun' => 'A video',
+    // 'media' for every page but Developer → TV App, whose box takes the app ('apk', up to its own ceiling).
+    'kind' => 'media',
+    'maxBytes' => null,
 ])
 
 <div x-data="uploadDropzone({{ Js::from([
@@ -24,6 +27,8 @@
         'addUrl' => $addUrl,
         'maxVideoSeconds' => (int) $maxVideoSeconds,
         'videoNoun' => $videoNoun,
+        'kind' => $kind,
+        'maxBytes' => $maxBytes,
     ]) }})"
      x-effect="context = ({{ $context }})"
      {{ $attributes->merge(['class' => 'space-y-3']) }}
@@ -44,7 +49,7 @@
            @drop.prevent="addFiles($event.dataTransfer.files)"
            dusk="{{ $dusk }}-drop">
         <input type="file" class="sr-only" @if ($multiple) multiple @endif
-               accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm"
+               accept="{{ $kind === 'apk' ? '.apk,application/vnd.android.package-archive' : 'image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm' }}"
                @change="addFiles($event.target.files); $event.target.value = ''"
                dusk="{{ $dusk }}-file">
 

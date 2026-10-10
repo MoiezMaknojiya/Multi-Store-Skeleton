@@ -95,7 +95,7 @@ test('the pages above the organizations say how much each field takes', function
     $this->actingAs(createSuperAdmin());
 
     assertEveryFieldSaysItsLimit($this, [
-        '/dashboard', '/users', '/organizations', '/permissions', '/roles', '/activity', '/channels', '/channels/'.$channel->id,
+        '/dashboard', '/users', '/organizations', '/permissions', '/roles', '/activity', '/developer', '/channels', '/channels/'.$channel->id,
         '/campaigns', '/media', '/builder', '/builder/assets', '/builder/create?orientation=portrait', '/profile',
     ]);
 });

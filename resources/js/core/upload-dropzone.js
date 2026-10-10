@@ -75,6 +75,15 @@ function wordsFrom(body) {
     }
 }
 
+/** Developer → TV App's box takes the app alone, under its ceiling: what the server says too (ChunkedUploads::open). */
+function apkError(file, maxBytes) {
+    if ((file.name.split('.').pop() ?? '').toLowerCase() !== 'apk') {
+        return 'Only the TV app can be uploaded here: an Android app, an .apk file.';
+    }
+
+    return maxBytes && file.size > maxBytes ? `The app may not be larger than ${Math.round(maxBytes / (1024 * 1024))} MB.` : null;
+}
+
 let rows = 0;
 
 export function registerUploadDropzone(Alpine) {
@@ -93,6 +102,9 @@ export function registerUploadDropzone(Alpine) {
             addUrl: config.addUrl ?? null,
             maxVideoSeconds: config.maxVideoSeconds ?? MAX_VIDEO_SECONDS,
             videoNoun: config.videoNoun ?? 'A video',
+            // 'media' (pictures and videos) everywhere but Developer → TV App, whose box takes the app: 'apk'.
+            kind: config.kind ?? 'media',
+            maxBytes: config.maxBytes ?? null,
 
             /* Set by the page: {library|organization|channel, fields, storage}. */
             context: {},
@@ -189,7 +201,9 @@ export function registerUploadDropzone(Alpine) {
                 const item = this.uploads[this.uploads.length - 1];
                 this.announceBusy();
 
-                const refused = fileError(file) ?? storageError(file, this.roomLeft(item));
+                const refused = this.kind === 'apk'
+                    ? apkError(file, this.maxBytes)
+                    : (fileError(file) ?? storageError(file, this.roomLeft(item)));
 
                 if (refused) return this.refuse(item, refused);
 

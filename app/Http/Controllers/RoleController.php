@@ -369,8 +369,13 @@ class RoleController extends Controller
             throw ValidationException::withMessages(['permissions' => 'One of those permissions does not exist.']);
         }
 
-        if ($permissions->contains(fn (Permission $permission) => in_array($permission->name, Permission::SUPER_ADMIN_ONLY, true))) {
-            throw ValidationException::withMessages(['permissions' => 'Permission management belongs to the Super-Admin role alone.']);
+        $superAdminsOwn = $permissions->filter(fn (Permission $permission) => in_array($permission->name, Permission::SUPER_ADMIN_ONLY, true));
+
+        if ($superAdminsOwn->isNotEmpty()) {
+            // The catalogue keeps its words; the TV app's permissions are named.
+            throw ValidationException::withMessages(['permissions' => $superAdminsOwn->every(fn (Permission $permission) => str_starts_with($permission->name, 'permission-'))
+                ? 'Permission management belongs to the Super-Admin role alone.'
+                : $superAdminsOwn->pluck('display_name')->join(', ', ' and ').($superAdminsOwn->count() === 1 ? ' belongs' : ' belong').' to the Super-Admin role alone.']);
         }
 
         $aboveTheOrganizations = $type === 'platform'

@@ -60,12 +60,15 @@ class Permission extends Model
     ];
 
     /**
-     * The permission catalogue itself stays with the Super-Admin role alone (owner's rule):
-     * every route names its permission in code, so renaming a row either breaks a feature for
-     * everybody or turns a harmless permission into a powerful one.
+     * What stays with the Super-Admin role alone, never on another role:
+     *
+     *  - the permission catalogue itself (owner's rule): every route names its permission in code, so renaming a row either
+     *    breaks a feature for everybody or turns a harmless permission into a powerful one;
+     *  - Developer → TV App (owner, 2026-10-10): the app every television installs, whose new version every TV is offered.
      */
     public const SUPER_ADMIN_ONLY = [
         'permission-view', 'permission-store', 'permission-update', 'permission-destroy',
+        'player-app-view', 'player-app-store', 'player-app-destroy',
     ];
 
     /** The label of every permission the application ships with. */
@@ -109,6 +112,9 @@ class Permission extends Model
         'permission-store' => 'Create Permissions',
         'permission-update' => 'Update Permissions',
         'permission-destroy' => 'Delete Permissions',
+        'player-app-view' => 'View TV App',
+        'player-app-store' => 'Upload TV App',
+        'player-app-destroy' => 'Delete TV App Versions',
     ];
 
     protected $fillable = ['name', 'label'];

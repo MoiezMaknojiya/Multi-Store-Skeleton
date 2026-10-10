@@ -53,7 +53,7 @@ token with every request.
 
 **`uploads`** (a row per open upload, `App\Models\Upload`): a random uuid, the user, the organization it will count to (NULL for
 the platform's library and the ads network; the foreign key cascades), `purpose` (`media`, `channel`, `campaign`,
-`asset`), the file's name and claimed type, its `size` and the bytes `received`, and `expires_at` — 24 hours. The bytes
+`asset`, and `app-release` for the TV app — §3), the file's name and claimed type, its `size` and the bytes `received`, and `expires_at` — 24 hours. The bytes
 are `{id}.part` on the `uploads` disk (config/filesystems.php): `storage/app/private/uploads`, private, never under
 `public/` — and a root of its own for the browser tests (`storage/app/dusk-uploads`) and the backend tests
 (`storage/framework/testing/uploads`), as the `public` disk has, because the prune takes every part no row names and
@@ -80,6 +80,13 @@ through the foreign key, and the next prune takes their parts.
 the request's `file` before any rule runs. Anything else is refused on `file`: "That upload is not finished, or it
 has expired. Choose the file again." — and a request carrying both is refused too. The controllers forget the upload
 once its row is made; a refused one stays for the person to try again, until it expires.
+
+**A fifth door, the TV app (2026-10-10):** Developer → TV App takes the Android player's APK through the same box in
+`form` mode (`kind="apk"`): purpose `app-release`, opened only for a super admin holding Upload TV App (403 otherwise),
+an `.apk` name (415, "Only the TV app can be uploaded here…") of at most 200 MB (`PlayerAppRelease::MAX_BYTES`, 413) —
+no organization's wall, the server's reserve still asked when it is published. `StorePlayerAppReleaseRequest` takes the
+finished upload like the four, and the page asks `POST /developer/app/inspect` for the version first (rule 02,
+**Developer → TV App**).
 
 ## 4. The browser
 

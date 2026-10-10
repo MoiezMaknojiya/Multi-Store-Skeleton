@@ -29,7 +29,7 @@ class Upload extends Model
     use HasUuids;
 
     /** What an upload may be opened for: the four places that take a file. */
-    public const PURPOSES = ['media', 'channel', 'campaign', 'asset'];
+    public const PURPOSES = ['media', 'channel', 'campaign', 'asset', 'app-release'];
 
     /** Where the bytes wait (config/filesystems.php): private, never served, a folder of its own per environment. */
     public const DISK = 'uploads';

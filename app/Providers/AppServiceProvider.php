@@ -214,6 +214,11 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('invitation-response', fn (Request $request) => Limit::perMinute(20)
             ->by('invitation-response:'.$request->ip()));
 
+        // A television asking whether its app has a newer version (/player-app/latest.json): when the app starts and once a
+        // day, so an organization's whole row of sets on one line stays far inside it.
+        RateLimiter::for('player-app', fn (Request $request) => Limit::perMinute(60)
+            ->by('player-app:'.$request->ip()));
+
         // Installing a font reaches OUT of this server to Google and writes files, so it is counted
         // even though it needs `ad-store` or `ad-update` to get here at all: a loop in a client must
         // not be able to pull a hundred families down. One family is one request, and a design needs

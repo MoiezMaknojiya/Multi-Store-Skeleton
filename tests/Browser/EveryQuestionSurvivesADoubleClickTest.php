@@ -10,6 +10,7 @@ use App\Models\Invitation;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\Permission;
+use App\Models\PlayerAppRelease;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
@@ -58,12 +59,13 @@ class EveryQuestionSurvivesADoubleClickTest extends DuskTestCase
         $platformChannel = Channel::factory()->create(['name' => 'GAMA Wholesale']);
         ChannelAd::factory()->create(['channel_id' => $platformChannel->id, 'media_id' => Media::factory()->create(['organization_id' => null])->id]);
         User::factory()->create(['first_name' => 'Naveed', 'last_name' => 'Khan'])->organizations()->attach(0, ['role_id' => Role::create(['name' => 'Regional Admin', 'is_global' => true])->id]);
+        PlayerAppRelease::create(['version_code' => 1, 'version_name' => '1.0', 'path' => 'player-app/TheDisplaySolution-1.0-1.apk', 'size' => 9_000_000, 'sha256' => str_repeat('a', 64)]);
 
         $this->browse(function (Browser $browser) use ($admin, $screen, $platformChannel) {
             $this->freshSession($browser);
             $browser->loginAs($admin);
 
-            $this->pressEveryQuestion($browser, ['/users', '/organizations', '/roles', '/permissions', '/channels', '/channels/'.$platformChannel->id,
+            $this->pressEveryQuestion($browser, ['/users', '/organizations', '/roles', '/permissions', '/developer', '/channels', '/channels/'.$platformChannel->id,
                 '/campaigns', '/activity', '/media', '/screens', '/screens/'.$screen->id, '/builder', '/builder/assets', '/profile']);
         });
     }

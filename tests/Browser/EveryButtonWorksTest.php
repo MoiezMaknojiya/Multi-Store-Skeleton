@@ -11,6 +11,7 @@ use App\Models\Invitation;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\Permission;
+use App\Models\PlayerAppRelease;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
@@ -62,6 +63,8 @@ class EveryButtonWorksTest extends DuskTestCase
     public function test_every_button_above_the_organizations_works(): void
     {
         $admin = $this->seedSuperAdmin();
+        // A version of the TV app, so Developer draws its row (the file is never fetched here).
+        PlayerAppRelease::create(['version_code' => 1, 'version_name' => '1.0', 'path' => 'player-app/TheDisplaySolution-1.0-1.apk', 'size' => 9_000_000, 'sha256' => str_repeat('a', 64), 'notes' => 'The first release.']);
         [$alpha, $screen, $platformChannel] = $this->aOrganization();
         Organization::factory()->create(['name' => 'Orphan Organization']);
         Campaign::factory()->create(['name' => 'Summer Cola Campaign']);
@@ -79,6 +82,7 @@ class EveryButtonWorksTest extends DuskTestCase
                 '/roles',
                 '/permissions',
                 '/activity',
+                '/developer',
                 '/channels',
                 '/channels/'.$platformChannel->id,
                 '/campaigns',

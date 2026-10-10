@@ -18,6 +18,7 @@ use App\Http\Controllers\Platform\OrganizationBillingController;
 use App\Http\Controllers\Platform\OrganizationController;
 use App\Http\Controllers\Platform\PermissionController;
 use App\Http\Controllers\Platform\PlatformInvitationController;
+use App\Http\Controllers\Platform\PlayerAppController;
 use App\Http\Controllers\Platform\UserController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoleController;
@@ -75,6 +76,10 @@ Route::get('/player.webmanifest', fn () => response()->json([
     'theme_color' => '#000000',
     'icons' => $appIcons,
 ])->header('Content-Type', 'application/manifest+json'))->name('player.manifest');
+
+// The TV app's newest version (Developer → TV App): what the Android player asks when it starts and once a day, to offer an
+// update. Open — a television has no session — and limited per address.
+Route::get('/player-app/latest.json', [PlayerAppController::class, 'latest'])->middleware('throttle:player-app')->name('player-app.latest');
 
 // -----------------------------------------------------------------------
 // Invitations  (the link in the email — open to guests on purpose: the
@@ -464,6 +469,19 @@ Route::middleware(['auth', 'verified', 'organization.active', 'throttle:admin'])
         Route::put('/{permission}', [PermissionController::class, 'update'])->middleware('can:permission-update')->name('permissions.update');
         // Delete Permission
         Route::delete('/{permission}', [PermissionController::class, 'destroy'])->middleware('can:permission-destroy')->name('permissions.destroy');
+    });
+
+    // -------------------------------------------------------------------
+    // Developer → TV App  (/developer/*)
+    // -------------------------------------------------------------------
+    // The super admin alone (owner, 2026-10-10): the permissions are Super-Admin's own (Permission::SUPER_ADMIN_ONLY), and the
+    // `super-admin-tier` lock holds should one reach another role. A new version is offered to every TV with the app.
+    Route::prefix('developer')->middleware('can:super-admin-tier')->group(function () {
+        Route::get('/', [PlayerAppController::class, 'index'])->middleware('can:player-app-view')->name('developer.index');
+        Route::get('/app/releases/data', [PlayerAppController::class, 'data'])->middleware('can:player-app-view')->name('developer.app.data');
+        Route::post('/app/inspect', [PlayerAppController::class, 'inspect'])->middleware('can:player-app-store')->name('developer.app.inspect');
+        Route::post('/app/releases', [PlayerAppController::class, 'store'])->middleware('can:player-app-store')->name('developer.app.store');
+        Route::delete('/app/releases/{release}', [PlayerAppController::class, 'destroy'])->whereNumber('release')->middleware('can:player-app-destroy')->name('developer.app.destroy');
     });
 
 });

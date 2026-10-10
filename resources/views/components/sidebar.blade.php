@@ -146,6 +146,17 @@
             icon="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
         @endcan
 
+        {{-- Developer, last (owner, 2026-10-10): the TV app's versions — the super admin's alone, as its route group is. --}}
+        @can('super-admin-tier')
+            @can('player-app-view')
+            <x-sidebar.nav-item
+                href="{{ route('developer.index') }}"
+                routeMatch="developer.*"
+                label="Developer"
+                icon="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
+            @endcan
+        @endcan
+
     </nav>
 
     {{-- The account at the foot of the bar opens Settings: the profile, and the organization's settings. --}}

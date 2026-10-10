@@ -10,6 +10,7 @@ use App\Models\Invitation;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\Permission;
+use App\Models\PlayerAppRelease;
 use App\Models\Role;
 use App\Models\Screen;
 use Illuminate\Routing\Middleware\ThrottleRequests;
@@ -53,6 +54,9 @@ function pausedOrganizationRows(Organization $organization, $owner): array
         'invitation' => Invitation::factory()->create(['organization_id' => $organization->id])->id,
         'permission' => Permission::firstOrCreate(['name' => 'media-view'])->id,
         'campaign' => Campaign::factory()->create()->id,
+        'release' => PlayerAppRelease::create([
+            'version_code' => 1, 'version_name' => '1.0', 'path' => 'player-app/paused.apk', 'size' => 10, 'sha256' => str_repeat('a', 64),
+        ])->id,
         'organization' => $organization->id,
         'upload' => (string) Str::uuid(),
     ];

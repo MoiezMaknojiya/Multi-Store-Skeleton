@@ -9,6 +9,7 @@ use App\Models\Campaign;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\Permission;
+use App\Models\PlayerAppRelease;
 use App\Models\Role;
 use App\Models\Upload;
 use App\Models\User;
@@ -125,8 +126,8 @@ abstract class DuskTestCase extends BaseTestCase
     /**
      * Every file on the shelves a test can write to: the media libraries (an organization's,
      * and the platform's under media/platform), the shelf channels kept their files on
-     * before they took them from the libraries, the campaigns, and the Ad Builder's own
-     * (its assets and published pages, and the fonts it installs).
+     * before they took them from the libraries, the campaigns, the Ad Builder's own
+     * (its assets and published pages, and the fonts it installs) and the TV app's versions.
      *
      * @return list<string>
      */
@@ -137,7 +138,7 @@ abstract class DuskTestCase extends BaseTestCase
 
             return array_merge(...array_map(
                 fn (string $shelf) => $disk->allFiles($shelf),
-                ['media', 'channels', 'campaigns', 'builder', 'fonts'],
+                ['media', 'channels', 'campaigns', 'builder', 'fonts', 'player-app'],
             ));
         } catch (\Throwable) {
             return [];
@@ -175,6 +176,11 @@ abstract class DuskTestCase extends BaseTestCase
             }
 
             foreach (BuilderAd::whereNotNull('thumbnail_path')->pluck('thumbnail_path') as $path) {
+                $paths[str_replace('\\', '/', $path)] = true;
+            }
+
+            // The TV app's versions (Developer → TV App).
+            foreach (PlayerAppRelease::pluck('path') as $path) {
                 $paths[str_replace('\\', '/', $path)] = true;
             }
 

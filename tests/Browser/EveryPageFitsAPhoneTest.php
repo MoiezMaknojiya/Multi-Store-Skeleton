@@ -11,6 +11,7 @@ use App\Models\Invitation;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\Permission;
+use App\Models\PlayerAppRelease;
 use App\Models\PlaylistItem;
 use App\Models\Role;
 use App\Models\Screen;
@@ -47,6 +48,8 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
     public function test_every_page_and_dialog_above_the_organizations_fits_a_phone(): void
     {
         $admin = $this->seedSuperAdmin();
+        // A version of the TV app, so Developer draws its row (the file is never fetched here).
+        PlayerAppRelease::create(['version_code' => 1, 'version_name' => '1.0', 'path' => 'player-app/TheDisplaySolution-1.0-1.apk', 'size' => 9_000_000, 'sha256' => str_repeat('a', 64), 'notes' => 'The first release.']);
         [$alpha, $screen, $platformChannel] = $this->aBusyOrganization();
 
         Invitation::factory()->forPlatform()->create([
@@ -66,6 +69,7 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
                 '/roles' => ['role-form', 'role-permissions', 'confirm-role-deletion'],
                 '/permissions' => ['permission-form-modal', 'confirm-permission-deletion'],
                 '/activity' => ['confirm-activity-maintenance'],
+                '/developer' => ['confirm-tv-app-deletion'],
                 '/channels' => ['channel-form-modal', 'confirm-channel-deletion'],
                 '/channels/'.$platformChannel->id => ['channel-ad-modal'],
                 '/campaigns' => ['campaign-form-modal'],
