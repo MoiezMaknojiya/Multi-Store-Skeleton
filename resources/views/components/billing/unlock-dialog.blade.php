@@ -7,11 +7,11 @@
     $words = [
         'premium_templates' => [
             'Unlock Premium Templates',
-            'Every premium template, and every new one we add, for $'.\App\Services\BillingSummary::PREMIUM_TEMPLATES_PRICE.'. Once unlocked, the ads you make from them are yours to keep.',
+            'Every premium template, and every new one we add, for $'.\App\Services\BillingSummary::PREMIUM_TEMPLATES_PRICE.' a month. Once unlocked, the ads you make from them are yours to keep.',
         ],
         'platform_channels' => [
             'Unlock Platform Channels',
-            'Every platform channel, and every new one we add, on all your screens, for $'.\App\Services\BillingSummary::PLATFORM_CHANNELS_PRICE.'. Your own channels stay free.',
+            'Every platform channel, and every new one we add, on all your screens, for $'.\App\Services\BillingSummary::PLATFORM_CHANNELS_PRICE.' a month. Your own channels stay free.',
         ],
     ][$feature];
 @endphp

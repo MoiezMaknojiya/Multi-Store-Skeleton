@@ -316,15 +316,15 @@
                                 <p class="text-sm font-medium text-gray-900 dark:text-white">Screens</p>
                                 <p class="text-xs text-gray-500 dark:text-gray-400" dusk="organization-billing-screens" x-text="screensLine()"></p>
                             </div>
-                            <p class="shrink-0 text-sm font-semibold text-gray-900 dark:text-white" dusk="organization-billing-total"
-                               x-text="'$' + (billing?.monthly_total ?? 0) + ' / month'"></p>
+                            <p class="shrink-0 text-sm font-semibold text-gray-900 dark:text-white" dusk="organization-billing-screens-total"
+                               x-text="'$' + (billing?.screens_monthly ?? 0) + ' / month'"></p>
                         </div>
 
                         @foreach (['premium_templates' => 'Premium Templates', 'platform_channels' => 'Platform Channels'] as $feature => $title)
                             <div class="flex flex-wrap items-center justify-between gap-3 py-4">
                                 <div class="min-w-0 flex-1">
                                     <p class="text-sm font-medium text-gray-900 dark:text-white" id="billing-{{ $feature }}-label">
-                                        {{ $title }} · $<span x-text="billing?.features.{{ $feature }}.price"></span>
+                                        {{ $title }} · $<span x-text="billing?.features.{{ $feature }}.price"></span> a month
                                     </p>
                                     <p class="text-xs text-gray-500 dark:text-gray-400" x-text="featureLine('{{ $feature }}')"></p>
                                 </div>
@@ -351,6 +351,13 @@
                                 <p class="text-xs text-gray-500 dark:text-gray-400">Always free</p>
                             </div>
                             <span class="badge-neutral shrink-0">Free</span>
+                        </div>
+
+                        {{-- The month, as the switches stand in the dialog: each feature is $10 a month while it is unlocked. --}}
+                        <div class="flex flex-wrap items-center justify-between gap-3 py-4">
+                            <p class="text-sm font-semibold text-gray-900 dark:text-white">Every month, once billing starts</p>
+                            <p class="shrink-0 text-base font-semibold text-gray-900 dark:text-white" dusk="organization-billing-total"
+                               x-text="'$' + monthlyTotal() + ' / month'"></p>
                         </div>
                     </div>
 

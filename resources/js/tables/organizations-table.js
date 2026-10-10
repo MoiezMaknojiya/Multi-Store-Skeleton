@@ -118,6 +118,16 @@ export function registerOrganizationsTable(Alpine) {
                 return `${count} ${count === 1 ? 'screen' : 'screens'}: the first is free, then $${this.billing.screen_price} a month each`;
             },
 
+            /** The month as the switches stand in the dialog: the screens, and each feature while it is unlocked ($10 a month each). */
+            monthlyTotal() {
+                const features = this.billing?.features;
+                if (!features) return 0;
+
+                return (this.billing.screens_monthly ?? 0)
+                    + (this.billingForm.premium_templates_unlocked ? features.premium_templates.price : 0)
+                    + (this.billingForm.platform_channels_unlocked ? features.platform_channels.price : 0);
+            },
+
             /** What the switch says the organization may do, as it stands in the dialog. */
             featureLine(feature) {
                 const name = this.billingOrganization?.name ?? '';

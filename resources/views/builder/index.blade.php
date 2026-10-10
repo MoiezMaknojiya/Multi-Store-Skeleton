@@ -288,7 +288,7 @@
                             <x-icon name="lock-closed" class="mt-0.5 h-4 w-4 shrink-0" />
                             <div>
                                 <p class="font-semibold">Premium Templates are locked for {{ $organizationName }}.</p>
-                                <p class="mt-0.5">Look at every template and preview it. To use them, unlock Premium Templates for ${{ \App\Services\BillingSummary::PREMIUM_TEMPLATES_PRICE }}: contact us and we unlock them for you.</p>
+                                <p class="mt-0.5">Look at every template and preview it. To use them, unlock Premium Templates for ${{ \App\Services\BillingSummary::PREMIUM_TEMPLATES_PRICE }} a month: contact us and we unlock them for you.</p>
                             </div>
                         </div>
 

@@ -33,11 +33,12 @@ function pairedScreen(Organization $organization, string $name, string $pairedAt
 test('the first screen paired is free and every further one $5 a month', function () {
     $summary = fn () => app(BillingSummary::class)->for($this->organization->fresh());
 
-    expect($summary())->toMatchArray(['screen_count' => 0, 'free_screens' => 0, 'paid_screens' => 0, 'monthly_total' => 0]);
+    // Both features start unlocked, $10 a month each, so the month starts at $20 with no screen at all.
+    expect($summary())->toMatchArray(['screen_count' => 0, 'free_screens' => 0, 'paid_screens' => 0, 'screens_monthly' => 0, 'features_monthly' => 20, 'monthly_total' => 20]);
 
     $tv2 = pairedScreen($this->organization, 'Tv2', '2026-10-06 10:05:00');
     $tv1 = pairedScreen($this->organization, 'Tv1', '2026-10-06 10:00:00');
-    expect($summary())->toMatchArray(['screen_count' => 2, 'free_screens' => 1, 'paid_screens' => 1, 'monthly_total' => 5]);
+    expect($summary())->toMatchArray(['screen_count' => 2, 'free_screens' => 1, 'paid_screens' => 1, 'screens_monthly' => 5, 'monthly_total' => 25]);
 
     $tv3 = pairedScreen($this->organization, 'Tv3', '2026-10-06 10:05:00');
     $tv4 = pairedScreen($this->organization, 'Tv4', '2026-10-07 09:00:00');
@@ -47,7 +48,7 @@ test('the first screen paired is free and every further one $5 a month', functio
     expect(array_column($screens, 'name'))->toBe(['Tv1', 'Tv2', 'Tv3', 'Tv4'])
         ->and(array_column($screens, 'free'))->toBe([true, false, false, false])
         ->and(array_column($screens, 'monthly'))->toBe([0, 5, 5, 5])
-        ->and($summary())->toMatchArray(['screen_count' => 4, 'paid_screens' => 3, 'screen_price' => 5, 'monthly_total' => 15]);
+        ->and($summary())->toMatchArray(['screen_count' => 4, 'paid_screens' => 3, 'screen_price' => 5, 'screens_monthly' => 15, 'monthly_total' => 35]);
 
     // Another organization's screens are not counted.
     pairedScreen(Organization::factory()->create(), 'Elsewhere', '2026-10-01 00:00:00');
@@ -63,6 +64,26 @@ test('a new organization starts with everything unlocked, and the prices are the
     ]);
 });
 
+test('each feature is a subscription of $10 a month: it counts to the month while it is unlocked, and not after', function () {
+    // Owner, 2026-10-10: "montly $10 ka ha subscription ha 2no feature ki 10$".
+    pairedScreen($this->organization, 'Tv1', '2026-10-06 10:00:00');
+    pairedScreen($this->organization, 'Tv2', '2026-10-06 10:01:00');
+    $summary = function (array $switches) {
+        $this->organization->forceFill($switches)->save();
+
+        return app(BillingSummary::class)->for($this->organization->fresh());
+    };
+
+    expect($summary(['premium_templates_unlocked' => false, 'platform_channels_unlocked' => false]))
+        ->toMatchArray(['screens_monthly' => 5, 'features_monthly' => 0, 'monthly_total' => 5])
+        ->and($summary(['premium_templates_unlocked' => true, 'platform_channels_unlocked' => false]))
+        ->toMatchArray(['features_monthly' => 10, 'monthly_total' => 15])
+        ->and($summary(['premium_templates_unlocked' => false, 'platform_channels_unlocked' => true]))
+        ->toMatchArray(['features_monthly' => 10, 'monthly_total' => 15])
+        ->and($summary(['premium_templates_unlocked' => true, 'platform_channels_unlocked' => true]))
+        ->toMatchArray(['features_monthly' => 20, 'monthly_total' => 25]);
+});
+
 /* ── Settings → Billing, inside an organization ──────────────────────────── */
 
 test('the Owner reads Settings → Billing: the month, the features, every screen and whom to ask', function () {
@@ -75,16 +96,21 @@ test('the Owner reads Settings → Billing: the month, the features, every scree
 
     $this->get('/profile')->assertOk()->assertSee('dusk="settings-tab-billing"', false);
 
-    $this->get('/settings/billing')->assertOk()
+    $page = $this->get('/settings/billing')->assertOk()
         ->assertSee('dusk="billing-page"', false)
         ->assertSee('Billing has not started yet')
-        ->assertSeeInOrder(['Estimated every month', '$5', 'for 2 screens'])
-        ->assertSeeInOrder(['First screen', 'Free', '1 more screen × $5', '$5'])
-        ->assertSeeInOrder(['Premium Templates', '$10', 'Unlocked', 'Platform Channels', '$10', 'Locked', 'Your own ads and uploads', 'Free'])
-        ->assertSeeInOrder(['Tv1', 'Oct 6, 2026', 'Free', 'Tv2', 'Oct 6, 2026', '$5', 'Total', '$5'])
+        // The month: the one screen past the free one, and the feature that is unlocked — not the locked one.
+        ->assertSeeInOrder(['Estimated every month', '$15', 'once billing starts'])
+        ->assertSeeInOrder(['First screen', 'Free', '1 more screen × $5', '$5', 'Premium Templates', '$10'])
+        ->assertSeeInOrder(['A monthly subscription each', 'Premium Templates', '$10 a month', 'Unlocked', 'Platform Channels', '$10 a month', 'Locked', 'Your own ads and uploads', 'Free'])
+        ->assertSeeInOrder(['Tv1', 'Oct 6, 2026', 'Free', 'Tv2', 'Oct 6, 2026', '$5', 'Screens total', '$5'])
+        ->assertDontSee('Unlocked once')
         ->assertSee('No invoices yet')
         ->assertSee('Contact us, and we unlock it for you.')
         ->assertSee("Tell us your organization's name, Smart Stop.", false);
+
+    $month = str($page->getContent())->after('dusk="billing-month-lines"')->before('</dl>');
+    expect((string) $month)->toContain('Premium Templates')->not->toContain('Platform Channels');
 });
 
 test('the contact lines are the owner’s once given', function () {
@@ -127,7 +153,8 @@ test('the super admin reads an organization’s billing and turns its switches, 
 
     $this->getJson("/organizations/{$this->organization->id}/billing")->assertOk()
         ->assertJsonPath('billing.organization.name', 'Smart Stop')
-        ->assertJsonPath('billing.monthly_total', 5)
+        ->assertJsonPath('billing.screens_monthly', 5)
+        ->assertJsonPath('billing.monthly_total', 25)
         ->assertJsonPath('billing.features.premium_templates.unlocked', true);
 
     $this->putJson("/organizations/{$this->organization->id}/billing", ['premium_templates_unlocked' => false, 'platform_channels_unlocked' => true])

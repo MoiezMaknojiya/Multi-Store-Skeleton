@@ -327,7 +327,7 @@
                         <x-icon name="lock-closed" class="mt-0.5 h-4 w-4 shrink-0" />
                         <div>
                             <p class="font-semibold">Platform channels are locked for {{ $screen->organization?->name }}.</p>
-                            <p class="mt-0.5">See what they play. To put them on your screens, unlock every platform channel for ${{ \App\Services\BillingSummary::PLATFORM_CHANNELS_PRICE }}: contact us.</p>
+                            <p class="mt-0.5">See what they play. To put them on your screens, unlock every platform channel for ${{ \App\Services\BillingSummary::PLATFORM_CHANNELS_PRICE }} a month: contact us.</p>
                         </div>
                     </div>
 

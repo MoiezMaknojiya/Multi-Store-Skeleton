@@ -20,11 +20,10 @@
             <section class="card p-6" aria-labelledby="billing-month-title">
                 <h2 id="billing-month-title" class="text-sm font-medium text-gray-500 dark:text-gray-400">Estimated every month</h2>
                 <p class="mt-2 text-4xl font-semibold text-gray-900 dark:text-white" dusk="billing-monthly-total">${{ $billing['monthly_total'] }}</p>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    for {{ $billing['screen_count'] }} {{ Str::plural('screen', $billing['screen_count']) }}, once billing starts
-                </p>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">once billing starts</p>
 
-                <dl class="mt-5 space-y-2 border-t border-gray-100 pt-4 text-sm dark:border-gray-700">
+                {{-- The sum: the screens, then each feature while it is unlocked — a subscription of its own (owner, 2026-10-10). --}}
+                <dl class="mt-5 space-y-2 border-t border-gray-100 pt-4 text-sm dark:border-gray-700" dusk="billing-month-lines">
                     <div class="flex justify-between gap-3">
                         <dt class="text-gray-600 dark:text-gray-300">First screen</dt>
                         <dd class="font-medium text-gray-900 dark:text-white">Free</dd>
@@ -33,15 +32,23 @@
                         <dt class="text-gray-600 dark:text-gray-300">
                             {{ $billing['paid_screens'] }} more {{ Str::plural('screen', $billing['paid_screens']) }} × ${{ $billing['screen_price'] }}
                         </dt>
-                        <dd class="font-medium text-gray-900 dark:text-white">${{ $billing['monthly_total'] }}</dd>
+                        <dd class="font-medium text-gray-900 dark:text-white">${{ $billing['screens_monthly'] }}</dd>
                     </div>
+                    @foreach (['premium_templates' => 'Premium Templates', 'platform_channels' => 'Platform Channels'] as $key => $title)
+                        @if ($billing['features'][$key]['unlocked'])
+                            <div class="flex justify-between gap-3">
+                                <dt class="text-gray-600 dark:text-gray-300">{{ $title }}</dt>
+                                <dd class="font-medium text-gray-900 dark:text-white">${{ $billing['features'][$key]['price'] }}</dd>
+                            </div>
+                        @endif
+                    @endforeach
                 </dl>
             </section>
 
             {{-- What may be unlocked, and what is always free. --}}
             <section class="card p-6 lg:col-span-2" aria-labelledby="billing-features-title">
                 <h2 id="billing-features-title" class="text-subheading">Features</h2>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Unlocked once, for the whole organization.</p>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">A monthly subscription each, for the whole organization.</p>
 
                 <ul class="mt-3 divide-y divide-gray-100 border-t border-gray-100 dark:divide-gray-700 dark:border-gray-700">
                     @foreach ([
@@ -54,7 +61,7 @@
                                 <p class="text-xs text-gray-500 dark:text-gray-400">{{ $description }}</p>
                             </div>
                             <div class="flex shrink-0 items-center gap-3">
-                                <span class="text-sm text-gray-600 dark:text-gray-300">${{ $billing['features'][$key]['price'] }}</span>
+                                <span class="text-sm text-gray-600 dark:text-gray-300">${{ $billing['features'][$key]['price'] }} a month</span>
                                 @if ($billing['features'][$key]['unlocked'])
                                     <span class="badge-success">Unlocked</span>
                                 @else
@@ -116,8 +123,8 @@
                         @if ($billing['screen_count'] > 0)
                             <tfoot>
                                 <tr class="border-t border-gray-200 dark:border-gray-700">
-                                    <td colspan="2" class="px-5 py-3 font-semibold text-gray-900 dark:text-white">Total</td>
-                                    <td class="px-5 py-3 text-right font-semibold text-gray-900 dark:text-white">${{ $billing['monthly_total'] }}</td>
+                                    <td colspan="2" class="px-5 py-3 font-semibold text-gray-900 dark:text-white">Screens total</td>
+                                    <td class="px-5 py-3 text-right font-semibold text-gray-900 dark:text-white">${{ $billing['screens_monthly'] }}</td>
                                 </tr>
                             </tfoot>
                         @endif

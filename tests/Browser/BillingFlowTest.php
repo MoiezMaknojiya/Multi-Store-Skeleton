@@ -42,12 +42,15 @@ class BillingFlowTest extends DuskTestCase
             $this->presses($browser, $this->centreOf($browser, '[dusk="settings-tab-billing"]'), 1);
             $browser->waitFor('@billing-page')
                 ->assertAttribute('@settings-tab-billing', 'aria-current', 'page')
-                ->assertSeeIn('@billing-monthly-total', '$15')
+                // Three screens past the free one, and both features while they are unlocked: $10 a month each.
+                ->assertSeeIn('@billing-monthly-total', '$35')
                 ->assertSee('3 more screens × $5')
+                ->assertSeeIn('@billing-month-lines', 'Premium Templates')
+                ->assertSeeIn('@billing-month-lines', 'Platform Channels')
                 ->assertSeeIn('@billing-feature-premium_templates', 'Unlocked')
                 ->assertSeeIn('@billing-feature-platform_channels', 'Unlocked')
                 ->assertSeeIn('@billing-screens', 'Tv1')
-                ->assertSeeIn('@billing-screens', 'Total')
+                ->assertSeeIn('@billing-screens', 'Screens total')
                 ->assertSeeIn('@billing-contact', 'Contact us')
                 ->screenshot('billing-tab');
             $this->assertSame('Settings · Laravel', $browser->driver->getTitle());
@@ -79,7 +82,8 @@ class BillingFlowTest extends DuskTestCase
             // A double click opens the dialog and leaves it open, on Smart Stop's numbers.
             $this->presses($browser, $this->centreOf($browser, '[dusk="billing-organization-'.$smart->id.'"]'), 2);
             $browser->waitForTextIn('@organization-billing', 'Billing · Smart Stop')
-                ->waitForTextIn('@organization-billing-total', '$15 / month')
+                ->waitForTextIn('@organization-billing-total', '$35 / month')
+                ->assertSeeIn('@organization-billing-screens-total', '$15 / month')
                 ->assertSeeIn('@organization-billing-screens', '4 screens: the first is free, then $5 a month each')
                 ->assertDisabled('@organization-billing-save')
                 ->assertAttribute('@billing-switch-premium_templates', 'aria-checked', 'true');
@@ -97,6 +101,7 @@ class BillingFlowTest extends DuskTestCase
             $this->presses($browser, $this->centreOf($browser, '[dusk="billing-switch-premium_templates"]'), 1);
             $browser->pause(200)->assertAttribute('@billing-switch-premium_templates', 'aria-checked', 'false')
                 ->assertSee('Locked: Smart Stop sees the templates and cannot use them')
+                ->assertSeeIn('@organization-billing-total', '$25 / month')   // the month follows the switch before Save
                 ->assertEnabled('@organization-billing-save')
                 ->screenshot('billing-dialog-switch');
             $this->countRequests($browser, 'PUT', '/organizations/'.$smart->id.'/billing');
@@ -115,7 +120,7 @@ class BillingFlowTest extends DuskTestCase
             $this->key($browser, 'Escape');
             $browser->waitUntilMissing('@organization-billing');
             $this->presses($browser, $this->centreOf($browser, '[dusk="billing-organization-'.$moiez->id.'"]'), 1);
-            $browser->waitForTextIn('@organization-billing-total', '$0 / month', 15)->pause(1800)
+            $browser->waitForTextIn('@organization-billing-total', '$20 / month', 15)->pause(1800)
                 ->assertSeeIn('@organization-billing', 'Billing · Moiez Store')
                 ->assertSeeIn('@organization-billing-screens', '1 screen: the first is free');
             $this->network($browser, 0);
@@ -195,6 +200,7 @@ class BillingFlowTest extends DuskTestCase
             $this->presses($browser, $this->centreOf($browser, '[dusk="unlock-channel-'.$gama->id.'"]'), 2);
             $browser->waitFor('@unlock-platform-channels')->pause(400)
                 ->assertSeeIn('@unlock-platform-channels', 'Unlock Platform Channels')
+                ->assertSeeIn('@unlock-platform-channels', 'for $10 a month')   // a subscription (owner, 2026-10-10)
                 ->assertSeeIn('@unlock-platform-channels', 'Your own channels stay free.');
             $this->presses($browser, $this->centreOf($browser, '[dusk="unlock-platform-channels-close"]'), 2);
             $browser->waitUntilMissing('@unlock-platform-channels')->pause(400);

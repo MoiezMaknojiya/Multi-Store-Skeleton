@@ -14,11 +14,11 @@ sub ki honti ha professional kaam chiya", "har organization ki row per edit k ba
 |---|---|---|
 | The first screen | Free | The screen paired first (`paired_at`, then `id`). |
 | Every further screen | $5 a month | Counted, never refused, until billing starts. |
-| Premium Templates | $10 | Every platform ad for every organization, used as the organization's own copy (Use This Template). |
-| Platform Channels | $10 | Every channel the platform makes for every organization (GAMA and any other). |
+| Premium Templates | $10 a month | Every platform ad for every organization, used as the organization's own copy (Use This Template). |
+| Platform Channels | $10 a month | Every channel the platform makes for every organization (GAMA and any other). |
 | The organization's own ads, uploads and channels | Free | Whatever the organization makes itself, or the platform makes for that one organization — a channel too: Add Channel above the organizations has an Organization list (All organizations, or one), 2026-10-08. |
 
-Whether each $10 is monthly or paid once is decided when Stripe comes. The prices live once, in `App\Services\BillingSummary`.
+Each $10 is a subscription of its own, monthly (owner, 2026-10-10: "montly $10 ka ha subscription ha 2no feature ki 10$"): while a feature is unlocked it counts to the month's estimate (`features_monthly`, beside `screens_monthly`, making `monthly_total`), on Settings → Billing and in the platform's Billing dialog, which sums it as its switches stand before Save. The prices live once, in `App\Services\BillingSummary`.
 
 ## 2. Data
 
