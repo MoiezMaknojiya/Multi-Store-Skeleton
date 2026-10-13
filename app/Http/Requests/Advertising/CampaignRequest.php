@@ -122,6 +122,9 @@ class CampaignRequest extends FormRequest
             'file.mimes' => 'Only '.StoreMediaRequest::FORMATS_IN_WORDS.' can be uploaded.',
             'file.max' => StoreMediaRequest::tooLargeMessage(),
             'screen_ids.*.exists' => 'One of the chosen screens no longer exists. Reload the page and choose again.',
+            // The form sends the ids it listed: anything else came from a request made by hand.
+            'screen_ids' => 'Choose the screens from the list.',
+            'screen_ids.*' => 'Choose the screens from the list.',
             'duration_seconds.required' => 'Say how many seconds it stays on screen.',
             'duration_seconds.integer' => 'Give the seconds as a whole number.',
             'duration_seconds.max' => 'An advert stays on screen for at most '.Campaign::MAX_AD_SECONDS.' seconds: one break.',

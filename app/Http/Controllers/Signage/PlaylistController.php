@@ -34,6 +34,11 @@ class PlaylistController extends Controller
      *  organization actually means, and a hundred is a runaway client. */
     private const MAX_RULES = 10;
 
+    /** What a request made by hand is told when the page's own list or schedule could not be read. */
+    private const UNREADABLE_PLAYLIST = 'The playlist could not be read. Reload the page and try again.';
+
+    private const UNREADABLE_SCHEDULE = 'A schedule could not be read. Set it again.';
+
     /** The current playlist, with just enough of each file to render a row. */
     public function index(Screen $screen): JsonResponse
     {
@@ -164,6 +169,13 @@ class PlaylistController extends Controller
             'items.*.duration_seconds.integer' => 'Line :position: give the seconds as a whole number.',
             'items.*.duration_seconds.min' => 'Line :position: a picture stays on screen for at least '.PlaylistItem::MIN_IMAGE_SECONDS.' seconds.',
             'items.*.duration_seconds.max' => 'Line :position: a picture stays on screen for at most 24 hours.',
+            // What only a request made by hand could get wrong: the page sends these from its own list.
+            'items.present' => self::UNREADABLE_PLAYLIST,
+            'items.array' => self::UNREADABLE_PLAYLIST,
+            'items.*.media_id' => 'Line :position: its file could not be read. Reload the page and try again.',
+            'items.*.channel_id' => 'Line :position: its channel could not be read. Reload the page and try again.',
+            'version.required' => self::UNREADABLE_PLAYLIST,
+            'version.string' => self::UNREADABLE_PLAYLIST,
             ...$this->ruleMessages(),
         ]);
 
@@ -225,6 +237,9 @@ class PlaylistController extends Controller
             'target_screen_ids.*' => ['integer', 'min:1'],
         ], [
             'target_screen_ids.required' => 'Choose at least one screen to copy to.',
+            'target_screen_ids.min' => 'Choose at least one screen to copy to.',
+            'target_screen_ids.array' => 'Choose the screens to copy to from the list.',
+            'target_screen_ids.*' => 'Choose the screens to copy to from the list.',
         ]);
 
         $targets = Screen::visibleTo(auth()->user())
@@ -323,9 +338,12 @@ class PlaylistController extends Controller
         $validated = $request->validate([
             ...$perRule,
             'rules' => ['present', 'array', 'max:'.self::MAX_RULES],
-            'rules.*' => ['array'],
             'days' => ['nullable', 'integer', 'min:1', 'max:60'],
-        ], collect($this->ruleMessages())->mapWithKeys(fn (string $message, string $key) => [$rekey($key) => $message])->all());
+        ], [
+            ...collect($this->ruleMessages())->mapWithKeys(fn (string $message, string $key) => [$rekey($key) => $message])->all(),
+            'rules.present' => self::UNREADABLE_SCHEDULE,
+            'days' => 'Show between 1 and 60 days.',
+        ]);
 
         // From the screen's own today, not the server's — a preview shown to somebody
         // setting up a television in another timezone has to agree with what that
@@ -665,6 +683,8 @@ class PlaylistController extends Controller
 
         return [
             'items.*.rules' => ['array', 'max:'.self::MAX_RULES],
+            // Each rule is a set of fields: anything else would reach the mapper and die in it.
+            'items.*.rules.*' => ['array'],
             // WHAT TIME: wall-clock, to the minute, both or neither (neither is the whole day). An end
             // BEFORE the start is allowed and runs past midnight; an end EQUAL to the start is not,
             // because there is no honest reading of it.
@@ -710,6 +730,14 @@ class PlaylistController extends Controller
             'items.*.rules.*.starts_on.date_format' => 'Enter the whole date, or leave it blank.',
             'items.*.rules.*.ends_on.date_format' => 'Enter the whole date, or leave it blank.',
             'items.*.rules.*.recurrence_until.date_format' => 'Enter the whole date, or leave it blank.',
+            // The fields the window fills from its own choices: only a request made by hand gets them wrong.
+            'items.*.rules.array' => self::UNREADABLE_SCHEDULE,
+            'items.*.rules.*.array' => self::UNREADABLE_SCHEDULE,
+            'items.*.rules.*.recurrence_type' => self::UNREADABLE_SCHEDULE,
+            'items.*.rules.*.recurrence_weekdays' => self::UNREADABLE_SCHEDULE,
+            'items.*.rules.*.recurrence_weekdays.*' => self::UNREADABLE_SCHEDULE,
+            'items.*.rules.*.recurrence_ordinal' => self::UNREADABLE_SCHEDULE,
+            'items.*.rules.*.recurrence_weekday' => self::UNREADABLE_SCHEDULE,
         ];
     }
 

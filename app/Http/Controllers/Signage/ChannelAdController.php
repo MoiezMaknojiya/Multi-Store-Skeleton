@@ -216,17 +216,18 @@ class ChannelAdController extends Controller implements HasMiddleware
      */
     public function reorder(Request $request, Channel $channel): JsonResponse
     {
+        $changed = 'The ads in this channel have changed. Reload the page and try again.';
         $validated = $request->validate([
             'ad_ids' => ['present', 'array'],
             'ad_ids.*' => ['integer', 'min:1', 'distinct'],
-        ]);
+        ], ['ad_ids' => $changed, 'ad_ids.*' => $changed]);
 
         $posted = collect($validated['ad_ids'])->map(fn (int|string $id) => (int) $id)->values();
         $current = ChannelAd::where('channel_id', $channel->id)->pluck('id')->map(fn (int|string $id) => (int) $id);
 
         if ($posted->sort()->values()->all() !== $current->sort()->values()->all()) {
             throw ValidationException::withMessages([
-                'ad_ids' => 'The ads in this channel have changed. Reload the page and try again.',
+                'ad_ids' => $changed,
             ]);
         }
 

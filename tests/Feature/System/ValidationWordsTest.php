@@ -4,6 +4,7 @@ use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\Media;
 use App\Models\Organization;
+use App\Models\Permission;
 use App\Models\Screen;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -134,6 +135,71 @@ test('a schedule\'s hours are refused in the words its window says', function (a
     'the same time twice' => [['start_time' => '11:00', 'end_time' => '11:00'], 'end_time', 'Time: the start and the end cannot be the same. To run past midnight, set an end earlier than the start.'],
     'a time typed in part' => [['start_time' => '11', 'end_time' => '15:00'], 'start_time', 'Time: enter the whole time, or choose All day.'],
 ]);
+
+test('a list of ids or rules posted in the wrong shape is refused in the page\'s words, never with its raw path', function () {
+    // Laravel's own wording: "The permissions.0 field must be an integer.", "The ad_ids.1 field has a duplicate value."
+    $laravelWords = '/\bfield (must|is|has)\b|\.[0-9]+ /';
+    $refused = function ($response, string $field, string $words) use ($laravelWords) {
+        $response->assertStatus(422);
+        $said = collect($response->json('errors'))->flatten()->all();
+        expect($said)->not->toBeEmpty();
+        foreach ($said as $message) {
+            expect(preg_match($laravelWords, $message))->toBe(0, "Laravel's own words reached the page: {$message}");
+        }
+        expect(collect($response->json('errors'))->filter(fn ($messages, $key) => str_starts_with($key, $field))->flatten()->all())
+            ->toContain($words);
+    };
+
+    $screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
+    $other = Screen::factory()->create(['organization_id' => $this->organization->id]);
+    $file = Media::factory()->create(['organization_id' => $this->organization->id]);
+    $channel = Channel::factory()->create(['organization_id' => $this->organization->id]);
+
+    // A screen's playlist: Copy to Other Screens, the schedule window's preview, and a line's own rules.
+    foreach (['x', ['x'], [0]] as $targets) {
+        $refused($this->postJson("/screens/{$screen->id}/playlist/copy", ['target_screen_ids' => $targets]),
+            'target_screen_ids', 'Choose the screens to copy to from the list.');
+    }
+    $refused($this->postJson("/screens/{$screen->id}/playlist/preview", ['rules' => ['x']]),
+        'rules', 'A schedule could not be read. Set it again.');
+    $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
+    $refused($this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => [['media_id' => $file->id, 'duration_seconds' => 10, 'rules' => ['x']]]]),
+        'items.0.rules', 'A schedule could not be read. Set it again.');
+
+    // A channel's ads put in order.
+    foreach ([['x'], [1, 1]] as $ids) {
+        $refused($this->putJson("/channels/{$channel->id}/ads/order", ['ad_ids' => $ids]),
+            'ad_ids', 'The ads in this channel have changed. Reload the page and try again.');
+    }
+
+    // The platform: a role's permissions, an advert's screens, and the ads network by organization and by screen.
+    $admin = createSuperAdmin();
+    $this->actingAs($admin)->withSession([]);
+    $permission = Permission::where('name', 'screen-view')->value('id');
+    foreach (['x', ['x'], [$permission, $permission]] as $permissions) {
+        $refused($this->postJson('/roles', ['name' => 'Cashiers', 'type' => 'organization', 'permissions' => $permissions]),
+            'permissions', 'Choose the permissions from the list.');
+    }
+    // (A plain word among the screens is dropped before the rules, as the form always was: a list inside the list is not.)
+    $refused($this->post('/campaigns', ['name' => 'Cola', 'is_active' => '1', 'screen_ids' => [['x']], 'file' => UploadedFile::fake()->image('coke.jpg'), 'duration_seconds' => 8], ['Accept' => 'application/json']),
+        'screen_ids', 'Choose the screens from the list.');
+    foreach (['x', ['x']] as $ids) {
+        $refused($this->putJson('/network-ads/organizations', ['organization_ids' => $ids, 'accepts' => true]),
+            'organization_ids', 'Choose the organizations from the list.');
+    }
+
+    $this->actingAs($this->keeper)->withSession([
+        'current_organization_id' => $this->organization->id,
+        'impersonating_original_id' => $admin->id,
+        'impersonating_user_id' => $this->keeper->id,
+    ]);
+    foreach (['x', ['x']] as $ids) {
+        $refused($this->putJson('/network-ads/screens', ['screen_ids' => $ids, 'accepts' => true]),
+            'screen_ids', 'Choose the screens from the list.');
+    }
+
+    expect($other->fresh()->playlistItems()->count())->toBe(0);
+});
 
 test('an upload is refused in the words its form shows', function () {
     $this->postJson('/media', ['file' => UploadedFile::fake()->image('menu.jpg'), 'title' => str_repeat('a', 256)])

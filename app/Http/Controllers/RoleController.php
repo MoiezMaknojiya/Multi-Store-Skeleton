@@ -45,6 +45,9 @@ class RoleController extends Controller
     private const MESSAGES = [
         'permissions.required' => 'Choose at least one permission.',
         'permissions.min' => 'Choose at least one permission.',
+        // The checklist sends ids it listed: anything else came from a request made by hand.
+        'permissions.array' => 'Choose the permissions from the list.',
+        'permissions.*' => 'Choose the permissions from the list.',
         'type.required' => 'Choose what this role is for.',
         'type.in' => 'Choose what this role is for.',
     ];

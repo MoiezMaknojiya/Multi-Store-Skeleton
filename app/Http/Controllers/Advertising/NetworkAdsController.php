@@ -33,10 +33,13 @@ use Illuminate\Validation\ValidationException;
  */
 class NetworkAdsController extends Controller
 {
+    /** The switch is on or off: anything else came from a request made by hand. */
+    private const ON_OR_OFF = 'Turn advertising on or off.';
+
     /** Does this organization carry advertising at all? */
     public function organization(Request $request): JsonResponse
     {
-        $validated = $request->validate(['accepts' => ['required', 'boolean']]);
+        $validated = $request->validate(['accepts' => ['required', 'boolean']], ['accepts' => self::ON_OR_OFF]);
 
         $organization = $this->currentOrganization();
         $organization->update(['accepts_network_ads' => $validated['accepts']]);
@@ -68,6 +71,10 @@ class NetworkAdsController extends Controller
             'screen_ids' => ['required', 'array', 'min:1'],
             'screen_ids.*' => ['integer', 'min:1'],
             'accepts' => ['required', 'boolean'],
+        ], [
+            'screen_ids' => 'Choose the screens from the list.',
+            'screen_ids.*' => 'Choose the screens from the list.',
+            'accepts' => self::ON_OR_OFF,
         ]);
 
         $organization = $this->currentOrganization();
@@ -118,6 +125,10 @@ class NetworkAdsController extends Controller
             'organization_ids' => ['required', 'array', 'min:1'],
             'organization_ids.*' => ['integer', 'min:1'],
             'accepts' => ['required', 'boolean'],
+        ], [
+            'organization_ids' => 'Choose the organizations from the list.',
+            'organization_ids.*' => 'Choose the organizations from the list.',
+            'accepts' => self::ON_OR_OFF,
         ]);
 
         $organizations = Organization::whereIn('id', $validated['organization_ids'])->get();
