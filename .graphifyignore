@@ -1,0 +1,19 @@
+# What graphify's knowledge graph never reads (gitignore syntax): secrets, data, uploads, backups and what is built
+# or installed rather than written here.
+.env
+.env.*
+!.env.example
+storage/
+vendor/
+node_modules/
+public/build/
+public/storage
+public/dusk-storage
+bootstrap/cache/
+database/*.sqlite
+graphify-out/
+*.apk
+*.jks
+# The app icons hold no knowledge (logo and favicons).
+*.png
+*.svg
