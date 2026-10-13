@@ -9,3 +9,6 @@
 /.github export-ignore
 CHANGELOG.md export-ignore
 .styleci.yml export-ignore
+
+# Windows runs a .bat line by line and needs its CRLF endings (scripts/tv).
+*.bat text eol=crlf
