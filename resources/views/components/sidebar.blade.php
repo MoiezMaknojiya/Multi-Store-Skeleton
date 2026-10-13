@@ -163,8 +163,8 @@
     <div class="px-3 py-4 border-t border-gray-200 dark:border-gray-700">
         <a href="{{ route('profile.edit') }}" dusk="sidebar-settings" title="Settings"
            aria-label="Settings — {{ auth()->user()->name ?? 'User' }}"
-           @if (request()->routeIs('profile.*', 'organization-settings.*')) aria-current="page" @endif
-           class="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 {{ request()->routeIs('profile.*', 'organization-settings.*') ? 'bg-gray-100 dark:bg-gray-800' : '' }}">
+           @if (request()->routeIs('profile.*', 'organization-settings.*', 'billing.*')) aria-current="page" @endif
+           class="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 {{ request()->routeIs('profile.*', 'organization-settings.*', 'billing.*') ? 'bg-gray-100 dark:bg-gray-800' : '' }}">
             <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-semibold flex-shrink-0" aria-hidden="true">
                 {{ mb_strtoupper(mb_substr(auth()->user()->name ?: 'U', 0, 1)) }}
             </div>

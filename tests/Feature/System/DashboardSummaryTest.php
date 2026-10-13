@@ -5,10 +5,12 @@ use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\Media;
 use App\Models\Organization;
+use App\Models\Role;
 use App\Models\Screen;
 use App\Models\User;
 use App\Services\DiskGuard;
 use App\Services\OrganizationStorage;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 
 /*
@@ -262,6 +264,22 @@ test('the platform\'s dashboard: every part by its permission, and an organizati
         ->and($summary['attention'])->toBeNull()
         ->and($summary['activity'])->toBeNull();
     $response->assertDontSee('href="'.route('organizations.view').'"', false);
+});
+
+test('with the Owner role gone, the platform\'s dashboard still opens and says first that the role is missing', function () {
+    Organization::factory()->create(['name' => 'Orphan Organization']);
+    // Only straight in the database: the panel never deletes the Owner role.
+    DB::table('roles')->where('key', Role::OWNER)->delete();
+
+    $response = dashboardFor(createSuperAdmin());
+    $summary = $response->viewData('summary');
+
+    expect($summary['attention'])->toHaveCount(1)
+        ->and($summary['attention'][0])->toMatchArray([
+            'key' => 'owner-role-missing', 'tone' => 'error', 'text' => 'The Owner role is missing',
+            'detail' => 'No organization can be given an Owner until it is back. Run php artisan db:seed to put it back.',
+        ]);
+    $response->assertSee('dusk="dashboard-attention-owner-role-missing"', false)->assertSee('The Owner role is missing');
 });
 
 test('the platform\'s count of accounts is what its Users page lists to the viewer', function () {

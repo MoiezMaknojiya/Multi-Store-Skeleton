@@ -103,6 +103,17 @@ test('the organization’s settings are the Organizations tab of Settings; the s
     settingsAs($this->staff, $this->organization)->get('/profile')->assertOk()->assertDontSee('dusk="settings-tab-organization"', false);
 });
 
+test('the sidebar marks Settings as the page you are on, on every one of its tabs', function () {
+    $marked = '/<a[^>]*dusk="sidebar-settings"[^>]*aria-current="page"/';
+
+    foreach (['/profile', '/settings/organization', '/settings/billing'] as $tab) {
+        expect(preg_match($marked, settingsAs($this->owner, $this->organization)->get($tab)->assertOk()->getContent()))
+            ->toBe(1, "{$tab} does not mark Settings in the sidebar");
+    }
+
+    expect(preg_match($marked, settingsAs($this->owner, $this->organization)->get('/dashboard')->assertOk()->getContent()))->toBe(0);
+});
+
 /*
 | An organization changes hands on the Members page
 */

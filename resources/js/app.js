@@ -41,7 +41,7 @@ import { registerBuilderAssetsTable } from './tables/builder-assets-table.js';
 
 window.Alpine = Alpine;
 
-/* Toast notifications: one shared organization; call window.toast('...', 'error'|'success')
+/* Toast notifications: one shared store; call window.toast('...', 'error'|'success')
  * from anywhere. Errors deserve a readable message, not a browser alert(). A success goes after five
  * seconds, an error after ten (it may name what to do next), and neither while the pointer or the keyboard
  * is on it (hold/release). The timers live outside the reactive state. */

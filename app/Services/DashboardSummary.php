@@ -210,20 +210,33 @@ class DashboardSummary
         }
 
         if ($user->can('organization-view')) {
-            $ownerId = Role::owner()?->id;
-            $ownerless = Organization::whereDoesntHave('users', fn (Builder $users) => $users->where('organization_user.role_id', $ownerId));
+            // The Owner role is found by its key, and the panel never deletes it. Gone from the database all the same, no
+            // organization can be given an Owner: that is said first, rather than the page failing.
+            $ownerId = Role::where('key', Role::OWNER)->value('id');
 
-            foreach ((clone $ownerless)->orderBy('name')->limit(self::LIST_LENGTH)->get(['id', 'name']) as $organization) {
-                $attention[] = [
-                    'key' => "organization-ownerless-{$organization->id}",
-                    'tone' => 'warning',
-                    'text' => "{$organization->name} has no Owner",
-                    'detail' => 'Invite one from the Organizations page',
-                    'href' => route('organizations.view'),
-                ];
+            if ($ownerId === null) {
+                array_unshift($attention, [
+                    'key' => 'owner-role-missing',
+                    'tone' => 'error',
+                    'text' => 'The Owner role is missing',
+                    'detail' => 'No organization can be given an Owner until it is back. Run php artisan db:seed to put it back.',
+                    'href' => null,
+                ]);
+            } else {
+                $ownerless = Organization::whereDoesntHave('users', fn (Builder $users) => $users->where('organization_user.role_id', $ownerId));
+
+                foreach ((clone $ownerless)->orderBy('name')->limit(self::LIST_LENGTH)->get(['id', 'name']) as $organization) {
+                    $attention[] = [
+                        'key' => "organization-ownerless-{$organization->id}",
+                        'tone' => 'warning',
+                        'text' => "{$organization->name} has no Owner",
+                        'detail' => 'Invite one from the Organizations page',
+                        'href' => route('organizations.view'),
+                    ];
+                }
+                $attention = [...$attention, ...$this->andMore('organization-ownerless-more', $ownerless->count(), 'warning',
+                    'more organizations have no Owner', 'They are all on the Organizations page', route('organizations.view'))];
             }
-            $attention = [...$attention, ...$this->andMore('organization-ownerless-more', $ownerless->count(), 'warning',
-                'more organizations have no Owner', 'They are all on the Organizations page', route('organizations.view'))];
         }
 
         return [
