@@ -138,18 +138,18 @@ test('publishing again refreshes the same media row, so the playlists keep it', 
 
 test('a published ad plays like any other file — the device gets it for the length its design says', function () {
     $ad = BuilderAd::factory()->withText('On air')->create(['organization_id' => $this->organization->id, 'name' => 'On air']);
-    $ad->update(['document' => [...$ad->document, 'duration' => 8]]);
+    $ad->update(['document' => [...$ad->document, 'duration' => 12]]);
     $this->postJson("/builder/{$ad->id}/publish")->assertOk();
 
     $screen = Screen::factory()->withToken('ad-token')->create(['organization_id' => $this->organization->id]);
-    // A line written before the ad had a length, or by hand: the ad's own eight seconds are what plays.
+    // A line written before the ad had a length, or by hand: the ad's own twelve seconds are what plays.
     PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => Media::sole()->id, 'position' => 0, 'duration_seconds' => 15]);
 
     $manifest = $this->withHeader('Authorization', 'Bearer ad-token')->getJson('/device/playlist')->assertOk()->json();
     $item = collect($manifest['items'] ?? [])->firstWhere('type', 'html');
 
     expect($item)->not->toBeNull()
-        ->and($item['duration'])->toBe(8)
+        ->and($item['duration'])->toBe(12)
         ->and($item['url'])->toContain('/builder/')
         ->and($item['checksum'])->not->toBeEmpty();
 });

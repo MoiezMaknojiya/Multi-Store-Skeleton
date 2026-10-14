@@ -63,7 +63,7 @@ class CampaignRequest extends FormRequest
             // An IMAGE's seconds on screen — or, for a video, the length the browser
             // measured. A video's form has no seconds field at all (it runs to its own
             // end), so for one this may simply be missing, and what is kept is the file's own.
-            // A picture's seconds: six at least, like every picture (PlaylistItem::MIN_IMAGE_SECONDS), one break at
+            // A picture's seconds: ten at least, like every picture (PlaylistItem::MIN_IMAGE_SECONDS), one break at
             // most. A video's form sends none — its length is read from the file.
             // A video's number is only what the browser measured (hidden, never shown): the file is measured here, so
             // it refuses nothing.

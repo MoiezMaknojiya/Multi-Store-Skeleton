@@ -82,7 +82,7 @@ test("an upload inside an organization's own channel joins that organization's l
     $own = Channel::factory()->create(['organization_id' => $organization->id]);
 
     $this->actingAs($keeper)->withSession(['current_organization_id' => $organization->id])
-        ->post("/channels/{$own->id}/ads", ['file' => UploadedFile::fake()->image('deal.jpg'), 'seconds' => 7], ['Accept' => 'application/json'])
+        ->post("/channels/{$own->id}/ads", ['file' => UploadedFile::fake()->image('deal.jpg'), 'seconds' => 12], ['Accept' => 'application/json'])
         ->assertOk();
 
     $media = ChannelAd::where('channel_id', $own->id)->sole()->media;
@@ -182,13 +182,13 @@ test('the end date cannot come before the start', function () {
 test('a file chosen from the library is held by id, and nothing is uploaded or copied', function () {
     $promo = Media::factory()->platformOwned()->create(['title' => 'Summer promo']);
 
-    uploadChannelAd($this, ['media_id' => $promo->id, 'seconds' => 8])->assertOk();
+    uploadChannelAd($this, ['media_id' => $promo->id, 'seconds' => 12])->assertOk();
 
     $ad = ChannelAd::sole();
 
     expect($ad->media_id)->toBe($promo->id)
         ->and($ad->title)->toBe('Summer promo')      // a blank title takes the file's own
-        ->and($ad->play_seconds)->toBe(8)
+        ->and($ad->play_seconds)->toBe(12)
         ->and(Media::count())->toBe(1)
         ->and(Storage::disk('public')->allFiles())->toBe([]);
 });
@@ -211,10 +211,10 @@ test('a published Ad Builder ad is chosen the same way, and runs on seconds like
 test('a file and a choice together, or neither, are refused', function () {
     $promo = Media::factory()->platformOwned()->create();
 
-    uploadChannelAd($this, ['media_id' => $promo->id, 'file' => UploadedFile::fake()->image('x.jpg'), 'seconds' => 8])
+    uploadChannelAd($this, ['media_id' => $promo->id, 'file' => UploadedFile::fake()->image('x.jpg'), 'seconds' => 12])
         ->assertStatus(422)->assertJsonValidationErrors('file');
 
-    uploadChannelAd($this, ['seconds' => 8])
+    uploadChannelAd($this, ['seconds' => 12])
         ->assertStatus(422)->assertJsonValidationErrors(['media_id', 'file']);
 
     expect(ChannelAd::count())->toBe(0);
@@ -233,15 +233,15 @@ test("an organization's channel takes that organization's files only; the platfo
     $this->actingAs($keeper)->withSession(['current_organization_id' => $organization->id]);
 
     foreach ([$theirs, $platform] as $foreign) {
-        $this->postJson("/channels/{$own->id}/ads", ['media_id' => $foreign->id, 'seconds' => 8])
+        $this->postJson("/channels/{$own->id}/ads", ['media_id' => $foreign->id, 'seconds' => 12])
             ->assertStatus(422)->assertJsonValidationErrors('media_id');
     }
 
-    $this->postJson("/channels/{$own->id}/ads", ['media_id' => $ours->id, 'seconds' => 8])->assertOk();
+    $this->postJson("/channels/{$own->id}/ads", ['media_id' => $ours->id, 'seconds' => 12])->assertOk();
 
     // The platform's channel, from above the organizations: its own library and any organization's.
     foreach ([$platform, $theirs] as $allowed) {
-        uploadChannelAd($this, ['media_id' => $allowed->id, 'seconds' => 8])->assertOk();
+        uploadChannelAd($this, ['media_id' => $allowed->id, 'seconds' => 12])->assertOk();
     }
 
     expect(ChannelAd::where('channel_id', $this->channel->id)->pluck('media_id')->all())->toBe([$platform->id, $theirs->id]);
@@ -249,7 +249,7 @@ test("an organization's channel takes that organization's files only; the platfo
 
 test('an id that is not an id is refused, never a 500', function () {
     foreach ([['x'], 'abc', 0, -3, 99999999] as $id) {
-        uploadChannelAd($this, ['media_id' => $id, 'seconds' => 8])->assertStatus(422);
+        uploadChannelAd($this, ['media_id' => $id, 'seconds' => 12])->assertStatus(422);
     }
 
     expect(ChannelAd::count())->toBe(0);
@@ -355,10 +355,10 @@ test('an ad can be pointed at another library file by id', function () {
     $ad = ChannelAd::factory()->create(['channel_id' => $this->channel->id]);
     $other = Media::factory()->platformOwned()->create(['title' => 'Other']);
 
-    editChannelAd($this, $ad, ['media_id' => $other->id, 'seconds' => 9])->assertOk();
+    editChannelAd($this, $ad, ['media_id' => $other->id, 'seconds' => 13])->assertOk();
 
     expect($ad->fresh()->media_id)->toBe($other->id)
-        ->and($ad->fresh()->play_seconds)->toBe(9);
+        ->and($ad->fresh()->play_seconds)->toBe(13);
 });
 
 test('an image replaced by a video loses its seconds', function () {
@@ -397,7 +397,7 @@ test('taking an ad out of a channel leaves its file in the library', function ()
 test('an ad in another channel cannot be reached through this one', function () {
     $theirs = ChannelAd::factory()->create(['channel_id' => Channel::factory()->create()->id]);
 
-    editChannelAd($this, $theirs, ['seconds' => 8])->assertNotFound();
+    editChannelAd($this, $theirs, ['seconds' => 12])->assertNotFound();
     $this->deleteJson("/channels/{$this->channel->id}/ads/{$theirs->id}")->assertNotFound();
 
     expect(ChannelAd::find($theirs->id))->not->toBeNull();
@@ -451,7 +451,7 @@ test('seeing the ads needs channel-view; changing them needs channel-update', fu
     $this->actingAs($viewer)->getJson("/channels/{$this->channel->id}/ads")->assertOk();
 
     $this->post("/channels/{$this->channel->id}/ads", [
-        'file' => UploadedFile::fake()->image('x.jpg'), 'seconds' => 8,
+        'file' => UploadedFile::fake()->image('x.jpg'), 'seconds' => 12,
     ], ['Accept' => 'application/json'])->assertForbidden();
 
     $this->putJson("/channels/{$this->channel->id}/ads/order", ['ad_ids' => []])->assertForbidden();
@@ -470,11 +470,11 @@ test("inside an organization the platform's channel is read, never changed", fun
     $this->getJson("/channels/{$this->channel->id}/ads")->assertOk()->assertJsonPath('ads.0.title', 'Platform promo');
     $this->get("/channels/{$this->channel->id}")->assertOk()->assertDontSee('dusk="add-channel-ad"', false);
 
-    $this->post("/channels/{$this->channel->id}/ads", ['file' => UploadedFile::fake()->image('x.jpg'), 'seconds' => 8], ['Accept' => 'application/json'])
+    $this->post("/channels/{$this->channel->id}/ads", ['file' => UploadedFile::fake()->image('x.jpg'), 'seconds' => 12], ['Accept' => 'application/json'])
         ->assertNotFound();
     $this->getJson("/channels/{$this->channel->id}/library")->assertNotFound();
     $this->putJson("/channels/{$this->channel->id}/ads/order", ['ad_ids' => [$ad->id]])->assertNotFound();
-    $this->postJson("/channels/{$this->channel->id}/ads/{$ad->id}", ['seconds' => 8])->assertNotFound();
+    $this->postJson("/channels/{$this->channel->id}/ads/{$ad->id}", ['seconds' => 12])->assertNotFound();
     $this->deleteJson("/channels/{$this->channel->id}/ads/{$ad->id}")->assertNotFound();
 
     expect(ChannelAd::where('channel_id', $this->channel->id)->pluck('title')->all())->toBe(['Platform promo'])
@@ -487,7 +487,7 @@ test("an organization's own channel takes its ads from inside that organization 
     $own = Channel::factory()->create(['name' => 'Our Specials', 'organization_id' => $organization->id]);
 
     $this->actingAs($keeper)->withSession(['current_organization_id' => $organization->id])
-        ->post("/channels/{$own->id}/ads", ['file' => UploadedFile::fake()->image('deal.jpg'), 'seconds' => 7], ['Accept' => 'application/json'])
+        ->post("/channels/{$own->id}/ads", ['file' => UploadedFile::fake()->image('deal.jpg'), 'seconds' => 12], ['Accept' => 'application/json'])
         ->assertOk();
 
     expect(ChannelAd::where('channel_id', $own->id)->value('title'))->toBe('deal');

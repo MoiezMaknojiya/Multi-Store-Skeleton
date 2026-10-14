@@ -68,7 +68,7 @@ class BuilderAd extends Model
      */
     public const DEFAULT_SECONDS = PlaylistItem::DEFAULT_IMAGE_SECONDS;
 
-    /** The shortest an ad may be: the six seconds a picture is held to (PlaylistItem::MIN_IMAGE_SECONDS). */
+    /** The shortest an ad may be: the ten seconds a picture is held to (PlaylistItem::MIN_IMAGE_SECONDS). */
     public const MIN_SECONDS = PlaylistItem::MIN_IMAGE_SECONDS;
 
     /** The longest an ad may be — as long as a picture may hold a channel's screen (ChannelAd::MAX_IMAGE_SECONDS). */

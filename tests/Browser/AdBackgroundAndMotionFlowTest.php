@@ -209,23 +209,23 @@ class AdBackgroundAndMotionFlowTest extends DuskTestCase
             JS);
             $browser->waitUsing(5, 100, fn () => str_contains((string) $browser->text('[dusk="anim-loop-curve"] p'), 'cubic(0.25,0.1,0.6,1.3)'));
 
-            // And an exit, six seconds in.
+            // And an exit, ten seconds in.
             $this->setValue($browser, '@anim-out-effect', 'zoom', 'change');
             $browser->waitFor('@anim-out-at');
-            $this->setValue($browser, '@anim-out-at', '6', 'change');
+            $this->setValue($browser, '@anim-out-at', '10', 'change');
 
-            // The ad is six seconds long (the Stage panel's default, owner's rule 2026-09-28) and leaves the screen
+            // The ad is ten seconds long (the Stage panel's default, owner's rule 2026-10-14) and leaves the screen
             // then, however its elements move: the panel says so where each time is set.
-            $browser->waitFor('@anim-out-timing')->assertSeeIn('@anim-out-timing', 'Leaves after the ad ends at 6 s: nobody will see it.')
+            $browser->waitFor('@anim-out-timing')->assertSeeIn('@anim-out-timing', 'Leaves after the ad ends at 10 s: nobody will see it.')
                 ->assertMissing('@anim-in-timing')
                 ->assertMissing('@anim-loop-timing');
 
-            $this->setValue($browser, '@anim-in-delay', '5.6', 'change');
-            $browser->waitFor('@anim-in-timing')->assertSeeIn('@anim-in-timing', 'Still coming in when the ad ends at 6 s.')
-                ->assertSeeIn('@anim-loop-timing', 'Starts after the ad ends at 6 s: it never moves.');
+            $this->setValue($browser, '@anim-in-delay', '9.6', 'change');
+            $browser->waitFor('@anim-in-timing')->assertSeeIn('@anim-in-timing', 'Still coming in when the ad ends at 10 s.')
+                ->assertSeeIn('@anim-loop-timing', 'Starts after the ad ends at 10 s: it never moves.');
 
-            $this->setValue($browser, '@anim-in-delay', '7', 'change');
-            $browser->waitUsing(5, 100, fn () => str_contains($browser->text('@anim-in-timing'), 'Comes in after the ad ends at 6 s: nobody will see this element.'));
+            $this->setValue($browser, '@anim-in-delay', '11', 'change');
+            $browser->waitUsing(5, 100, fn () => str_contains($browser->text('@anim-in-timing'), 'Comes in after the ad ends at 10 s: nobody will see this element.'));
 
             // Back where it was: nothing to say about the entrance or the loop.
             $this->setValue($browser, '@anim-in-delay', '0', 'change');
@@ -259,7 +259,7 @@ class AdBackgroundAndMotionFlowTest extends DuskTestCase
             $this->assertEqualsWithDelta(0.6, $animations['in']['duration'], 0.001);
             $this->assertSame(['float', 'y', 10], [$animations['loop']['effect'], $animations['loop']['axis'], (int) $animations['loop']['amount']]);
             $this->assertSame('cubic(0.25,0.1,0.6,1.3)', $animations['loop']['ease']);
-            $this->assertSame(['zoom', 6], [$animations['out']['effect'], (int) $animations['out']['at']]);
+            $this->assertSame(['zoom', 10], [$animations['out']['effect'], (int) $animations['out']['at']]);
 
             $browser->visit(Storage::disk('public')->url(Media::sole()->path));
 

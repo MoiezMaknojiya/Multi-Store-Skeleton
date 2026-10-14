@@ -19,15 +19,16 @@ use Tests\DuskTestCase;
 
 /**
  * The owner's case, 2026-09-28: "agar mein koi ad banata hu ad builder se aur woo 8 seconds ki ho aur background
- * 20 seconds toh hamari ads 8 seconds k bad change honi chahiye". The design says eight seconds; its background is
- * a real twenty-second video, made in the page and put on the shelf; the television plays the ad, and the next
- * item comes on eight seconds later — the video cut, as Xibo cuts a layout's and Canva a page's.
+ * 20 seconds toh hamari ads 8 seconds k bad change honi chahiye". Ten seconds is the least since 2026-10-14, so the
+ * design says twelve; its background is a real twenty-second video, made in the page and put on the shelf; the
+ * television plays the ad, and the next item comes on twelve seconds later — the video cut, as Xibo cuts a layout's
+ * and Canva a page's.
  */
 class AdLengthOnScreenTest extends DuskTestCase
 {
     use DatabaseMigrations;
 
-    public function test_an_eight_second_ad_over_a_twenty_second_background_video_moves_on_at_eight_seconds(): void
+    public function test_a_twelve_second_ad_over_a_twenty_second_background_video_moves_on_at_twelve_seconds(): void
     {
         $this->seedSuperAdmin();
         $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
@@ -67,32 +68,32 @@ class AdLengthOnScreenTest extends DuskTestCase
             $asset = BuilderAsset::sole();
             $this->assertSame(20, $asset->duration_seconds, 'the server measured the video itself');
 
-            /* ── The design: that video as its background, eight seconds on screen ─ */
+            /* ── The design: that video as its background, twelve seconds on screen ─ */
             $document = BuilderAd::blankDocument();
-            $document['duration'] = 8;
+            $document['duration'] = 12;
             $document['stage']['background']['layers'] = [[
                 'id' => 'bg_video', 'type' => 'video', 'assetId' => $asset->id, 'fit' => 'cover', 'visible' => true, 'opacity' => 1,
             ]];
             $ad = BuilderAd::create([
-                'organization_id' => $organization->id, 'name' => 'Eight seconds', 'orientation' => BuilderAd::LANDSCAPE,
+                'organization_id' => $organization->id, 'name' => 'Twelve seconds', 'orientation' => BuilderAd::LANDSCAPE,
                 'document' => $document, 'created_by' => $owner->id,
             ]);
 
             // The editor says the length in its Stage panel, and Publish takes it along.
             $panel->visit('/builder/'.$ad->id);
             $this->waitForAlpine($panel);
-            $panel->waitFor('@ad-length')->assertInputValue('@ad-length', '8')->assertMissing('@ad-length-earlier');
+            $panel->waitFor('@ad-length')->assertInputValue('@ad-length', '12')->assertMissing('@ad-length-earlier');
             $this->jsClick($panel, '@ad-publish');
             $panel->waitUsing(25, 250, fn () => $ad->fresh()->media_id !== null);
 
             $page = $ad->fresh()->media;
-            $this->assertSame(8, $page->duration_seconds);
+            $this->assertSame(12, $page->duration_seconds);
             $this->assertStringContainsString('autoplay muted loop playsinline', (string) Storage::disk('public')->get($page->path), 'the background repeats while the ad is up');
 
             // On the playlist: the ad, then the picture.
             $screen = Screen::where('organization_id', $organization->id)->sole();
-            PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->id, 'position' => 0, 'duration_seconds' => 8]);
-            PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $picture->id, 'position' => 1, 'duration_seconds' => 6]);
+            PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->id, 'position' => 0, 'duration_seconds' => 12]);
+            PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $picture->id, 'position' => 1, 'duration_seconds' => 10]);
 
             /* ── The television ─────────────────────────────────────────── */
             $tv->visit('/login');
@@ -128,8 +129,8 @@ class AdLengthOnScreenTest extends DuskTestCase
                 return $adSeconds !== null;
             }, 'the ad never came on between two showings of the picture');
 
-            $this->assertGreaterThan(6.5, $adSeconds, "the ad was up for {$adSeconds}s");
-            $this->assertLessThan(10.5, $adSeconds, "the ad was up for {$adSeconds}s — not the video's twenty");
+            $this->assertGreaterThan(10.5, $adSeconds, "the ad was up for {$adSeconds}s");
+            $this->assertLessThan(14.5, $adSeconds, "the ad was up for {$adSeconds}s — not the video's twenty");
         });
     }
 
@@ -140,9 +141,9 @@ class AdLengthOnScreenTest extends DuskTestCase
         $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
         $owner = $this->organizationMember($organization, Role::OWNER, 'owner@example.com');
 
-        // The shortest an ad may be: six seconds (owner's rule, 2026-09-28).
-        $ad = BuilderAd::factory()->withText('Six seconds')->create(['organization_id' => $organization->id, 'name' => 'Six seconds']);
-        $ad->update(['document' => [...$ad->document, 'duration' => 6]]);
+        // The shortest an ad may be: ten seconds (owner's rule, 2026-10-14; six before).
+        $ad = BuilderAd::factory()->withText('Ten seconds')->create(['organization_id' => $organization->id, 'name' => 'Ten seconds']);
+        $ad->update(['document' => [...$ad->document, 'duration' => 10]]);
 
         $this->browse(function (Browser $browser) use ($owner, $organization, $ad) {
             $this->freshSession($browser);
@@ -150,27 +151,27 @@ class AdLengthOnScreenTest extends DuskTestCase
             $this->switchToOrganization($browser, $organization);
             $browser->visit('/builder/'.$ad->id);
             $this->waitForAlpine($browser);
-            $browser->waitFor('@ad-length')->assertInputValue('@ad-length', '6');
+            $browser->waitFor('@ad-length')->assertInputValue('@ad-length', '10');
 
-            // Play: the television's own runtime, started again every six seconds — each start noted here.
+            // Play: the television's own runtime, started again every ten seconds — each start noted here.
             $browser->script(<<<'JS'
                 window.__starts = [];
                 const run = window.AdRuntime.run;
                 window.AdRuntime.run = function () { window.__starts.push(performance.now()); return run.apply(this, arguments); };
             JS);
             $this->jsClick($browser, '@ad-play');
-            $browser->waitFor('@preview-overlay')->assertSeeIn('@stage-size-note', 'Playing for 6 seconds, then from the start');
-            $browser->waitUsing(20, 100, fn () => count($browser->script('return window.__starts;')[0]) >= 3);
+            $browser->waitFor('@preview-overlay')->assertSeeIn('@stage-size-note', 'Playing for 10 seconds, then from the start');
+            $browser->waitUsing(35, 100, fn () => count($browser->script('return window.__starts;')[0]) >= 3);
 
             $starts = $browser->script('return window.__starts;')[0];
-            $this->assertEqualsWithDelta(6000, $starts[1] - $starts[0], 500, 'the second start, six seconds on');
-            $this->assertEqualsWithDelta(6000, $starts[2] - $starts[1], 500, 'and the third');
+            $this->assertEqualsWithDelta(10000, $starts[1] - $starts[0], 500, 'the second start, ten seconds on');
+            $this->assertEqualsWithDelta(10000, $starts[2] - $starts[1], 500, 'and the third');
 
             // Stop stops the starts too.
             $this->jsClick($browser, '@ad-play');
             $browser->waitUntilMissing('@preview-overlay', 5);
             $stopped = count($browser->script('return window.__starts;')[0]);
-            $browser->pause(7000);
+            $browser->pause(11000);
             $this->assertCount($stopped, $browser->script('return window.__starts;')[0], 'nothing starts after Stop');
 
             // Preview: the page in a tab of its own, loaded again at the ad's length.
@@ -183,7 +184,7 @@ class AdLengthOnScreenTest extends DuskTestCase
             $browser->waitUntil('document.readyState === "complete" && !!document.getElementById("ad-stage")', 10);
 
             $loaded = $browser->script('return performance.timeOrigin;')[0];
-            $browser->waitUsing(15, 250, function () use ($browser, $loaded) {
+            $browser->waitUsing(20, 250, function () use ($browser, $loaded) {
                 try {
                     return $browser->script('return document.readyState === "complete" ? performance.timeOrigin : 0;')[0] > $loaded;
                 } catch (\Throwable) {
@@ -229,12 +230,12 @@ class AdLengthOnScreenTest extends DuskTestCase
 
             // Given a length of its own, and published: now every screen plays that.
             $panel->script(
-                'const el = document.querySelector(\'[dusk="ad-length"]\'); el.value = "8";'
+                'const el = document.querySelector(\'[dusk="ad-length"]\'); el.value = "12";'
                 .'el.dispatchEvent(new Event("change", { bubbles: true }));'
             );
             $panel->waitUntilMissing('@ad-length-earlier', 5);
             $this->jsClick($panel, '@ad-publish');
-            $panel->waitUsing(25, 250, fn () => $ad->media->fresh()->duration_seconds === 8);
+            $panel->waitUsing(25, 250, fn () => $ad->media->fresh()->duration_seconds === 12);
         });
     }
 }

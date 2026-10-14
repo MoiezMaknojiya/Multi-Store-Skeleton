@@ -1,11 +1,11 @@
 /**
  * Shared playlist defaults. Mirrors PlaylistItem::DEFAULT_IMAGE_SECONDS and ::MIN_IMAGE_SECONDS so
  * the forms and the server agree on how long an image shows when nobody says, and on the least it
- * may (owner's rule, 2026-09-28: six seconds, both).
+ * may (owner's rule, 2026-10-14: ten seconds, both).
  */
 export const PlaylistItemDefaults = {
-    imageSeconds: 6,
-    minImageSeconds: 6,
+    imageSeconds: 10,
+    minImageSeconds: 10,
     /* Mirrors PlaylistItem::MAX_IMAGE_SECONDS: the longest one picture holds a screen, on a playlist as in a channel
      * (five minutes; owner, 2026-10-14). */
     maxImageSeconds: 300,

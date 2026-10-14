@@ -54,10 +54,10 @@ class ChannelAdminTest extends DuskTestCase
             // A file plays from a playlist or from a channel, never both (owner's rule, 2026-09-26): an ad on a screen's
             // playlist is not offered here — and the picker says so rather than look empty (owner, 2026-10-01).
             $pizza = Media::factory()->adPage()->create(['organization_id' => $organization->id, 'title' => 'Pizza Night', 'thumbnail_path' => null]);
-            PlaylistItem::create(['screen_id' => Screen::factory()->create(['organization_id' => $organization->id])->id, 'media_id' => $pizza->id, 'position' => 0, 'duration_seconds' => 6]);
+            PlaylistItem::create(['screen_id' => Screen::factory()->create(['organization_id' => $organization->id])->id, 'media_id' => $pizza->id, 'position' => 0, 'duration_seconds' => 10]);
             $bakery = Organization::factory()->create(['name' => 'Beta Bakes']);
             $bread = Media::factory()->adPage()->create(['organization_id' => $bakery->id, 'title' => 'Bread Sale', 'thumbnail_path' => null]);
-            PlaylistItem::create(['screen_id' => Screen::factory()->create(['organization_id' => $bakery->id])->id, 'media_id' => $bread->id, 'position' => 0, 'duration_seconds' => 6]);
+            PlaylistItem::create(['screen_id' => Screen::factory()->create(['organization_id' => $bakery->id])->id, 'media_id' => $bread->id, 'position' => 0, 'duration_seconds' => 10]);
 
             // -- Its ads page: an upload, which joins the platform's library first --
             $browser->visit('/channels/'.$channel->id);
@@ -113,19 +113,19 @@ class ChannelAdminTest extends DuskTestCase
 
             $this->jsType($browser, '@channel-ad-title', 'Coke again');
 
-            // Six seconds at least (owner's rule, 2026-09-28): said under the field before anything is sent.
-            $this->jsType($browser, '@channel-ad-seconds', '5');
+            // Ten seconds at least (owner's rule, 2026-10-14): said under the field before anything is sent.
+            $this->jsType($browser, '@channel-ad-seconds', '9');
             $this->jsClick($browser, '@channel-ad-save');
-            $browser->waitForText('A picture stays on screen for at least 6 seconds.');
+            $browser->waitForText('A picture stays on screen for at least 10 seconds.');
             $this->assertSame(1, ChannelAd::where('channel_id', $channel->id)->count(), 'nothing was saved');
 
-            $this->jsType($browser, '@channel-ad-seconds', '7');
+            $this->jsType($browser, '@channel-ad-seconds', '11');
             $this->jsClick($browser, '@channel-ad-save');
 
             $browser->waitUsing(15, 200, fn () => ChannelAd::where('channel_id', $channel->id)->count() === 2);
             $again = ChannelAd::where('channel_id', $channel->id)->latest('id')->first();
             $this->assertSame($ad->media_id, $again->media_id);
-            $this->assertSame(7, $again->duration_seconds);
+            $this->assertSame(11, $again->duration_seconds);
             $this->assertSame(1, Media::whereNull('organization_id')->count(), 'choosing a library file made a copy of it');
             $browser->waitFor('@channel-ad-row-'.$again->id)->assertSeeIn('@channel-ad-title-'.$again->id, 'Coke again');
 
@@ -207,7 +207,7 @@ class ChannelAdminTest extends DuskTestCase
             $this->waitForModalClosed($browser, '@channel-ad-form');
 
             // -- Reordering ---------------------------------------------------------
-            $second = ChannelAd::factory()->lasting(8)->showing(['thumbnail_path' => null])->create([
+            $second = ChannelAd::factory()->lasting(12)->showing(['thumbnail_path' => null])->create([
                 'channel_id' => $channel->id, 'title' => 'Monster', 'position' => 99,
             ]);
 

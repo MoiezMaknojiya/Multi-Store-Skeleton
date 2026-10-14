@@ -41,7 +41,7 @@ class HalfTypedDatesTest extends DuskTestCase
             $this->jsClick($browser, '@add-channel-ad');
             $browser->waitFor('@channel-ad-pick-'.$picture->id);
             $this->jsClick($browser, '@channel-ad-pick-'.$picture->id);
-            $this->jsType($browser, '@channel-ad-seconds', '8');
+            $this->jsType($browser, '@channel-ad-seconds', '12');
 
             // Only the month of the end date.
             $browser->click('@channel-ad-ends-on')->keys('@channel-ad-ends-on', '12');

@@ -45,7 +45,7 @@ class NetworkAdBreakTest extends DuskTestCase
             'organization_id' => $organization->id, 'name' => 'Counter TV', 'accepts_network_ads' => true,
         ]);
 
-        $campaign = Campaign::factory()->lasting(6)->create([
+        $campaign = Campaign::factory()->lasting(10)->create([
             'name' => 'Coca-Cola', 'path' => $this->putImage('campaigns/advert.png', 220, 30, 40),
             'thumbnail_path' => null, 'mime_type' => 'image/png',
         ]);
@@ -329,7 +329,7 @@ class NetworkAdBreakTest extends DuskTestCase
             'organization_id' => $organization->id, 'accepts_network_ads' => false,
         ]);
 
-        $campaign = Campaign::factory()->lasting(6)->create([
+        $campaign = Campaign::factory()->lasting(10)->create([
             'path' => $this->putImage('campaigns/advert.png', 220, 30, 40), 'thumbnail_path' => null,
         ]);
         $campaign->screens()->attach($screen);
@@ -348,7 +348,7 @@ class NetworkAdBreakTest extends DuskTestCase
             $tv->visit('/player');
 
             // Watch the advert layer from here on rather than looking at it once: a break
-            // lasts six seconds, and a single look after a fixed wait can fall either side
+            // lasts ten seconds, and a single look after a fixed wait can fall either side
             // of one. Building an advert counts as much as showing it — a screen that
             // carries none should never be handed one at all.
             $tv->script(<<<'JS'

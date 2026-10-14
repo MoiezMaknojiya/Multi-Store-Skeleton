@@ -21,10 +21,10 @@ use Tests\DuskTestCase;
 
 /**
  * Every kind of line on one television, each timed on the glass (owner, 2026-09-29: "brute force aur out of the box
- * testing … kuch break toh nahi ho raha"). A picture at the least it may (6 s); an Ad Builder ad of 6 s over a 20 s
- * background video, which is cut; a 3 s video, which no minimum holds; an organization's channel with a picture saved before
- * the six-second rule at 3 s, which plays 6, and an ad page of 7 s; and a picture line saved before the rule at 2 s,
- * which plays 6. What is measured is how long each one stays in front — not what any number says.
+ * testing … kuch break toh nahi ho raha"). A picture at the least it may (10 s since 2026-10-14); an Ad Builder ad of 10 s
+ * over a 20 s background video, which is cut; a 3 s video, which no minimum holds; an organization's channel with a picture
+ * saved before the rule at 3 s, which plays 10, and an ad page of 11 s; and a picture line saved before the rule at 2 s,
+ * which plays 10. What is measured is how long each one stays in front — not what any number says.
  */
 class EveryLineKeepsItsTimeTest extends DuskTestCase
 {
@@ -73,19 +73,19 @@ class EveryLineKeepsItsTimeTest extends DuskTestCase
             $clip = Media::where('type', Media::TYPE_VIDEO)->sole();
             $this->assertSame(3, $clip->duration_seconds, 'the server measured the short video itself');
 
-            /* ── Two ads: six seconds over the twenty-second video, and seven seconds plain ── */
-            $six = $this->publishedAd($organization, $owner, 'Six seconds', 6, BuilderAsset::sole());
-            $seven = $this->publishedAd($organization, $owner, 'Seven seconds', 7, null);
+            /* ── Two ads: ten seconds over the twenty-second video, and eleven seconds plain ── */
+            $ten = $this->publishedAd($organization, $owner, 'Ten seconds', 10, BuilderAsset::sole());
+            $eleven = $this->publishedAd($organization, $owner, 'Eleven seconds', 11, null);
 
-            /* ── The organization's channel: a picture saved before the rule at 3 s, and the seven-second page ── */
+            /* ── The organization's channel: a picture saved before the rule at 3 s, and the eleven-second page ── */
             $channel = Channel::factory()->create(['name' => 'Alpha Deals', 'organization_id' => $organization->id]);
             ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $inChannel->id, 'title' => 'Old deal', 'duration_seconds' => 3, 'position' => 0]);
-            ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $seven->id, 'title' => 'Seven seconds', 'duration_seconds' => null, 'position' => 1]);
+            ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $eleven->id, 'title' => 'Eleven seconds', 'duration_seconds' => null, 'position' => 1]);
 
             /* ── The playlist, as a screen saved before the rule may hold it ── */
             foreach ([
-                ['media_id' => $first->id, 'duration_seconds' => 6],
-                ['media_id' => $six->id, 'duration_seconds' => 6],
+                ['media_id' => $first->id, 'duration_seconds' => 10],
+                ['media_id' => $ten->id, 'duration_seconds' => 10],
                 ['media_id' => $clip->id, 'duration_seconds' => 3],
                 ['channel_id' => $channel->id, 'duration_seconds' => null],
                 ['media_id' => $old->id, 'duration_seconds' => 2],
@@ -112,7 +112,7 @@ class EveryLineKeepsItsTimeTest extends DuskTestCase
             // Name each showing by what it is: the file's own name, or the ad's page.
             $names = [
                 basename($first->path) => 'first', basename($old->path) => 'old', basename($inChannel->path) => 'in-channel',
-                basename($clip->path) => 'clip', "/ads/{$six->builderAd->id}/" => 'six', "/ads/{$seven->builderAd->id}/" => 'seven',
+                basename($clip->path) => 'clip', "/ads/{$ten->builderAd->id}/" => 'ten', "/ads/{$eleven->builderAd->id}/" => 'eleven',
             ];
             $nameOf = function (string $src) use ($names): string {
                 foreach ($names as $needle => $name) {
@@ -124,8 +124,8 @@ class EveryLineKeepsItsTimeTest extends DuskTestCase
                 return 'unknown '.$src;
             };
 
-            // One whole pass after the first picture: first, six, clip, in-channel, seven, old — then first again.
-            $order = ['first', 'six', 'clip', 'in-channel', 'seven', 'old', 'first'];
+            // One whole pass after the first picture: first, ten, clip, in-channel, eleven, old — then first again.
+            $order = ['first', 'ten', 'clip', 'in-channel', 'eleven', 'old', 'first'];
             $pass = null;
             $tv->waitUsing(150, 500, function () use ($tv, $nameOf, $order, &$pass) {
                 $glass = array_map(fn (array $row) => [$nameOf($row[1]), $row[2]], (array) $tv->script('return window.__glass;')[0]);
@@ -146,7 +146,7 @@ class EveryLineKeepsItsTimeTest extends DuskTestCase
                 $seconds[$pass[$i][0]] = round(($pass[$i + 1][1] - $pass[$i][1]) / 1000, 2);
             }
 
-            $expected = ['first' => 6, 'six' => 6, 'clip' => 3, 'in-channel' => 6, 'seven' => 7, 'old' => 6];
+            $expected = ['first' => 10, 'ten' => 10, 'clip' => 3, 'in-channel' => 10, 'eleven' => 11, 'old' => 10];
             foreach ($expected as $name => $wanted) {
                 $this->assertEqualsWithDelta($wanted, $seconds[$name], 1.5, "{$name} was on the glass for {$seconds[$name]} s, not {$wanted}: ".json_encode($seconds));
             }

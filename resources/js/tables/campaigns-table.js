@@ -122,7 +122,7 @@ export function registerCampaignsTable(Alpine) {
                 this.confirmingClose = true;
             },
 
-            /** "At least 6 seconds, at most 60: one break." — the limits, said before they are broken. */
+            /** "At least 10 seconds, at most 60: one break." — the limits, said before they are broken. */
             secondsHint() {
                 return `At least ${PlaylistItemDefaults.minImageSeconds} seconds, at most ${this.maxBreakSeconds}: one break.`;
             },

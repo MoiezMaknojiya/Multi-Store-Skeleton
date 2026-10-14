@@ -262,7 +262,7 @@ export function registerScreenPlaylist(Alpine) {
                 thumbnail_url: media.thumbnail_url,
                 // A picture stays up for as long as the line says. A video runs to its own end — its
                 // measured length, or a generous backstop for one nobody could measure (never an image's
-                // six seconds, which would cut it off) — and an Ad Builder page for the length its design
+                // ten seconds, which would cut it off) — and an Ad Builder page for the length its design
                 // says; a page published before designs had a length is timed like a picture.
                 duration_seconds: media.type === 'video'
                     ? (media.duration_seconds || PlaylistItemDefaults.unmeasuredVideoSeconds)

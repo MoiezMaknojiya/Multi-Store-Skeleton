@@ -148,7 +148,7 @@ class Campaign extends Model
      */
     public function getPlaySecondsAttribute(): int
     {
-        // A picture saved before the six-second rule plays for six, and one saved before the one-break ceiling
+        // A picture saved before the ten-second rule plays for ten, and one saved before the one-break ceiling
         // (2026-09-28) for sixty: never under the least, never past a break.
         return $this->type === Media::TYPE_VIDEO
             ? ($this->media_duration_seconds ?: $this->duration_seconds)

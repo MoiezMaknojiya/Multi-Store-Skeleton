@@ -197,7 +197,7 @@ class Media extends Model
 
         return match ($this->type) {
             self::TYPE_VIDEO => (int) $this->duration_seconds,
-            // Never under the least an ad may be — which a page published before the six-second rule may still carry.
+            // Never under the least an ad may be — which a page published before the ten-second rule may still carry.
             self::TYPE_HTML => max(BuilderAd::MIN_SECONDS, (int) $this->duration_seconds),
             default => null,
         };

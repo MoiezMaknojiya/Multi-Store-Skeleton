@@ -123,7 +123,7 @@ class PlaylistFlowTest extends DuskTestCase
 
             $item = PlaylistItem::where('screen_id', $screen->id)->firstOrFail();
             $this->assertSame($media->id, $item->media_id);
-            $this->assertSame(6, $item->duration_seconds);   // the image default (owner's rule, 2026-09-28)
+            $this->assertSame(10, $item->duration_seconds);   // the image default (owner's rule, 2026-10-14)
 
             // -- 6. The picture actually appears on the TV ----------------------
             $tv->waitUntil('!!document.querySelector("#layer-a img, #layer-b img")', 45);
@@ -178,7 +178,7 @@ class PlaylistFlowTest extends DuskTestCase
                 'media_id' => $row->id,
                 'position' => $position,
                 // The least a picture may, so the test does not sit and wait longer than it must.
-                'duration_seconds' => 6,
+                'duration_seconds' => 10,
             ]);
         }
 
@@ -208,7 +208,7 @@ class PlaylistFlowTest extends DuskTestCase
             // Read the wall as it changes, one name each time the picture does: the order
             // is what the TV really showed, recorded as it happened, never assumed.
             $seen = [];
-            $tv->waitUsing(45, 100, function () use ($srcOf, &$seen) {
+            $tv->waitUsing(70, 100, function () use ($srcOf, &$seen) {
                 $name = basename((string) parse_url($srcOf(), PHP_URL_PATH));
 
                 if ($name !== '' && end($seen) !== $name) {
@@ -551,7 +551,7 @@ class PlaylistFlowTest extends DuskTestCase
             $this->jsClick($browser, '@playlist-add-'.$clip->id);
             $browser->waitForText('3 items');
             // A video takes its own length; an image takes the default.
-            $browser->assertSee('37 secs');   // 6 + 6 + 25
+            $browser->assertSee('45 secs');   // 10 + 10 + 25
 
             // The list the page will save, read from the component itself: what is sent is
             // this array, so a move that only redrew the rows would still save the old order.
@@ -568,11 +568,11 @@ class PlaylistFlowTest extends DuskTestCase
             $this->jsClick($browser, '@playlist-up-2');
             $this->assertSame([$two->id, $clip->id, $one->id], $order());
 
-            // -- A picture stays up six seconds at least: said before anything is sent ---
-            $this->jsType($browser, '@playlist-duration-0', '5');
+            // -- A picture stays up ten seconds at least: said before anything is sent ---
+            $this->jsType($browser, '@playlist-duration-0', '9');
             $this->jsClick($browser, '@playlist-save');
             $browser->waitUsing(5, 100, fn () => in_array(
-                'Poster Two: a picture stays on screen for at least 6 seconds.',
+                'Poster Two: a picture stays on screen for at least 10 seconds.',
                 $browser->script('return Alpine.store("toasts").items.map((toast) => toast.message);')[0],
                 true,
             ));

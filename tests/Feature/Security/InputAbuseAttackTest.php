@@ -195,24 +195,24 @@ test('a file one picker leaves out cannot be forced past it by id, either way ro
 });
 
 test("an ad is on screen for its design's length alone: no document, line or channel ad posted by hand stretches it", function () {
-    // Owner, 2026-09-28: the design owns its length — a whole number of seconds from six to BuilderAd::MAX_SECONDS —
+    // Owner, 2026-09-28: the design owns its length — a whole number of seconds from ten to BuilderAd::MAX_SECONDS —
     // and every screen and channel plays the ad that long. Text, a truth value or a fraction is no length the editor
     // would show, so the server takes none either; and the seconds a line or a channel ad posts are not the ad's.
     $ad = BuilderAd::factory()->withText()->create(['organization_id' => $this->organization->id, 'name' => 'Short one']);
     $forChannel = BuilderAd::factory()->withText()->create(['organization_id' => $this->organization->id, 'name' => 'Channel one']);
 
-    foreach (['8', '8 seconds', true, 8.5, -8, 0, 5, 301, PHP_INT_MAX, ['8'], ['seconds' => 8]] as $duration) {
+    foreach (['12', '12 seconds', true, 12.5, -12, 0, 9, 301, PHP_INT_MAX, ['12'], ['seconds' => 12]] as $duration) {
         $this->putJson("/builder/{$ad->id}", ['name' => $ad->name, 'document' => [...$ad->document, 'duration' => $duration]])
             ->assertStatus(422)
             ->assertJsonValidationErrors('document.duration');
     }
 
     foreach ([$ad, $forChannel] as $design) {
-        $this->putJson("/builder/{$design->id}", ['name' => $design->name, 'document' => [...$design->document, 'duration' => 8]])->assertOk();
+        $this->putJson("/builder/{$design->id}", ['name' => $design->name, 'document' => [...$design->document, 'duration' => 12]])->assertOk();
         $this->postJson("/builder/{$design->id}/publish")->assertOk();
     }
 
-    // A playlist line posted with a day's worth of seconds keeps the design's eight.
+    // A playlist line posted with a day's worth of seconds keeps the design's twelve.
     $screen = Screen::factory()->withToken('stretch-token')->create(['organization_id' => $this->organization->id]);
     $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
     $this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => [
@@ -223,23 +223,23 @@ test("an ad is on screen for its design's length alone: no document, line or cha
     $channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Our Deals']);
     $this->postJson("/channels/{$channel->id}/ads", ['media_id' => $forChannel->fresh()->media_id, 'seconds' => ['9999']])
         ->assertOk()
-        ->assertJsonPath('ads.0.play_seconds', 8);
+        ->assertJsonPath('ads.0.play_seconds', 12);
 
-    expect($this->getJson('/device/playlist', ['Authorization' => 'Bearer stretch-token'])->json('items.0.duration'))->toBe(8)
+    expect($this->getJson('/device/playlist', ['Authorization' => 'Bearer stretch-token'])->json('items.0.duration'))->toBe(12)
         ->and(ChannelAd::sole()->duration_seconds)->toBeNull()
-        ->and($ad->fresh()->document['duration'])->toBe(8);
+        ->and($ad->fresh()->document['duration'])->toBe(12);
 });
 
-test('a picture cannot be flashed by for less than six seconds, whatever shape the seconds are sent in', function () {
-    // Owner's rule, 2026-09-28: six seconds at least on a playlist, in a channel and as an advert. The forms say
-    // so before anything is sent; this is the wall behind them, for a request made by hand.
+test('a picture cannot be flashed by for less than ten seconds, whatever shape the seconds are sent in', function () {
+    // Owner's rule, 2026-10-14: ten seconds at least on a playlist, in a channel and as an advert (six from 2026-09-28).
+    // The forms say so before anything is sent; this is the wall behind them, for a request made by hand.
     Storage::fake('public');
     $screen = Screen::factory()->create(['organization_id' => $this->organization->id]);
     $channel = Channel::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Our Deals']);
     $poster = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Poster']);
     $flyer = Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Flyer']);
 
-    foreach ([5, '5', 0, -6, 5.9, ['6'], true] as $seconds) {
+    foreach ([9, '9', 6, 0, -6, 9.9, ['10'], true] as $seconds) {
         $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
         $this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => [
             ['media_id' => $poster->id, 'duration_seconds' => $seconds],
@@ -250,7 +250,7 @@ test('a picture cannot be flashed by for less than six seconds, whatever shape t
 
     $this->actingAs(createSuperAdmin());
 
-    foreach ([5, '5', 0, -6, 5.9] as $seconds) {
+    foreach ([9, '9', 6, 0, -6, 9.9] as $seconds) {
         $this->post('/campaigns', [
             'name' => 'Coca-Cola', 'is_active' => '1', 'screen_ids' => [],
             'file' => UploadedFile::fake()->image('coke.jpg'), 'duration_seconds' => $seconds,
@@ -262,7 +262,7 @@ test('a picture cannot be flashed by for less than six seconds, whatever shape t
         ->and(Campaign::count())->toBe(0);
 });
 
-test('seconds of every shape, hundreds of times, at every door that takes them: never a 500, never a picture under six', function () {
+test('seconds of every shape, hundreds of times, at every door that takes them: never a 500, never a picture under ten', function () {
     // The owner's brute-force round, 2026-09-29. A fixed seed, so a failure replays exactly. The panel's own limiter
     // (throttle:admin) would turn most of these into 429s long before the rules saw them; it has tests of its own.
     mt_srand(20260929);
@@ -316,9 +316,10 @@ test('seconds of every shape, hundreds of times, at every door that takes them: 
             ->and($statuses)->toContain(422);
     }
 
-    // And whatever was kept is a whole number inside the door's own limits — never a picture or an ad under six.
-    expect(PlaylistItem::pluck('duration_seconds')->every(fn (mixed $s) => is_int($s) && $s >= 6 && $s <= 86400))->toBeTrue()
-        ->and(ChannelAd::pluck('duration_seconds')->every(fn (mixed $s) => is_int($s) && $s >= 6 && $s <= ChannelAd::MAX_IMAGE_SECONDS))->toBeTrue();
+    // And whatever was kept is a whole number inside the door's own limits — never a picture or an ad under ten, nor
+    // a picture over five minutes.
+    expect(PlaylistItem::pluck('duration_seconds')->every(fn (mixed $s) => is_int($s) && $s >= PlaylistItem::MIN_IMAGE_SECONDS && $s <= PlaylistItem::MAX_IMAGE_SECONDS))->toBeTrue()
+        ->and(ChannelAd::pluck('duration_seconds')->every(fn (mixed $s) => is_int($s) && $s >= PlaylistItem::MIN_IMAGE_SECONDS && $s <= ChannelAd::MAX_IMAGE_SECONDS))->toBeTrue();
 
     $length = $design->fresh()->document['duration'] ?? null;
     expect($length === null || (is_int($length) && $length >= BuilderAd::MIN_SECONDS && $length <= BuilderAd::MAX_SECONDS))->toBeTrue();

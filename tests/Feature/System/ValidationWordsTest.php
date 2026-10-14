@@ -45,7 +45,7 @@ test('a line of the playlist is refused in the words its box shows, with its pla
     'a fraction' => [6.5, 'Line 1: give the seconds as a whole number.'],
     'past five minutes' => [301, 'Menu: a picture stays on screen for at most 5 minutes.'],
     'past a day' => [100000, 'Line 1: a picture stays on screen for at most 5 minutes.'],
-    'nothing at all' => [0, 'Line 1: a picture stays on screen for at least 6 seconds.'],
+    'nothing at all' => [0, 'Line 1: a picture stays on screen for at least 10 seconds.'],
 ]);
 
 test('a schedule is refused in the words its window shows — on the save and in the preview alike', function () {
@@ -55,7 +55,7 @@ test('a schedule is refused in the words its window shows — on the save and in
     $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');
 
     $this->putJson("/screens/{$screen->id}/playlist", ['version' => $version, 'items' => [
-        ['media_id' => $picture->id, 'duration_seconds' => 8, 'rules' => [$rule]],
+        ['media_id' => $picture->id, 'duration_seconds' => 10, 'rules' => [$rule]],
     ]])->assertStatus(422)->assertJsonValidationErrors(['items.0.rules.0.recurrence_interval' => 'Repeat every: enter a whole number from 1 to 52.']);
 
     $this->postJson("/screens/{$screen->id}/playlist/preview", ['rules' => [$rule], 'days' => 7])
@@ -77,7 +77,7 @@ test("a channel ad's seconds are refused in the form's words", function (mixed $
 })->with([
     'a fraction' => [7.5, 'Give the seconds as a whole number.'],
     'past five minutes' => [301, 'A picture stays on screen for at most 5 minutes.'],
-    'under six' => [5, 'A picture stays on screen for at least 6 seconds.'],
+    'under ten' => [9, 'A picture stays on screen for at least 10 seconds.'],
 ]);
 
 test("a channel's own fields are refused in the form's words", function () {
@@ -101,7 +101,7 @@ test("an advert's fields are refused in the form's words, and a video's own meas
     $this->post('/campaigns', [...$fields, 'file' => UploadedFile::fake()->image('coke.jpg')], ['Accept' => 'application/json'])
         ->assertStatus(422)->assertJsonValidationErrors(['duration_seconds' => 'Say how many seconds it stays on screen.']);
 
-    $this->post('/campaigns', [...$fields, 'name' => '', 'file' => UploadedFile::fake()->image('coke.jpg'), 'duration_seconds' => 8], ['Accept' => 'application/json'])
+    $this->post('/campaigns', [...$fields, 'name' => '', 'file' => UploadedFile::fake()->image('coke.jpg'), 'duration_seconds' => 10], ['Accept' => 'application/json'])
         ->assertStatus(422)->assertJsonValidationErrors(['name' => 'Campaign name is required.']);
 
     // The number a browser measured for a video (hidden, never shown) is only a hint: the file is measured here.
@@ -118,7 +118,7 @@ test("an ad's length is refused in the editor's words", function (mixed $seconds
 })->with([
     'past five minutes' => [301, 'An ad stays on screen for at most 5 minutes.'],
     'a fraction' => [8.5, "Give the ad's length as a whole number of seconds."],
-    'under six' => [5, 'An ad stays on screen for at least 6 seconds.'],
+    'under ten' => [9, 'An ad stays on screen for at least 10 seconds.'],
 ]);
 
 test('a schedule\'s hours are refused in the words its window says', function (array $times, string $field, string $words) {
@@ -182,7 +182,7 @@ test('a list of ids or rules posted in the wrong shape is refused in the page\'s
             'permissions', 'Choose the permissions from the list.');
     }
     // (A plain word among the screens is dropped before the rules, as the form always was: a list inside the list is not.)
-    $refused($this->post('/campaigns', ['name' => 'Cola', 'is_active' => '1', 'screen_ids' => [['x']], 'file' => UploadedFile::fake()->image('coke.jpg'), 'duration_seconds' => 8], ['Accept' => 'application/json']),
+    $refused($this->post('/campaigns', ['name' => 'Cola', 'is_active' => '1', 'screen_ids' => [['x']], 'file' => UploadedFile::fake()->image('coke.jpg'), 'duration_seconds' => 10], ['Accept' => 'application/json']),
         'screen_ids', 'Choose the screens from the list.');
     foreach (['x', ['x']] as $ids) {
         $refused($this->putJson('/network-ads/organizations', ['organization_ids' => $ids, 'accepts' => true]),

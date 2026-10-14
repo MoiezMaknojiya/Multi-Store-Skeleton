@@ -38,7 +38,7 @@ test('a file or a channel deleted while a save is on its way is refused with a r
     $this->actingAs($keeper)->withSession(['current_organization_id' => $organization->id]);
 
     foreach ([
-        'file' => [['media_id' => $poster->id, 'duration_seconds' => 8]],
+        'file' => [['media_id' => $poster->id, 'duration_seconds' => 12]],
         'channel' => [['channel_id' => $channel->id]],
     ] as $kind => $lines) {
         $version = $this->getJson("/screens/{$screen->id}/playlist")->json('version');

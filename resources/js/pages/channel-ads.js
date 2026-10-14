@@ -151,7 +151,7 @@ export function registerChannelAds(Alpine) {
             this.confirmingClose = true;
         },
 
-        /** "At least 6 seconds, at most 5 minutes." — the limits, said before they are broken. */
+        /** "At least 10 seconds, at most 5 minutes." — the limits, said before they are broken. */
         secondsHint() {
             return `At least ${PlaylistItemDefaults.minImageSeconds} seconds, at most ${lengthInWords(this.maxImageSeconds)}.`;
         },

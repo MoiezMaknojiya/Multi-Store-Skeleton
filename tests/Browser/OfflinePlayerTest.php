@@ -57,16 +57,16 @@ class OfflinePlayerTest extends DuskTestCase
 
         // Two pictures whose lines play them until a minute of today: the first's window closes while the line is
         // down, the second's a minute later. A file keeps no dates of its own (owner, 2026-10-01): its line's rule
-        // says when. Each picture stays up six seconds, the least one may (owner's rule, 2026-09-28).
+        // says when. Each picture stays up ten seconds, the least one may (owner's rule, 2026-10-14).
         $soonEnds = $this->wholeMinuteAfter($timezone, 60);
         $laterEnds = $soonEnds->addMinute();
 
         $soon = $this->picture($organization, 'soon.png', [200, 40, 40]);
         $later = $this->picture($organization, 'later.png', [40, 160, 60]);
 
-        $this->playOnlyBetween(PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $soon->id, 'position' => 0, 'duration_seconds' => 6]),
+        $this->playOnlyBetween(PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $soon->id, 'position' => 0, 'duration_seconds' => 10]),
             '00:00', $soonEnds->format('H:i'));
-        $this->playOnlyBetween(PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $later->id, 'position' => 1, 'duration_seconds' => 6]),
+        $this->playOnlyBetween(PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $later->id, 'position' => 1, 'duration_seconds' => 10]),
             '00:00', $laterEnds->format('H:i'));
 
         $this->browse(function (Browser $tv) use ($soonEnds, $laterEnds) {
@@ -155,8 +155,8 @@ class OfflinePlayerTest extends DuskTestCase
         // A file the next days bring — its line starts tomorrow — bigger than two pieces: warmed now, played by no one here.
         $big = $this->bigFile($organization, 'tomorrow.mp4', 2 * self::PART_BYTES + 123_456);
 
-        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->media_id, 'position' => 0, 'duration_seconds' => 6]);
-        $this->playOnlyBetween(PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $later->id, 'position' => 1, 'duration_seconds' => 6]),
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->media_id, 'position' => 0, 'duration_seconds' => 10]);
+        $this->playOnlyBetween(PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $later->id, 'position' => 1, 'duration_seconds' => 10]),
             $laterStarts->format('H:i'), '23:59');
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $big->id, 'position' => 2])
             ->scheduleRules()->create(['starts_on' => CarbonImmutable::now($timezone)->addDay()->toDateString()]);

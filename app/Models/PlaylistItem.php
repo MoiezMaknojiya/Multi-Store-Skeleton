@@ -10,15 +10,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class PlaylistItem extends Model
 {
     /**
-     * The shortest a picture stays on screen — and an Ad Builder ad (BuilderAd::MIN_SECONDS) — owner's rule,
-     * 2026-09-28: "6 seconds minimum … us se kam nahi kar paye". Six seconds is the industry's shortest spot
-     * (YouTube's bumper ad) and the least a roadside screen must hold one in much of the United States; anything
-     * shorter is a flicker nobody can read. A video is never held to it: it runs to its own end.
+     * The shortest a picture stays on screen — and an Ad Builder ad (BuilderAd::MIN_SECONDS) and an advert —
+     * owner's rule, 2026-10-14: "minimum 10 second ho aur max 5 minutes", everywhere ("Har jagah"). It was six from
+     * 2026-09-28 ("6 seconds minimum … us se kam nahi kar paye"); ten is what the industry gives a picture by default,
+     * long enough to be read across a shop. A video is never held to it: it runs to its own end.
      */
-    public const MIN_IMAGE_SECONDS = 6;
+    public const MIN_IMAGE_SECONDS = 10;
 
-    /** What an image shows for when nothing else says otherwise (owner's rule, 2026-09-28: six, like the least). */
-    public const DEFAULT_IMAGE_SECONDS = 6;
+    /** What an image shows for when nothing else says otherwise (owner's rule, 2026-10-14: ten, like the least). */
+    public const DEFAULT_IMAGE_SECONDS = 10;
 
     /**
      * The longest one picture holds a screen, on a playlist and in a channel alike (ChannelAd::MAX_IMAGE_SECONDS) — owner,

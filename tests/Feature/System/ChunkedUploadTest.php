@@ -73,7 +73,7 @@ test('every door takes a finished upload: a channel, the ads network and the Ad 
     $channel = Channel::factory()->create(['organization_id' => $this->organization->id]);
 
     $id = Tus::upload($this, jpegBytes(), ['name' => 'deal.jpg', 'purpose' => 'channel', 'channel' => $channel->id]);
-    $this->postJson("/channels/{$channel->id}/ads", ['upload' => $id, 'seconds' => 8])->assertOk();
+    $this->postJson("/channels/{$channel->id}/ads", ['upload' => $id, 'seconds' => 12])->assertOk();
 
     $id = Tus::upload($this, jpegBytes(320, 320), ['name' => 'logo.jpg', 'purpose' => 'asset']);
     $this->postJson('/builder/assets', ['upload' => $id])->assertOk();

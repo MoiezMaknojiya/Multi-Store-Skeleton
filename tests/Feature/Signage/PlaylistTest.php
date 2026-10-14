@@ -69,14 +69,14 @@ test('saving a playlist writes the order exactly as sent', function () {
             'version' => $screen->playlistFingerprint(),
             'items' => [
                 ['media_id' => $second->id, 'duration_seconds' => 15],
-                ['media_id' => $first->id, 'duration_seconds' => 8],
+                ['media_id' => $first->id, 'duration_seconds' => 12],
             ],
         ])->assertOk();
 
     $items = $screen->playlistItems()->get();
     expect($items->pluck('media_id')->all())->toBe([$second->id, $first->id]);
     expect($items->pluck('position')->all())->toBe([0, 1]);
-    expect($items->pluck('duration_seconds')->all())->toBe([15, 8]);
+    expect($items->pluck('duration_seconds')->all())->toBe([15, 12]);
 });
 
 test('saving replaces the playlist rather than appending to it', function () {
@@ -302,7 +302,7 @@ test('a mixed playlist reaches the device in order, with each type intact', func
     ]);
 
     // Deliberately interleaved: image, video, image, video.
-    foreach ([[$poster, 8], [$clip, 30], [$second, 15], [$webm, 12]] as $position => [$media, $seconds]) {
+    foreach ([[$poster, 11], [$clip, 30], [$second, 15], [$webm, 12]] as $position => [$media, $seconds]) {
         PlaylistItem::create([
             'screen_id' => $screen->id,
             'media_id' => $media->id,
@@ -316,7 +316,7 @@ test('a mixed playlist reaches the device in order, with each type intact', func
 
     expect($items)->toHaveCount(4);
     expect(collect($items)->pluck('type')->all())->toBe(['image', 'video', 'image', 'video']);
-    expect(collect($items)->pluck('duration')->all())->toBe([8, 30, 15, 12]);
+    expect(collect($items)->pluck('duration')->all())->toBe([11, 30, 15, 12]);
     expect(collect($items)->pluck('mime')->all())->toBe(['image/jpeg', 'video/mp4', 'image/jpeg', 'video/webm']);
 
     // Every item is individually addressable and cacheable.
@@ -337,7 +337,7 @@ test('a long playlist keeps its exact order', function () {
     $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => $screen->playlistFingerprint(),
-            'items' => $media->map(fn ($m) => ['media_id' => $m->id, 'duration_seconds' => 7])->all(),
+            'items' => $media->map(fn ($m) => ['media_id' => $m->id, 'duration_seconds' => 12])->all(),
         ])->assertOk();
 
     expect($screen->playlistItems()->pluck('media_id')->all())->toBe($media->pluck('id')->all());
@@ -361,14 +361,14 @@ test('the same file can appear more than once in a playlist, at different length
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => $screen->playlistFingerprint(),
             'items' => [
-                ['media_id' => $logo->id, 'duration_seconds' => 6],
+                ['media_id' => $logo->id, 'duration_seconds' => 10],
                 ['media_id' => $offer->id, 'duration_seconds' => 20],
-                ['media_id' => $logo->id, 'duration_seconds' => 8],
+                ['media_id' => $logo->id, 'duration_seconds' => 12],
             ],
         ])->assertOk();
 
     expect($screen->playlistItems()->count())->toBe(3);
-    expect($screen->playlistItems()->pluck('duration_seconds')->all())->toBe([6, 20, 8]);
+    expect($screen->playlistItems()->pluck('duration_seconds')->all())->toBe([10, 20, 12]);
 
     $this->flushSession();
     $items = $this->withHeader('Authorization', 'Bearer tok')->getJson('/device/playlist')->json('items');
@@ -406,7 +406,7 @@ test('a playlist longer than the cap is refused whole', function () {
     $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
         ->putJson("/screens/{$screen->id}/playlist", [
             'version' => $screen->playlistFingerprint(),
-            'items' => array_fill(0, 201, ['media_id' => $media->id, 'duration_seconds' => 6]),
+            'items' => array_fill(0, 201, ['media_id' => $media->id, 'duration_seconds' => 10]),
         ])->assertStatus(422)->assertJsonValidationErrors(['items']);
 
     expect($screen->playlistItems()->count())->toBe(0);
