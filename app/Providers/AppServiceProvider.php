@@ -2,13 +2,16 @@
 
 namespace App\Providers;
 
+use App\Cache\DeadlockRetryingDatabaseStore;
 use App\Http\Controllers\Platform\ImpersonateController;
 use App\Models\Permission;
 use App\Models\User;
 use App\Services\VideoDuration;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
@@ -21,6 +24,27 @@ class AppServiceProvider extends ServiceProvider
     {
         // One per request: an upload's length is read by its validation and again by its storage, from one memo.
         $this->app->singleton(VideoDuration::class);
+
+        // The database cache that runs a deadlock's victim again (config/cache.php's `database` store), registered
+        // before any provider boots, as Laravel's docs ask of a cache driver.
+        $this->app->booting(function () {
+            Cache::extend('database-retrying', function (Application $app, array $config) {
+                $store = new DeadlockRetryingDatabaseStore(
+                    $app['db']->connection($config['connection'] ?? null),
+                    $config['table'],
+                    $this->getPrefix($config),
+                    $config['lock_table'] ?? 'cache_locks',
+                    $config['lock_lottery'] ?? [2, 100],
+                    $config['lock_timeout'] ?? 86400,
+                    $this->getSerializableClasses($config),
+                );
+
+                return $this->repository(
+                    $store->setLockConnection($app['db']->connection($config['lock_connection'] ?? $config['connection'] ?? null)),
+                    $config,
+                );
+            });
+        });
     }
 
     public function boot(): void
