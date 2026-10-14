@@ -10,6 +10,7 @@ use App\Models\Media;
 use App\Models\PlaylistItem;
 use App\Models\ScheduleRule;
 use App\Models\Screen;
+use App\Rules\VideoLength;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -158,7 +159,7 @@ class PlaylistController extends Controller
             'items.*.media_id' => ['nullable', 'integer', 'min:1', 'required_without:items.*.channel_id'],
             'items.*.channel_id' => ['nullable', 'integer', 'min:1'],
             // A file needs a length; a channel line lasts as long as its ads do.
-            'items.*.duration_seconds' => ['nullable', 'integer', 'min:1', 'max:'.PlaylistItem::MAX_IMAGE_SECONDS, 'required_with:items.*.media_id'],
+            'items.*.duration_seconds' => ['nullable', 'integer', 'min:1', 'max:'.PlaylistItem::MAX_SENT_SECONDS, 'required_with:items.*.media_id'],
             // What the client had on screen when it started editing.
             'version' => ['required', 'string'],
 
@@ -175,7 +176,7 @@ class PlaylistController extends Controller
             // Said per line — the page puts the red border on that line's box; its own check says them first.
             'items.*.duration_seconds.integer' => 'Line :position: give the seconds as a whole number.',
             'items.*.duration_seconds.min' => 'Line :position: a picture stays on screen for at least '.PlaylistItem::MIN_IMAGE_SECONDS.' seconds.',
-            'items.*.duration_seconds.max' => 'Line :position: a picture stays on screen for at most 24 hours.',
+            'items.*.duration_seconds.max' => 'Line :position: a picture stays on screen for at most '.VideoLength::inWords(PlaylistItem::MAX_IMAGE_SECONDS).'.',
             // What only a request made by hand could get wrong: the page sends these from its own list.
             'items.present' => self::UNREADABLE_PLAYLIST,
             'items.array' => self::UNREADABLE_PLAYLIST,
@@ -190,7 +191,7 @@ class PlaylistController extends Controller
         $this->assertEachLineIsAFileOrAChannel($items);
         $this->assertMediaBelongsToTheSameOrganization($screen, $items);
         $this->assertFilesAreInNoChannel($items);
-        $this->assertPicturesStayUpLongEnough($items);
+        $this->assertPicturesKeepTheirSeconds($items);
         $this->assertChannelsAreAvailable($screen, $items);
         $this->assertPlatformChannelsMayBeAdded($screen, $items);
 
@@ -591,13 +592,14 @@ class PlaylistController extends Controller
     }
 
     /**
-     * A picture stays on screen for at least PlaylistItem::MIN_IMAGE_SECONDS (owner's rule, 2026-09-28) — and so
-     * does an Ad Builder page published before designs had a length, which is timed like one. A video and a page
-     * with a length of its own are not asked: their lines keep the file's length whatever is sent (writeItems).
+     * A picture stays on screen for at least PlaylistItem::MIN_IMAGE_SECONDS (owner's rule, 2026-09-28) and at most
+     * PlaylistItem::MAX_IMAGE_SECONDS (owner, 2026-10-14) — and so does an Ad Builder page published before designs had
+     * a length, which is timed like one. A video and a page with a length of its own are not asked: their lines keep
+     * the file's length whatever is sent (writeItems).
      *
      * @param  array<int|string, array<string, mixed>>  $items
      */
-    private function assertPicturesStayUpLongEnough(array $items): void
+    private function assertPicturesKeepTheirSeconds(array $items): void
     {
         $lines = collect($items)->filter(fn (array $item) => filled($item['media_id'] ?? null));
         $files = Media::whereIn('id', $lines->pluck('media_id')->map(fn (int|string $id) => (int) $id)->all())
@@ -615,6 +617,13 @@ class PlaylistController extends Controller
                 throw ValidationException::withMessages([
                     "items.{$index}.duration_seconds" => "{$file->title}: a picture stays on screen for at least "
                         .PlaylistItem::MIN_IMAGE_SECONDS.' seconds.',
+                ]);
+            }
+
+            if ((int) $item['duration_seconds'] > PlaylistItem::MAX_IMAGE_SECONDS) {
+                throw ValidationException::withMessages([
+                    "items.{$index}.duration_seconds" => "{$file->title}: a picture stays on screen for at most "
+                        .VideoLength::inWords(PlaylistItem::MAX_IMAGE_SECONDS).'.',
                 ]);
             }
         }

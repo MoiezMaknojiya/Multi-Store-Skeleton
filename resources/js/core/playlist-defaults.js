@@ -6,8 +6,9 @@
 export const PlaylistItemDefaults = {
     imageSeconds: 6,
     minImageSeconds: 6,
-    /* Mirrors PlaylistItem::MAX_IMAGE_SECONDS: the longest one picture holds a playlist's screen (a day). */
-    maxImageSeconds: 86400,
+    /* Mirrors PlaylistItem::MAX_IMAGE_SECONDS: the longest one picture holds a screen, on a playlist as in a channel
+     * (five minutes; owner, 2026-10-14). */
+    maxImageSeconds: 300,
 
     /* Mirrors ChannelAd::UNMEASURED_VIDEO_SECONDS: the length a playlist line gives a video
      * the browser could not measure. A video runs to its own end — the player moves on at

@@ -43,7 +43,8 @@ test('a line of the playlist is refused in the words its box shows, with its pla
     ]])->assertStatus(422)->assertJsonValidationErrors(['items.0.duration_seconds' => $said]);
 })->with([
     'a fraction' => [6.5, 'Line 1: give the seconds as a whole number.'],
-    'past a day' => [100000, 'Line 1: a picture stays on screen for at most 24 hours.'],
+    'past five minutes' => [301, 'Menu: a picture stays on screen for at most 5 minutes.'],
+    'past a day' => [100000, 'Line 1: a picture stays on screen for at most 5 minutes.'],
     'nothing at all' => [0, 'Line 1: a picture stays on screen for at least 6 seconds.'],
 ]);
 

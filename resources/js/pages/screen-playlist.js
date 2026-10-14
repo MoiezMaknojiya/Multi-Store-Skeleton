@@ -8,6 +8,7 @@
  */
 import axios from 'axios';
 import { dayLabel, toAmPm, windowLabel } from '../core/clock.js';
+import { lengthInWords } from '../core/media-file.js';
 import { PlaylistItemDefaults } from '../core/playlist-defaults.js';
 import { isARepeatPress } from '../core/click-beside.js';
 import { announce } from '../core/announce.js';
@@ -457,7 +458,7 @@ export function registerScreenPlaylist(Alpine) {
 
             if (!Number.isInteger(seconds)) return 'give the seconds as a whole number.';
             if (seconds < PlaylistItemDefaults.minImageSeconds) return `a picture stays on screen for at least ${PlaylistItemDefaults.minImageSeconds} seconds.`;
-            if (seconds > PlaylistItemDefaults.maxImageSeconds) return 'a picture stays on screen for at most 24 hours.';
+            if (seconds > PlaylistItemDefaults.maxImageSeconds) return `a picture stays on screen for at most ${lengthInWords(PlaylistItemDefaults.maxImageSeconds)}.`;
 
             return null;
         },

@@ -591,6 +591,16 @@ class PlaylistFlowTest extends DuskTestCase
             ));
             $this->assertSame(0, PlaylistItem::where('screen_id', $screen->id)->count(), 'nothing was saved');
 
+            // And five minutes at most, as in a channel (owner, 2026-10-14): 3600 typed for 36 would hold the screen all day.
+            $this->jsType($browser, '@playlist-duration-0', '301');
+            $this->jsClick($browser, '@playlist-save');
+            $browser->waitUsing(5, 100, fn () => in_array(
+                'Poster Two: a picture stays on screen for at most 5 minutes.',
+                $browser->script('return Alpine.store("toasts").items.map((toast) => toast.message);')[0],
+                true,
+            ));
+            $this->assertSame(0, PlaylistItem::where('screen_id', $screen->id)->count(), 'nothing was saved');
+
             // -- Retime an image -------------------------------------------------
             // Poster Two is first now, so this is its line.
             $this->jsType($browser, '@playlist-duration-0', '20');

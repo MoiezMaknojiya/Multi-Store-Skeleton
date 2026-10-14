@@ -20,8 +20,21 @@ class PlaylistItem extends Model
     /** What an image shows for when nothing else says otherwise (owner's rule, 2026-09-28: six, like the least). */
     public const DEFAULT_IMAGE_SECONDS = 6;
 
-    /** The longest one picture holds a playlist's screen: a whole day. A channel's picture is held to less. */
-    public const MAX_IMAGE_SECONDS = 86400;
+    /**
+     * The longest one picture holds a screen, on a playlist and in a channel alike (ChannelAd::MAX_IMAGE_SECONDS) — owner,
+     * 2026-10-14: "5 minute (300 s), baaki app jaisa: ek hi qanoon har jagah, aur galti ka number ruk jayega". A playlist
+     * took a whole day before, so 3600 typed for 36 kept every other line off that screen all day; a picture shown all
+     * day is a playlist of that picture alone, and the hours it shows are its schedule's.
+     */
+    public const MAX_IMAGE_SECONDS = 300;
+
+    /**
+     * The most seconds a save may send for any file line: a bound on the number alone. Only a picture — and an Ad
+     * Builder page with no length of its own, timed like one — is held to MAX_IMAGE_SECONDS (PlaylistController::
+     * assertPicturesKeepTheirSeconds): a video's line keeps its file's length whatever is sent, and a video uploaded
+     * before videos were held to five minutes is longer.
+     */
+    public const MAX_SENT_SECONDS = 86400;
 
     protected $fillable = ['screen_id', 'media_id', 'channel_id', 'position', 'duration_seconds'];
 
@@ -34,12 +47,13 @@ class PlaylistItem extends Model
     }
 
     /**
-     * How long a picture is on screen for the seconds it was given: the default when it says none, and never under
-     * the least — a line, a channel ad or an advert saved before the least keeps its place and simply plays for it.
+     * How long a picture is on screen for the seconds it was given: the default when it says none, never under the
+     * least and never over the most — a line, a channel ad or an advert saved before either rule keeps its place and
+     * simply plays for it (a playlist's picture of 86400, saved before 2026-10-14, plays for five minutes).
      */
     public static function secondsForAPicture(?int $seconds): int
     {
-        return max(self::MIN_IMAGE_SECONDS, $seconds ?: self::DEFAULT_IMAGE_SECONDS);
+        return min(self::MAX_IMAGE_SECONDS, max(self::MIN_IMAGE_SECONDS, $seconds ?: self::DEFAULT_IMAGE_SECONDS));
     }
 
     public function media(): BelongsTo

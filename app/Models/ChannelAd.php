@@ -23,9 +23,10 @@ class ChannelAd extends Model
 
     /**
      * The longest an IMAGE (or an ad page) may stay up in one go. A channel line sits inside an organization's own
-     * loop, and one still holding the wall for ten minutes is the channel swallowing the organization.
+     * loop, and one still holding the wall for ten minutes is the channel swallowing the organization. One law with
+     * a playlist's picture (owner, 2026-10-14), so it is that one.
      */
-    public const MAX_IMAGE_SECONDS = 300;
+    public const MAX_IMAGE_SECONDS = PlaylistItem::MAX_IMAGE_SECONDS;
 
     /**
      * How long a video is allowed when the browser could not measure it.
