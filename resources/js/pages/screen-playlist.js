@@ -248,8 +248,9 @@ export function registerScreenPlaylist(Alpine) {
         addItem(media, event) {
             // Not while a save is on its way: its answer replaces the list, and this line would go with it. And once
             // for a double click: its second press is the same choice, not a second line (isARepeatPress). Nor onto a
-            // playlist that could not be loaded: saved, it would replace the lines nobody could see.
-            if (this.saving || this.loadFailed || isARepeatPress(event)) return;
+            // playlist that could not be loaded: saved, it would replace the lines nobody could see. Nor while it is still
+            // loading: its answer replaces the list too, and the line would go after its button had said "Added".
+            if (this.saving || this.loading || this.loadFailed || isARepeatPress(event)) return;
 
             this.items.push({
                 key: this.nextKey++,
@@ -291,7 +292,7 @@ export function registerScreenPlaylist(Alpine) {
          * and new ones arrive without anybody coming back here.
          */
         addChannel(channel, event) {
-            if (this.saving || this.loadFailed || channel.locked || isARepeatPress(event)) return;
+            if (this.saving || this.loading || this.loadFailed || channel.locked || isARepeatPress(event)) return;
 
             this.items.push({
                 key: this.nextKey++,

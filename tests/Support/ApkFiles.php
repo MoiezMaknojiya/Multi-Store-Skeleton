@@ -12,10 +12,16 @@ use ZipArchive;
  */
 final class ApkFiles
 {
-    /** A manifest saying the package and version given; a null leaves that attribute out. */
-    public static function manifest(?string $package = PlayerAppRelease::PACKAGE, ?int $versionCode = 2, ?string $versionName = '1.1'): string
+    /**
+     * A manifest saying the package and version given; a null leaves that attribute out. With no `$versionCode`, a
+     * `$versionCodeText` writes the version code as words in the string pool, as a build may.
+     */
+    public static function manifest(?string $package = PlayerAppRelease::PACKAGE, ?int $versionCode = 2, ?string $versionName = '1.1', ?string $versionCodeText = null): string
     {
         $strings = ['versionCode', 'versionName', 'manifest', 'package', $package ?? '', $versionName ?? ''];
+        if ($versionCodeText !== null) {
+            $strings[] = $versionCodeText;
+        }
         $index = array_flip(['versionCode', 'versionName', 'manifest', 'package']);
         $packageIndex = 4;
         $nameIndex = 5;
@@ -42,6 +48,8 @@ final class ApkFiles
         }
         if ($versionCode !== null) {
             $attributes[] = pack('VVVvCCV', 0xFFFFFFFF, $index['versionCode'], 0xFFFFFFFF, 8, 0, 0x10, $versionCode);
+        } elseif ($versionCodeText !== null) {
+            $attributes[] = pack('VVVvCCV', 0xFFFFFFFF, $index['versionCode'], 6, 8, 0, 0x03, 6);
         }
         if ($versionName !== null) {
             $attributes[] = pack('VVVvCCV', 0xFFFFFFFF, $index['versionName'], $nameIndex, 8, 0, 0x03, $nameIndex);

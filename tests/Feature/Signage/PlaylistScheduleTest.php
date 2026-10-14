@@ -283,6 +283,17 @@ test('a preview refuses the hours a save would refuse, in the same words', funct
     ])->assertStatus(422)->assertJsonValidationErrors(['rules.0.end_time' => 'Time: give both a start and an end, or choose All day.']);
 });
 
+test('a preview leaves out a rule with no field of a rule, as the save does, instead of failing', function () {
+    $preview = fn (array $rules) => $this->postJson("/screens/{$this->screen->id}/playlist/preview", ['rules' => $rules]);
+    $lunch = $preview([$this->lunch])->assertOk()->json('occurrences');
+
+    // validated() keeps no rule whose fields are all missing, so with nothing else posted it held no
+    // `rules` at all, and reading it was a 500 ("Undefined array key"). Only a request made by hand sends one.
+    $preview([[]])->assertOk()->assertExactJson(['occurrences' => []]);
+    $preview([['colour' => 'red']])->assertOk()->assertExactJson(['occurrences' => []]);
+    expect($preview([[], $this->lunch])->assertOk()->json('occurrences'))->toBe($lunch)->not->toBeEmpty();
+});
+
 test('the whole playlist, schedules included, copies onto other screens', function () {
     $target = Screen::factory()->create(['organization_id' => $this->organization->id, 'name' => 'Window TV']);
 

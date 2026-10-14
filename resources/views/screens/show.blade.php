@@ -332,7 +332,7 @@
                                 </p>
                             </div>
 
-                            <button @click="addItem(media, $event)" x-bind:dusk="'playlist-add-' + media.id" x-bind:disabled="saving"
+                            <button @click="addItem(media, $event)" x-bind:dusk="'playlist-add-' + media.id" x-bind:disabled="saving || loading || loadFailed"
                                 class="btn-row-neutral" x-bind:aria-label="(addedId === media.id ? 'Added ' : 'Add ') + media.title + ' to the playlist'"
                                 x-text="addedId === media.id ? 'Added' : 'Add'">Add</button>
                         </div>
@@ -401,7 +401,7 @@
                                         x-bind:aria-expanded="(openChannelId === channel.id).toString()"
                                         x-text="openChannelId === channel.id ? 'Hide Ads' : 'Show Ads'"></button>
 
-                                <button @click="addChannel(channel, $event)" x-bind:dusk="'playlist-add-channel-' + channel.id" x-bind:disabled="saving"
+                                <button @click="addChannel(channel, $event)" x-bind:dusk="'playlist-add-channel-' + channel.id" x-bind:disabled="saving || loading || loadFailed"
                                     x-show="!channel.locked"
                                     class="btn-row-neutral" x-bind:aria-label="'Add the channel ' + channel.title + ' to the playlist'">Add</button>
                                 <button type="button" x-show="channel.locked" x-cloak @click="$dispatch('open-modal', 'unlock-platform-channels')"

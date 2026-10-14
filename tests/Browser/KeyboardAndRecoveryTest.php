@@ -9,6 +9,7 @@ use App\Models\Media;
 use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Role;
+use App\Models\ScheduleRule;
 use App\Models\Screen;
 use App\Models\User;
 use Facebook\WebDriver\Chrome\ChromeDevToolsDriver;
@@ -281,6 +282,74 @@ class KeyboardAndRecoveryTest extends DuskTestCase
             $browser->loginAs($admin)->visit('/users')->waitFor('@manage-organizations-'.$staff->id);
             $browser->click('@manage-organizations-'.$staff->id)->waitFor('@membership-remove-'.$alpha->id);
             $this->assertSame([], $this->misnamed($browser), 'the Organizations dialog of the Users page');
+        });
+    }
+
+    public function test_a_weekday_pressed_alone_is_a_change_escape_asks_about(): void
+    {
+        [$owner, $alpha, $screen] = $this->screenWithLines(['Breakfast']);
+        ScheduleRule::create([
+            'playlist_item_id' => PlaylistItem::where('screen_id', $screen->id)->value('id'),
+            'recurrence_type' => ScheduleRule::WEEKLY, 'recurrence_interval' => 1, 'recurrence_weekdays' => [1],
+        ]);
+
+        $this->browse(function (Browser $browser) use ($owner, $alpha, $screen) {
+            $this->signIn($browser, $owner, $alpha, '/screens/'.$screen->id);
+            $browser->waitFor('@playlist-schedule-0')->click('@playlist-schedule-0')->waitFor('@rule-weekday-3-0')->pause(300);
+
+            // Wednesday pressed, no field typed in: a button that chooses (aria-pressed) is a change too.
+            $browser->click('@rule-weekday-3-0')->pause(150);
+            $this->press($browser, WebDriverKeys::ESCAPE);
+            $browser->waitFor('@playlist-schedule-modal-discard-ask')->assertSee('Discard your changes?');
+
+            // Pressed again, it is as it was: Escape closes at once.
+            $browser->click('@playlist-schedule-modal-keep-editing')->waitUntilMissing('@playlist-schedule-modal-discard-ask')
+                ->click('@rule-weekday-3-0')->pause(150);
+            $this->press($browser, WebDriverKeys::ESCAPE);
+            $browser->waitUntilMissing('@rule-weekday-3-0')->assertMissing('@playlist-schedule-modal-discard-ask');
+        });
+    }
+
+    public function test_add_waits_until_the_playlist_has_loaded(): void
+    {
+        [$owner, $alpha, $screen] = $this->screenWithLines([]);
+        $poster = Media::factory()->create(['organization_id' => $alpha->id, 'title' => 'Poster', 'thumbnail_path' => null]);
+
+        $this->browse(function (Browser $browser) use ($owner, $alpha, $screen, $poster) {
+            $this->signIn($browser, $owner, $alpha, '/dashboard');
+
+            // The playlist's own answer held back, as on a slow line, while the library beside it arrives: its answer
+            // replaces the lines, so a line added meanwhile went after its button had said "Added".
+            $tools = new ChromeDevToolsDriver($browser->driver);
+            $tools->execute('Fetch.enable', ['patterns' => [['urlPattern' => '*/screens/'.$screen->id.'/playlist']]]);
+
+            try {
+                $browser->visit('/screens/'.$screen->id)->waitFor('@playlist-add-'.$poster->id)->pause(400)
+                    ->assertDisabled('@playlist-add-'.$poster->id);
+                $browser->script("const add = document.querySelector('[dusk=\"playlist-add-{$poster->id}\"]'); add.disabled = false; add.click();");
+                $this->assertSame(0, $browser->script("return Alpine.\$data(document.querySelector('[x-data^=\"screenPlaylist\"]')).items.length;")[0]);
+            } finally {
+                $tools->execute('Fetch.disable');
+            }
+
+            $browser->waitFor('@playlist-empty')->assertEnabled('@playlist-add-'.$poster->id)
+                ->click('@playlist-add-'.$poster->id)->waitFor('@playlist-title-0')->assertSeeIn('@playlist-title-0', 'Poster');
+        });
+    }
+
+    public function test_an_impossible_day_in_the_address_is_left_out_and_the_log_still_loads(): void
+    {
+        $admin = $this->seedSuperAdmin();
+
+        $this->browse(function (Browser $browser) use ($admin) {
+            $this->freshSession($browser);
+            // The 13th month could not be sent at all (the log said it could not load, again on every reload), and the
+            // 30th of February became the 2nd of March.
+            $browser->loginAs($admin)->visit('/activity?from=2026-13-01&to=2026-02-30');
+            $this->waitForAlpine($browser);
+            $browser->pause(1500)->assertMissing('@table-load-failed')->assertSelected('@activity-range-preset', '30d');
+            $this->assertNotSame('2026-13-01', $browser->inputValue('@activity-range-from'));
+            $this->assertNotSame('2026-02-30', $browser->inputValue('@activity-range-to'));
         });
     }
 

@@ -358,7 +358,9 @@ class PlaylistController extends Controller
         $from = $screen->localTime();
         $days = $validated['days'] ?? 7;
 
-        $occurrences = collect($validated['rules'])
+        // A rule with none of a rule's fields is left out of validated(), as the save leaves it out of the line —
+        // and with nothing else posted, so is `rules` itself.
+        $occurrences = collect($validated['rules'] ?? [])
             ->map(function (array $posted) use ($from) {
                 $rule = new ScheduleRule($this->ruleAttributes($posted));
 

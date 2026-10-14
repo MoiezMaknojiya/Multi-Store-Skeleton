@@ -181,6 +181,19 @@ test('a manifest built to break the reader reads as nothing, never as an error o
     }
 });
 
+test('a version code written as words is kept only inside the numbers Android allows', function () {
+    $code = fn (string $words) => readManifest(ApkFiles::manifest(versionCode: null, versionCodeText: $words))['version_code'];
+
+    // Words past the column's reach once made the save a 500 on MySQL; nought is no version. Asked for, never kept.
+    expect($code('7'))->toBe(7)
+        ->and($code('2100000000'))->toBe(2100000000)
+        ->and($code('2100000001'))->toBeNull()
+        ->and($code('5000000000'))->toBeNull()
+        ->and($code(str_repeat('9', 30)))->toBeNull()
+        ->and($code('0'))->toBeNull()
+        ->and($code('-3'))->toBeNull();
+});
+
 /** What the reader makes of manifest bytes alone; it must never throw. */
 function readManifestOnly(string $bytes): array
 {

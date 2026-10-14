@@ -158,9 +158,11 @@ class ApkInspector
             if ($name === 'package') {
                 $found['package'] = $text;
             } elseif ($name === 'versionCode' || $resourceId === self::VERSION_CODE_ID) {
-                $found['version_code'] = in_array($dataType, [self::TYPE_INT_DEC, self::TYPE_INT_HEX], true) && $data >= 1 && $data <= 2100000000
+                $code = in_array($dataType, [self::TYPE_INT_DEC, self::TYPE_INT_HEX], true) && $data >= 1 && $data <= 2100000000
                     ? $data
                     : (is_string($text) && ctype_digit($text) ? (int) $text : null);
+                // Android's own ceiling for words too: past it the column cannot hold the number, and the save failed.
+                $found['version_code'] = $code !== null && $code >= 1 && $code <= 2100000000 ? $code : null;
             } elseif ($name === 'versionName' || $resourceId === self::VERSION_NAME_ID) {
                 $found['version_name'] = $text;
             }

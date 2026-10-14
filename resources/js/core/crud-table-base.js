@@ -39,7 +39,7 @@ export function createCrudTable({
                          // server; the modal uses <x-crud.password-confirm>)
     addressKeys = {},    // { param: 'stateProperty' | ['stateProperty', allowed] } the listing keeps in the page's address
                          // besides its search, page and sort, so a filter survives a visit to a row and back, a reload
-                         // and a link sent to a colleague; `allowed` is a list of values or a RegExp — anything else
+                         // and a link sent to a colleague; `allowed` is a list of values, a RegExp or a test — anything else
                          // in the address is left out, as is a value the server then refuses (422)
     extraState = {},     // Additional reactive properties specific to the entity
     extraMethods = {},   // Additional methods specific to the entity
@@ -54,8 +54,12 @@ export function createCrudTable({
     /* The address's keys: { param: { prop, allows(value) } }. */
     const kept = Object.fromEntries(Object.entries(addressKeys).map(([param, spec]) => {
         const [prop, allowed] = Array.isArray(spec) ? spec : [spec, null];
-        const allows = (value) => allowed === null
-            || (allowed instanceof RegExp ? allowed.test(value) : allowed.includes(value));
+        const allows = (value) => {
+            if (allowed === null) return true;
+            if (allowed instanceof RegExp) return allowed.test(value);
+
+            return typeof allowed === 'function' ? allowed(value) : allowed.includes(value);
+        };
 
         return [param, { prop, allows }];
     }));

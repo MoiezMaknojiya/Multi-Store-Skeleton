@@ -10,13 +10,16 @@ import { createCrudTable } from '../core/crud-table-base.js';
 /* Local-timezone YYYY-MM-DD (toISOString would shift the day near midnight). */
 const isoDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return isoDate(d); };
+/* A day of the calendar as a date box writes it: "2026-13-01" would make the range unreadable (toISOString throws, so
+ * the log could not load, again on every reload), and "2026-02-30" would quietly become the 2nd of March. */
+const isCalendarDay = (value) => /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) && isoDate(new Date(`${value}T00:00:00`)) === value;
 
 export function registerActivityTable(Alpine) {
     Alpine.data('activityTable', (config = {}) => createCrudTable({
         fetchUrl: '/activity/data',
         dataKey: 'logs',
         entityLabel: 'activity entry',
-        addressKeys: { from: ['from', /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/], to: ['to', /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/] },
+        addressKeys: { from: ['from', isCalendarDay], to: ['to', isCalendarDay] },
         extraState: {
             /* Whether this viewer holds activity-destroy — the storage panel is theirs. */
             canMaintain: config.canMaintain ?? false,

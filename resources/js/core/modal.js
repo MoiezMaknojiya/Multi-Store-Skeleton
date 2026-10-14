@@ -55,9 +55,10 @@ const NOT_A_CHANGE = ['search', 'file', 'hidden', 'password', 'button', 'submit'
 function changeableOf(target) {
     const el = target?.closest?.('input, select, textarea, [aria-pressed]') ?? (target?.closest?.('label')?.control ?? null);
 
-    if (!el || el.closest('[data-not-a-change]') || NOT_A_CHANGE.includes(el.type)) return null;
+    if (!el || el.closest('[data-not-a-change]')) return null;
 
-    return el;
+    // A button that chooses is one before its type is asked: every <button> is a 'button' or a 'submit'.
+    return el.hasAttribute('aria-pressed') || !NOT_A_CHANGE.includes(el.type) ? el : null;
 }
 
 function valueOf(el) {
