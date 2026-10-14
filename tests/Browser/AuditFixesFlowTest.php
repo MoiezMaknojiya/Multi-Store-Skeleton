@@ -513,6 +513,45 @@ class AuditFixesFlowTest extends DuskTestCase
     }
 
     /** The contrast of an element's colour (its border or its fill) against the card it stands on. */
+    public function test_every_kind_of_field_has_an_edge_that_stands_out_in_light_and_dark(): void
+    {
+        [$owner, $alpha] = $this->organizationWith(['screen-view']);
+
+        $this->browse(function (Browser $browser) use ($owner, $alpha) {
+            $this->signIn($browser, $owner, $alpha, '/screens');
+
+            // A field's edge is what says it is a field (WCAG 1.4.11): gray-300 on white was 1.47:1, gray-700 on the
+            // dark card 1.41:1. Each kind is measured against the card it stands on.
+            foreach (['false', 'true'] as $dark) {
+                $browser->script("localStorage.setItem('darkMode', '{$dark}')");
+                foreach (['/screens' => ['input.form-input[type="search"]', 'select.form-select'], '/profile' => ['input.form-input-auth']] as $page => $fields) {
+                    $browser->visit($page);
+                    $this->waitForAlpine($browser);
+                    $this->assertSame($dark === 'true', $browser->script("return document.documentElement.classList.contains('dark');")[0]);
+                    foreach ($fields as $field) {
+                        $where = "{$field} on {$page}".($dark === 'true' ? ' in dark mode' : '');
+                        $this->assertGreaterThanOrEqual(3.0, $this->contrastOf($browser, $field, 'borderTopColor'), "{$where} is too faint to be seen as a field");
+
+                        // And the keyboard's blue still wins over the edge.
+                        [$focused, $blue] = $browser->script(<<<JS
+                            const field = document.querySelector('{$field}');
+                            field.focus();
+                            const probe = document.createElement('div');
+                            probe.style.border = '1px solid var(--color-blue-500)';
+                            document.body.append(probe);
+                            const answer = [getComputedStyle(field).borderTopColor, getComputedStyle(probe).borderTopColor];
+                            probe.remove();
+                            field.blur();
+                            return answer;
+                        JS)[0];
+                        $this->assertSame($blue, $focused, "{$where} does not turn blue when it has the keyboard");
+                    }
+                }
+            }
+            $browser->script("localStorage.setItem('darkMode', 'false')");
+        });
+    }
+
     private function contrastOf(Browser $browser, string $css, string $property): float
     {
         return (float) $browser->script(<<<JS

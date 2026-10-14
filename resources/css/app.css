@@ -64,6 +64,11 @@
     --color-gray-900:  #101828;
     --color-gray-950:  #0c111d;
 
+    /* A field's edge (form-input, form-input-auth, form-select): the lightest grays that still stand out at 3:1 from
+       the card a field stands on (WCAG 1.4.11) — on white, and on the dark card (gray-800). gray-300 was 1.47:1 and
+       gray-700 1.41:1; gray-400 is 2.58:1 and gray-500 2.96:1 on the dark card. Owner's choice, 2026-10-14. */
+    --color-field-edge:      #8993a5;
+    --color-field-edge-dark: #6b758a;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -288,7 +293,7 @@
    zooms the whole page into any field whose text is smaller than 16px, and does not zoom back. */
 @utility form-input {
     @apply block w-full h-10 px-4 text-base sm:text-sm
-           border border-gray-300 dark:border-gray-700
+           border border-field-edge dark:border-field-edge-dark
            bg-white dark:bg-gray-900
            text-gray-800 dark:text-gray-300
            placeholder-gray-500 dark:placeholder-gray-400
@@ -306,12 +311,12 @@
    variants (and the dark autofill override below). */
 @utility form-input-auth {
     @apply block w-full h-10 px-4 text-base sm:text-sm
-           border border-gray-300
+           border border-field-edge
            bg-white text-gray-800 placeholder-gray-500
            rounded-lg
            focus:outline-none focus:border-blue-500
            focus:ring-2 focus:ring-blue-500/20
-           dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100 dark:placeholder-gray-400;
+           dark:bg-gray-900 dark:border-field-edge-dark dark:text-gray-100 dark:placeholder-gray-400;
 }
 
 /* ── Select dropdown ───────────────────────────────────────────────────
@@ -331,7 +336,7 @@
         line-height: 1.25rem;
         border-width: 1px;
         border-style: solid;
-        border-color: var(--color-gray-300);
+        border-color: var(--color-field-edge);
         background-color: var(--color-white);
         color: var(--color-gray-800);
         border-radius: 0.375rem;         /* rounded-md */
@@ -362,10 +367,15 @@
 
     /* Dark-mode select — uses .dark variant + class for specificity */
     .dark .form-select {
-        border-color: var(--color-gray-700);
+        border-color: var(--color-field-edge-dark);
         background-color: var(--color-gray-900);
         color: var(--color-gray-300);
         background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%2398a2b3' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+    }
+
+    /* The keyboard's blue in the dark too: `.dark .form-select` comes later and weighs the same as `:focus`. */
+    .dark .form-select:focus {
+        border-color: var(--color-blue-500);
     }
 }
 
