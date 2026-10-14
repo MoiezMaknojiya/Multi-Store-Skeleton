@@ -189,13 +189,27 @@ class PlaylistPickerTabsTest extends DuskTestCase
             $browser->visit('/dashboard');
             $this->network($browser, 1200);
 
-            $browser->visit('/screens/'.$screen->id);
-            $this->waitForAlpine($browser);
-            $this->watch($browser);
+            // The two lists held back until they have been seen on their way: on the slow line the page is only
+            // "loaded" after its font and its logo, by when a list with nothing to wait for has long arrived — the
+            // card's "Loading..." was gone before it could be looked at, and the test failed for it (2026-10-14).
+            $tools = new ChromeDevToolsDriver($browser->driver);
+            $tools->execute('Fetch.enable', ['patterns' => [
+                ['urlPattern' => '*/screens/'.$screen->id.'/available-media*'],
+                ['urlPattern' => '*/screens/'.$screen->id.'/available-channels*'],
+            ]]);
 
-            // While the lists are on their way the card says so on its open tab, and the Channels tab waits for
-            // its list: pressing where it will be does nothing.
-            $browser->waitFor('@picker-tab-library')->assertSeeIn('@media-picker', 'Loading...');
+            try {
+                $browser->visit('/screens/'.$screen->id);
+                $this->waitForAlpine($browser);
+                $this->watch($browser);
+
+                // While the lists are on their way the card says so on its open tab, and the Channels tab waits for
+                // its list.
+                $browser->waitFor('@picker-tab-library')->assertSeeIn('@media-picker', 'Loading...')
+                    ->assertMissing('@picker-tab-channels');
+            } finally {
+                $tools->execute('Fetch.disable');
+            }
 
             $browser->waitFor('@picker-tab-channels', 15);
             $this->presses($browser, $this->centreOf($browser, '[dusk="picker-tab-channels"]'), 2);

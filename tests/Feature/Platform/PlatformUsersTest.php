@@ -161,6 +161,35 @@ test('platform invitations are the super admins’ alone', function () {
     $this->actingAs($support)->getJson('/users/invitations')->assertForbidden();
 });
 
+test('a platform invitation is sent again with a new link and revoked by a super admin, and never reaches an organization’s', function () {
+    $team = Role::create(['name' => 'Support', 'is_global' => true]);
+    $platform = Invitation::factory()->forPlatform()->withToken($first = str_repeat('a', 64))->create(['email' => 'helper@example.com', 'role_id' => $team->id]);
+    $organizations = Invitation::factory()->create(['organization_id' => $this->organization->id, 'email' => 'cashier@example.com']);
+    $support = createPlatformUser(['user-view', 'user-destroy']);
+
+    // On the platform team but no super admin: neither.
+    $this->actingAs($support)->postJson("/users/invitations/{$platform->id}/resend")->assertForbidden();
+    $this->actingAs($support)->deleteJson("/users/invitations/{$platform->id}")->assertForbidden();
+
+    // An organization's invitation is its Members page's to change, never these doors'.
+    $this->actingAs($this->primary)->postJson("/users/invitations/{$organizations->id}/resend")->assertNotFound();
+    $this->actingAs($this->primary)->deleteJson("/users/invitations/{$organizations->id}")->assertNotFound();
+    expect($organizations->fresh())->not->toBeNull();
+    Notification::assertNothingSent();
+
+    // Sent again: a new link, and the first one no longer opens it.
+    $this->actingAs($this->primary)->postJson("/users/invitations/{$platform->id}/resend")->assertOk()->assertJson(['email_sent' => true]);
+    expect(Invitation::findByToken($first))->toBeNull()
+        ->and($platform->fresh()->token_hash)->not->toBe(Invitation::hashToken($first));
+    Notification::assertSentOnDemand(InvitationNotification::class);
+
+    // Revoked: gone, logged, and a second press says it is not there.
+    $this->actingAs($this->primary)->deleteJson("/users/invitations/{$platform->id}")->assertOk();
+    expect(Invitation::find($platform->id))->toBeNull()
+        ->and(ActivityLog::where('action', 'invitation.revoked')->where('description', 'like', '%helper@example.com%')->exists())->toBeTrue();
+    $this->actingAs($this->primary)->deleteJson("/users/invitations/{$platform->id}")->assertNotFound();
+});
+
 test('the accounts listing runs a bounded number of queries however many rows there are', function () {
     $countQueries = function () {
         DB::flushQueryLog();
