@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\AdAnimations;
 use App\Services\MediaStorage;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -439,5 +440,73 @@ class BuilderAd extends Model
         return is_int($seconds) && $seconds >= 1
             ? max(self::MIN_SECONDS, min(self::MAX_SECONDS, $seconds))
             : self::DEFAULT_SECONDS;
+    }
+
+    /**
+     * The least this design may last: the moment its last shown animation is over — an entrance landed, an exit gone,
+     * a loop round once after its wait — rounded up to a whole second, never under MIN_SECONDS nor past MAX_SECONDS
+     * (owner, 2026-10-14: "agar ad builder mein animation 10 seconds se ziyada ho toh minimum second wahi dikhaye aur
+     * max toh 5 minutes ha"; the editor raises the length to it by itself, editor.js leastAdSeconds). An element that
+     * is hidden, or inside a hidden group, is on no screen and does not count, nor does an effect AdAnimations does
+     * not know; the numbers are read as AdAnimations keeps them, so a hand-made one cannot reach past what it allows.
+     */
+    public static function leastLengthFor(?array $document): int
+    {
+        $elements = collect(is_array($document['elements'] ?? null) ? $document['elements'] : [])->filter(fn (mixed $element) => is_array($element));
+        // An id that is no word is nobody's parent (a list posted by hand is read, never turned into text: a 500).
+        $byId = $elements->keyBy(fn (array $element) => is_string($element['id'] ?? null) ? $element['id'] : '');
+
+        // Shown: itself and every group around it visible. A parent that is not there, or a circle, is shown nowhere.
+        $shown = function (array $element) use ($byId): bool {
+            $at = $element;
+
+            for ($steps = 0; $steps <= 10; $steps++) {
+                if (($at['visible'] ?? true) === false) {
+                    return false;
+                }
+
+                $parent = $at['parentId'] ?? null;
+
+                if ($parent === null || $parent === '') {
+                    return true;
+                }
+
+                if (! is_string($parent)) {
+                    return false;
+                }
+
+                $at = $byId->get($parent);
+
+                if (! is_array($at)) {
+                    return false;
+                }
+            }
+
+            return false;
+        };
+
+        $animations = app(AdAnimations::class);
+        $end = 0.0;
+
+        foreach ($elements as $element) {
+            if (! $shown($element)) {
+                continue;
+            }
+
+            $slots = $animations->sanitize($element['animations'] ?? null);
+            $landed = isset($slots['in']) ? $slots['in']['delay'] + $slots['in']['duration'] : 0.0;
+            $end = max($end, $landed);
+
+            if (isset($slots['loop'])) {
+                $end = max($end, $landed + $slots['loop']['delay'] + $slots['loop']['duration']);
+            }
+
+            if (isset($slots['out'])) {
+                $end = max($end, $slots['out']['at'] + $slots['out']['duration']);
+            }
+        }
+
+        // Rounded to the thousandth first, so 8 + 1 + 2 + 3 is fourteen and not a hair past it.
+        return (int) min(self::MAX_SECONDS, max(self::MIN_SECONDS, ceil(round($end, 3))));
     }
 }

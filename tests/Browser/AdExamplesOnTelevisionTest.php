@@ -75,10 +75,12 @@ class AdExamplesOnTelevisionTest extends DuskTestCase
 
             $this->jsClick($panel, '@playlist-save');
             $panel->waitUsing(15, 250, fn () => PlaylistItem::where('screen_id', $screen->id)->count() === 4);
-            $this->assertSame(
-                array_fill(0, 4, BuilderAd::DEFAULT_SECONDS),
-                PlaylistItem::where('screen_id', $screen->id)->orderBy('position')->pluck('duration_seconds')->all(),
-            );
+            // Each its own: as long as its animations run, and never under the default (owner, 2026-10-14) — one of the
+            // four runs for forty-two seconds.
+            $lengths = $ads->map(fn (BuilderAd $ad) => $ad->media->fresh()->ownLength())->all();
+            $this->assertSame($lengths, PlaylistItem::where('screen_id', $screen->id)->orderBy('position')->pluck('duration_seconds')->all());
+            $this->assertSame(BuilderAd::DEFAULT_SECONDS, min($lengths));
+            $this->assertGreaterThan(BuilderAd::DEFAULT_SECONDS, max($lengths), 'no example runs longer than the default: the test proves nothing');
 
             /* ── 3. Reopened, the television asks at once rather than at its next poll ── */
             $tv->refresh();

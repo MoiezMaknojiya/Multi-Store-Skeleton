@@ -93,8 +93,18 @@ class BuilderAdRequest extends FormRequest
             // How long the ad is on screen (BuilderAd::DEFAULT_SECONDS): every playlist and channel plays it this
             // long, and a video inside it repeats or is cut to fit. A design saved before it had one says the default.
             // A real number only (`strict`): "8" or true passes the loose rule, and the editor would show the
-            // default for either while the screens played something else. Ten seconds at least, like a picture.
-            'document.duration' => ['nullable', 'integer:strict', 'min:'.BuilderAd::MIN_SECONDS, 'max:'.BuilderAd::MAX_SECONDS],
+            // default for either while the screens played something else. Ten seconds at least, like a picture — and
+            // as long as its animations run, which the editor raises it to by itself (BuilderAd::leastLengthFor).
+            'document.duration' => ['bail', 'nullable', 'integer:strict', 'min:'.BuilderAd::MIN_SECONDS, 'max:'.BuilderAd::MAX_SECONDS,
+                function (string $attribute, mixed $value, Closure $fail) {
+                    $document = $this->input('document');
+                    $least = BuilderAd::leastLengthFor(is_array($document) ? $document : null);
+
+                    if (is_int($value) && $value < $least) {
+                        $fail("This ad's animations run for {$least} seconds, so it stays on screen for at least {$least} seconds.");
+                    }
+                },
+            ],
 
             // The frame is the size a television is — 1920×1080, or 1080×1920 mounted upright — and the
             // ad's orientation says which. Nothing may say otherwise: a document claiming another size would

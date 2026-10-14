@@ -17,6 +17,7 @@
  */
 import axios from 'axios';
 import { isAClickBeside, noteShut } from '../core/click-beside.js';
+import { lengthInWords } from '../core/media-file.js';
 import { arrangePanel, CLIPBOARD_KEY, readClipboard } from './arrange.js';
 import {
     clampName, isGroup, MAX_NAME, MAX_TEXT, newId, normaliseDocument, parentIdOf, readPreference, renumberDepth, syncGroupBounds,
@@ -112,8 +113,8 @@ export function registerAdEditor(Alpine) {
             maxElements: config.maxElements ?? 200,
             maxGuides: config.maxGuides ?? 50,
             /* How long the ad is on screen (BuilderAd::DEFAULT_SECONDS, ::MAX_SECONDS): the design's own. */
-            adSecondsDefault: config.adSeconds?.default ?? 6,
-            adSecondsMin: config.adSeconds?.min ?? 6,
+            adSecondsDefault: config.adSeconds?.default ?? 10,
+            adSecondsMin: config.adSeconds?.min ?? 10,
             adSecondsMax: config.adSeconds?.max ?? 300,
 
             /* ── Editor state (not part of the design) ─────────────────── */
@@ -185,7 +186,14 @@ export function registerAdEditor(Alpine) {
 
             /* ── Lifecycle ─────────────────────────────────────────────── */
             init() {
+                // A design opened with animations running past its length (saved before the length followed them)
+                // is given the length they need, as a change of its own, so the next save and Publish carry it.
+                const raised = this.coverTheAnimations();
                 this.history = createHistory(this.doc);
+                if (raised) {
+                    this.markChanged();
+                    this.$nextTick(() => this.sayTheLengthRose());
+                }
                 this.$nextTick(() => this.zoomToFit());
 
                 // A saved design names its fonts; the catalogue says where they live, so it is fetched
@@ -346,6 +354,66 @@ export function registerAdEditor(Alpine) {
             },
 
             /**
+             * The least the ad may last: the moment its last shown animation is over — an entrance landed, an exit
+             * gone, a loop round once after its wait — rounded up to a whole second, never under the shortest nor past
+             * the longest an ad may be (owner, 2026-10-14: "agar ad builder mein animation 10 seconds se ziyada ho toh
+             * minimum second wahi dikhaye aur max toh 5 minutes ha"). BuilderAd::leastLengthFor says the same, and the
+             * server refuses a save below it.
+             */
+            leastAdSeconds() {
+                const number = (animations, slot, key) => {
+                    const value = Number(animations[slot]?.[key]);
+
+                    return Number.isFinite(value) ? value : Number(this.animationNumbers?.[slot]?.[key]?.[2] ?? 0);
+                };
+                let end = 0;
+
+                for (const element of this.doc.elements ?? []) {
+                    if (!this.isShown(element)) continue;
+
+                    const animations = element.animations ?? {};
+                    const landed = animations.in?.effect ? number(animations, 'in', 'delay') + number(animations, 'in', 'duration') : 0;
+
+                    end = Math.max(end, landed);
+                    if (animations.loop?.effect) end = Math.max(end, landed + number(animations, 'loop', 'delay') + number(animations, 'loop', 'duration'));
+                    if (animations.out?.effect) end = Math.max(end, number(animations, 'out', 'at') + number(animations, 'out', 'duration'));
+                }
+
+                // To the thousandth first, so 8 + 1 + 2 + 3 is fourteen and not a hair past it.
+                return Math.min(this.adSecondsMax, Math.max(this.adSecondsMin, Math.ceil(Math.round(end * 1000) / 1000)));
+            },
+
+            /**
+             * A length shorter than the animations rises to them (asked, the owner chose "Length khud badhe"); it never
+             * falls by itself when an animation goes. Returns whether it rose.
+             */
+            coverTheAnimations() {
+                if (!this.hasOwnLength()) return false;
+
+                const least = this.leastAdSeconds();
+                if (this.doc.duration >= least) return false;
+
+                this.doc.duration = least;
+
+                return true;
+            },
+
+            /** Said where the designer is: the Length is in the Stage panel, out of sight while an element is edited. */
+            sayTheLengthRose() {
+                window.toast(`The ad now lasts ${this.doc.duration} seconds, so its animations are seen to the end.`, 'success');
+            },
+
+            /** Under the Length: its range, or the least the animations need when that is more than the shortest. */
+            lengthNote() {
+                const least = this.leastAdSeconds();
+                const most = lengthInWords(this.adSecondsMax);
+
+                return least > this.adSecondsMin
+                    ? `At least ${least} seconds: the animations run that long. At most ${most}.`
+                    : `${this.adSecondsMin} seconds to ${most}, on every screen and channel.`;
+            },
+
+            /**
              * Set the ad's length, held between the shortest and the longest the server takes. Emptied, the ad has
              * no length of its own again, and each screen keeps the seconds it gives it.
              */
@@ -363,7 +431,7 @@ export function registerAdEditor(Alpine) {
 
                 if (! Number.isFinite(seconds)) return this.hasOwnLength() ? this.adSeconds() : '';
 
-                this.doc.duration = Math.min(this.adSecondsMax, Math.max(this.adSecondsMin, seconds));
+                this.doc.duration = Math.min(this.adSecondsMax, Math.max(this.leastAdSeconds(), seconds));
                 this.commit('Length');
 
                 return this.doc.duration;
@@ -378,8 +446,11 @@ export function registerAdEditor(Alpine) {
                 syncGroupBounds(this.doc);
                 this.leaveMissingGroup();
                 this.ensureSelectionExists();
+                // In the same step, so Undo takes the animation and the length it needed back together.
+                const raised = this.coverTheAnimations();
                 this.history.commit(this.doc, label);
                 this.markChanged();
+                if (raised) this.sayTheLengthRose();
             },
 
             /** Something differs from what was saved — by a change, an undo, or a jump in the history. */

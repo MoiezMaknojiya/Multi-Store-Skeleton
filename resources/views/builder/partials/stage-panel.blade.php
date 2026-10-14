@@ -2,16 +2,17 @@
      colours, gradients, pictures and videos, each with its own opacity and blend mode. --}}
 <div class="space-y-5 p-4" dusk="stage-panel">
     {{-- How long the ad is on screen — the design's own, as a layout's duration is in Xibo and a page's in Canva
-         (owner, 2026-09-28): every playlist and channel plays it this long. --}}
+         (owner, 2026-09-28): every playlist and channel plays it this long. Never shorter than its animations
+         (owner, 2026-10-14): the least is what they need, said under the field, and the length rises to it by itself. --}}
     <div>
         <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Length</h2>
         <label class="mt-2 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-            <input type="number" x-bind:min="adSecondsMin" x-bind:max="adSecondsMax" step="1" class="form-input w-24"
+            <input type="number" x-bind:min="leastAdSeconds()" x-bind:max="adSecondsMax" step="1" class="form-input w-24"
                    x-bind:value="hasOwnLength() ? adSeconds() : ''" @change="$el.value = setAdSeconds($el.value)"
-                   placeholder="Not set" aria-label="Seconds on screen" dusk="ad-length" />
+                   placeholder="Not set" aria-label="Seconds on screen" aria-describedby="ad-length-note" dusk="ad-length" />
             <span>seconds on screen</span>
         </label>
-        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" dusk="ad-length-note">
+        <p id="ad-length-note" class="mt-1 text-xs text-gray-500 dark:text-gray-400" x-text="lengthNote()" dusk="ad-length-note">
             {{ \App\Models\BuilderAd::MIN_SECONDS }} seconds to {{ \App\Rules\VideoLength::inWords(\App\Models\BuilderAd::MAX_SECONDS) }}, on every screen and channel.
         </p>
         {{-- A design made before designs had a length: every screen keeps its own seconds, published or not, until

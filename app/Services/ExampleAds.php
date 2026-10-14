@@ -273,9 +273,8 @@ class ExampleAds
             $elements[$depth]['z'] = $depth;
         }
 
-        return [
+        $document = [
             'version' => 1,
-            'duration' => BuilderAd::DEFAULT_SECONDS,
             'stage' => [
                 'width' => BuilderAd::STAGE_WIDTH,
                 'height' => BuilderAd::STAGE_HEIGHT,
@@ -283,6 +282,10 @@ class ExampleAds
             ],
             'elements' => array_values($elements),
         ];
+
+        // As long as its animations run, as the editor makes every design (owner, 2026-10-14): the default when
+        // they are over sooner.
+        return ['version' => 1, 'duration' => BuilderAd::leastLengthFor($document), ...$document];
     }
 
     /** @param  array{0: int, 1: int, 2: int, 3: int, 4?: int|float, 5?: float}  $box  x, y, w, h, rotation, opacity */

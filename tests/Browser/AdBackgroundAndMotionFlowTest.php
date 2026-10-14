@@ -209,27 +209,32 @@ class AdBackgroundAndMotionFlowTest extends DuskTestCase
             JS);
             $browser->waitUsing(5, 100, fn () => str_contains((string) $browser->text('[dusk="anim-loop-curve"] p'), 'cubic(0.25,0.1,0.6,1.3)'));
 
-            // And an exit, ten seconds in.
+            // And an exit, twelve seconds in: past the ad's ten, so the ad now lasts what the exit needs (owner,
+            // 2026-10-14: "Length khud badhe"), and there is nothing to warn about.
             $this->setValue($browser, '@anim-out-effect', 'zoom', 'change');
             $browser->waitFor('@anim-out-at');
-            $this->setValue($browser, '@anim-out-at', '10', 'change');
-
-            // The ad is ten seconds long (the Stage panel's default, owner's rule 2026-10-14) and leaves the screen
-            // then, however its elements move: the panel says so where each time is set.
-            $browser->waitFor('@anim-out-timing')->assertSeeIn('@anim-out-timing', 'Leaves after the ad ends at 10 s: nobody will see it.')
+            $this->setValue($browser, '@anim-out-at', '12', 'change');
+            $browser->waitForText('The ad now lasts 13 seconds, so its animations are seen to the end.')
+                ->assertMissing('@anim-out-timing')
                 ->assertMissing('@anim-in-timing')
                 ->assertMissing('@anim-loop-timing');
 
-            $this->setValue($browser, '@anim-in-delay', '9.6', 'change');
-            $browser->waitFor('@anim-in-timing')->assertSeeIn('@anim-in-timing', 'Still coming in when the ad ends at 10 s.')
-                ->assertSeeIn('@anim-loop-timing', 'Starts after the ad ends at 10 s: it never moves.');
+            // Only the longest an ad may be still cuts an animation, and the panel says so where each time is set.
+            $this->setValue($browser, '@anim-out-at', '300', 'change');
+            $browser->waitFor('@anim-out-timing')->assertSeeIn('@anim-out-timing', 'Leaves after the ad ends at 300 s: nobody will see it.');
 
-            $this->setValue($browser, '@anim-in-delay', '11', 'change');
-            $browser->waitUsing(5, 100, fn () => str_contains($browser->text('@anim-in-timing'), 'Comes in after the ad ends at 10 s: nobody will see this element.'));
+            $this->setValue($browser, '@anim-in-delay', '299.6', 'change');
+            $browser->waitFor('@anim-in-timing')->assertSeeIn('@anim-in-timing', 'Still coming in when the ad ends at 300 s.')
+                ->assertSeeIn('@anim-loop-timing', 'Starts after the ad ends at 300 s: it never moves.');
 
-            // Back where it was: nothing to say about the entrance or the loop.
+            $this->setValue($browser, '@anim-in-delay', '300', 'change');
+            $browser->waitUsing(5, 100, fn () => str_contains($browser->text('@anim-in-timing'), 'Comes in after the ad ends at 300 s: nobody will see this element.'));
+
+            // Back where they were: nothing to say about the entrance or the loop, and the exit at twelve again.
             $this->setValue($browser, '@anim-in-delay', '0', 'change');
             $browser->waitUntilMissing('@anim-in-timing', 5)->assertMissing('@anim-loop-timing');
+            $this->setValue($browser, '@anim-out-at', '12', 'change');
+            $browser->waitUntilMissing('@anim-out-timing', 5);
 
             /* ── 2. ▶ Play runs the television's runtime over the stage ──── */
             $this->jsClick($browser, '@ad-play');
@@ -259,7 +264,7 @@ class AdBackgroundAndMotionFlowTest extends DuskTestCase
             $this->assertEqualsWithDelta(0.6, $animations['in']['duration'], 0.001);
             $this->assertSame(['float', 'y', 10], [$animations['loop']['effect'], $animations['loop']['axis'], (int) $animations['loop']['amount']]);
             $this->assertSame('cubic(0.25,0.1,0.6,1.3)', $animations['loop']['ease']);
-            $this->assertSame(['zoom', 10], [$animations['out']['effect'], (int) $animations['out']['at']]);
+            $this->assertSame(['zoom', 12], [$animations['out']['effect'], (int) $animations['out']['at']]);
 
             $browser->visit(Storage::disk('public')->url(Media::sole()->path));
 
