@@ -120,8 +120,26 @@ test('the contact lines are the owner’s once given', function () {
     $this->actingAs($owner)->withSession(['current_organization_id' => $this->organization->id])
         ->get('/settings/billing')->assertOk()
         ->assertSee('mailto:help@example.com', false)
+        // A phone on a phone is a number to press.
+        ->assertSee('href="tel:5550100"', false)
         ->assertSee('555 0100')
         ->assertDontSee('Contact us, and we unlock it for you.');
+});
+
+test('the month says only what it counts: no free screen and no "0 more screens" for an organization with none', function () {
+    $owner = createOrganizationMember($this->organization, Role::OWNER);
+    $this->actingAs($owner)->withSession(['current_organization_id' => $this->organization->id]);
+
+    $month = fn () => (string) str($this->get('/settings/billing')->assertOk()->getContent())->after('dusk="billing-month-lines"')->before('</dl>');
+
+    expect($month())->not->toContain('First screen')->not->toContain('more screen');
+
+    // One screen: the free one, and still no line of paid screens.
+    pairedScreen($this->organization, 'Tv1', '2026-10-06 10:00:00');
+    expect($month())->toContain('First screen')->not->toContain('more screen');
+
+    pairedScreen($this->organization, 'Tv2', '2026-10-06 10:01:00');
+    expect($month())->toContain('First screen')->toContain('1 more screen × $5');
 });
 
 test('the tab is there with View Billing alone: a member without it has none, and the platform has its own place', function () {

@@ -200,6 +200,23 @@ class EveryPageRendersTest extends DuskTestCase
                 unnamed: [...document.querySelectorAll('button, a[href], input:not([type="hidden"]), select, textarea, [role="tab"], [role="button"], [role="switch"]')]
                     .filter((el) => shown(el) && !nameOf(el)).map(describe),
                 noAlt: [...document.querySelectorAll('img')].filter((img) => shown(img) && !img.hasAttribute('alt')).map((img) => img.outerHTML.slice(0, 120)),
+                // A control's own words are in its name (WCAG 2.5.3): "Remove" is not named "Take them out of …", or
+                // somebody who says "click Remove" to their computer is not understood.
+                misnamed: [...document.querySelectorAll('button[aria-label], a[aria-label], [role="button"][aria-label]')]
+                    .filter(shown)
+                    .map((el) => {
+                        const words = [];
+                        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+                        while (walker.nextNode()) {
+                            const holder = walker.currentNode.parentElement;
+                            if (holder.closest('[aria-hidden="true"], .sr-only') || !shown(holder)) continue;
+                            words.push(walker.currentNode.textContent);
+                        }
+                        return [el, words.join(' ').replace(/\s+/g, ' ').trim()];
+                    })
+                    .filter(([el, words]) => /[A-Za-z]{2,}/.test(words)
+                        && !el.getAttribute('aria-label').replace(/\s+/g, ' ').toLowerCase().includes(words.toLowerCase()))
+                    .map(([el, words]) => `"${words}" is named "${el.getAttribute('aria-label')}" ` + describe(el)),
             };
         JS)[0];
 
@@ -207,6 +224,7 @@ class EveryPageRendersTest extends DuskTestCase
         $this->assertCount(1, $found['h1'], "{$page} should have one h1, it has: ".json_encode($found['h1']));
         $this->assertSame([], $found['unnamed'], "{$page} shows controls a screen reader cannot name");
         $this->assertSame([], $found['noAlt'], "{$page} shows pictures with no alt");
+        $this->assertSame([], $found['misnamed'], "{$page} names controls without the words they show");
     }
 
     /** Anything the browser logged as an error since the last check — its own noise aside. */

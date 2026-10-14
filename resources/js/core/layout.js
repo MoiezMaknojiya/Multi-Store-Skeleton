@@ -7,6 +7,8 @@ export function registerLayoutHandler(Alpine) {
     Alpine.data('layoutHandler', () => ({
         sidebarOpen: wideScreen() && localStorage.getItem('sidebarOpen') !== 'false',
         darkMode: localStorage.getItem('darkMode') === 'true',
+        /* The sidebar is an overlay (below lg): while it is open, the page behind it is out of the keyboard's reach. */
+        narrow: !wideScreen(),
 
         init() {
             document.documentElement.classList.toggle('dark', this.darkMode);
@@ -21,7 +23,25 @@ export function registerLayoutHandler(Alpine) {
 
             this.$watch('sidebarOpen', val => {
                 if (wideScreen()) localStorage.setItem('sidebarOpen', val);
+                // Opened over the page: the keyboard goes into it, at its first link, as into any dialog.
+                if (val && this.narrow) this.$nextTick(() => document.querySelector('#main-sidebar nav a')?.focus());
             });
+
+            // Narrowed (a tablet turned, a window made small): the menu becomes an overlay, and starts closed as it does on
+            // a phone — never left open over a page made inert behind it.
+            window.matchMedia('(min-width: 1024px)').addEventListener('change', (event) => {
+                this.narrow = !event.matches;
+                if (this.narrow) this.sidebarOpen = false;
+            });
+        },
+
+        /* Escape shuts the overlay and puts the keyboard back on the button that opened it. */
+        closeSidebarOnEscape() {
+            // A dialog open above it answers Escape itself (core/modal.js marks the page while one is open).
+            if (!this.sidebarOpen || !this.narrow || document.body.classList.contains('overflow-y-hidden')) return;
+
+            this.sidebarOpen = false;
+            this.$nextTick(() => document.querySelector('[aria-controls="main-sidebar"]')?.focus());
         },
 
         toggleDark() { this.darkMode = !this.darkMode; },

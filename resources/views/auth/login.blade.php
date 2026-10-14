@@ -2,7 +2,7 @@
     <h1 class="auth-title mb-1">Sign In</h1>
     <p class="text-sm text-gray-500 mb-8">
         Don't have an account?
-        <a href="{{ route('register') }}" class="text-blue-600 hover:underline font-medium">Create one</a>
+        <a href="{{ route('register') }}" class="text-blue-600 underline underline-offset-2 hover:decoration-2 font-medium">Create one</a>
     </p>
 
     <x-auth.session-status class="mb-4" :status="session('status')" />
@@ -25,7 +25,7 @@
                        class="form-checkbox">
                 <span class="text-sm text-gray-600">Remember me</span>
             </label>
-            <a href="{{ route('password.request') }}" class="text-sm text-blue-600 hover:underline">
+            <a href="{{ route('password.request') }}" class="touch-target inline-flex items-center text-sm text-blue-600 hover:underline">
                 Forgot password?
             </a>
         </div>

@@ -4,7 +4,7 @@
     </x-slot>
 
     {{-- Above the organizations the page opens on the platform's own ads (owner, 2026-10-08). --}}
-    <div x-data="adsTable({{ Js::from(['owner' => $aboveTheOrganizations ? 'platform' : '']) }})" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <div x-data="adsTable({{ Js::from(['owner' => $aboveTheOrganizations ? 'platform' : '', 'ownerIds' => array_map(fn (array $organization) => (string) $organization['id'], $organizations)]) }})" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
         {{-- Create Ad, then the organization list (above the organizations; an organization sees its own only) and the search, on one line:
              the button first, as on every page (owner, 2026-09-30). --}}
@@ -44,7 +44,7 @@
             <div class="p-5" x-bind:aria-busy="loading ? 'true' : 'false'">
                 <template x-if="loading">
                     <p class="py-12 text-center text-sm text-muted-soft">
-                        <span class="inline-flex items-center gap-2"><x-spinner class="text-blue-600 dark:text-blue-400" /> Loading...</span>
+                        <x-loading />
                     </p>
                 </template>
 
@@ -57,13 +57,14 @@
 
                 <template x-if="!loading && items.length === 0 && !loadFailed && (search || filterOrganization)">
                     <div class="mx-auto max-w-md space-y-3 py-12 text-center" dusk="table-no-match">
+                        {{-- Whose list is empty, in its own name: the platform is no organization. --}}
                         <p class="text-sm text-gray-700 dark:text-gray-200">
                             <span x-show="search">No ad matches &ldquo;<span class="font-medium" x-text="search"></span>&rdquo;.</span>
-                            <span x-show="!search">This organization has no ads yet.</span>
+                            <span x-show="!search" x-text="filterOrganization === 'platform' ? 'The platform has no ads yet.' : ownerName() + ' has no ads yet.'"></span>
                         </p>
                         <div class="flex flex-wrap justify-center gap-2">
                             <button type="button" x-show="search" class="btn-row-neutral" @click="search = ''" dusk="table-clear-search">Clear Search</button>
-                            <button type="button" x-show="!search" class="btn-row-neutral" @click="filterOrganization = ''; applyFilters()" dusk="table-clear-filters">Show Every Organization</button>
+                            <button type="button" x-show="!search" class="btn-row-neutral" @click="filterOrganization = ''; applyFilters()" dusk="table-clear-filters">Show All</button>
                         </div>
                     </div>
                 </template>
@@ -89,19 +90,19 @@
                             <div class="relative">
                                 @can('ad-update')
                                     <a x-bind:href="item.can?.update ? '/builder/' + item.id : null" tabindex="-1" aria-hidden="true" class="block aspect-video bg-gray-100 dark:bg-gray-900">
-                                        <img x-show="item.thumbnail_url" x-cloak x-bind:src="item.thumbnail_url" alt=""
+                                        <img x-show="item.thumbnail_url" x-cloak x-bind:src="item.thumbnail_url" alt="" loading="lazy" decoding="async"
                                              class="h-full w-full" x-bind:class="item.orientation === 'portrait' ? 'object-contain' : 'object-cover'"
                                              x-bind:dusk="'ad-poster-' + item.id" />
                                         <span x-show="!item.thumbnail_url" x-cloak
-                                              class="flex h-full w-full items-center justify-center text-xs text-muted-soft">No preview yet</span>
+                                              class="flex h-full w-full items-center justify-center text-xs text-gray-600 dark:text-gray-400">No preview yet</span>
                                     </a>
                                 @else
                                     <div class="aspect-video bg-gray-100 dark:bg-gray-900">
-                                        <img x-show="item.thumbnail_url" x-cloak x-bind:src="item.thumbnail_url" alt=""
+                                        <img x-show="item.thumbnail_url" x-cloak x-bind:src="item.thumbnail_url" alt="" loading="lazy" decoding="async"
                                              class="h-full w-full" x-bind:class="item.orientation === 'portrait' ? 'object-contain' : 'object-cover'"
                                              x-bind:dusk="'ad-poster-' + item.id" />
                                         <span x-show="!item.thumbnail_url" x-cloak
-                                              class="flex h-full w-full items-center justify-center text-xs text-muted-soft">No preview yet</span>
+                                              class="flex h-full w-full items-center justify-center text-xs text-gray-600 dark:text-gray-400">No preview yet</span>
                                     </div>
                                 @endcan
 
@@ -114,7 +115,7 @@
                                      which its name says. --}}
                                 <a x-bind:href="'/builder/' + item.id + '/preview'" target="_blank" rel="noopener"
                                    x-bind:aria-label="'Preview ' + item.name + ' (opens in a new tab)'"
-                                   class="absolute right-2 top-2 inline-flex items-center gap-1 rounded bg-black/70 px-2 py-1 text-xs font-medium text-white hover:bg-black/85 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                                   class="touch-target absolute right-2 top-2 inline-flex items-center justify-center gap-1 rounded bg-black/70 px-2 py-1 text-xs font-medium text-white hover:bg-black/85 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                    x-bind:dusk="'preview-ad-' + item.id">
                                     <svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6.3 2.84A1.5 1.5 0 0 0 4 4.11v11.78a1.5 1.5 0 0 0 2.3 1.27l9.34-5.89a1.5 1.5 0 0 0 0-2.54L6.3 2.84Z" /></svg>
                                     Preview
@@ -126,12 +127,14 @@
                             <div class="flex flex-wrap items-start justify-between gap-3 p-4">
                                 <div class="min-w-[8rem] flex-1">
                                     @can('ad-update')
-                                        <a x-bind:href="item.can?.update ? '/builder/' + item.id : null" x-bind:dusk="'ad-name-' + item.id" x-bind:title="item.name"
-                                           class="block truncate font-medium text-gray-800 dark:text-white" x-bind:class="item.can?.update ? 'hover:underline' : ''"
-                                           x-text="item.name"></a>
+                                        {{-- A card's title, on two lines when it needs them (never cut to a tooltip a phone cannot
+                                             open): the words sit in a block of their own, which says the two lines are meant. --}}
+                                        <a x-bind:href="item.can?.update ? '/builder/' + item.id : null" x-bind:dusk="'ad-name-' + item.id"
+                                           class="touch-target block font-medium text-gray-800 dark:text-white" x-bind:class="item.can?.update ? 'hover:underline' : ''"><span
+                                           class="block line-clamp-2 break-words" x-text="item.name"></span></a>
                                     @else
-                                        <p x-bind:dusk="'ad-name-' + item.id" x-bind:title="item.name"
-                                           class="truncate font-medium text-gray-800 dark:text-white" x-text="item.name"></p>
+                                        <p x-bind:dusk="'ad-name-' + item.id"
+                                           class="line-clamp-2 break-words font-medium text-gray-800 dark:text-white" x-text="item.name"></p>
                                     @endcan
 
                                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" x-bind:dusk="'ad-byline-' + item.id"
@@ -271,16 +274,34 @@
                  a channel's Add Ad: only the tiles scroll, and Back and Cancel stay in sight. --}}
             @unless ($aboveTheOrganizations)
                 <x-modal name="premium-templates" :show="false" maxWidth="6xl" focusable>
-                    <div class="flex flex-col p-6 lg:max-h-[calc(100dvh-2rem)]" dusk="premium-templates">
+                    <div class="flex max-h-[calc(100dvh-1rem)] flex-col p-6 lg:max-h-[calc(100dvh-2rem)]" dusk="premium-templates">
                         <div class="flex flex-wrap items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Premium Templates</h2>
                                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400"
                                    x-text="(newAdOrientation === 'portrait' ? 'Portrait' : 'Landscape') + ': the one you use becomes your own ad, with its pictures.'"></p>
                             </div>
-                            <input type="search" x-model="templateSearch" @input.debounce.300ms="loadTemplates()" @keydown.enter.prevent="loadTemplates()"
-                                   placeholder="Search templates..." aria-label="Search templates" maxlength="255" autocomplete="off"
-                                   class="form-input sm:w-64" dusk="templates-search" />
+                            {{-- A search under way shows its spinner in the box: the tiles of the last answer stay until the new one. --}}
+                            <div class="relative w-full sm:w-64">
+                                <input type="search" x-model="templateSearch" @input.debounce.300ms="loadTemplates()" @keydown.enter.prevent="loadTemplates()"
+                                       placeholder="Search templates..." aria-label="Search templates" maxlength="255" autocomplete="off"
+                                       class="form-input pr-10" dusk="templates-search" />
+                                <x-spinner x-show="templatesState === 'loading' && templates.length > 0" x-cloak
+                                           class="absolute right-3 top-3 h-4 w-4 text-blue-600 dark:text-blue-400" />
+                            </div>
+                        </div>
+
+                        {{-- A copy refused (the organization's storage is full): said where the person is looking, with the way to make room. --}}
+                        <div x-show="templateRefusal" x-cloak role="alert" class="alert-error mt-5" dusk="templates-refused">
+                            <p x-text="templateRefusal"></p>
+                            <p class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                                @can('media-view')
+                                    <a href="{{ route('media.view') }}" class="font-medium underline underline-offset-2 hover:decoration-2">Open the Media Library</a>
+                                @endcan
+                                @can('ad-view')
+                                    <a href="{{ route('builder.assets') }}" class="font-medium underline underline-offset-2 hover:decoration-2">Open the Assets</a>
+                                @endcan
+                            </p>
                         </div>
 
                         {{-- Locked (docs/BILLING-SPEC.md §6): nothing hidden, shown with a lock. --}}
@@ -295,7 +316,7 @@
                         <div class="mt-5 min-h-0 flex-1 overflow-y-auto px-1 pb-1" x-bind:aria-busy="templatesState === 'loading' ? 'true' : 'false'">
                             <template x-if="templatesState === 'loading' && templates.length === 0">
                                 <p class="py-12 text-center text-sm text-muted-soft">
-                                    <span class="inline-flex items-center gap-2"><x-spinner class="text-blue-600 dark:text-blue-400" /> Loading...</span>
+                                    <x-loading />
                                 </p>
                             </template>
 
@@ -317,16 +338,18 @@
                                 </div>
                             </template>
 
-                            <div x-show="templates.length > 0" x-cloak class="grid gap-4"
-                                 x-bind:class="newAdOrientation === 'portrait' ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'"
+                            {{-- As many across as the dialog takes, each tile wide enough for its whole button ("Contact Us to Unlock"
+                                 included): one on a phone, where an upright picture is held to a height a phone can show. --}}
+                            <div x-show="templates.length > 0" x-cloak class="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(14rem,1fr))]"
                                  dusk="templates-grid">
                                 <template x-for="template in templates" :key="template.id">
                                     <div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700" x-bind:dusk="'template-' + template.id">
                                         <div class="relative bg-gray-100 dark:bg-gray-900"
-                                             x-bind:class="template.orientation === 'portrait' ? 'aspect-[9/16]' : 'aspect-video'">
-                                            <img x-show="template.thumbnail_url" x-bind:src="template.thumbnail_url" alt="" class="h-full w-full object-cover" />
+                                             x-bind:class="template.orientation === 'portrait' ? 'aspect-[9/16] max-h-96 w-full max-sm:aspect-auto max-sm:h-96' : 'aspect-video'">
+                                            <img x-show="template.thumbnail_url" x-bind:src="template.thumbnail_url" alt="" loading="lazy" decoding="async"
+                                                 class="h-full w-full object-contain" />
                                             <span x-show="!template.thumbnail_url"
-                                                  class="flex h-full w-full items-center justify-center text-xs text-muted-soft">No preview yet</span>
+                                                  class="flex h-full w-full items-center justify-center text-xs text-gray-600 dark:text-gray-400">No preview yet</span>
                                             <span x-show="templatesLocked" x-cloak
                                                   class="absolute left-2 top-2 inline-flex items-center gap-1 rounded bg-black/75 px-2 py-1 text-xs font-semibold text-amber-200"
                                                   x-bind:dusk="'template-premium-' + template.id">
@@ -335,25 +358,26 @@
                                             </span>
                                             <a x-bind:href="template.preview_url" target="_blank" rel="noopener" @click="ignoreRepeatPress($event)"
                                                x-bind:aria-label="'Preview ' + template.name + ' (opens in a new tab)'"
-                                               class="absolute right-2 top-2 inline-flex items-center gap-1 rounded bg-black/70 px-2 py-1 text-xs font-medium text-white hover:bg-black/85 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                                               class="touch-target absolute right-2 top-2 inline-flex items-center justify-center gap-1 rounded bg-black/70 px-2 py-1 text-xs font-medium text-white hover:bg-black/85 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
                                                x-bind:dusk="'template-preview-' + template.id">
                                                 <x-icon name="play" class="h-3 w-3" />
                                                 Preview
                                             </a>
                                         </div>
                                         <div class="space-y-2 p-3">
-                                            <p class="truncate text-sm font-medium text-gray-800 dark:text-white" x-bind:title="template.name" x-text="template.name"></p>
+                                            <p class="line-clamp-2 break-words text-sm font-medium text-gray-800 dark:text-white" x-text="template.name"></p>
                                             <button type="button" class="btn-primary w-full justify-center" @click="useTemplate(template, $event)"
                                                     x-show="!templatesLocked"
                                                     x-bind:disabled="usingTemplateId !== null"
-                                                    x-bind:aria-label="'Use the template ' + template.name"
+                                                    x-bind:aria-label="(usingTemplateId === template.id ? 'Copying ' : 'Use This Template: ') + template.name"
+                                                    x-bind:aria-busy="usingTemplateId === template.id ? 'true' : 'false'"
                                                     x-bind:dusk="'use-template-' + template.id">
                                                 <x-spinner x-show="usingTemplateId === template.id" x-cloak />
                                                 <span x-text="usingTemplateId === template.id ? 'Copying...' : 'Use This Template'"></span>
                                             </button>
                                             <button type="button" class="btn-secondary w-full justify-center" x-show="templatesLocked" x-cloak
                                                     @click="$dispatch('open-modal', 'unlock-premium-templates')"
-                                                    x-bind:aria-label="'Contact us to unlock ' + template.name"
+                                                    x-bind:aria-label="'Contact Us to Unlock ' + template.name"
                                                     x-bind:dusk="'unlock-template-' + template.id">
                                                 <x-icon name="lock-closed" class="h-4 w-4" />
                                                 Contact Us to Unlock

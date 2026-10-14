@@ -1,5 +1,6 @@
-{{-- `persistent`: a form of several fields — a click beside it does not close it and lose what was typed
-     (Cancel and Escape still do). --}}
+{{-- `persistent`: a form of several fields — a click beside it does not close it and lose what was typed, and
+     Escape with something changed in it asks "Discard your changes?" first (customModal.closeMe). Its own Cancel
+     still closes it at once: the person has decided. --}}
 @props(['name', 'show' => false, 'maxWidth' => '2xl', 'persistent' => false])
 
 @php
@@ -23,10 +24,11 @@ $maxWidth = [
 {{-- items-center-safe, not items-center: a modal taller than the window is laid from its top and scrolls,
      where a centred one hung its top above the window, out of reach of any scrolling. --}}
 <div
-    x-data="customModal({{ Js::from($name) }}, @js($show), @js($attributes->has('focusable')))"
+    x-data="customModal({{ Js::from($name) }}, @js($show), @js($attributes->has('focusable')), @js((bool) $persistent))"
+    data-modal-root
     x-on:open-modal.window="openEvent($event)"
     x-on:close-modal.window="closeEvent($event)"
-    x-on:close.stop="closeMe"
+    x-on:close.stop="closeMe('close')"
     x-on:keydown.escape.window="closeOnEscape"
     x-on:keydown.tab.window="keepFocusInside($event)"
     x-show="show"
@@ -51,8 +53,24 @@ $maxWidth = [
         aria-modal="true"
         tabindex="-1"
         x-on:click.stop
+        @if ($persistent) x-on:pointerdown.capture="modalNoteTouch($event)" x-on:keydown.capture="modalNoteTouch($event)"
+            x-on:input.capture="modalNoteInput($event)" x-on:change.capture="modalNoteInput($event)" x-on:click.capture="modalNoteClick($event)"
+            x-on:modal-changed="modalMarkChanged()" x-on:upload-picked="modalMarkChanged()" @endif
         class="relative z-10 focus:outline-none bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-[calc(100%-1rem)] sm:w-full {{ $maxWidth }} sm:mx-auto"
     >
+        @if ($persistent)
+            {{-- Escape on a form with changes in it: asked at the top of the dialog, which keeps it in sight while the
+                 form scrolls beneath, and the keyboard is put on Keep Editing — Escape again keeps editing too. --}}
+            <div x-show="modalAskingToDiscard" x-cloak data-discard-ask class="sticky top-0 z-20 rounded-t-lg bg-white p-3 sm:px-6 dark:bg-gray-800" dusk="{{ $name }}-discard-ask">
+                <div role="alert" class="alert-warning flex flex-wrap items-center justify-between gap-3">
+                    <span>Discard your changes?</span>
+                    <span class="flex flex-wrap gap-2">
+                        <button type="button" class="btn-secondary" x-ref="modalKeepEditing" @click="modalKeepEditing()" dusk="{{ $name }}-keep-editing">Keep Editing</button>
+                        <button type="button" class="btn-danger" @click="modalDiscardChanges()" dusk="{{ $name }}-discard">Discard Changes</button>
+                    </span>
+                </div>
+            </div>
+        @endif
         {{ $slot }}
     </div>
 </div>

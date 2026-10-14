@@ -83,6 +83,25 @@ export function unreadableFields(form) {
     return errors;
 }
 
+/**
+ * After a refusal, the first thing that is wrong brought into sight and given the keyboard: in a long form or a window
+ * scrolled down to its OK, the field may be out of sight, and a press that changes nothing visible reads as broken.
+ * The first field marked red (a form field's crud-field-error, a field with its own red border); else the first error's
+ * words, scrolled to. Waits for the page to draw the errors first.
+ */
+export function showFirstError(root) {
+    setTimeout(() => {
+        const field = root?.querySelector('.crud-field-error :is(input, select, textarea), :is(input, select, textarea)[class*="!border-red-500"], [aria-invalid="true"]');
+        const said = root?.querySelector('.form-error');
+        const target = field ?? said;
+
+        if (!target) return;
+
+        target.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        field?.focus({ preventScroll: true });
+    }, 0);
+}
+
 /** A field that must be filled, refused in its own words (required() says "{label} is required."). */
 export const requiredMessage = (message) => (value) =>
     empty(value) ? message : null;

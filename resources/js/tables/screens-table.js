@@ -42,6 +42,8 @@ export function registerScreensTable(Alpine) {
         fetchUrl: '/screens/data',
         dataKey: 'screens',
         entityLabel: 'screen',
+        // The Status list survives a visit to a screen's playlist and back, a reload and a link (crud-table-base).
+        addressKeys: { status: ['filterStatus', ['', 'online', 'offline']] },
         formModalName: 'screen-form-modal',
         deleteModalName: 'confirm-screen-deletion',
         // Newest paired first, as the list always opened; each heading sorts it (ScreenController::sortedBy).
@@ -97,9 +99,7 @@ export function registerScreensTable(Alpine) {
              * blinking to "Loading..." every thirty seconds, and a failure is said rather than
              * leaving stale chips looking current. Not over a fetch somebody asked for. */
             onInit() {
-                this.refreshTimer = setInterval(() => {
-                    if (!this.saving && !this.deleting && !this.loading) this.fetchItems({ quiet: true });
-                }, REFRESH_MS);
+                this.refreshTimer = setInterval(() => this.refreshStatuses(), REFRESH_MS);
 
                 /* The holding-picture list is fetched only when an edit modal opens:
                  * the library can be long, and most edits never touch it. */
@@ -110,6 +110,13 @@ export function registerScreensTable(Alpine) {
                 /* Sent here to pair a screen (the dashboard's Pair a screen): the code's dialog at once — for somebody
                  * the page offers Add Screen to. */
                 if (takeAddressFlag('pair') && document.querySelector('[dusk="add-screen"]')) this.$nextTick(() => this.openPairModal());
+            },
+
+            /* The timer's refresh: each row's Online/Offline brought up to date where the row stands, so sorted by Status
+             * or by Paired no row moves under the pointer — a press meant for one screen never lands on another's
+             * Playlist or Replace Device. The order is the person's to change, with a heading. */
+            refreshStatuses() {
+                if (!this.saving && !this.deleting && !this.loading) this.fetchItems({ quiet: true, keepOrder: true });
             },
 
             extraParams() {

@@ -4,6 +4,7 @@
  * assignable roles), so the page never offers an action MemberController would refuse.
  */
 import axios from 'axios';
+import { expiresInWords } from '../core/clock.js';
 import { isARepeatPress } from '../core/click-beside.js';
 import { passwordRefusal } from '../core/password-refusal.js';
 import { validate, required, emailFormat, maxLen } from '../core/validate.js';
@@ -13,6 +14,8 @@ export function registerMembersPage(Alpine) {
         organizationName: config.organizationName ?? '',
 
         loading: true,
+        // The team could not be loaded at all: both lists say so, with Try Again, and the tabs count nothing.
+        loadFailed: false,
         members: [],
         invitations: [],
         assignableRoles: [],
@@ -43,15 +46,21 @@ export function registerMembersPage(Alpine) {
         /* After a change (`quiet`), the rows stay where they are until the new ones are in, with no "Loading..." row
          * pushing them down under the pointer — as crud-table-base's refreshInPlace (owner, 2026-10-07). */
         async fetch({ quiet = false } = {}) {
-            if (!quiet) this.loading = true;
+            if (!quiet) {
+                this.loading = true;
+                this.loadFailed = false;
+            }
             try {
                 const { data } = await axios.get('/members/data');
                 this.members = data.members;
                 this.invitations = data.invitations;
                 this.assignableRoles = data.assignable_roles;
                 this.ownerCount = data.owner_count;
+                this.loadFailed = false;
             } catch (error) {
-                window.toast(error.response?.data?.message ?? 'Could not load the team. Please refresh the page.');
+                // The first load says so in both lists, with Try Again; a refresh after a change keeps its rows.
+                if (quiet) window.toast(error.response?.data?.message ?? 'Could not load the team. Please refresh the page.');
+                else this.loadFailed = true;
             } finally {
                 this.loading = false;
             }
@@ -85,9 +94,7 @@ export function registerMembersPage(Alpine) {
         expiresText(invitation) {
             if (invitation.is_expired) return 'Expired';
 
-            const days = Math.ceil((new Date(invitation.expires_at) - new Date()) / 86400000);
-
-            return days <= 1 ? 'Expires today' : `Expires in ${days} days`;
+            return expiresInWords(invitation.expires_at);
         },
 
         /* ── Invite ────────────────────────────────────────────────────── */

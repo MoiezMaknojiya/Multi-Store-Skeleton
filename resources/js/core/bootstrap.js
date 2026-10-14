@@ -21,23 +21,26 @@ let sessionEnded = false;
    once, in the server's words, and the dashboard — which says why and what still works — is opened. */
 let organizationPaused = false;
 
+/* How long the words stay before the page goes: long enough to read a sentence, and for a screen reader to say it. */
+const READ_BEFORE_LEAVING_MS = 4000;
+
 window.axios.interceptors.response.use((response) => response, (error) => {
     if ([401, 419].includes(error.response?.status) && !sessionEnded) {
         sessionEnded = true;
         window.toast?.('Your session has ended. Sign in again to carry on.');
-        setTimeout(() => window.location.reload(), 1500);
+        setTimeout(() => window.location.reload(), READ_BEFORE_LEAVING_MS);
     }
 
     if (error.response?.status === 409 && error.response.data?.stale_tab === true && !pageWasStale) {
         pageWasStale = true;
         window.toast?.(error.response.data.message);
-        setTimeout(() => window.location.reload(), 2500);
+        setTimeout(() => window.location.reload(), READ_BEFORE_LEAVING_MS);
     }
 
     if (error.response?.status === 403 && error.response.data?.paused === true && !organizationPaused) {
         organizationPaused = true;
         window.toast?.(error.response.data.message);
-        setTimeout(() => window.location.assign('/dashboard'), 1500);
+        setTimeout(() => window.location.assign('/dashboard'), READ_BEFORE_LEAVING_MS);
     }
 
     return Promise.reject(error);

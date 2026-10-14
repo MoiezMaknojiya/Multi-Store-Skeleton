@@ -95,7 +95,7 @@
                         <td class="px-5 py-4">
                             <div class="flex items-center justify-end gap-2">
                                 <button type="button" class="btn-row-success" x-show="item.can.invite_owner"
-                                    x-bind:aria-label="'Invite an owner for ' + item.name"
+                                    x-bind:aria-label="'Invite Owner for ' + item.name"
                                     @click="openInviteOwner(item)" x-bind:dusk="'invite-owner-' + item.id">Invite Owner</button>
                                 {{-- Beside Edit (owner, 2026-10-08 — "har organization ki row per edit k barabar mein"). --}}
                                 <button type="button" class="btn-row-neutral" x-show="item.can.billing"
@@ -300,7 +300,7 @@
 
                     <template x-if="billingLoading">
                         <p class="py-10 text-center text-sm text-muted-soft">
-                            <span class="inline-flex items-center gap-2"><x-spinner class="text-blue-600 dark:text-blue-400" /> Loading...</span>
+                            <x-loading />
                         </p>
                     </template>
                     <template x-if="!billingLoading && billingFailed">
@@ -335,7 +335,7 @@
                                             @click="billingForm.{{ $feature }}_unlocked = !billingForm.{{ $feature }}_unlocked"
                                             x-bind:disabled="savingBilling"
                                             dusk="billing-switch-{{ $feature }}"
-                                            class="group relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full bg-gray-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 aria-checked:bg-blue-600 dark:bg-gray-600 dark:aria-checked:bg-blue-500">
+                                            class="group relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full bg-gray-500 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 aria-checked:bg-blue-600 dark:bg-gray-400 dark:aria-checked:bg-blue-500">
                                         <span aria-hidden="true" class="inline-block h-5 w-5 translate-x-0.5 rounded-full bg-white shadow transition-transform group-aria-checked:translate-x-5"></span>
                                     </button>
                                 @else

@@ -38,7 +38,7 @@ class PausedOrganizationFlowTest extends DuskTestCase
 
             // …and the next thing the page asks for says so and leads to the dashboard.
             $this->jsType($browser, '@crud-search', 'poster');
-            $browser->waitForText('Alpha Mart is paused. Contact support to turn it back on.', 10)
+            $browser->waitForText('Alpha Mart is paused. Contact us to turn it back on.', 10)
                 ->waitForLocation('/dashboard', 10)
                 ->waitFor('@dashboard-paused')
                 ->assertSeeIn('@dashboard-paused', 'Alpha Mart is paused')

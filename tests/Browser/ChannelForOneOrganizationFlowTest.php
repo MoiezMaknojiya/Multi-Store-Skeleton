@@ -33,7 +33,7 @@ class ChannelForOneOrganizationFlowTest extends DuskTestCase
             $this->presses($browser, $this->centreOf($browser, '[dusk="add-channel"]'), 2);
             $browser->waitFor('@channel-organization')->pause(300)
                 ->assertSelected('@channel-organization', '')
-                ->assertSeeIn('@channel-organization-hint', "For every organization's screens, once its Platform Channels are unlocked ($10).")
+                ->assertSeeIn('@channel-organization-hint', "For every organization's screens, once its Platform Channels are unlocked ($10 a month).")
                 ->select('@channel-organization', (string) $alpha->id)
                 ->waitForTextIn('@channel-organization-hint', "Free: that organization's own channel, for its screens alone.")
                 ->screenshot('channel-for-one-organization');

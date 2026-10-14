@@ -7,6 +7,9 @@
             <h2 id="shortcuts-title" class="text-lg font-medium text-gray-900 dark:text-gray-100">Keyboard shortcuts</h2>
             <button type="button" class="btn-pager" @click="shortcutsOpen = false" dusk="shortcuts-close" aria-label="Close" title="Close (Esc)"><x-icon name="x-mark" /></button>
         </div>
+        {{-- Every shortcut works on a Mac too, with its own two keys. --}}
+        <p x-show="/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)" x-cloak class="mt-1 text-sm text-gray-500 dark:text-gray-400"
+           dusk="shortcuts-mac">On a Mac: ⌘ Command for Ctrl, ⌥ Option for Alt.</p>
 
         <div class="mt-4 grid gap-x-10 gap-y-6 sm:grid-cols-2">
             @foreach ([

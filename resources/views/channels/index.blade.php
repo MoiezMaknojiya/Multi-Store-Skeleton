@@ -5,7 +5,7 @@
 
     {{-- Js::from, not @json: @json leaves its quotes raw and the first string would
          close this attribute (see .claude/rules/02-project-conventions.md). --}}
-    <div x-data="channelsTable({{ Js::from(['maxAdsPerPass' => $maxAdsPerPass]) }})"
+    <div x-data="channelsTable({{ Js::from(['maxAdsPerPass' => $maxAdsPerPass, 'platformChannelsPrice' => \App\Services\BillingSummary::PLATFORM_CHANNELS_PRICE]) }})"
          class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
         {{-- A bound :title — the wrapper echoes it itself, and an echo here as well escaped an organization's name twice. The

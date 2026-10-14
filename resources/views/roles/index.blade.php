@@ -45,7 +45,7 @@
                     <tbody class="table-tbody" x-bind:aria-busy="loading ? 'true' : 'false'">
                         <template x-if="loading">
                             <tr><td colspan="5" class="px-5 py-6 text-center text-muted-soft">
-                                <span class="inline-flex items-center gap-2"><x-spinner class="text-blue-600 dark:text-blue-400" /> Loading...</span>
+                                <x-loading />
                             </td></tr>
                         </template>
 
@@ -195,7 +195,7 @@
                                         x-effect="$el.indeterminate = groupState(group.permissions) === 'some'"
                                         @change="toggleGroup(group.permissions)">
                                     <span class="text-sm font-semibold text-gray-700 dark:text-gray-200" x-text="group.title"></span>
-                                    <span class="ml-auto text-[11px] font-medium text-blue-700 dark:text-blue-300" x-show="groupHint(group)" x-text="groupHint(group)"></span>
+                                    <span class="ml-auto text-xs font-medium text-blue-700 dark:text-blue-300" x-show="groupHint(group)" x-text="groupHint(group)"></span>
                                 </label>
                                 <div class="p-2 space-y-0.5">
                                     <template x-for="permission in group.permissions" :key="permission.id">

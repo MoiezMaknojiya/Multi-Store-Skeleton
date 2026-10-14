@@ -21,6 +21,6 @@
     </form>
 
     <p class="mt-6 text-center text-sm text-gray-600">
-        <a href="{{ route('login') }}" class="font-medium text-blue-600 hover:underline" dusk="back-to-sign-in">Back to sign in</a>
+        <a href="{{ route('login') }}" class="touch-target inline-flex items-center font-medium text-blue-600 hover:underline" dusk="back-to-sign-in">Back to sign in</a>
     </p>
 </x-guest-layout>

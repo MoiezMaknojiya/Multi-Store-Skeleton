@@ -199,7 +199,7 @@
 @utility btn-row-danger {
     @apply inline-flex items-center justify-center gap-1
            bg-red-50 dark:bg-red-900/20
-           text-red-700 dark:text-red-400
+           text-red-700 dark:text-red-300
            px-3 py-1.5 rounded-md
            not-disabled:hover:bg-red-600 not-disabled:hover:text-white
            text-xs font-medium whitespace-nowrap
@@ -291,7 +291,7 @@
            border border-gray-300 dark:border-gray-700
            bg-white dark:bg-gray-900
            text-gray-800 dark:text-gray-300
-           placeholder-gray-500
+           placeholder-gray-500 dark:placeholder-gray-400
            rounded-md
            focus:outline-none
            focus:border-blue-500
@@ -311,7 +311,7 @@
            rounded-lg
            focus:outline-none focus:border-blue-500
            focus:ring-2 focus:ring-blue-500/20
-           dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100 dark:placeholder-gray-500;
+           dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100 dark:placeholder-gray-400;
 }
 
 /* ── Select dropdown ───────────────────────────────────────────────────
@@ -378,7 +378,7 @@
 @utility form-checkbox {
     @apply appearance-none
            w-4 h-4 rounded-md
-           border border-gray-300 dark:border-gray-600
+           border border-gray-500 dark:border-gray-400
            bg-white dark:bg-gray-700
            cursor-pointer
            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-0
@@ -732,4 +732,44 @@ html.dark [data-theme-icon="light"] {
 .crud-field-error select,
 .crud-field-error textarea {
     border-color: var(--color-red-500) !important;
+}
+
+/* Somebody who asked their system for less motion gets none from the panel: a toast, a dialog, a switch or a bar is
+   simply there, and nothing slides. The Ad Builder's own preview of an ad's animations is drawn by script (motion.js),
+   which this leaves alone: it plays only when Play is pressed. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* A control drawn small for a mouse — an icon in the header, a back arrow, a sort heading, a chip on a poster — that a finger
+   must also hit: 44 px on a touch screen, as every btn-* is (below). */
+@utility touch-target {
+    min-height: 1.5rem;
+
+    @media (pointer: coarse) {
+        min-height: 2.75rem;
+        min-width: 2.75rem;
+    }
+}
+
+/* On a touch screen every button and tab is a finger's size, 44 px (Apple's and Google's guidance), however small it is
+   drawn for a mouse: a playlist line's arrows, a row's Edit, a pager's number. A mouse keeps the compact panel. */
+@media (pointer: coarse) {
+    :where(.btn-primary, .btn-secondary, .btn-danger, .btn-primary-add, .btn-secondary-add, .btn-row-neutral, .btn-row-primary,
+        .btn-row-danger, .btn-row-success, .btn-pager, .btn-primary-auth, .tab-link) {
+        min-height: 2.75rem;
+        min-width: 2.75rem;
+    }
+
+    /* A field is tapped too: as tall as a button beside it. */
+    :where(.form-input, .form-input-auth, .form-select) {
+        min-height: 2.75rem;
+    }
 }

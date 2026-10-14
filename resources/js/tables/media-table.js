@@ -22,6 +22,13 @@ export function registerMediaTable(Alpine) {
         fetchUrl: '/media/data',
         dataKey: 'media',
         entityLabel: 'file',
+        // Which library, what kind, which way and in what order: kept in the address, the library above the organizations alone.
+        addressKeys: {
+            ...(config.libraries ? { library: ['library', ['platform', ...config.libraries.map((library) => String(library.id))]] } : {}),
+            type: ['filterType', ['', 'image', 'video']],
+            orientation: ['filterOrientation', ['', 'landscape', 'portrait']],
+            sort: ['sort', ['newest', 'oldest', 'title_asc', 'title_desc']],
+        },
         formModalName: 'media-form-modal',
         deleteModalName: 'confirm-media-deletion',
 

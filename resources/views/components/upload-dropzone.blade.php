@@ -64,7 +64,7 @@
             <span class="hidden font-semibold text-blue-600 pointer-coarse:inline dark:text-blue-400">{{ $multiple ? 'Tap to choose files' : 'Tap to choose a file' }}</span>
             <span class="pointer-coarse:hidden">
                 <span x-text="dragging ? 'Let go to upload' : '{{ $multiple ? 'Drop files here or' : 'Drop a file here or' }}'">{{ $multiple ? 'Drop files here or' : 'Drop a file here or' }}</span>
-                <span x-show="! dragging" class="font-semibold text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">{{ $multiple ? 'choose files' : 'choose a file' }}</span>
+                <span x-show="! dragging" class="font-semibold text-blue-600 underline underline-offset-2 hover:decoration-2 dark:text-blue-400">{{ $multiple ? 'choose files' : 'choose a file' }}</span>
             </span>
         </span>
 
@@ -115,7 +115,7 @@
                              :style="`width: ${Math.max(item.percent, 2)}%`"></div>
                     </div>
 
-                    <p x-show="statusText(item)" class="mt-1 flex items-center gap-1 text-xs"
+                    <p x-show="statusText(item)" class="mt-1 flex items-center gap-1 text-xs tabular-nums"
                        :class="['done', 'ready'].includes(item.status) ? 'text-green-700 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'"
                        dusk="{{ $dusk }}-upload-status">
                         <svg x-show="['done', 'ready'].includes(item.status)" class="h-3.5 w-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" aria-hidden="true">
@@ -124,10 +124,18 @@
                         <span x-text="statusText(item)"></span>
                     </p>
                     <p x-show="item.error" class="form-error" x-text="item.error" dusk="{{ $dusk }}-upload-error"></p>
+                    <div x-show="item.stopping" x-cloak role="alert" class="alert-warning mt-2 flex flex-wrap items-center justify-between gap-2"
+                         dusk="{{ $dusk }}-upload-stop-ask">
+                        <span x-text="`Stop uploading ${item.name}?`"></span>
+                        <span class="flex flex-wrap gap-2">
+                            <button type="button" class="btn-secondary" @click="item.stopping = false" dusk="{{ $dusk }}-upload-keep">Keep Uploading</button>
+                            <button type="button" class="btn-danger" @click="remove(item)" dusk="{{ $dusk }}-upload-stop">Stop Upload</button>
+                        </span>
+                    </div>
                 </div>
 
-                {{-- A finger's size on a phone (40 px), smaller beside a mouse. --}}
-                <div class="flex flex-shrink-0 items-center gap-1">
+                {{-- A finger's size on a phone (40 px), smaller beside a mouse, and apart enough that a slip on Pause is no Cancel. --}}
+                <div class="flex flex-shrink-0 items-center gap-2">
                     <button type="button" x-show="canPause(item)" @click="togglePause(item)"
                             class="inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:h-8 sm:w-8 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
                             :aria-label="item.status === 'paused' ? `Resume ${item.name}` : `Pause ${item.name}`"
@@ -148,7 +156,7 @@
                         </svg>
                     </button>
 
-                    <button type="button" @click="remove(item)"
+                    <button type="button" @click="askToStop(item)"
                             class="inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:h-8 sm:w-8 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-red-400"
                             :aria-label="busy() && ! ['done', 'ready', 'failed', 'refused'].includes(item.status) ? `Cancel ${item.name}` : `Remove ${item.name} from the list`"
                             :title="['done', 'ready', 'failed', 'refused'].includes(item.status) ? 'Remove' : 'Cancel'"

@@ -24,11 +24,15 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
             </svg>
             <span class="flex-1"><span class="sr-only" x-text="toast.type === 'success' ? 'Done: ' : 'Error: '"></span><span x-text="toast.message"></span></span>
-            <button type="button" class="-m-1 rounded p-1 opacity-80 hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-white" aria-label="Dismiss notification"
-                @click="$store.toasts.dismiss(toast.id)"><span aria-hidden="true">✕</span></button>
+            <button type="button" class="-m-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded opacity-80 hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-white" aria-label="Dismiss notification"
+                @click="$store.toasts.dismiss(toast.id)"><x-icon name="x-mark" class="h-4 w-4" /></button>
         </div>
     </template>
 </div>
+
+{{-- What a screen reader is told of a change made where the keyboard is — a line moved to its new place, a line
+     taken out — with nothing drawn: announce() in core/announce.js writes it here. --}}
+<div id="announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true" dusk="announcer"></div>
 
 {{-- A saved form says so as a toast in words — a key is never shown raw — and the email's own keys stay beside the
      email field on the profile, which says them there. --}}

@@ -4,7 +4,7 @@
     <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-gray-700">
         <h2 id="dashboard-activity-title" class="text-base font-semibold text-gray-800 dark:text-white">Recent activity</h2>
         <a href="{{ route('activity.view') }}" dusk="dashboard-activity-all"
-            class="text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 whitespace-nowrap rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+            class="touch-target inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 whitespace-nowrap rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
             View all
         </a>
     </div>

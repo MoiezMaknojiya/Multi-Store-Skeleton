@@ -43,3 +43,15 @@ export function dayLabel(value) {
     return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
         .toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
+
+/** When an invitation's link stops working, by the calendar of the person reading it: "Expires today", "Expires
+ *  tomorrow", "Expires in 5 days" — never "today" for a link that works until tomorrow evening. */
+export function expiresInWords(expiresAt, now = new Date()) {
+    const end = new Date(expiresAt);
+    const midnight = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+    const days = Math.round((midnight(end) - midnight(now)) / 86400000);
+
+    if (days <= 0) return 'Expires today';
+
+    return days === 1 ? 'Expires tomorrow' : `Expires in ${days} days`;
+}

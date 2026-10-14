@@ -78,12 +78,14 @@
                             <div class="flex items-center justify-end gap-2">
                                 <button type="button" class="btn-row-neutral" x-show="item.can.impersonate"
                                     x-bind:aria-label="'Log in as ' + item.name"
-                                    @click="impersonate(item)" x-bind:disabled="impersonating" x-bind:dusk="'impersonate-' + item.id">Log In As</button>
+                                    @click="impersonate(item)" x-bind:disabled="impersonating" x-bind:dusk="'impersonate-' + item.id">
+                                    <x-spinner x-show="impersonatingId === item.id" x-cloak class="h-3 w-3" /> Log In As</button>
                                 <button type="button" class="btn-row-neutral" x-show="item.can.manage_organizations"
                                     x-bind:aria-label="item.name + '’s organizations'"
-                                    @click="openManageOrganizations(item)" x-bind:disabled="loadingAccess" x-bind:dusk="'manage-organizations-' + item.id">Organizations</button>
+                                    @click="openManageOrganizations(item)" x-bind:disabled="loadingAccess" x-bind:dusk="'manage-organizations-' + item.id">
+                                    <x-spinner x-show="loadingAccess && accessTarget?.id === item.id" x-cloak class="h-3 w-3" /> Organizations</button>
                                 <button type="button" class="btn-row-danger" x-show="item.can.remove_platform_role"
-                                    x-bind:aria-label="'Remove the platform role of ' + item.name"
+                                    x-bind:aria-label="'Remove Platform Role of ' + item.name"
                                     @click="confirmRemoveRole(item)" x-bind:dusk="'remove-platform-role-' + item.id">Remove Platform Role</button>
                                 <button type="button" class="btn-row-danger" x-show="item.can.delete"
                                     x-bind:aria-label="'Delete ' + item.name"
@@ -118,9 +120,15 @@
                             <th class="px-5 py-3 text-right font-semibold">Actions</th>
                         </tr>
                     </thead>
-                    <tbody class="table-tbody">
-                        <tr x-show="invitations.length === 0">
-                            <td colspan="5" class="px-5 py-6 text-center text-muted-soft">No invitations are waiting.</td>
+                    <tbody class="table-tbody" x-bind:aria-busy="invitationsLoading ? 'true' : 'false'">
+                        <tr x-show="invitationsLoading" x-cloak>
+                            <td colspan="5" class="px-5 py-6 text-center text-muted-soft"><x-loading /></td>
+                        </tr>
+                        <tr x-show="!invitationsLoading && invitationsFailed" x-cloak>
+                            <td colspan="5" class="px-5 py-10"><x-load-failed retry="fetchInvitations()" what="the invitations" dusk="platform-invitations-failed" /></td>
+                        </tr>
+                        <tr x-show="!invitationsLoading && !invitationsFailed && invitations.length === 0" x-cloak>
+                            <td colspan="5" class="px-5 py-6 text-center text-muted-soft" dusk="platform-invitations-empty">No invitations are waiting.</td>
                         </tr>
                         <template x-for="invitation in invitations" :key="invitation.id">
                             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -194,10 +202,10 @@
                         <template x-for="membership in access.memberships" :key="membership.organization_id">
                             <li class="py-3" x-bind:dusk="'membership-' + membership.organization_id">
                                 <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-                                    <p class="sm:w-44 text-sm font-medium text-gray-800 dark:text-gray-100 truncate" x-text="membership.organization_name"></p>
+                                    <p class="sm:w-44 text-sm font-medium text-gray-800 dark:text-gray-100 break-words" x-text="membership.organization_name"></p>
                                     <div class="flex-1 min-w-0">
                                         <select class="form-select" x-model.number="membership.selected_role_id" x-bind:dusk="'membership-role-' + membership.organization_id"
-                                                aria-label="Role in this organization">
+                                                x-bind:aria-label="'Role in ' + membership.organization_name">
                                             <template x-for="role in rolesFor(membership.organization_id)" :key="role.id">
                                                 <option x-bind:value="role.id" x-text="role.name" x-bind:selected="role.id === membership.selected_role_id"></option>
                                             </template>
@@ -207,9 +215,10 @@
                                         <button type="button" class="btn-row-neutral" @click="saveMembershipRole(membership)"
                                                 x-bind:disabled="membership.busy || membership.selected_role_id === membership.role_id"
                                                 x-bind:aria-label="'Save the role in ' + membership.organization_name"
-                                                x-bind:dusk="'membership-save-' + membership.organization_id">Save</button>
+                                                x-bind:dusk="'membership-save-' + membership.organization_id">
+                                            <x-spinner x-show="membership.busy" x-cloak class="h-3 w-3" /> Save</button>
                                         <button type="button" class="btn-row-danger" @click="askRemove(membership)"
-                                                x-bind:aria-label="'Take them out of ' + membership.organization_name"
+                                                x-bind:aria-label="'Remove from ' + membership.organization_name"
                                                 x-bind:disabled="membership.busy" x-bind:dusk="'membership-remove-' + membership.organization_id">Remove</button>
                                     </div>
                                 </div>
@@ -229,7 +238,7 @@
                         {{-- They can be put back in, so it asks only that it is you. --}}
                         <x-crud.password-confirm id="remove-membership-password" model="removePassword" error="removePasswordError" hint="Confirm it is you." />
                         <div class="mt-4 flex flex-wrap justify-end gap-3">
-                            <x-secondary-button x-on:click="removing = null">Cancel</x-secondary-button>
+                            <x-secondary-button x-on:click="keepMembership()" dusk="remove-membership-cancel">Cancel</x-secondary-button>
                             <x-danger-button x-bind:disabled="removingBusy" dusk="remove-membership-confirm">
                                 <x-spinner x-show="removingBusy" x-cloak />
                                 Remove from Organization
@@ -244,7 +253,8 @@
                     <p x-show="access.organizations.length === 0" class="mt-2 text-sm text-gray-500 dark:text-gray-400">They are already in every organization.</p>
                     <form x-show="access.organizations.length > 0" @submit.prevent="assignToOrganization()" class="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-start" dusk="assign-organization-form">
                         <div x-bind:class="assignErrors.organization_id ? 'crud-field-error' : ''">
-                            <select class="form-select" x-model="assignForm.organization_id" @change="assignForm.role_id = ''" dusk="assign-organization" aria-label="Organization">
+                            <label for="assign-organization" class="form-label">Organization <span class="text-red-600" aria-hidden="true">*</span></label>
+                            <select id="assign-organization" class="form-select" x-model="assignForm.organization_id" @change="assignForm.role_id = ''" dusk="assign-organization" aria-required="true">
                                 <option value="">Choose an organization</option>
                                 <template x-for="option in access.organizations" :key="option.id">
                                     <option x-bind:value="option.id" x-text="option.name + (option.city ? ' — ' + option.city : '')"></option>
@@ -253,7 +263,8 @@
                             <template x-if="assignErrors.organization_id"><p class="form-error" role="alert" x-text="assignErrors.organization_id[0]"></p></template>
                         </div>
                         <div x-bind:class="assignErrors.role_id ? 'crud-field-error' : ''">
-                            <select class="form-select" x-model="assignForm.role_id" x-bind:disabled="!assignForm.organization_id" dusk="assign-role" aria-label="Role">
+                            <label for="assign-role" class="form-label">Role <span class="text-red-600" aria-hidden="true">*</span></label>
+                            <select id="assign-role" class="form-select" x-model="assignForm.role_id" x-bind:disabled="!assignForm.organization_id" dusk="assign-role" aria-required="true">
                                 <option value="">Choose a role</option>
                                 <template x-for="role in rolesFor(assignForm.organization_id)" :key="role.id">
                                     <option x-bind:value="role.id" x-text="role.name"></option>
@@ -262,7 +273,7 @@
                             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" x-show="assignForm.role_id" x-text="roleDescription(assignForm.organization_id, assignForm.role_id)"></p>
                             <template x-if="assignErrors.role_id"><p class="form-error" role="alert" x-text="assignErrors.role_id[0]"></p></template>
                         </div>
-                        <x-primary-button x-bind:disabled="assigning" dusk="assign-organization-save">
+                        <x-primary-button x-bind:disabled="assigning" dusk="assign-organization-save" class="sm:mt-6">
                             <x-spinner x-show="assigning" x-cloak />
                             Add
                         </x-primary-button>

@@ -10,6 +10,8 @@ import axios from 'axios';
 import { dayLabel, toAmPm, windowLabel } from '../core/clock.js';
 import { PlaylistItemDefaults } from '../core/playlist-defaults.js';
 import { isARepeatPress } from '../core/click-beside.js';
+import { announce } from '../core/announce.js';
+import { showFirstError } from '../core/validate.js';
 
 /** A rule as the editor holds it. day_mode and time_mode are UI ideas only — the server stores
  *  the dates, the repeat and the two times, and infers nothing from a mode. */
@@ -103,8 +105,16 @@ export function registerScreenPlaylist(Alpine) {
         // with the save that was already happening.
         version: null,
         available: [],
-        /* How many files the library offers in all, whatever the search says: the number on its tab. */
+        /* How many files the library offers in all, whatever the search says: the number on its tab — and how many the
+         * search matches, of which the newest hundred are listed (said under the list when there are more). */
         availableTotal: null,
+        availableMatched: 0,
+        /* The file whose Add was pressed a moment ago: its button says "Added" for two seconds. */
+        addedId: null,
+        addedTimer: null,
+        /* The line × took out a moment ago ({item, index}), which Undo puts back where it was — for ten seconds. */
+        removedLine: null,
+        removedTimer: null,
         /* Every channel this screen could carry, and the one whose ads are unfolded. */
         channels: [],
         openChannelId: null,
@@ -115,6 +125,12 @@ export function registerScreenPlaylist(Alpine) {
         search: '',
         availableToken: 0,
         loading: true,
+        /* A list that could not be loaded says so, with Try Again — never "Nothing here yet" over a playlist that has
+         * lines (the playlist, the library, the channels, the other screens to copy to). */
+        loadFailed: false,
+        availableFailed: false,
+        channelsFailed: false,
+        copyFailed: false,
         saving: false,
         dirty: false,
         searchTimer: null,
@@ -175,6 +191,7 @@ export function registerScreenPlaylist(Alpine) {
 
         async load() {
             this.loading = true;
+            this.loadFailed = false;
             try {
                 const { data } = await axios.get(`/screens/${this.screenId}/playlist`);
                 this.items = data.items.map((item) => ({
@@ -185,8 +202,9 @@ export function registerScreenPlaylist(Alpine) {
                 this.version = data.version;
                 this.localDate = data.local_date ?? null;
                 this.dirty = false;
-            } catch (error) {
-                window.toast(error.response?.data?.message ?? 'Could not load the playlist.');
+            } catch {
+                // Said where the lines would be, with Try Again — the page's own words, not a toast to miss.
+                this.loadFailed = true;
             } finally {
                 this.loading = false;
             }
@@ -196,6 +214,7 @@ export function registerScreenPlaylist(Alpine) {
             // The newest search wins: "Pro" then "Promo" sends two, and the answer to "Pro"
             // arriving second would list files the box is no longer asking for.
             const token = ++this.availableToken;
+            this.availableFailed = false;
             try {
                 const { data } = await axios.get(`/screens/${this.screenId}/available-media`, {
                     params: { search: this.search },
@@ -203,17 +222,17 @@ export function registerScreenPlaylist(Alpine) {
                 if (token !== this.availableToken) return;
                 this.available = data.media;
                 this.availableTotal = data.total;
+                this.availableMatched = data.matched ?? data.media.length;
             } catch (error) {
                 if (token !== this.availableToken) return;
-                if (error.response?.status !== 403) {
-                    window.toast('Could not load the content library.');
-                }
+                if (error.response?.status !== 403) this.availableFailed = true;
             } finally {
                 if (token === this.availableToken) this.availableLoaded = true;
             }
         },
 
         async loadChannels() {
+            this.channelsFailed = false;
             try {
                 const { data } = await axios.get(`/screens/${this.screenId}/available-channels`);
                 this.channels = data.channels;
@@ -221,17 +240,16 @@ export function registerScreenPlaylist(Alpine) {
             } catch (error) {
                 // Someone who may only look at a playlist is not given the list, and has
                 // no use for it.
-                if (error.response?.status !== 403) {
-                    window.toast('Could not load the channels.');
-                }
+                if (error.response?.status !== 403) this.channelsFailed = true;
             }
         },
 
         /* ── Editing ───────────────────────────────────────────────────── */
         addItem(media, event) {
             // Not while a save is on its way: its answer replaces the list, and this line would go with it. And once
-            // for a double click: its second press is the same choice, not a second line (isARepeatPress).
-            if (this.saving || isARepeatPress(event)) return;
+            // for a double click: its second press is the same choice, not a second line (isARepeatPress). Nor onto a
+            // playlist that could not be loaded: saved, it would replace the lines nobody could see.
+            if (this.saving || this.loadFailed || isARepeatPress(event)) return;
 
             this.items.push({
                 key: this.nextKey++,
@@ -256,7 +274,12 @@ export function registerScreenPlaylist(Alpine) {
             });
             this.dirty = true;
 
-            // Below lg the playlist is above the library, out of sight: say where the file went.
+            // Its button says "Added" for a moment — a second press is then a choice, not a press nobody saw land — and a
+            // screen reader hears it. Below lg the playlist is above the library, out of sight: a toast says where it went.
+            clearTimeout(this.addedTimer);
+            this.addedId = media.id;
+            this.addedTimer = setTimeout(() => { this.addedId = null; }, 2000);
+            announce(`${media.title} added to the playlist.`);
             if (!window.matchMedia('(min-width: 1024px)').matches) {
                 window.toast(`${media.title} added. Press Save Changes to send it to the screen.`, 'success');
             }
@@ -268,7 +291,7 @@ export function registerScreenPlaylist(Alpine) {
          * and new ones arrive without anybody coming back here.
          */
         addChannel(channel, event) {
-            if (this.saving || channel.locked || isARepeatPress(event)) return;
+            if (this.saving || this.loadFailed || channel.locked || isARepeatPress(event)) return;
 
             this.items.push({
                 key: this.nextKey++,
@@ -285,6 +308,7 @@ export function registerScreenPlaylist(Alpine) {
                 rules: [],
             });
             this.dirty = true;
+            announce(`${channel.title} added to the playlist.`);
         },
 
         // Once for a double click (isARepeatPress): the line under the pointer after the first press is the NEXT one —
@@ -292,20 +316,63 @@ export function registerScreenPlaylist(Alpine) {
         removeItem(index, event) {
             if (this.saving || isARepeatPress(event)) return;
 
-            this.items.splice(index, 1);
+            const [gone] = this.items.splice(index, 1);
             this.dirty = true;
+            clearTimeout(this.removedTimer);
+            this.removedLine = { item: gone, index };
+            this.removedTimer = setTimeout(() => { this.removedLine = null; }, 10000);
+
+            // The keyboard stays in the list: on the × of the line that took this one's place, or of the line above
+            // it when this was the last — never back at the top of the page with the removed button.
+            this.$nextTick(() => {
+                const next = this.lineButton('remove', Math.min(index, this.items.length - 1));
+                (next ?? document.querySelector('[dusk="playlist-heading"]'))?.focus();
+            });
+            announce(`${gone.title} taken out of the playlist. Undo puts it back; Save Changes keeps it so.`);
+        },
+
+        /** Undo: the line just taken out back where it was, schedules and all — before Save Changes, nothing has left. */
+        undoRemove() {
+            if (!this.removedLine || this.saving) return;
+
+            const { item, index } = this.removedLine;
+            clearTimeout(this.removedTimer);
+            this.removedLine = null;
+            const at = Math.min(index, this.items.length);
+            this.items.splice(at, 0, item);
+            this.dirty = true;
+            this.$nextTick(() => this.lineButton('remove', at)?.focus());
+            announce(`${item.title} put back at position ${at + 1}.`);
         },
 
         moveUp(index, event) {
             if (index === 0 || this.saving || isARepeatPress(event)) return;
             [this.items[index - 1], this.items[index]] = [this.items[index], this.items[index - 1]];
             this.dirty = true;
+            this.afterMove(index - 1, 'up');
         },
 
         moveDown(index, event) {
             if (index >= this.items.length - 1 || this.saving || isARepeatPress(event)) return;
             [this.items[index + 1], this.items[index]] = [this.items[index], this.items[index + 1]];
             this.dirty = true;
+            this.afterMove(index + 1, 'down');
+        },
+
+        /* A moved line takes its row out of the page and back (x-for), which drops the keyboard: it is put back on the
+         * same arrow of the line at its new place — the other arrow once that one is at the end — and where the line
+         * went is said (WCAG 2.4.3, 4.1.3). */
+        afterMove(at, direction) {
+            this.$nextTick(() => {
+                const same = this.lineButton(direction, at);
+                const other = this.lineButton(direction === 'up' ? 'down' : 'up', at);
+                (same && !same.disabled ? same : other)?.focus();
+            });
+            announce(`${this.items[at].title} moved to position ${at + 1} of ${this.items.length}.`);
+        },
+
+        lineButton(kind, index) {
+            return index < 0 ? null : document.querySelector(`[dusk="playlist-${kind}-${index}"]`);
         },
 
         async save() {
@@ -352,6 +419,9 @@ export function registerScreenPlaylist(Alpine) {
                 this.version = data.version;
                 this.localDate = data.local_date ?? this.localDate;
                 this.dirty = false;
+                // Saved: what was taken out is gone from the screen too, and there is nothing to undo here any more.
+                clearTimeout(this.removedTimer);
+                this.removedLine = null;
                 window.toast('Playlist saved. The screen shows it within 30 seconds.', 'success');
             } catch (error) {
                 const errors = error.response?.data?.errors;
@@ -427,6 +497,8 @@ export function registerScreenPlaylist(Alpine) {
 
             if (errors.some((problems) => Object.keys(problems).length > 0)) {
                 this.scheduleErrors = errors;
+                // The rule may be far above OK in a long window: brought into sight, its field given the keyboard.
+                showFirstError(document.querySelector('[dusk="schedule-modal"]'));
 
                 return;
             }
@@ -633,15 +705,20 @@ export function registerScreenPlaylist(Alpine) {
             if (this.dirty || this.saving) return;
 
             this.copySelected = [];
+            this.$dispatch('open-modal', 'playlist-copy-modal');
+            await this.loadCopyTargets();
+        },
+
+        async loadCopyTargets() {
             this.copyTargets = [];
             this.copyLoading = true;
-            this.$dispatch('open-modal', 'playlist-copy-modal');
+            this.copyFailed = false;
 
             try {
                 const { data } = await axios.get(`/screens/${this.screenId}/playlist/copy-targets`);
                 this.copyTargets = data.screens;
             } catch {
-                window.toast('Could not load the other screens.');
+                this.copyFailed = true;
             } finally {
                 this.copyLoading = false;
             }

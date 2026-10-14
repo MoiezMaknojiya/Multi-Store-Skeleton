@@ -29,6 +29,8 @@
                         </x-crud.form-field>
                     </div>
 
+                    {{-- What the page learns of the file, said to a screen reader as it changes: reading, read, or asked for. --}}
+                    <div role="status" aria-live="polite" class="space-y-4 empty:hidden" dusk="tv-app-status">
                     <p x-show="checking" x-cloak class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300" dusk="tv-app-checking">
                         <x-spinner class="text-blue-600 dark:text-blue-400" /> Reading the version from the file...
                     </p>
@@ -38,8 +40,10 @@
                         Version <strong x-text="read?.version_name"></strong> (code <span x-text="read?.version_code"></span>), read from the file.
                     </p>
 
+                    </div>
+
                     <div x-show="read && ! read.version_read" x-cloak class="space-y-4" dusk="tv-app-version-typed">
-                        <p class="alert-warning">
+                        <p class="alert-warning" role="status">
                             <span x-show="typesName() && typesCode()">The version could not be read from this file.</span>
                             <span x-show="! typesName()">The file says version <strong x-text="read?.version_name"></strong>, but not its code.</span>
                             <span x-show="! typesCode()">The file says version code <strong x-text="read?.version_code"></strong>, but not its name.</span>
@@ -100,7 +104,7 @@
                                 <span class="font-medium text-gray-800 dark:text-white" x-text="item.version_name"></span>
                                 <span class="text-xs text-gray-500 dark:text-gray-400" x-text="'code ' + item.version_code"></span>
                                 <span x-show="item.current" class="badge-success">Offered to TVs</span>
-                                <span x-show="! item.version_read_from_file" class="badge-warning" title="The version was typed: it could not be read from the file">Typed</span>
+                                <span x-show="! item.version_read_from_file" class="badge-warning relative" title="The version was typed: it could not be read from the file">Typed<span class="sr-only">: the version could not be read from the file</span></span>
                             </div>
                             <p x-show="item.notes" class="cell-prose text-xs text-gray-500 dark:text-gray-400" x-text="item.notes"></p>
                         </td>

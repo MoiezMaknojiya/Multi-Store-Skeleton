@@ -91,7 +91,7 @@
                                     <span class="text-xs text-gray-500 dark:text-gray-300" x-text="typeLabel(item)"></span>
                                 </template>
                                 <template x-if="item.duration_seconds">
-                                    <span class="absolute bottom-1 right-1 px-1 rounded bg-black/70 text-white text-[10px]"
+                                    <span class="absolute bottom-1 right-1 px-1 rounded bg-black/70 text-white text-xs tabular-nums"
                                           x-text="formatDuration(item.duration_seconds)"></span>
                                 </template>
                             </div>

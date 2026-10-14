@@ -20,7 +20,7 @@
                 @else
                     You were invited
                 @endif
-                <span class="font-semibold">{{ $invitation->email }}</span> to join as
+                <span class="font-semibold break-all">{{ $invitation->email }}</span> to join as
                 <span class="font-semibold" dusk="invitation-role">{{ $invitation->role->name }}</span>.
             </p>
             <p class="mt-1 text-xs text-gray-500">{{ $invitation->role->description() }}</p>
@@ -69,14 +69,14 @@
 
             @case('login')
                 <p class="mt-6 text-sm text-gray-600">
-                    An account already exists for <span class="font-medium">{{ $invitation->email }}</span>.
+                    An account already exists for <span class="font-medium break-all">{{ $invitation->email }}</span>.
                     Sign in with it and you'll come straight back here to accept.
                 </p>
                 <a href="{{ route('login') }}" class="btn-primary-auth mt-5" dusk="invitation-login">Sign In to Accept</a>
                 @break
 
             @case('accept')
-                <p class="mt-6 text-sm text-gray-600">You're signed in as <span class="font-medium">{{ auth()->user()->email }}</span>.</p>
+                <p class="mt-6 text-sm text-gray-600">You're signed in as <span class="font-medium break-all">{{ auth()->user()->email }}</span>.</p>
                 <form method="POST" action="{{ route('invitations.accept', $token) }}" class="mt-5">
                     @csrf
                     <button type="submit" class="btn-primary-auth" dusk="invitation-accept">Accept Invitation</button>
@@ -85,8 +85,8 @@
 
             @case('mismatch')
                 <div class="alert-warning mt-6" dusk="invitation-mismatch">
-                    You're signed in as <span class="font-semibold">{{ auth()->user()->email }}</span>, but this invitation is for
-                    <span class="font-semibold">{{ $invitation->email }}</span>. Sign out, then open the link again.
+                    You're signed in as <span class="font-semibold break-all">{{ auth()->user()->email }}</span>, but this invitation is for
+                    <span class="font-semibold break-all">{{ $invitation->email }}</span>. Sign out, then open the link again.
                 </div>
                 <form method="POST" action="{{ route('logout') }}" class="mt-5">
                     @csrf
@@ -98,7 +98,7 @@
         {{-- Declining deletes the invitation, so it asks first: one stray tap under the main button must not end it. --}}
         @if ($state !== 'mismatch')
             <div class="mt-4 text-center" x-data="{ sure: false }">
-                <button type="button" x-show="! sure" @click="sure = true" dusk="invitation-decline"
+                <button type="button" x-show="! sure" @click="sure = true; $nextTick(() => $refs.keep.focus())" x-ref="decline" dusk="invitation-decline"
                     class="rounded-md px-3 py-2 text-sm text-gray-600 hover:text-gray-800 hover:underline">
                     Decline Invitation
                 </button>
@@ -106,7 +106,7 @@
                     @csrf
                     <p>Decline? This link stops working, and you would need a new invitation to join.</p>
                     <div class="mt-3 flex flex-wrap justify-end gap-2">
-                        <button type="button" class="btn-secondary" @click="sure = false" dusk="invitation-decline-keep">Keep It</button>
+                        <button type="button" class="btn-secondary" @click="sure = false; $nextTick(() => $refs.decline.focus())" x-ref="keep" dusk="invitation-decline-keep">Keep It</button>
                         <button type="submit" class="btn-danger" dusk="invitation-decline-confirm">Decline</button>
                     </div>
                 </form>

@@ -165,6 +165,14 @@ test('a long list names five and counts the rest, leading to where they all are'
             'count' => 2,
         ]);
 
+    // One more is said as one: "1 more screen is offline", never "1 more screens are offline".
+    $gamma = Organization::factory()->create();
+    $one = createOrganizationUser($gamma, ['screen-view'], 'One More Watcher');
+    Screen::factory()->count(6)->create(['organization_id' => $gamma->id, 'last_seen_at' => null]);
+    $lines = collect(dashboardFor($one, $gamma)->viewData('summary')['attention'])->keyBy('key');
+    expect($lines['screen-offline-more']['text'])->toBe('1 more screen is offline')
+        ->and($lines['screen-empty-more']['text'])->toBe('1 more screen has nothing to play');
+
     // The number beside "Needs attention" counts every screen, not the lines: 7 offline and 7 with nothing to play.
     expect(dashboardFor($watcher, $alpha)->getContent())
         ->toMatch('/dusk="dashboard-attention-count">14<span class="sr-only"> to look at<\/span>/');

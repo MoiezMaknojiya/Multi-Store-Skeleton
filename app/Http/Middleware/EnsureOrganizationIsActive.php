@@ -41,6 +41,6 @@ class EnsureOrganizationIsActive
     /** The words a paused organization's people are told, on the dashboard and in every refusal. */
     public static function message(string $organization): string
     {
-        return "{$organization} is paused. Contact support to turn it back on.";
+        return "{$organization} is paused. Contact us to turn it back on.";
     }
 }

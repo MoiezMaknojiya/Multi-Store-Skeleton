@@ -5,7 +5,7 @@
 
 <th scope="col" class="px-5 py-3 text-left font-semibold" aria-sort="none" x-bind:aria-sort="sortState('{{ $column }}')">
     <button type="button" @click="sortOn('{{ $column }}', '{{ $first }}')" dusk="sort-{{ $column }}"
-            class="inline-flex items-center gap-1 rounded hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:text-white">
+            class="touch-target -my-1 inline-flex items-center gap-1 rounded py-1 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:text-white">
         {{ $label }}
         <x-icon name="arrow-up" class="h-3.5 w-3.5" x-show="sortState('{{ $column }}') === 'ascending'" x-cloak />
         <x-icon name="arrow-down" class="h-3.5 w-3.5" x-show="sortState('{{ $column }}') === 'descending'" x-cloak />

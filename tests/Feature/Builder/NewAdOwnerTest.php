@@ -54,7 +54,7 @@ test('the editor opens for the organization chosen: its badge, its own shelf, an
             ->assertViewHas('assets', fn (array $assets) => collect($assets)->pluck('id')->all() === [$alphaFile->id]);
 
         expect($response->getContent())
-            ->toMatch('/<span class="badge-neutral shrink-0"[^>]*dusk="ad-owner">Alpha Mart<\/span>/')
+            ->toMatch('/<span class="badge-neutral[^"]*"[^>]*dusk="ad-owner"><span class="truncate">Alpha Mart<\/span><\/span>/')
             ->not->toContain('dusk="ad-organization"')
             ->not->toContain('Beta Deli');
 
@@ -80,7 +80,7 @@ test('with no organization named the new ad is the platform\'s, and says so', fu
         ->assertViewHas('newAdOrganizationId', null)
         ->assertViewHas('assets', fn (array $assets) => collect($assets)->pluck('id')->all() === [$platformFile->id]);
 
-    expect($response->getContent())->toMatch('/<span class="badge-info shrink-0"[^>]*dusk="ad-owner">Platform<\/span>/');
+    expect($response->getContent())->toMatch('/<span class="badge-info[^"]*"[^>]*dusk="ad-owner"><span class="truncate">Platform<\/span><\/span>/');
 });
 
 test('an organization that is not there, or no plain id, sends the question back', function (string $query) {

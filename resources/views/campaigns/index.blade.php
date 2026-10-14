@@ -42,7 +42,7 @@
                                              x-bind:class="Number(item.height) > Number(item.width) ? 'object-contain' : 'object-cover'">
                                     </template>
                                     <template x-if="!item.thumbnail_url">
-                                        <span class="text-[10px] text-gray-500 dark:text-gray-300" x-text="item.type"></span>
+                                        <span class="text-xs text-gray-500 dark:text-gray-300" x-text="item.type"></span>
                                     </template>
                                 </div>
                                 <div class="min-w-0">
@@ -207,7 +207,11 @@
                             </span>
                         </p>
 
-                        <template x-if="!loadingScreens && allScreens.length === 0">
+                        <template x-if="!loadingScreens && screensFailed">
+                            <x-load-failed retry="loadScreens()" what="the screens" dusk="campaign-screens-failed" class="py-2" />
+                        </template>
+
+                        <template x-if="!loadingScreens && !screensFailed && allScreens.length === 0">
                             <p class="text-sm text-gray-500 dark:text-gray-400" dusk="campaign-no-screens">
                                 There are no screens yet.
                             </p>
@@ -220,7 +224,7 @@
                                          press, once they all are, clears them — the words say which it will do. --}}
                                     <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
                                         <p class="text-sm font-medium text-gray-800 dark:text-white" x-text="group.name"></p>
-                                        <button type="button" @click="toggleOrganization(group)"
+                                        <button type="button" data-a-change @click="toggleOrganization(group)"
                                                 x-bind:dusk="'campaign-organization-all-' + group.id"
                                                 x-show="group.screens.some(s => s.carries_ads)"
                                                 x-bind:aria-label="(organizationAllChosen(group) ? 'Clear every screen of ' : 'Choose every screen of ') + group.name"

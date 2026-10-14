@@ -5,7 +5,7 @@
     </x-slot>
 
     {{-- Above the organizations the page opens on the platform's own files (owner, 2026-10-08). --}}
-    <div x-data="builderAssetsTable({{ Js::from(['storage' => $storage, 'owner' => $aboveTheOrganizations ? 'platform' : '']) }})" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <div x-data="builderAssetsTable({{ Js::from(['storage' => $storage, 'owner' => $aboveTheOrganizations ? 'platform' : '', 'ownerIds' => array_map(fn (array $organization) => (string) $organization['id'], $organizations)]) }})" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
         {{-- The organization's storage where a note once stood (owner, 2026-09-30), the Owner list and the search beside it. The
              meter shows only for an organization's shelf: the platform's own has no wall. --}}
@@ -58,7 +58,7 @@
             <div class="p-5" x-bind:aria-busy="loading ? 'true' : 'false'">
                 <template x-if="loading">
                     <p class="py-12 text-center text-sm text-muted-soft">
-                        <span class="inline-flex items-center gap-2"><x-spinner class="text-blue-600 dark:text-blue-400" /> Loading...</span>
+                        <x-loading />
                     </p>
                 </template>
 
@@ -76,7 +76,16 @@
                     </div>
                 </template>
 
-                <template x-if="!loading && items.length === 0 && !loadFailed && !search">
+                {{-- Above the organizations whose shelf is empty, in its own name, and the way to every file. --}}
+                <template x-if="!loading && items.length === 0 && !loadFailed && !search && filterOrganization !== ''">
+                    <div class="mx-auto max-w-md space-y-3 py-12 text-center" dusk="assets-empty">
+                        <p class="text-sm text-gray-700 dark:text-gray-200"
+                           x-text="filterOrganization === 'platform' ? 'The platform has no files yet.' : ownerName() + ' has no files yet.'"></p>
+                        <button type="button" class="btn-row-neutral" @click="filterOrganization = ''; applyFilters()" dusk="table-clear-filters">Show All</button>
+                    </div>
+                </template>
+
+                <template x-if="!loading && items.length === 0 && !loadFailed && !search && filterOrganization === ''">
                     <p class="py-16 text-center text-sm text-gray-500 dark:text-gray-400" dusk="assets-empty">
                         No files yet.
                     </p>
@@ -89,21 +98,16 @@
                              x-bind:dusk="'asset-card-' + item.id">
 
                             {{-- The picture, and over it — under the mouse, or while the keyboard is in the card; always on a
-                                 touch screen, which has no hover — what the file is in the middle and Delete in the top-left
-                                 corner (owner, 2026-09-30). --}}
+                                 touch screen, which has no hover — Delete in the top-left corner (owner, 2026-09-30). What the
+                                 file is is written under its name, for every pointer and none. --}}
                             <div class="relative aspect-video bg-gray-100 dark:bg-gray-900">
                                 {{-- An upright picture is shown whole, not cut to its middle. --}}
                                 <img x-show="item.thumbnail_url" x-cloak x-bind:src="item.thumbnail_url" alt="" loading="lazy"
                                      class="h-full w-full"
                                      x-bind:class="Number(item.height) > Number(item.width) ? 'object-contain' : 'object-cover'" />
                                 <span x-show="!item.thumbnail_url" x-cloak
-                                      class="flex h-full w-full items-center justify-center text-xs text-muted-soft"
+                                      class="flex h-full w-full items-center justify-center text-xs text-gray-600 dark:text-gray-400"
                                       x-text="item.kind === 'video' ? 'Video' : 'Image'"></span>
-
-                                <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:bg-transparent pointer-coarse:opacity-100">
-                                    <span class="rounded-full bg-black/75 px-2.5 py-1 text-xs font-medium text-white"
-                                          x-bind:dusk="'asset-details-' + item.id" x-text="assetDetails(item)"></span>
-                                </div>
 
                                 {{-- An organization's own file with Delete Ads; the platform's only above the organizations: the row says
                                      which this person may (can_delete), the controller asks again. --}}
@@ -111,21 +115,27 @@
                                     <button type="button" x-show="item.can_delete" x-cloak @click="askToDelete(item)"
                                             x-bind:aria-label="'Delete ' + item.title" title="Delete"
                                             x-bind:dusk="'delete-asset-' + item.id"
-                                            class="absolute left-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-red-700 shadow-sm opacity-0 transition-opacity hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100 dark:bg-gray-800/95 dark:text-red-400 dark:hover:bg-gray-800">
+                                            class="touch-target absolute left-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-red-700 shadow-sm opacity-0 transition-opacity hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100 dark:bg-gray-800/95 dark:text-red-400 dark:hover:bg-gray-800">
                                         <x-icon name="trash" />
                                     </button>
                                 @endcan
                             </div>
 
                             <div class="space-y-2 p-3">
-                                <p class="truncate text-sm font-medium text-gray-800 dark:text-white" x-bind:title="item.title"
-                                   x-bind:dusk="'asset-title-' + item.id" x-text="item.title"></p>
+                                <div>
+                                    <p class="line-clamp-2 break-words text-sm font-medium text-gray-800 dark:text-white"
+                                       x-bind:dusk="'asset-title-' + item.id" x-text="item.title"></p>
+                                    <p class="mt-0.5 text-xs tabular-nums text-gray-500 dark:text-gray-400"
+                                       x-bind:dusk="'asset-details-' + item.id" x-text="assetDetails(item)"></p>
+                                </div>
 
                                 {{-- Two pills: whose it is (above the organizations: its organization, or "Every organization" for the platform's;
                                      an organization's shelf is its own alone) and whether an ad uses it — green in use, grey not yet. --}}
                                 <div class="flex flex-wrap items-center gap-1">
                                     <span x-show="item.owner_label" x-cloak x-bind:class="item.shared ? 'badge-info' : 'badge-neutral'"
                                           x-text="item.owner_label" x-bind:dusk="'asset-owner-' + item.id"></span>
+                                    {{-- A pill keeps to one line (rule 02); a list of ads too long for it is cut to the card's
+                                         width, and read whole by a screen reader. --}}
                                     <span class="max-w-full" x-bind:class="isUsed(item) ? 'badge-success' : 'badge-neutral'"
                                           x-bind:title="usageLabel(item)" x-bind:dusk="'asset-usage-' + item.id">
                                         <span class="min-w-0 truncate" x-text="usageLabel(item)"></span>

@@ -91,11 +91,10 @@ class StorePlayerAppReleaseRequest extends FormRequest
                 $validator->errors()->add('version_name', 'The version could not be read from this file: type its version name.');
             }
 
-            $current = PlayerAppRelease::current();
+            $notNewer = $code !== null ? PlayerAppRelease::notNewerThanCurrent($name, $code) : null;
 
-            if ($code !== null && $current !== null && $code <= $current->version_code) {
-                $validator->errors()->add($this->read()['version_code'] !== null ? 'file' : 'version_code',
-                    "This is version {$name} (code {$code}): it must be newer than {$current->version_name} (code {$current->version_code}), the one every TV is offered now.");
+            if ($notNewer !== null) {
+                $validator->errors()->add($this->read()['version_code'] !== null ? 'file' : 'version_code', $notNewer);
             }
         }];
     }

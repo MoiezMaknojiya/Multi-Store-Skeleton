@@ -18,7 +18,7 @@
 <div x-show="storage" @if ($initial === null) x-cloak @endif {{ $attributes->merge(['class' => 'card p-4 space-y-2 sm:max-w-md']) }} dusk="storage-meter">
     <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
         <span class="font-medium text-gray-700 dark:text-gray-200">Storage</span>
-        <span class="whitespace-nowrap text-gray-500 dark:text-gray-400" x-text="storageText()" dusk="storage-meter-text">{{ $__words }}</span>
+        <span class="whitespace-nowrap tabular-nums text-gray-500 dark:text-gray-400" x-text="storageText()" dusk="storage-meter-text">{{ $__words }}</span>
     </div>
     <div class="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
          role="progressbar" aria-label="Storage used" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="storageLevel()"

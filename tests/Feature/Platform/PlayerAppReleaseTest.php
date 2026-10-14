@@ -172,8 +172,10 @@ test('a version must be newer than the one every TV is offered', function () {
     $this->actingAs($this->admin);
     aRelease(2, '1.1');
 
+    // Said the moment the file is read, before anybody types notes and presses Publish — and Publish refuses it too.
     $same = uploadTheApp($this, ApkFiles::apk(ApkFiles::manifest(versionCode: 2, versionName: '1.1')));
-    $this->postJson('/developer/app/inspect', ['upload' => $same])->assertOk()->assertJsonPath('current', ['version_code' => 2, 'version_name' => '1.1']);
+    $this->postJson('/developer/app/inspect', ['upload' => $same])->assertStatus(422)
+        ->assertJsonValidationErrors(['file' => 'This is version 1.1 (code 2): it must be newer than 1.1 (code 2), the one every TV is offered now.']);
     $this->postJson('/developer/app/releases', ['upload' => $same])->assertStatus(422)
         ->assertJsonValidationErrors(['file' => 'This is version 1.1 (code 2): it must be newer than 1.1 (code 2), the one every TV is offered now.']);
 

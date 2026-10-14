@@ -276,7 +276,7 @@ test('a copy says it was made from a Premium Template, inside the organization a
     $above = collect($this->getJson('/builder/data')->assertOk()->json('ads'))->keyBy('id');
     expect($above[$copyId])->toMatchArray(['from_template' => true, 'owner_label' => 'Alpha Mart'])
         ->and($above[$template->id])->toMatchArray(['from_template' => false, 'owner_label' => 'Premium Template']);
-    $this->get("/builder/{$copyId}")->assertOk()->assertSee('dusk="ad-owner">Alpha Mart<', false);
+    $this->get("/builder/{$copyId}")->assertOk()->assertSee('dusk="ad-owner"><span class="truncate">Alpha Mart<', false);
 
     // The listing asks for an owner in the words of the Owner list alone.
     foreach (['nope', '0', 'Platform', '1.5'] as $value) {

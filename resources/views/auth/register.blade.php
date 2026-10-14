@@ -2,7 +2,7 @@
     <h1 class="auth-title mb-1">Create your account</h1>
     <p class="text-sm text-gray-500 mb-8">
         Already have an account?
-        <a href="{{ route('login') }}" class="text-blue-600 hover:underline font-medium">Sign in</a>
+        <a href="{{ route('login') }}" class="text-blue-600 underline underline-offset-2 hover:decoration-2 font-medium">Sign in</a>
     </p>
 
     @unless ($signupOpen)

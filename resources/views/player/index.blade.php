@@ -123,7 +123,7 @@
 
             {{-- Booting / talking to the server --}}
             <div id="view-loading" class="text-center">
-                <p class="muted" style="font-size:20px">Starting up...</p>
+                <p class="muted" style="font-size:clamp(18px,2.2vw,32px)">Starting up...</p>
             </div>
 
             {{-- Waiting to be adopted by an organization owner --}}
@@ -189,7 +189,7 @@
 
             {{-- Cannot reach the server --}}
             <div id="view-error" hidden class="text-center">
-                <p id="error-message" class="muted" style="font-size:20px"></p>
+                <p id="error-message" class="muted" style="font-size:clamp(18px,2.2vw,32px)"></p>
             </div>
 
         </div>

@@ -80,7 +80,7 @@ export function runClientValidation(event, fieldNames, rules) {
     // The keyboard goes to the first field to fix, and the page brings it into view.
     const first = form.querySelector('[data-client-invalid]');
     first?.focus({ preventScroll: true });
-    first?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    first?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
 
     return false;
 }

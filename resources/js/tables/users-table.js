@@ -5,6 +5,7 @@
  * from the server (`can`), so no button can mislead.
  */
 import axios from 'axios';
+import { expiresInWords } from '../core/clock.js';
 import { createCrudTable } from '../core/crud-table-base.js';
 import { isARepeatPress } from '../core/click-beside.js';
 import { passwordRefusal } from '../core/password-refusal.js';
@@ -15,12 +16,15 @@ export function registerUsersTable(Alpine) {
         fetchUrl: '/users/data',
         dataKey: 'users',
         entityLabel: 'account',
+        addressKeys: { group: ['group', ['', 'platform', 'organization']] },
         deleteModalName: 'confirm-account-deletion',
         // Newest accounts first; Account and Joined sort it (UserController::sortedBy, owner 2026-10-07).
         sortable: { by: 'joined', direction: 'desc' },
         extraState: {
             isSuperAdmin: config.isSuperAdmin ?? false,
             impersonating: false,
+            /* The row whose Log In As is on its way: its button shows the spinner while the browser moves on. */
+            impersonatingId: null,
 
             /* The super admin's tabs: '' every account, 'platform' the platform team, 'organization' everybody else —
              * and how many each holds, from the listing's own answer. */
@@ -44,8 +48,11 @@ export function registerUsersTable(Alpine) {
             rolePassword: '',
             rolePasswordError: '',
 
-            /* The platform team's open invitations — super admins only. */
+            /* The platform team's open invitations — super admins only — and whether they are on their way or could
+             * not be loaded (said in the card, never "No invitations are waiting"). */
             invitations: [],
+            invitationsLoading: true,
+            invitationsFailed: false,
             inviteForm: { email: '', role_id: '' },
             inviting: false,
             selectedInvitation: null,
@@ -154,10 +161,23 @@ export function registerUsersTable(Alpine) {
                 }
             },
 
+            /* The question opens further down the dialog: brought into sight, the keyboard on its password. */
             askRemove(membership) {
                 this.removing = membership;
                 this.removePassword = '';
                 this.removePasswordError = '';
+                this.$nextTick(() => {
+                    const field = document.getElementById('remove-membership-password');
+                    field?.scrollIntoView({ block: 'nearest' });
+                    field?.focus({ preventScroll: true });
+                });
+            },
+
+            /* Cancel: the question goes, and the keyboard is back on the Remove that asked it. */
+            keepMembership() {
+                const asked = this.removing?.organization_id;
+                this.removing = null;
+                this.$nextTick(() => document.querySelector(`[dusk="membership-remove-${asked}"]`)?.focus());
             },
 
             /* Taking someone out of an organization is a big delete: it asks for the password. */
@@ -233,6 +253,7 @@ export function registerUsersTable(Alpine) {
             async impersonate(user) {
                 if (this.impersonating) return;
                 this.impersonating = true;
+                this.impersonatingId = user.id;
                 try {
                     const { data } = await axios.post(`/users/${user.id}/impersonate`);
                     // Stays true on success: the button remains dead while the browser moves on — to the dashboard,
@@ -241,6 +262,7 @@ export function registerUsersTable(Alpine) {
                 } catch (error) {
                     window.toast(error.response?.data?.message || 'Could not log in as this person.');
                     this.impersonating = false;
+                    this.impersonatingId = null;
                 }
             },
 
@@ -343,19 +365,23 @@ export function registerUsersTable(Alpine) {
             /* ── Platform team invitations ─────────────────────────────── */
 
             async fetchInvitations() {
+                this.invitationsFailed = false;
                 try {
                     const { data } = await axios.get('/users/invitations');
                     this.invitations = data.invitations;
-                } catch (error) {
-                    this.invitations = [];
+                } catch {
+                    // A refresh after a change keeps the rows it has; the first load says so in the card.
+                    if (this.invitations.length === 0) this.invitationsFailed = true;
+                    else window.toast('Could not bring the invitations up to date.');
+                } finally {
+                    this.invitationsLoading = false;
                 }
             },
 
             expiresText(invitation) {
                 if (invitation.is_expired) return 'Expired';
-                const days = Math.ceil((new Date(invitation.expires_at) - new Date()) / 86400000);
 
-                return days <= 1 ? 'Expires today' : `Expires in ${days} days`;
+                return expiresInWords(invitation.expires_at);
             },
 
             openInvite() {

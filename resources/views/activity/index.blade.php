@@ -78,7 +78,10 @@
                 </div>
                 <div>
                     <x-input-label value="To" for="activity-range-to" />
-                    <input id="activity-range-to" type="date" x-model="to" @change="onDateChange()" dusk="activity-range-to" class="form-input mt-1">
+                    <input id="activity-range-to" type="date" x-model="to" @change="onDateChange()" dusk="activity-range-to" class="form-input mt-1"
+                           x-bind:class="rangeError ? '!border-red-500' : ''" x-bind:aria-invalid="rangeError ? 'true' : null"
+                           x-bind:aria-describedby="rangeError ? 'activity-range-error' : null">
+                    <p x-show="rangeError" x-cloak id="activity-range-error" class="form-error" role="alert" dusk="activity-range-error" x-text="rangeError"></p>
                 </div>
             </div>
         </div>

@@ -53,7 +53,7 @@ export function registerChannelsTable(Alpine) {
                 organizationHint() {
                     return this.form.organization_id
                         ? `Free: that organization's own channel, for its screens alone.`
-                        : `For every organization's screens, once its Platform Channels are unlocked ($10).`;
+                        : `For every organization's screens, once its Platform Channels are unlocked ($${config.platformChannelsPrice ?? 10} a month).`;
                 },
 
                 /** "5 ads · 3 running today" — an ad outside its dates is on no screen. */

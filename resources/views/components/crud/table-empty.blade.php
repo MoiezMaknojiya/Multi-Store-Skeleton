@@ -18,10 +18,7 @@
     <tr>
         <td colspan="{{ $columns }}" class="px-5 py-10 text-center">
             <template x-if="loadFailed">
-                <div class="mx-auto max-w-md space-y-3" role="alert" dusk="table-load-failed">
-                    <p class="text-sm text-gray-700 dark:text-gray-200">Could not load this list. Check the connection, then try again.</p>
-                    <button type="button" class="btn-row-neutral" @click="fetchItems()" dusk="table-try-again">Try Again</button>
-                </div>
+                <x-load-failed retry="fetchItems()" dusk="table-load-failed" try-dusk="table-try-again" />
             </template>
             <template x-if="!loadFailed && (search || ({{ $filtered }}))">
                 <div class="mx-auto max-w-md space-y-3" dusk="table-no-match">

@@ -174,6 +174,24 @@ test('the picker can be searched', function () {
     expect(collect($media)->pluck('title')->all())->toBe(['Lunch Poster']);
 });
 
+test('the picker lists the newest hundred and says how many match, so the page can say the rest are there', function () {
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['screen-playlist']);
+    $screen = Screen::factory()->create(['organization_id' => $organization->id]);
+    Media::factory()->count(101)->create(['organization_id' => $organization->id]);
+    Media::factory()->create(['organization_id' => $organization->id, 'title' => 'Lunch Poster']);
+
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id]);
+
+    $all = $this->getJson("/screens/{$screen->id}/available-media")->assertOk();
+    expect($all->json('media'))->toHaveCount(100)
+        ->and($all->json('matched'))->toBe(102)
+        ->and($all->json('total'))->toBe(102);
+
+    $found = $this->getJson("/screens/{$screen->id}/available-media?search=Lunch")->assertOk();
+    expect($found->json('matched'))->toBe(1)->and($found->json('total'))->toBe(102);
+});
+
 test('deleting a file takes it off every screen it was playing on', function () {
     $organization = Organization::factory()->create();
     $screen = Screen::factory()->create(['organization_id' => $organization->id]);

@@ -7,8 +7,11 @@
         </div>
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ $organization->name }} is paused</h2>
         <p class="mx-auto mt-2 max-w-md text-sm text-gray-500 dark:text-gray-400">
-            Its pages are closed for now, and its screens keep playing. Contact support to turn it back on.
+            Its pages are closed for now, and its screens keep playing.
         </p>
+        {{-- Whom to ask: the same contact billing gives (BillingSummary::contact), or "Contact us" until the owner gives one. --}}
+        <x-billing.contact :contact="\App\Services\BillingSummary::contact()" :organization="$organization->name"
+                           lead="Contact us, and we turn it back on." :always-lead="true" class="mx-auto mt-4 max-w-md" />
         @if ($hasOtherOrganizations)
             <a href="{{ route('organizations.select') }}" class="btn-secondary mt-6" dusk="dashboard-paused-switch">Choose Another Organization</a>
         @endif

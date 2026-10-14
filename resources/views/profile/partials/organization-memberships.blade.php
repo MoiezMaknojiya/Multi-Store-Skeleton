@@ -33,7 +33,7 @@
                 @php($memberOrganization = $membership['organization'])
                 <li class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3" dusk="organization-membership-{{ $memberOrganization->id }}">
                     <div class="min-w-0">
-                        <p class="font-medium text-gray-900 dark:text-gray-100 truncate" title="{{ $memberOrganization->name }}">{{ $memberOrganization->name }}</p>
+                        <p class="font-medium text-gray-900 dark:text-gray-100 break-words">{{ $memberOrganization->name }}</p>
                         <p class="text-xs text-gray-500 dark:text-gray-400">
                             {{ $membership['role']?->name ?? __('No role') }} · {{ $memberOrganization->city }}, {{ $memberOrganization->state }}
                         </p>

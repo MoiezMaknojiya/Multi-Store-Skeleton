@@ -34,6 +34,9 @@ class PlaylistController extends Controller
      *  organization actually means, and a hundred is a runaway client. */
     private const MAX_RULES = 10;
 
+    /** The newest files the Content Library lists at once; a search finds the rest. */
+    private const PICKER_LISTS = 100;
+
     /** What a request made by hand is told when the page's own list or schedule could not be read. */
     private const UNREADABLE_PLAYLIST = 'The playlist could not be read. Reload the page and try again.';
 
@@ -76,16 +79,20 @@ class PlaylistController extends Controller
         // (owner, 2026-10-01).
         $offered = Media::playableOn($screen)->withoutDrafts()->inNoChannel();
 
-        $media = (clone $offered)
-            ->when($search !== '', fn (Builder $q) => $q->where('title', 'like', "%{$search}%"))
+        $matching = (clone $offered)->when($search !== '', fn (Builder $q) => $q->where('title', 'like', "%{$search}%"));
+
+        $media = (clone $matching)
             ->orderByDesc('created_at')
-            ->limit(100)
+            ->limit(self::PICKER_LISTS)
             ->get(['id', 'organization_id', 'title', 'type', 'duration_seconds', 'orientation', 'disk', 'path', 'thumbnail_path']);
 
         return response()->json([
             // Every file the library offers, whatever the search says and however many are listed: the number on
             // the Content Library tab, which stays put while somebody types.
             'total' => $offered->count(),
+            // How many the search matches, of which the newest PICKER_LISTS are listed: the page says when the rest are
+            // there to be searched for, instead of a list that silently stops.
+            'matched' => $media->count() < self::PICKER_LISTS ? $media->count() : $matching->count(),
             'media' => $media->map(fn (Media $item) => [
                 'id' => $item->id,
                 'title' => $item->title,

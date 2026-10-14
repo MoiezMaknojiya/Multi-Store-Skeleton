@@ -59,6 +59,23 @@ class PlayerAppRelease extends Model
         return self::query()->newestFirst()->first();
     }
 
+    /**
+     * Why a version cannot be offered (Android installs nothing older than what a TV has), or null when it is newer than
+     * the one every TV is offered now: said the moment the file is read and again when it is published.
+     */
+    public static function notNewerThanCurrent(?string $name, int $code): ?string
+    {
+        $current = self::current();
+
+        if ($current === null || $code > $current->version_code) {
+            return null;
+        }
+
+        $version = $name !== null ? "version {$name} (code {$code})" : "version code {$code}";
+
+        return "This is {$version}: it must be newer than {$current->version_name} (code {$current->version_code}), the one every TV is offered now.";
+    }
+
     public function url(): string
     {
         return Storage::disk('public')->url($this->path);

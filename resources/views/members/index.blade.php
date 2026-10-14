@@ -17,11 +17,11 @@
                      right before Alpine starts; tab-link colours it (app.css). --}}
                 <button type="button" role="tab" id="tab-members" aria-controls="panel-members" dusk="tab-members" class="tab-link"
                     x-on:click="tab = 'members'" aria-selected="true" :aria-selected="tab === 'members' ? 'true' : 'false'">
-                    Members <span class="ml-1 badge-neutral" x-text="members.length"></span>
+                    Members <span class="ml-1 badge-neutral" x-show="!loading && !loadFailed" x-cloak x-text="members.length"></span>
                 </button>
                 <button type="button" role="tab" id="tab-invitations" aria-controls="panel-invitations" dusk="tab-invitations" class="tab-link"
                     x-on:click="tab = 'invitations'" aria-selected="false" :aria-selected="tab === 'invitations' ? 'true' : 'false'">
-                    Pending Invitations <span class="ml-1 badge-neutral" x-text="invitations.length"></span>
+                    Pending Invitations <span class="ml-1 badge-neutral" x-show="!loading && !loadFailed" x-cloak x-text="invitations.length"></span>
                 </button>
             </div>
         </div>
@@ -50,10 +50,15 @@
                     <tbody class="table-tbody" x-bind:aria-busy="loading ? 'true' : 'false'">
                         <template x-if="loading">
                             <tr><td colspan="4" class="px-5 py-6 text-center text-muted-soft">
-                                <span class="inline-flex items-center gap-2"><x-spinner class="text-blue-600 dark:text-blue-400" /> Loading...</span>
+                                <x-loading />
                             </td></tr>
                         </template>
-                        <template x-if="!loading && filteredMembers().length === 0">
+                        <template x-if="!loading && loadFailed">
+                            <tr><td colspan="4" class="px-5 py-10">
+                                <x-load-failed retry="fetch()" what="the team" dusk="members-load-failed" />
+                            </td></tr>
+                        </template>
+                        <template x-if="!loading && !loadFailed && filteredMembers().length === 0">
                             <tr><td colspan="4" class="px-5 py-10 text-center">
                                 <div class="mx-auto max-w-md space-y-3" dusk="table-no-match">
                                     <p class="text-sm text-gray-700 dark:text-gray-200">Nobody matches &ldquo;<span class="font-medium" x-text="search"></span>&rdquo;.</p>
@@ -86,7 +91,7 @@
                                     <div class="flex items-center justify-end gap-2">
                                         @can('member-update')
                                         <button type="button" class="btn-row-neutral" x-show="member.can_manage"
-                                            x-bind:aria-label="'Change the role of ' + member.name"
+                                            x-bind:aria-label="'Change Role of ' + member.name"
                                             x-on:click="openChangeRole(member)" :dusk="'change-role-' + member.id">Change Role</button>
                                         @endcan
                                         @can('member-remove')
@@ -129,10 +134,15 @@
                     <tbody class="table-tbody" x-bind:aria-busy="loading ? 'true' : 'false'">
                         <template x-if="loading">
                             <tr><td colspan="5" class="px-5 py-6 text-center text-muted-soft">
-                                <span class="inline-flex items-center gap-2"><x-spinner class="text-blue-600 dark:text-blue-400" /> Loading...</span>
+                                <x-loading />
                             </td></tr>
                         </template>
-                        <template x-if="!loading && invitations.length === 0">
+                        <template x-if="!loading && loadFailed">
+                            <tr><td colspan="5" class="px-5 py-10">
+                                <x-load-failed retry="fetch()" what="the invitations" dusk="invitations-load-failed" />
+                            </td></tr>
+                        </template>
+                        <template x-if="!loading && !loadFailed && invitations.length === 0">
                             <tr>
                                 <td colspan="5" class="px-5 py-10 text-center">
                                     <p class="text-sm font-medium text-gray-700 dark:text-gray-200" dusk="invitations-empty">No invitations are waiting.</p>

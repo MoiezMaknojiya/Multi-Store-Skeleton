@@ -42,6 +42,13 @@ test('a paused organization\'s people land on a page that says so, and the menu 
         ->assertDontSee('href="'.route('media.view').'"', false)
         ->assertDontSee('href="'.route('members.view').'"', false);
 
+    // Whom to ask is on the page itself: the same contact billing gives, or "Contact us" until the owner gives one.
+    $page->assertSee('dusk="billing-contact-us"', false);
+    config(['signage.billing_contact_email' => 'help@example.com', 'signage.billing_contact_phone' => '555 0100']);
+    workingIn($this->owner, $this->organization)->get('/dashboard')->assertOk()
+        ->assertSee('mailto:help@example.com', false)->assertSee('href="tel:5550100"', false)
+        ->assertSeeInOrder(['Alpha Mart is paused', 'help@example.com']);
+
     // The role they hold there grants nothing while it is paused.
     session(['current_organization_id' => $this->organization->id]);
     expect($this->owner->fresh()->contextPermissionNames())->toBe([])
@@ -53,7 +60,7 @@ test('every page of a paused organization leads to the dashboard, and every requ
         workingIn($this->owner, $this->organization)->get($page)->assertRedirect(route('dashboard'));
     }
 
-    $words = 'Alpha Mart is paused. Contact support to turn it back on.';
+    $words = 'Alpha Mart is paused. Contact us to turn it back on.';
 
     workingIn($this->owner, $this->organization)->getJson('/media/data')->assertForbidden()->assertJsonPath('message', $words);
     workingIn($this->owner, $this->organization)->getJson('/screens/data')->assertForbidden()->assertJsonPath('message', $words);

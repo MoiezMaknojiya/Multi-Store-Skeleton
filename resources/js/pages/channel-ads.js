@@ -16,15 +16,16 @@
  * to its own end (owner's rule).
  */
 import axios from 'axios';
+import { announce } from '../core/announce.js';
 import { lengthInWords } from '../core/media-file.js';
 import { PlaylistItemDefaults } from '../core/playlist-defaults.js';
-import { unreadableFields } from '../core/validate.js';
+import { showFirstError, unreadableFields } from '../core/validate.js';
 import { dayLabel } from '../core/clock.js';
 
 const blankForm = () => ({ title: '', seconds: PlaylistItemDefaults.imageSeconds, starts_on: '', ends_on: '' });
 
 // onPlaylists: how many files of this library a playlist holds, which a channel leaves out — said, not hidden.
-const blankPicker = () => ({ items: [], page: 1, lastPage: 1, loading: false, search: '', library: 'platform', onPlaylists: 0 });
+const blankPicker = () => ({ items: [], page: 1, lastPage: 1, loading: false, failed: false, search: '', library: 'platform', onPlaylists: 0 });
 
 /** Tiles fetched at a time; "Load more" asks for the next ones. */
 const PICKER_PAGE_SIZE = 24;
@@ -44,6 +45,8 @@ export function registerChannelAds(Alpine) {
 
         ads: [],
         loading: true,
+        // The ads could not be loaded at all: said where they would be, with Try Again.
+        loadFailed: false,
         saving: false,
         reordering: false,
         removing: false,
@@ -78,13 +81,20 @@ export function registerChannelAds(Alpine) {
         /* After a change (`quiet`), the rows stay where they are until the new ones are in, with no "Loading..." row
          * pushing them down under the pointer — as crud-table-base's refreshInPlace (owner, 2026-10-07). */
         async load({ quiet = false } = {}) {
-            if (!quiet) this.loading = true;
+            if (!quiet) {
+                this.loading = true;
+                this.loadFailed = false;
+            }
             try {
                 const { data } = await axios.get(`/channels/${this.channelId}/ads`);
                 this.ads = data.ads;
                 this.storage = data.storage ?? null;
+                this.loadFailed = false;
             } catch (error) {
-                window.toast(error.response?.data?.message ?? 'Could not load the ads.');
+                // The first load says so where the ads would be, with Try Again; a refresh after a change keeps the
+                // rows it has and says it in a toast.
+                if (quiet) window.toast(error.response?.data?.message ?? 'Could not load the ads.');
+                else this.loadFailed = true;
             } finally {
                 this.loading = false;
             }
@@ -220,6 +230,7 @@ export function registerChannelAds(Alpine) {
             if (this.libraries.length > 0) params.library = this.picker.library;
 
             this.picker.loading = true;
+            if (! more) this.picker.failed = false;
             try {
                 const { data } = await axios.get(`/channels/${this.channelId}/library`, { params });
                 if (ticket !== this.pickerTicket) return;
@@ -236,8 +247,12 @@ export function registerChannelAds(Alpine) {
             } catch (error) {
                 if (ticket !== this.pickerTicket) return;
 
+                // A refusal in words (a search too long) is a toast; a library that did not come at all is said where
+                // its tiles would be, with Try Again — never "Nothing in this library yet".
                 const errors = error.response?.data?.errors;
-                window.toast(errors ? Object.values(errors)[0][0] : (error.response?.data?.message ?? 'Could not load the library.'));
+                if (errors) window.toast(Object.values(errors)[0][0]);
+                else if (! more) this.picker.failed = true;
+                else window.toast(error.response?.data?.message ?? 'Could not load the library.');
             } finally {
                 if (ticket === this.pickerTicket) this.picker.loading = false;
             }
@@ -357,6 +372,8 @@ export function registerChannelAds(Alpine) {
             const errors = { ...this.validateAd(), ...unreadableFields(event?.target) };
             if (Object.keys(errors).length > 0) {
                 this.formErrors = errors;
+                // On a phone the files are above the fields: what is wrong is brought into sight.
+                showFirstError(event?.target);
                 return;
             }
 
@@ -401,6 +418,7 @@ export function registerChannelAds(Alpine) {
 
                 if (errors) {
                     this.formErrors = errors;
+                    showFirstError(event?.target);
                     // A refusal the form has no place for (a video's measurements, the other way's
                     // field) would otherwise say nothing at all.
                     const shown = ['title', 'seconds', 'starts_on', 'ends_on', this.sourceField()];
@@ -416,18 +434,31 @@ export function registerChannelAds(Alpine) {
 
         /* ── Order ───────────────────────────────────────────────────────── */
 
-        /** Swap one ad with its neighbour, and send the whole order. */
+        /** Swap one ad with its neighbour, and send the whole order. The arrows stay pressable while it goes — a
+         *  disabled button lets go of the keyboard — and a press meanwhile is simply not taken. */
         async move(index, step) {
             const target = index + step;
             if (this.reordering || target < 0 || target >= this.ads.length) return;
 
             const order = this.ads.map((ad) => ad.id);
             [order[index], order[target]] = [order[target], order[index]];
+            const moved = this.ads[index];
 
             this.reordering = true;
             try {
                 const { data } = await axios.put(`/channels/${this.channelId}/ads/order`, { ad_ids: order });
                 this.ads = data.ads;
+
+                // Its row was taken out of the page and put back: the keyboard goes back to the same arrow of the ad,
+                // or the other one once it is at the end, and where it went is said.
+                const at = this.ads.findIndex((ad) => ad.id === moved.id);
+                this.$nextTick(() => {
+                    const direction = step < 0 ? 'up' : 'down';
+                    const same = document.querySelector(`[dusk="channel-ad-${direction}-${moved.id}"]`);
+                    const other = document.querySelector(`[dusk="channel-ad-${direction === 'up' ? 'down' : 'up'}-${moved.id}"]`);
+                    (same && !same.disabled ? same : other)?.focus();
+                });
+                if (at !== -1) announce(`${moved.title} moved to position ${at + 1} of ${this.ads.length}.`);
             } catch (error) {
                 const errors = error.response?.data?.errors;
                 window.toast(errors ? Object.values(errors)[0][0] : (error.response?.data?.message ?? 'Could not change the order.'));

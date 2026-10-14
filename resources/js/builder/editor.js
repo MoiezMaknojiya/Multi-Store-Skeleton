@@ -597,6 +597,11 @@ export function registerAdEditor(Alpine) {
                 return Boolean(asset.organization_id) && (!this.organizationId || asset.organization_id === this.organizationId);
             },
 
+            /** Whose files this ad may use, in words: an ad for every organization uses the platform's. */
+            shelfWords() {
+                return this.isShared() ? "the platform's shelf" : "this organization's shelf";
+            },
+
             /** Made for every organization: a saved ad as the server says, a new one when Create Ad named no organization. */
             isShared() {
                 return this.adId ? this.shared : (this.choosesOrganization && !this.organizationId);
@@ -612,6 +617,12 @@ export function registerAdEditor(Alpine) {
 
                 const { id, organization_id, title, kind, disk, path, thumbnail_path, width, height, duration_seconds, url, thumbnail_url } = asset;
                 this.assets = [{ id, organization_id, title, kind, disk, path, thumbnail_path, width, height, duration_seconds, url, thumbnail_url }, ...this.assets];
+
+                // A picture dropped where only videos are picked (or the other way round) is on the shelf, not lost: said,
+                // since the grid of this picker does not show it.
+                if (this.assetPickerKind !== null && kind !== this.assetPickerKind) {
+                    window.toast(`${title} was added to your files. This list shows ${this.assetPickerKind === 'video' ? 'videos' : 'pictures'} only.`, 'success');
+                }
             },
 
             pickerTitle() {
@@ -1959,13 +1970,15 @@ export function registerAdEditor(Alpine) {
 
                 if (event.altKey) {
                     const edges = { a: 'left', h: 'center', d: 'right', w: 'top', v: 'middle', s: 'bottom' };
+                    // The key pressed, not the letter it typed: on a Mac Option+A types "å", and Option is this Alt.
+                    const letter = event.code?.startsWith('Key') ? event.code.slice(3).toLowerCase() : key;
 
-                    if (event.shiftKey && (key === 'h' || key === 'v')) {
+                    if (event.shiftKey && (letter === 'h' || letter === 'v')) {
                         event.preventDefault();
-                        this.distributeSelection(key === 'h' ? 'x' : 'y');
-                    } else if (edges[key]) {
+                        this.distributeSelection(letter === 'h' ? 'x' : 'y');
+                    } else if (edges[letter]) {
                         event.preventDefault();
-                        this.alignSelection(edges[key]);
+                        this.alignSelection(edges[letter]);
                     }
 
                     return;

@@ -43,7 +43,7 @@
 
         <p class="mt-6 text-sm text-gray-600">
             Wrong address?
-            <a href="{{ route('profile.edit') }}" class="text-blue-600 hover:underline" dusk="verify-email-change">Change it in your profile</a>,
+            <a href="{{ route('profile.edit') }}" class="text-blue-600 underline underline-offset-2 hover:decoration-2" dusk="verify-email-change">Change it in your profile</a>,
             and a new link goes to the right one.
         </p>
 
@@ -55,7 +55,7 @@
 
         <form method="POST" action="{{ route('logout') }}" class="mt-6">
             @csrf
-            <button type="submit" class="text-sm text-gray-600 underline hover:text-gray-900"
+            <button type="submit" class="touch-target inline-flex items-center text-sm text-gray-600 underline hover:text-gray-900"
                     dusk="verify-email-logout">Sign Out</button>
         </form>
     </div>

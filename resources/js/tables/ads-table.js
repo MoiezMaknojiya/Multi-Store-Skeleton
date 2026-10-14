@@ -16,6 +16,9 @@ export function registerAdsTable(Alpine) {
         fetchUrl: '/builder/data',
         dataKey: 'ads',
         entityLabel: 'ad',
+        // Above the organizations the Owner list is kept in the address, so the editor's way back lands on it (?owner=).
+        // Only an Owner the list offers: an organization since deleted (an old link) is the list as it opens.
+        addressKeys: config.owner ? { owner: ['filterOrganization', ['platform', '', ...(config.ownerIds ?? [])]] } : {},
         deleteModalName: 'confirm-ad-deletion',
         deleteNeedsPassword: true,
 
@@ -41,6 +44,8 @@ export function registerAdsTable(Alpine) {
             templatesAsked: 0,
             /* The template being copied: every Use This Template waits for it, and the page leaves for the editor. */
             usingTemplateId: null,
+            /* Why the last copy was refused (the organization's storage is full): said above the tiles, with the way to make room. */
+            templateRefusal: '',
         },
 
         extraMethods: {
@@ -63,6 +68,11 @@ export function registerAdsTable(Alpine) {
             applyFilters() {
                 this.currentPage = 1;
                 this.fetchItems();
+            },
+
+            /** The organization the Owner list shows, by the name it lists it under: whose list is empty, said in its name. */
+            ownerName() {
+                return this.$root.querySelector('select[aria-label="Owner"]')?.selectedOptions?.[0]?.text?.trim() ?? '';
             },
 
             /** "Copied from a Premium Template · by Ali Raza": where the ad came from, and who changed it last. */
@@ -157,6 +167,7 @@ export function registerAdsTable(Alpine) {
             async loadTemplates() {
                 const asked = ++this.templatesAsked;
                 this.templatesState = 'loading';
+                this.templateRefusal = '';
 
                 try {
                     const { data } = await axios.get('/builder/templates', {
@@ -183,7 +194,11 @@ export function registerAdsTable(Alpine) {
                     window.location.assign(data.redirect);
                 } catch (error) {
                     this.usingTemplateId = null;
-                    window.toast(error.response?.data?.message ?? 'Could not use this template.');
+                    // A refusal in words (no room, a template gone) stays in the dialog, beside the way to make room;
+                    // anything else is a toast.
+                    const refused = error.response?.status === 422 ? Object.values(error.response.data?.errors ?? {})[0]?.[0] : null;
+                    if (refused) this.templateRefusal = refused;
+                    else window.toast(error.response?.data?.message ?? 'Could not use this template.');
                 }
             },
         },

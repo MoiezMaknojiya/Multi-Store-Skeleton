@@ -9,7 +9,7 @@
     </div>
     <h2 class="text-lg font-semibold text-gray-900 dark:text-white">You're not a member of any organization yet</h2>
     <p class="mt-2 text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-        Ask an organization's owner to invite {{ auth()->user()->email }}. The invitation shows up here and in that inbox.
+        Ask an organization's owner to invite <span class="break-all">{{ auth()->user()->email }}</span>. The invitation shows up here and in that inbox.
     </p>
     {{-- The one thing to check from here: the address an owner has to invite. --}}
     <a href="{{ route('profile.edit') }}" class="btn-secondary mt-6" dusk="dashboard-empty-settings">Check Your Email in Settings</a>

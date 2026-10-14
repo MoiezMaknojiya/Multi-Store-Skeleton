@@ -16,6 +16,7 @@ export function registerActivityTable(Alpine) {
         fetchUrl: '/activity/data',
         dataKey: 'logs',
         entityLabel: 'activity entry',
+        addressKeys: { from: ['from', /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/], to: ['to', /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/] },
         extraState: {
             /* Whether this viewer holds activity-destroy — the storage panel is theirs. */
             canMaintain: config.canMaintain ?? false,
@@ -26,11 +27,15 @@ export function registerActivityTable(Alpine) {
             preset: '30d',
             from: daysAgo(30),
             to: isoDate(new Date()),
+            /* A range that ends before it starts: said under To, and nothing is asked of the server. */
+            rangeError: '',
         },
 
         extraMethods: {
             onInit() {
                 if (this.canMaintain) this.fetchPartitions();
+                // Dates the address brought (crud-table-base) are somebody's own range.
+                if (this.from !== daysAgo(30) || this.to !== isoDate(new Date())) this.preset = 'custom';
             },
 
             /* Send the range as real UTC INSTANTS derived from the viewer's LOCAL
@@ -77,12 +82,15 @@ export function registerActivityTable(Alpine) {
                 else if (preset === '30d') { this.from = daysAgo(30); this.to = today; }
                 else if (preset === 'year') { this.from = `${new Date().getFullYear()}-01-01`; this.to = today; }
                 else return; // 'custom': keep the dates, the user edits them directly
+                this.rangeError = '';
                 this.currentPage = 1;
                 this.fetchItems();
             },
 
             onDateChange() {
                 this.preset = 'custom';
+                this.rangeError = this.from && this.to && this.to < this.from ? 'The end date cannot be before the start date.' : '';
+                if (this.rangeError) return;
                 this.currentPage = 1;
                 this.fetchItems();
             },

@@ -37,7 +37,7 @@
 </head>
 
 <body class="font-sans antialiased bg-gray-100 dark:bg-gray-900"
-    x-data="layoutHandler">
+    x-data="layoutHandler" x-on:keydown.escape.window="closeSidebarOnEscape()">
 
     {{-- The first thing a keyboard reaches: straight past the sidebar to the page. --}}
     <a href="#main-content" class="skip-link" dusk="skip-to-content">Skip to main content</a>
@@ -65,7 +65,8 @@
             </x-header>
 
             {{-- Content Slot --}}
-            <main id="main-content" tabindex="-1" class="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-100 focus:outline-none dark:bg-gray-900">
+            {{-- While the menu lies open over it on a phone, the page is out of the keyboard's and a screen reader's reach. --}}
+            <main id="main-content" tabindex="-1" x-bind:inert="sidebarOpen && narrow" class="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-100 focus:outline-none dark:bg-gray-900">
                 {{ $slot }}
             </main>
         </div>

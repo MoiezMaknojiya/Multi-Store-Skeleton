@@ -44,10 +44,7 @@
                 <template x-if="loading">
                     <tr>
                         <td colspan="{{ $columns }}" class="px-5 py-6 text-center text-muted-soft">
-                            <span class="inline-flex items-center gap-2">
-                                <x-spinner class="text-blue-600 dark:text-blue-400" />
-                                Loading...
-                            </span>
+                            <x-loading />
                         </td>
                     </tr>
                 </template>

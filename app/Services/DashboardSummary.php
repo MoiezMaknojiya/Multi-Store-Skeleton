@@ -70,7 +70,7 @@ class DashboardSummary
                 ];
             }
             $attention = [...$attention, ...$this->andMore('screen-offline-more', $offline->count(), 'warning',
-                'more screens are offline', 'They are all on the Screens page', route('screens.view'))];
+                ['screen is offline', 'screens are offline'], 'They are all on the Screens page', route('screens.view'))];
 
             $empty = $screens->where('playlist_items_count', 0);
             foreach ($empty->take(self::LIST_LENGTH) as $screen) {
@@ -83,7 +83,7 @@ class DashboardSummary
                 ];
             }
             $attention = [...$attention, ...$this->andMore('screen-empty-more', $empty->count(), 'info',
-                'more screens have nothing to play', 'They are all on the Screens page', route('screens.view'))];
+                ['screen has nothing to play', 'screens have nothing to play'], 'They are all on the Screens page', route('screens.view'))];
         }
 
         if ($user->can('media-view')) {
@@ -235,7 +235,7 @@ class DashboardSummary
                     ];
                 }
                 $attention = [...$attention, ...$this->andMore('organization-ownerless-more', $ownerless->count(), 'warning',
-                    'more organizations have no Owner', 'They are all on the Organizations page', route('organizations.view'))];
+                    ['organization has no Owner', 'organizations have no Owner'], 'They are all on the Organizations page', route('organizations.view'))];
             }
         }
 
@@ -290,14 +290,16 @@ class DashboardSummary
      * The one line that counts what a list of LIST_LENGTH left out ("3 more screens are offline"), or none. It carries
      * its `count`, so the number beside "Needs attention" is every one of them, not the lines.
      *
+     * @param  array{0: string, 1: string}  $words  what is said of one, and of several
      * @return list<array<string, mixed>>
      */
-    private function andMore(string $key, int $total, string $tone, string $text, string $detail, string $href): array
+    private function andMore(string $key, int $total, string $tone, array $words, string $detail, string $href): array
     {
         $more = $total - self::LIST_LENGTH;
 
+        // "1 more screen is offline", "2 more screens are offline": [the words for one, the words for several].
         return $more > 0
-            ? [['key' => $key, 'tone' => $tone, 'text' => "{$more} {$text}", 'detail' => $detail, 'href' => $href, 'count' => $more]]
+            ? [['key' => $key, 'tone' => $tone, 'text' => "{$more} more ".($more === 1 ? $words[0] : $words[1]), 'detail' => $detail, 'href' => $href, 'count' => $more]]
             : [];
     }
 

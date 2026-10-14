@@ -15,8 +15,8 @@
 <x-app-layout :title="$screen->name">
     <x-slot name="header">
         <div class="flex min-w-0 items-center gap-2">
-            <a href="{{ route('screens.view') }}" dusk="back-to-screens" aria-label="Back to screens"
-               class="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+            <a href="{{ route('screens.view') }}" data-back dusk="back-to-screens" aria-label="Back to screens"
+               class="touch-target inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
@@ -47,24 +47,24 @@
             <div class="card">
                 <div class="card-header">
                     <div>
-                        <h2 class="text-subheading">Playlist</h2>
-                        <p class="text-xs text-gray-500 mt-0.5 dark:text-gray-400" dusk="playlist-summary" x-text="summary()"></p>
+                        <h2 class="text-subheading focus:outline-none" tabindex="-1" dusk="playlist-heading">Playlist</h2>
+                        <p class="text-xs tabular-nums text-gray-500 mt-0.5 dark:text-gray-400" dusk="playlist-summary" x-text="summary()"></p>
                     </div>
                     @can('screen-playlist')
                     <div class="flex flex-wrap items-center gap-2">
                         {{-- Edits stay on this page until Save Changes: said beside the button, and asked about
                              before the page is left (the browser's own "Leave site?"). --}}
-                        <span x-show="dirty && !saving" x-cloak role="status" dusk="playlist-unsaved"
-                              class="text-xs font-medium text-amber-700 dark:text-amber-400">Unsaved changes</span>
+                        <span x-show="dirty && !saving" x-cloak role="status" dusk="playlist-unsaved" id="playlist-unsaved"
+                              class="text-xs font-medium text-amber-700 dark:text-amber-400">Unsaved changes &middot; save them to copy</span>
                         {{-- Copying REPLACES the target's playlist, so it is deliberately
                              the quieter button of the two and asks before it acts. It copies the
                              SAVED playlist, so it waits until what is on the page has been saved. --}}
                         <button @click="openCopyModal()" dusk="playlist-copy-open" class="btn-secondary"
-                            x-bind:disabled="dirty || saving"
+                            x-bind:disabled="dirty || saving" x-bind:aria-describedby="dirty ? 'playlist-unsaved' : null"
                             x-bind:title="dirty ? 'Save your changes first: copying sends the saved playlist' : ''">
                             Copy to Other Screens
                         </button>
-                        <button @click="save()" x-bind:disabled="!dirty || saving" dusk="playlist-save" class="btn-primary">
+                        <button @click="save()" x-bind:disabled="!dirty || saving || loadFailed" dusk="playlist-save" class="btn-primary">
                             <x-spinner x-show="saving" x-cloak />
                             <span x-text="saving ? 'Saving...' : 'Save Changes'"></span>
                         </button>
@@ -76,10 +76,22 @@
                      narrow for both — at 1280 px they once squeezed every title to nothing. --}}
                 <div class="@container p-4 space-y-2">
                     <template x-if="loading">
-                        <p class="text-center text-muted-soft py-6">Loading...</p>
+                        <p class="text-center text-muted-soft py-6"><x-loading /></p>
                     </template>
 
-                    <template x-if="!loading && items.length === 0">
+                    <template x-if="!loading && loadFailed">
+                        <x-load-failed retry="load()" what="the playlist" dusk="playlist-load-failed" class="py-6" />
+                    </template>
+
+                    {{-- × took a line out a moment ago: Undo puts it back where it was, schedules and all. --}}
+                    @can('screen-playlist')
+                        <div x-show="removedLine" x-cloak role="status" class="alert-info flex flex-wrap items-center justify-between gap-2" dusk="playlist-removed">
+                            <span x-text="removedLine ? removedLine.item.title + ' taken out.' : ''"></span>
+                            <button type="button" class="btn-row-neutral" @click="undoRemove()" x-bind:disabled="saving" dusk="playlist-undo">Undo</button>
+                        </div>
+                    @endcan
+
+                    <template x-if="!loading && !loadFailed && items.length === 0">
                         <p class="text-center text-muted-soft py-10" dusk="playlist-empty">
                             Nothing here yet.
                             @can('screen-playlist')
@@ -101,40 +113,43 @@
                     </div>
 
                     <template x-for="(item, index) in items" :key="item.key">
-                        {{-- A line that is not playing — an Ad Builder page taken off the screens (unpublished) — is drawn faded; a
-                             locked platform channel's in the lock's amber. --}}
+                        {{-- A line that is not playing — an Ad Builder page taken off the screens (unpublished), a locked platform
+                             channel — has its picture faded and a badge that says why; its words keep their colour, so the
+                             sentence that explains it is never the hardest thing to read. A locked line is in the lock's amber. --}}
                         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 p-2 rounded-md border"
-                             x-bind:class="[item.is_draft ? 'opacity-60' : '', item.locked ? 'border-amber-200 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10' : 'border-gray-200 dark:border-gray-700']"
+                             x-bind:class="item.locked ? 'border-amber-200 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10' : 'border-gray-200 dark:border-gray-700'"
                              x-bind:dusk="'playlist-line-' + index">
                             <span class="w-6 text-xs text-gray-500 text-center dark:text-gray-400" x-text="index + 1"></span>
 
                             <div class="w-20 h-12 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0"
-                                 x-bind:class="item.locked ? 'opacity-60' : ''">
+                                 x-bind:class="item.locked || item.is_draft ? 'opacity-60' : ''">
                                 {{-- An upright picture is shown whole, not cut to its middle (docs/AD-BUILDER-SPEC.md §12). --}}
+                                {{-- Its title is written beside it, so the picture says nothing twice to a screen reader. --}}
                                 <template x-if="item.thumbnail_url">
-                                    <img :src="item.thumbnail_url" :alt="item.title" class="w-full h-full"
+                                    <img :src="item.thumbnail_url" alt="" loading="lazy" decoding="async" class="w-full h-full"
                                          x-bind:class="(item.thumbnail_orientation ?? item.orientation) === 'portrait' ? 'object-contain' : 'object-cover'">
                                 </template>
                                 <template x-if="!item.thumbnail_url">
-                                    <span class="text-[10px] text-gray-500 dark:text-gray-400" x-text="typeLabel(item)"></span>
+                                    <span class="text-xs text-gray-600 dark:text-gray-300" x-text="typeLabel(item)"></span>
                                 </template>
                             </div>
 
                             <div class="flex-1 min-w-0">
                                 <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 min-w-0 text-sm font-medium text-gray-800 dark:text-white">
-                                    <span class="truncate" x-text="item.title"></span>
+                                    <span class="line-clamp-2 break-words" x-text="item.title" x-bind:dusk="'playlist-title-' + index"></span>
                                     {{-- A platform file from before the Content Library became the organization's own (docs/BILLING-SPEC.md §5),
                                          left where no copy could be made: said, so the save's refusal names something the page shows. --}}
                                     <span x-show="item.from_platform" x-cloak class="badge-neutral shrink-0"
                                           x-bind:dusk="'playlist-platform-' + index">From the platform</span>
                                     <span x-show="item.locked" x-cloak class="badge-warning inline-flex shrink-0 items-center gap-1"
                                           x-bind:dusk="'playlist-premium-' + index"><x-icon name="lock-closed" class="h-3 w-3" /> Premium</span>
+                                    <span x-show="item.is_draft" x-cloak class="badge-warning shrink-0" x-bind:dusk="'playlist-draft-badge-' + index">Draft</span>
                                 </p>
                                 <p class="text-xs text-gray-500 dark:text-gray-400">
                                     <span x-text="typeLabel(item)"></span>
                                     {{-- It keeps its place, and plays again once the ad is published. --}}
                                     <span x-show="item.is_draft" x-cloak class="text-amber-700 dark:text-amber-400"
-                                          x-bind:dusk="'playlist-draft-' + index">&middot; Draft &mdash; not playing until it is published in the Ad Builder</span>
+                                          x-bind:dusk="'playlist-draft-' + index">&middot; not playing until it is published in the Ad Builder</span>
                                     {{-- A file the other way round from the screen plays with bars: said, not refused. --}}
                                     <span x-show="orientationNote(item)" x-cloak class="text-amber-700 dark:text-amber-400"
                                           x-bind:dusk="'playlist-orientation-' + index" x-text="' · ' + orientationNote(item)"></span>
@@ -150,14 +165,13 @@
                                      with none plays whenever the screen is on, and
                                      saying so on every row would be noise. --}}
                                 <p x-show="(item.rules ?? []).length > 0" x-cloak
-                                   class="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 truncate"
-                                   x-bind:dusk="'playlist-schedule-badge-' + index"
-                                   x-bind:title="scheduleBadge(item)">
-                                    <svg class="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                   class="flex items-start gap-1 text-xs text-blue-600 dark:text-blue-400"
+                                   x-bind:dusk="'playlist-schedule-badge-' + index">
+                                    <svg class="mt-px h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                     <span class="sr-only">Schedule:</span>
-                                    <span class="truncate" x-text="scheduleBadge(item)"></span>
+                                    <span class="line-clamp-2 break-words" x-text="scheduleBadge(item)"></span>
                                 </p>
                                 {{-- Every schedule of the line is over, by the screen's own calendar: it plays no more. --}}
                                 <p x-show="scheduleEnded(item)" x-cloak class="mt-0.5">
@@ -180,7 +194,7 @@
                                                 @input="dirty = true; item.secondsError = null" x-bind:dusk="'playlist-duration-' + index"
                                                 x-bind:aria-label="'Seconds on screen for ' + item.title"
                                                 x-bind:disabled="!canEdit || saving" x-bind:title="item.secondsError || ''"
-                                                class="form-input w-20 text-sm text-right">
+                                                class="form-input w-20 text-right">
                                             <span class="text-xs text-gray-500 dark:text-gray-400">secs</span>
                                         </span>
                                     </template>
@@ -232,7 +246,7 @@
                  playlist is not shown a card that stays empty. The Channels tab is there only while the screen has
                  a channel to carry (the platform's or the organization's own), and the card opens on the library. --}}
             @can('screen-playlist')
-            <div class="card self-start" dusk="playlist-picker">
+            <div class="card self-start lg:sticky lg:top-0" dusk="playlist-picker">
                 {{-- A tab list with its two panels, so a screen reader says "tab, 1 of 2" and which list is open; the
                      open tab is the one with aria-selected, written as the page opens (the library) so the row is
                      right before Alpine starts, and tab-link colours it (app.css). --}}
@@ -251,6 +265,11 @@
                     </div>
                 </div>
 
+                {{-- The channels could not be asked for: their tab would simply not be there, so it is said. --}}
+                <template x-if="channelsFailed">
+                    <x-load-failed retry="loadChannels()" what="the channels" dusk="channels-load-failed" class="px-4 pt-4" />
+                </template>
+
             {{-- ── Content Library ──────────────────────────────────────── --}}
                 <div x-show="openPickerTab() === 'library'" id="picker-panel-library" role="tabpanel" aria-labelledby="picker-tab-library"
                      class="p-4 space-y-2" dusk="media-picker">
@@ -265,13 +284,16 @@
                     {{-- Loading, a search that found nothing (and the way back), or a library with nothing to add yet
                          (and, for somebody who may upload, where to do it) — three different things, said apart. --}}
                     <template x-if="!availableLoaded">
-                        <p class="text-center text-muted-soft py-10">Loading...</p>
+                        <p class="text-center text-muted-soft py-10"><x-loading /></p>
                     </template>
-                    <template x-if="availableLoaded && available.length === 0">
+                    <template x-if="availableLoaded && availableFailed">
+                        <x-load-failed retry="loadAvailable()" what="the content library" dusk="picker-load-failed" class="py-6" />
+                    </template>
+                    <template x-if="availableLoaded && !availableFailed && available.length === 0">
                         <div class="text-center py-10 space-y-3" dusk="picker-empty">
                             <p class="text-sm text-muted-soft" x-show="search">
                                 Nothing matches &ldquo;<span x-text="search"></span>&rdquo;.
-                                <button type="button" class="ml-1 font-medium text-blue-600 hover:underline dark:text-blue-400" @click="search = ''">Clear Search</button>
+                                <button type="button" class="ml-1 font-medium text-blue-600 underline underline-offset-2 hover:decoration-2 dark:text-blue-400" @click="search = ''">Clear Search</button>
                             </p>
                             <p class="text-sm text-muted-soft" x-show="!search">No files to add yet.</p>
                             {{-- The Media page opens with View Media and uploads with Upload Media: offered to somebody with both. --}}
@@ -281,21 +303,24 @@
                         </div>
                     </template>
 
+                    {{-- Beside the playlist on a desk the list scrolls by itself, so the card stays in sight while the
+                         lines it adds to grow beside it; on a phone the page scrolls. --}}
+                    <div class="space-y-2 lg:max-h-[calc(100dvh-22rem)] lg:overflow-y-auto lg:pr-1" dusk="picker-list">
                     <template x-for="media in available" :key="media.id">
                         <div class="flex items-center gap-3 p-2 rounded-md border border-gray-200 dark:border-gray-700">
                             <div class="w-20 h-12 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
                                 <template x-if="media.thumbnail_url">
-                                    <img :src="media.thumbnail_url" :alt="media.title" class="w-full h-full"
+                                    <img :src="media.thumbnail_url" alt="" loading="lazy" decoding="async" class="w-full h-full"
                                          x-bind:class="media.orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                                 </template>
                                 <template x-if="!media.thumbnail_url">
-                                    <span class="text-[10px] text-gray-500 dark:text-gray-400" x-text="typeLabel(media)"></span>
+                                    <span class="text-xs text-gray-600 dark:text-gray-300" x-text="typeLabel(media)"></span>
                                 </template>
                             </div>
 
                             <div class="flex-1 min-w-0">
                                 <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 min-w-0 text-sm font-medium text-gray-800 dark:text-white">
-                                    <span class="truncate" x-text="media.title"></span>
+                                    <span class="line-clamp-2 break-words" x-text="media.title"></span>
                                 </p>
                                 <p class="text-xs text-gray-500 dark:text-gray-400">
                                     <span x-text="typeLabel(media)"></span>
@@ -308,9 +333,16 @@
                             </div>
 
                             <button @click="addItem(media, $event)" x-bind:dusk="'playlist-add-' + media.id" x-bind:disabled="saving"
-                                class="btn-row-neutral" x-bind:aria-label="'Add ' + media.title + ' to the playlist'">Add</button>
+                                class="btn-row-neutral" x-bind:aria-label="(addedId === media.id ? 'Added ' : 'Add ') + media.title + ' to the playlist'"
+                                x-text="addedId === media.id ? 'Added' : 'Add'">Add</button>
                         </div>
                     </template>
+                    </div>
+
+                    {{-- The newest hundred are listed: said, with the way to the rest, never a list that silently stops. --}}
+                    <p x-show="availableLoaded && !availableFailed && available.length < availableMatched" x-cloak
+                       class="text-xs text-muted-soft" dusk="picker-newest-note"
+                       x-text="'Showing the newest ' + available.length + ' of ' + availableMatched + '. Search to find the rest.'"></p>
                 </div>
 
             {{-- ── Channels ─────────────────────────────────────────────────
@@ -332,21 +364,23 @@
                     </div>
 
                     <template x-for="channel in channels" :key="channel.id">
-                        <div class="rounded-md border border-gray-200 dark:border-gray-700">
-                            <div class="flex items-center gap-3 p-2">
+                        {{-- A container, as the playlist's lines are: on a phone the buttons take a line of their own under the
+                             name, which once had some 60 px beside them. --}}
+                        <div class="@container rounded-md border border-gray-200 dark:border-gray-700">
+                            <div class="flex flex-wrap items-center gap-3 p-2">
                                 <div class="w-20 h-12 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
                                     <template x-if="channel.thumbnail_url">
-                                        <img :src="channel.thumbnail_url" :alt="channel.title" class="w-full h-full"
+                                        <img :src="channel.thumbnail_url" alt="" loading="lazy" decoding="async" class="w-full h-full"
                                              x-bind:class="channel.thumbnail_orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                                     </template>
                                     <template x-if="!channel.thumbnail_url">
-                                        <span class="text-[10px] text-gray-500 dark:text-gray-400">Channel</span>
+                                        <span class="text-xs text-gray-600 dark:text-gray-300">Channel</span>
                                     </template>
                                 </div>
 
                                 <div class="flex-1 min-w-0">
                                     <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 min-w-0 text-sm font-medium text-gray-800 dark:text-white">
-                                        <span class="truncate" x-text="channel.title"></span>
+                                        <span class="line-clamp-2 break-words" x-text="channel.title"></span>
                                         {{-- A channel the organization made for itself, told apart from the platform's; below
                                              the name when there is no room beside it, so neither is cut short. --}}
                                         <span x-show="channel.is_organization_channel" class="badge-neutral shrink-0"
@@ -360,6 +394,7 @@
                                        x-text="channelInfo(channel)"></p>
                                 </div>
 
+                                <div class="flex w-full flex-wrap items-center justify-end gap-2 @md:w-auto">
                                 <button type="button" @click="toggleChannelAds(channel.id)" x-show="channel.ads.length > 0"
                                         x-bind:dusk="'channel-preview-' + channel.id"
                                         class="btn-row-neutral"
@@ -373,6 +408,7 @@
                                     x-bind:dusk="'unlock-channel-' + channel.id"
                                     class="btn-row-neutral inline-flex items-center gap-1" x-bind:aria-label="'Unlock the channel ' + channel.title">
                                     <x-icon name="lock-closed" class="h-3 w-3" /> Unlock</button>
+                                </div>
                             </div>
 
                             {{-- What adding it would actually play, today. --}}
@@ -383,14 +419,14 @@
                                     <div class="text-xs min-w-0">
                                         <div class="aspect-video rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
                                             <template x-if="ad.thumbnail_url">
-                                                <img :src="ad.thumbnail_url" :alt="ad.title" class="w-full h-full"
+                                                <img :src="ad.thumbnail_url" alt="" loading="lazy" decoding="async" class="w-full h-full"
                                                      x-bind:class="ad.orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                                             </template>
                                             <template x-if="!ad.thumbnail_url">
-                                                <span class="text-[10px] text-gray-500 dark:text-gray-400" x-text="typeLabel(ad)"></span>
+                                                <span class="text-xs text-gray-600 dark:text-gray-300" x-text="typeLabel(ad)"></span>
                                             </template>
                                         </div>
-                                        <p class="mt-1 truncate text-gray-700 dark:text-gray-200" x-text="ad.title"></p>
+                                        <p class="mt-1 line-clamp-2 break-words text-gray-700 dark:text-gray-200" x-text="ad.title"></p>
                                         <p class="text-gray-500 dark:text-gray-400" x-text="adLine(ad)"></p>
                                         {{-- The other way round from this screen: it plays with bars, as a file on the list would. --}}
                                         <p x-show="orientationNote(ad)" x-cloak class="text-amber-700 dark:text-amber-400"
@@ -407,6 +443,18 @@
 
         @can('screen-playlist')
             <x-billing.unlock-dialog name="unlock-platform-channels" feature="platform_channels" :organization="$screen->organization?->name" />
+
+            {{-- On a phone Save Changes is at the top of a long list, far from the line just changed: while there are changes it
+                 also stands at the foot of the window. A spacer keeps the last line clear of it. --}}
+            <div x-show="dirty && !loadFailed" x-cloak class="h-20 lg:hidden" aria-hidden="true"></div>
+            <div x-show="dirty && !loadFailed && !(sidebarOpen && narrow)" x-cloak dusk="playlist-save-bar"
+                 class="fixed inset-x-0 bottom-0 z-10 flex items-center justify-between gap-3 border-t border-gray-200 bg-white px-4 py-3 shadow-lg lg:hidden dark:border-gray-700 dark:bg-gray-800">
+                <span class="text-xs font-medium text-amber-700 dark:text-amber-400">Unsaved changes</span>
+                <button type="button" @click="save()" x-bind:disabled="!dirty || saving || loadFailed" class="btn-primary" dusk="playlist-save-bar-button">
+                    <x-spinner x-show="saving" x-cloak />
+                    <span x-text="saving ? 'Saving...' : 'Save Changes'"></span>
+                </button>
+            </div>
         @endcan
 
         {{-- ── When one item plays ──────────────────────────────────────── --}}
@@ -481,7 +529,7 @@
                                     <template x-if="rule.recurrence_type === 'weekly'">
                                         {{-- A picked day is said, not only coloured: aria-pressed. The two quick picks
                                              after the days tick the usual sets at once. --}}
-                                        <div class="flex flex-wrap items-center gap-1" role="group" aria-label="Days of the week">
+                                        <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Days of the week">
                                             @foreach ($weekdays as $value => $label)
                                                 <button type="button" @click="toggleWeekday(rule, {{ $value }})"
                                                         aria-label="{{ $label }}"
@@ -489,14 +537,14 @@
                                                         x-bind:dusk="'rule-weekday-{{ $value }}-' + ruleIndex"
                                                         x-bind:class="hasWeekday(rule, {{ $value }})
                                                             ? 'bg-blue-600 text-white border-blue-600'
-                                                            : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600'"
-                                                        class="px-2.5 py-1 rounded border text-xs font-medium">
+                                                            : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-400 dark:border-gray-500'"
+                                                        class="min-h-8 px-2.5 py-1 rounded border text-xs font-medium">
                                                     {{ substr($label, 0, 3) }}
                                                 </button>
                                             @endforeach
-                                            <button type="button" @click="setWeekdays(rule, [1, 2, 3, 4, 5])"
+                                            <button type="button" data-a-change @click="setWeekdays(rule, [1, 2, 3, 4, 5])"
                                                     x-bind:dusk="'rule-weekdays-' + ruleIndex" class="btn-row-neutral ml-2">Weekdays</button>
-                                            <button type="button" @click="setWeekdays(rule, [6, 7])"
+                                            <button type="button" data-a-change @click="setWeekdays(rule, [6, 7])"
                                                     x-bind:dusk="'rule-weekends-' + ruleIndex" class="btn-row-neutral">Weekends</button>
                                         </div>
                                     </template>
@@ -579,14 +627,14 @@
                             <div class="flex items-start justify-between gap-3 pt-1">
                                 <p class="text-xs text-gray-500 dark:text-gray-400"
                                    x-bind:dusk="'rule-summary-' + ruleIndex" x-text="ruleSummary(rule)"></p>
-                                <button type="button" @click="removeRule(ruleIndex)"
+                                <button type="button" data-a-change @click="removeRule(ruleIndex)"
                                         x-bind:dusk="'rule-remove-' + ruleIndex" class="btn-row-danger">Remove</button>
                             </div>
                         </div>
                     </template>
 
                     <div class="flex flex-wrap items-center gap-2">
-                        <button type="button" @click="addRule()" dusk="schedule-add-rule" class="btn-secondary-add">
+                        <button type="button" data-a-change @click="addRule()" dusk="schedule-add-rule" class="btn-secondary-add">
                             + Add a Schedule
                         </button>
                         {{-- The same schedule on other lines too, without typing it again (owner, 2026-10-01). Only
@@ -601,7 +649,7 @@
                          class="rounded-md border border-gray-200 dark:border-gray-700 p-4 space-y-3">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <p class="text-sm text-gray-600 dark:text-gray-300">OK gives this schedule to the lines you tick, in place of theirs.</p>
-                            <button type="button" @click="toggleEveryCopyLine()" dusk="schedule-copy-all" class="btn-row-neutral"
+                            <button type="button" data-a-change @click="toggleEveryCopyLine()" dusk="schedule-copy-all" class="btn-row-neutral"
                                     x-text="copyToKeys.length === otherLines().length ? 'Clear All' : 'Select All'"></button>
                         </div>
                         <div class="max-h-48 space-y-2 overflow-y-auto">
@@ -625,7 +673,8 @@
                         <p class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
                             Next 7 days <span x-show="previewing" x-cloak class="normal-case">&mdash; working&hellip;</span>
                         </p>
-                        <p class="text-sm text-gray-700 dark:text-gray-200 mt-1" dusk="schedule-preview">
+                        {{-- Said to a screen reader as it changes: what the rules just typed will do. --}}
+                        <p class="text-sm text-gray-700 dark:text-gray-200 mt-1" dusk="schedule-preview" aria-live="polite">
                             <template x-if="scheduleRules.length === 0">
                                 <span>Plays whenever the screen is on.</span>
                             </template>
@@ -662,9 +711,12 @@
 
                 <div class="mt-4 space-y-2 max-h-80 overflow-y-auto">
                     <template x-if="copyLoading">
-                        <p class="text-sm text-gray-500 dark:text-gray-400">Loading the other screens&hellip;</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400"><x-loading text="Loading the other screens..." /></p>
                     </template>
-                    <template x-if="!copyLoading && copyTargets.length === 0">
+                    <template x-if="!copyLoading && copyFailed">
+                        <x-load-failed retry="loadCopyTargets()" what="the other screens" dusk="copy-load-failed" class="py-4" />
+                    </template>
+                    <template x-if="!copyLoading && !copyFailed && copyTargets.length === 0">
                         <p class="text-sm text-gray-500 dark:text-gray-400" dusk="copy-no-targets">
                             There are no other screens in this organization.
                         </p>

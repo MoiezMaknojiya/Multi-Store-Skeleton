@@ -15,6 +15,9 @@ import { registerDeleteAccountForm } from './pages/delete-account.js';
 import { registerFormGuard }         from './core/form-guard.js';
 import { registerStrayClickGuard }   from './core/click-beside.js';
 import { registerDigitsOnly }        from './core/digits-only.js';
+import { registerDropGuard }         from './core/drop-guard.js';
+import { registerTabLists }          from './core/tablist.js';
+import { registerBackLinks }         from './core/back-link.js';
 import { registerRegisterForm }      from './pages/register-form.js';
 import { registerAuthForms }         from './pages/auth-forms.js';
 import { registerOrganizationSettings }     from './pages/organization-settings.js';
@@ -89,6 +92,15 @@ registerStrayClickGuard();
 
 /* A digits-only field (`data-digits`, a phone or a ZIP code) keeps to its digits, and to that many, on every page. */
 registerDigitsOnly();
+
+/* A file dropped beside an upload box goes nowhere, instead of the browser opening it in place of the panel. */
+registerDropGuard();
+
+/* Every tab list answers the arrow keys, Home and End, and only its open tab is a stop for Tab. */
+registerTabLists();
+
+/* A way back to a list returns to it as it was left, when that is where the person came from. */
+registerBackLinks();
 
 /* Register layout & UI components */
 registerHeader(Alpine);

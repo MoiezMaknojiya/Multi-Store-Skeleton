@@ -31,7 +31,7 @@
     {{-- A link that expired or was used says so under the email; the way on is here, whatever happened. --}}
     <p class="mt-6 text-center text-sm text-gray-600">
         Link not working?
-        <a href="{{ route('password.request') }}" class="font-medium text-blue-600 hover:underline" dusk="ask-for-new-link">Ask for a new one</a>
-        · <a href="{{ route('login') }}" class="font-medium text-blue-600 hover:underline">Back to sign in</a>
+        <a href="{{ route('password.request') }}" class="font-medium text-blue-600 underline underline-offset-2 hover:decoration-2" dusk="ask-for-new-link">Ask for a new one</a>
+        · <a href="{{ route('login') }}" class="font-medium text-blue-600 underline underline-offset-2 hover:decoration-2">Back to sign in</a>
     </p>
 </x-guest-layout>

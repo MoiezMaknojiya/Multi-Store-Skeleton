@@ -39,6 +39,8 @@ export function registerCampaignsTable(Alpine) {
             /* The screen picker, fetched once when a modal first opens. */
             allScreens: [],
             loadingScreens: false,
+            // The screens could not be asked for: said in the form, with Try Again, never "There are no screens yet".
+            screensFailed: false,
             /* The advert chosen in the uploader ({name, size, type, meta}), its upload once every byte is in
              * ({upload, meta}), and whether bytes are still going: Save waits for them (docs/UPLOADS-SPEC.md). */
             picked: null,
@@ -75,12 +77,14 @@ export function registerCampaignsTable(Alpine) {
 
             async loadScreens() {
                 this.loadingScreens = true;
+                this.screensFailed = false;
                 try {
                     const { data } = await axios.get('/campaigns/screens');
                     this.allScreens = data.screens;
                     this.maxBreakSeconds = data.max_break_seconds ?? this.maxBreakSeconds;
                 } catch {
                     this.allScreens = [];
+                    this.screensFailed = true;
                 } finally {
                     this.loadingScreens = false;
                 }
@@ -93,7 +97,7 @@ export function registerCampaignsTable(Alpine) {
                 this.clearFile();
                 this.openFormModal(item);
                 // A modal opened before the list arrived would show no screens at all.
-                if (this.allScreens.length === 0 && ! this.loadingScreens) this.loadScreens();
+                if ((this.allScreens.length === 0 || this.screensFailed) && ! this.loadingScreens) this.loadScreens();
             },
 
             /** Closing the form gives up an advert still going up — asked first — or one that arrived and was never
@@ -212,6 +216,7 @@ export function registerCampaignsTable(Alpine) {
 
                 if (Object.keys(errors).length > 0) {
                     this.formErrors = errors;
+                    this.focusFirstError();
                     return;
                 }
 
@@ -252,9 +257,10 @@ export function registerCampaignsTable(Alpine) {
                     });
 
                     const url = this.editingItem ? `/campaigns/${this.editingItem.id}` : '/campaigns';
-                    await axios.post(url, payload);
+                    const { data } = await axios.post(url, payload);
 
                     this.closeCampaignModal();
+                    window.toast(data?.message ?? 'Campaign saved.', 'success');
                     this.currentPage = 1;
                     this.refreshInPlace();  // not awaited: the button is free again the moment the request is over
                     this.loadScreens();  // not awaited, the booked seconds have moved

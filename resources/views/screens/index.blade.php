@@ -146,7 +146,7 @@
                                  pair used for the role chip elsewhere, so it reads clearly
                                  on both the light and the dark table. --}}
                             <span x-show="item.device_uuid" x-cloak
-                                  class="block mt-1 font-mono text-[11px] text-blue-600 dark:text-blue-400 select-all whitespace-nowrap"
+                                  class="block mt-1 font-mono text-xs text-blue-600 dark:text-blue-400 select-all whitespace-nowrap"
                                   x-bind:dusk="'screen-uuid-' + item.id"
                                   x-bind:title="item.device_uuid"
                                   x-text="(item.device_uuid || '').split('-').pop()"></span>
@@ -163,25 +163,27 @@
                                         x-bind:dusk="'screen-ads-' + item.id"
                                         x-bind:class="item.accepts_network_ads ? 'btn-row-primary' : 'btn-row-neutral'"
                                         x-bind:title="adsLabel(item)"
+                                        x-bind:aria-label="(item.accepts_network_ads ? 'Adverts On' : 'Adverts Off') + ' for ' + item.name"
                                         x-text="item.accepts_network_ads ? 'Adverts On' : 'Adverts Off'"></button>
                                 @endcan
 
+                                {{-- Each names the screen it acts on: a screen reader hears "Edit Counter TV", not "Edit" on every row. --}}
                                 <a x-bind:href="'/screens/' + item.id" x-bind:dusk="'playlist-screen-' + item.id"
-                                    class="btn-row-primary">Playlist</a>
+                                    x-bind:aria-label="'Playlist of ' + item.name" class="btn-row-primary">Playlist</a>
 
                                 @can('screen-update')
                                 <button @click="openFormModal(item)" x-bind:dusk="'edit-screen-' + item.id"
-                                    class="btn-row-neutral">Edit</button>
+                                    x-bind:aria-label="'Edit ' + item.name" class="btn-row-neutral">Edit</button>
                                 @endcan
 
                                 @can('screen-store')
                                 <button @click="openReplaceModal(item)" x-bind:dusk="'replace-screen-' + item.id"
-                                    class="btn-row-neutral">Replace Device</button>
+                                    x-bind:aria-label="'Replace Device of ' + item.name" class="btn-row-neutral">Replace Device</button>
                                 @endcan
 
                                 @can('screen-destroy')
                                 <button @click="confirmDelete(item)" x-bind:dusk="'delete-screen-' + item.id"
-                                    class="btn-row-danger">Delete</button>
+                                    x-bind:aria-label="'Delete ' + item.name" class="btn-row-danger">Delete</button>
                                 @endcan
                             </div>
                         </td>
@@ -205,7 +207,7 @@
         </x-crud.confirm-delete-modal>
 
         {{-- Pair / Replace Modal --}}
-        <x-modal name="screen-pair-modal" :show="false" maxWidth="lg">
+        <x-modal name="screen-pair-modal" :show="false" maxWidth="lg" persistent>
             <div class="p-6">
                 <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
                     x-text="pairForm.mode === 'replace' ? 'Replace Device' : 'Add Screen'"></h2>
@@ -279,7 +281,7 @@
                                 Schedules on this screen follow this clock.
                                 <button type="button" x-show="offersBrowserTimezone()" x-cloak
                                         @click="pairForm.timezone = browserTimezone" dusk="screen-pair-use-local-timezone"
-                                        class="font-medium text-blue-600 hover:underline dark:text-blue-400"
+                                        class="font-medium text-blue-600 underline underline-offset-2 hover:decoration-2 dark:text-blue-400"
                                         x-text="'Use this computer\'s: ' + browserTimezone"></button>
                             </p>
                         </div>

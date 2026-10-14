@@ -13,6 +13,8 @@ export function registerBuilderAssetsTable(Alpine) {
         fetchUrl: '/builder/assets/data',
         dataKey: 'assets',
         entityLabel: 'asset',
+        // Only an Owner the list offers: an organization since deleted (an old link) is the list as it opens.
+        addressKeys: config.owner ? { owner: ['filterOrganization', ['platform', '', ...(config.ownerIds ?? [])]] } : {},
         deleteModalName: 'confirm-asset-deletion',
 
         extraState: {
@@ -35,6 +37,11 @@ export function registerBuilderAssetsTable(Alpine) {
             applyFilters() {
                 this.currentPage = 1;
                 this.fetchItems();
+            },
+
+            /** The organization the Owner list shows, by the name it lists it under: whose list is empty, said in its name. */
+            ownerName() {
+                return this.$root.querySelector('select[aria-label="Owner"]')?.selectedOptions?.[0]?.text?.trim() ?? '';
             },
 
             afterFetch(data) {

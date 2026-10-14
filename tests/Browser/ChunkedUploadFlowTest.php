@@ -149,7 +149,19 @@ class ChunkedUploadFlowTest extends DuskTestCase
                 $this->waitForStatus($browser, 'media', 'Changed my mind.gif', '/^Uploading \d+%/', 60);
                 $this->assertSame(1, Upload::count());
 
+                // × on a file still going up asks first (UI/UX audit, 2026-10-13): Stop Upload gives it up. Its chunks are held
+                // back meanwhile, so it is still going up when × is pressed, however fast this machine's line is.
+                $tools = new ChromeDevToolsDriver($browser->driver);
+                $tools->execute('Network.setBlockedURLs', ['urls' => ['*/uploads/*']]);
                 $this->clickInRow($browser, 'media', 'Changed my mind.gif', 'remove');
+                $browser->waitUsing(5, 100, fn () => $browser->script(<<<'JS'
+                    const row = [...document.querySelectorAll('[dusk="media-upload-row"]')]
+                        .find((each) => each.querySelector('[dusk="media-upload-name"]')?.textContent.trim() === 'Changed my mind.gif');
+                    const ask = row?.querySelector('[dusk="media-upload-stop-ask"]');
+                    return !!ask && ask.getClientRects().length > 0 && ask.innerText.includes('Stop uploading Changed my mind.gif?');
+                JS)[0] === true, 'the row did not ask before stopping its upload');
+                $tools->execute('Network.setBlockedURLs', ['urls' => []]);
+                $this->clickInRow($browser, 'media', 'Changed my mind.gif', 'stop');
                 $browser->waitUsing(10, 200, fn () => $this->statusOf($browser, 'media', 'Changed my mind.gif') === null);
                 $browser->waitUsing(20, 200, fn () => Upload::count() === 0, 'the cancelled upload stayed on the server');
                 $this->assertSame(1, Media::count());

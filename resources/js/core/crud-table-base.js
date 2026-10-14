@@ -7,7 +7,7 @@
  */
 import axios from 'axios';
 import { passwordRefusal } from './password-refusal.js';
-import { unreadableFields } from './validate.js';
+import { showFirstError, unreadableFields } from './validate.js';
 
 /**
  * Rows per page, for every listing in the app.
@@ -37,6 +37,10 @@ export function createCrudTable({
                          // Without one, the server's own message ("Screen updated successfully") is the toast.
     deleteNeedsPassword = false, // A big delete re-confirms the actor's password (ConfirmsPassword on the
                          // server; the modal uses <x-crud.password-confirm>)
+    addressKeys = {},    // { param: 'stateProperty' | ['stateProperty', allowed] } the listing keeps in the page's address
+                         // besides its search, page and sort, so a filter survives a visit to a row and back, a reload
+                         // and a link sent to a colleague; `allowed` is a list of values or a RegExp — anything else
+                         // in the address is left out, as is a value the server then refuses (422)
     extraState = {},     // Additional reactive properties specific to the entity
     extraMethods = {},   // Additional methods specific to the entity
     sortable = null,     // { by, direction } the listing starts sorted by, when its headings sort (x-crud.sort-header):
@@ -46,6 +50,15 @@ export function createCrudTable({
      * them with defaultForm, so a campaign's ticked screens were
      * pushed into the default itself — and the next "Add" opened with them already there. */
     const blankForm = () => structuredClone(defaultForm);
+
+    /* The address's keys: { param: { prop, allows(value) } }. */
+    const kept = Object.fromEntries(Object.entries(addressKeys).map(([param, spec]) => {
+        const [prop, allowed] = Array.isArray(spec) ? spec : [spec, null];
+        const allows = (value) => allowed === null
+            || (allowed instanceof RegExp ? allowed.test(value) : allowed.includes(value));
+
+        return [param, { prop, allows }];
+    }));
 
     return () => ({
         /* ── Shared reactive state ─────────────────────────────────────── */
@@ -70,13 +83,20 @@ export function createCrudTable({
         loadFailed: false,      // the list could not be loaded at all: the table says so, with Try again
         sortBy: sortable?.by ?? null,
         sortDirection: sortable?.direction ?? 'asc',
+        addressStart: null,     // how the list opens, before the address had its say (readAddress)
+        fromAddress: false,     // the list shows what the address asked for: a refusal of it falls back to the start
 
         /* Merge entity-specific state */
         ...extraState,
 
         /* ── Lifecycle ─────────────────────────────────────────────────── */
         init() {
+            this.readAddress();
             this.fetchItems();
+            /* Brought back by the browser's own Back out of its page cache: the rows as they are now, not as they were. */
+            window.addEventListener('pageshow', (event) => {
+                if (event.persisted) this.refreshInPlace();
+            });
             this.$watch('search', () => {
                 if (this.searchDebounceTimer) clearTimeout(this.searchDebounceTimer);
                 this.searchDebounceTimer = setTimeout(() => {
@@ -88,6 +108,69 @@ export function createCrudTable({
             if (typeof this.onInit === 'function') this.onInit();
         },
 
+        /* ── The page's address ────────────────────────────────────────── */
+        /* What the address says the list shows — its search, page, sort and the listing's own keys (addressKeys) — read
+         * before the first fetch; what it started as is kept, for an address the server refuses and for writing back
+         * only what differs. */
+        readAddress() {
+            this.addressStart = {
+                search: '', currentPage: 1, sortBy: this.sortBy, sortDirection: this.sortDirection,
+                ...Object.fromEntries(Object.values(kept).map(({ prop }) => [prop, this[prop]])),
+            };
+            this.fromAddress = false;
+
+            const query = new URLSearchParams(window.location.search);
+            const take = (prop, value) => { this[prop] = value; this.fromAddress = true; };
+
+            if (query.has('search')) take('search', query.get('search').slice(0, 255));
+            const page = Number.parseInt(query.get('page') ?? '', 10);
+            if (page > 1) take('currentPage', page);
+            if (sortable && /^[a-z_]{1,40}$/.test(query.get('sort') ?? '')) {
+                take('sortBy', query.get('sort'));
+                take('sortDirection', query.get('direction') === 'desc' ? 'desc' : 'asc');
+            }
+            Object.entries(kept).forEach(([param, { prop, allows }]) => {
+                if (query.has(param) && allows(query.get(param))) take(prop, query.get(param));
+            });
+        },
+
+        /* The list as it is shown, written into the address in place (no new history entry): only what differs from
+         * how the page opens, so a plain visit keeps a plain address. */
+        writeAddress() {
+            const query = new URLSearchParams(window.location.search);
+            // Empty is a value of its own where the list did not open empty (the Owner list's All, beside its Platform).
+            const put = (param, value, start) => {
+                if (value === null || value === undefined || String(value) === String(start ?? '')) query.delete(param);
+                else query.set(param, String(value));
+            };
+            const start = this.addressStart ?? {};
+
+            put('search', this.search.trim(), '');
+            put('page', this.currentPage, 1);
+            if (sortable) {
+                const changed = this.sortBy !== start.sortBy || this.sortDirection !== start.sortDirection;
+                put('sort', changed ? this.sortBy : null, null);
+                put('direction', changed ? this.sortDirection : null, null);
+            }
+            Object.entries(kept).forEach(([param, { prop }]) => put(param, this[prop], start[prop]));
+
+            const next = query.toString();
+            const address = window.location.pathname + (next ? `?${next}` : '') + window.location.hash;
+            if (address !== window.location.pathname + window.location.search + window.location.hash) {
+                window.history.replaceState(window.history.state, '', address);
+            }
+        },
+
+        /* An address the server would not answer (a filter it no longer has): the list as the page always opens. */
+        forgetTheAddress() {
+            Object.assign(this, this.addressStart);
+            this.fromAddress = false;
+            // The search put back to nothing wakes its watcher: this fetch is the one.
+            clearTimeout(this.searchDebounceTimer);
+            this.$nextTick(() => clearTimeout(this.searchDebounceTimer));
+            window.history.replaceState(window.history.state, '', window.location.pathname + window.location.hash);
+        },
+
         /* ── Data fetching ─────────────────────────────────────────────── */
         /**
          * `quiet` is for a refresh nobody asked for — the screens list re-reading itself
@@ -95,7 +178,7 @@ export function createCrudTable({
          * arrive, with no "Loading..." blink in between, and a failure keeps them and says so
          * once, rather than emptying the table without a word.
          */
-        async fetchItems({ quiet = false } = {}) {
+        async fetchItems({ quiet = false, keepOrder = false } = {}) {
             /* Rapid pagination/search can fire overlapping requests; only the response
              * matching the most recently issued request is allowed to update state, so a
              * slow older response can't overwrite a newer one that resolved first. */
@@ -113,7 +196,16 @@ export function createCrudTable({
                 const response = await axios.get(fetchUrl, { params });
                 if (requestToken !== this.fetchToken) return;
                 const data = response.data;
-                this.items = data[dataKey];
+                /* A refresh nobody asked for (keepOrder) brings each row up to date where it stands: a row moving under
+                 * the pointer as the list re-sorts itself would put the next press on another row. The same rows
+                 * only — a row gone or come is the list itself changing, and it is shown as the server has it. */
+                const fresh = new Map((data[dataKey] ?? []).map((row) => [row.id, row]));
+                if (keepOrder && this.items.length === fresh.size && this.items.every((row) => fresh.has(row.id))) {
+                    // New objects in the same order: a row open in a dialog (editingItem) is not changed under it.
+                    this.items = this.items.map((row) => ({ ...row, ...fresh.get(row.id) }));
+                } else {
+                    this.items = data[dataKey];
+                }
                 this.total = data.total;
                 this.currentPage = data.currentPage;
                 this.lastPage = data.lastPage;
@@ -121,8 +213,27 @@ export function createCrudTable({
                 this.loadFailed = false;
                 /* A listing may say more than its rows — the media library says how full its organization is. */
                 if (typeof this.afterFetch === 'function') this.afterFetch(data);
+                /* A page past the last (an old link, rows deleted since): the last page there is, never an empty
+                 * list that says there is nothing at all. */
+                if (!quiet && this.items.length === 0 && this.currentPage > 1 && this.currentPage > this.lastPage) {
+                    this.currentPage = Math.max(1, this.lastPage);
+
+                    return this.fetchItems();
+                }
+                if (!quiet) {
+                    this.writeAddress();
+                    // What the address asked for has been shown: a refusal from now on is the person's own to see.
+                    this.fromAddress = false;
+                }
             } catch (error) {
                 if (requestToken !== this.fetchToken) return;
+                /* The address asked for a list the server will not give (a filter it no longer has): the list as the
+                 * page always opens, never "could not load". */
+                if (!quiet && this.fromAddress && error.response?.status === 422) {
+                    this.forgetTheAddress();
+
+                    return this.fetchItems();
+                }
                 console.error(`Failed to fetch ${entityLabel}s:`, error);
                 if (quiet) {
                     /* The rows already shown are older, not wrong: keep them, and say once — not
@@ -191,7 +302,7 @@ export function createCrudTable({
         turnedPage() {
             this.fetchItems();
             this.$nextTick(() => (this.$root.querySelector('[data-list-card]') ?? this.$root.querySelector('.card'))
-                ?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+                ?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
         },
 
         /**
@@ -367,7 +478,7 @@ export function createCrudTable({
         /* After a refused save, the keyboard goes to the first field that has to change: its message is read out
            with it (x-crud.form-field ties the two together). */
         focusFirstError() {
-            this.$nextTick(() => this.$root.querySelector('.crud-field-error :is(input, select, textarea)')?.focus());
+            showFirstError(this.$root);
         },
 
         /* Merge entity-specific methods */

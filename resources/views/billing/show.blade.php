@@ -24,16 +24,26 @@
 
                 {{-- The sum: the screens, then each feature while it is unlocked — a subscription of its own (owner, 2026-10-10). --}}
                 <dl class="mt-5 space-y-2 border-t border-gray-100 pt-4 text-sm dark:border-gray-700" dusk="billing-month-lines">
-                    <div class="flex justify-between gap-3">
-                        <dt class="text-gray-600 dark:text-gray-300">First screen</dt>
-                        <dd class="font-medium text-gray-900 dark:text-white">Free</dd>
-                    </div>
-                    <div class="flex justify-between gap-3">
-                        <dt class="text-gray-600 dark:text-gray-300">
-                            {{ $billing['paid_screens'] }} more {{ Str::plural('screen', $billing['paid_screens']) }} × ${{ $billing['screen_price'] }}
-                        </dt>
-                        <dd class="font-medium text-gray-900 dark:text-white">${{ $billing['screens_monthly'] }}</dd>
-                    </div>
+                    {{-- Only what it counts: no "First screen: Free" for an organization with none, and no line of "0 more screens". --}}
+                    @if ($billing['screen_count'] === 0)
+                        <div class="flex justify-between gap-3">
+                            <dt class="text-gray-600 dark:text-gray-300">No screens yet: the first one paired is free</dt>
+                            <dd class="font-medium tabular-nums text-gray-900 dark:text-white">$0</dd>
+                        </div>
+                    @else
+                        <div class="flex justify-between gap-3">
+                            <dt class="text-gray-600 dark:text-gray-300">First screen</dt>
+                            <dd class="font-medium text-gray-900 dark:text-white">Free</dd>
+                        </div>
+                    @endif
+                    @if ($billing['paid_screens'] > 0)
+                        <div class="flex justify-between gap-3">
+                            <dt class="text-gray-600 dark:text-gray-300">
+                                {{ $billing['paid_screens'] }} more {{ Str::plural('screen', $billing['paid_screens']) }} × ${{ $billing['screen_price'] }}
+                            </dt>
+                            <dd class="font-medium tabular-nums text-gray-900 dark:text-white">${{ $billing['screens_monthly'] }}</dd>
+                        </div>
+                    @endif
                     @foreach (['premium_templates' => 'Premium Templates', 'platform_channels' => 'Platform Channels'] as $key => $title)
                         @if ($billing['features'][$key]['unlocked'])
                             <div class="flex justify-between gap-3">
@@ -93,13 +103,13 @@
                 <div class="overflow-x-auto">
                     <table class="table-base" dusk="billing-screens">
                         <thead>
-                            <tr>
+                            <tr class="table-head-row">
                                 <th class="px-5 py-3 text-left font-semibold">Screen</th>
                                 <th class="px-5 py-3 text-left font-semibold">Paired</th>
                                 <th class="px-5 py-3 text-right font-semibold">Every month</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody class="table-tbody">
                             @forelse ($billing['screens'] as $screen)
                                 <tr dusk="billing-screen-{{ $screen['id'] }}">
                                     <td class="px-5 py-3 font-medium text-gray-800 dark:text-white">{{ $screen['name'] }}</td>

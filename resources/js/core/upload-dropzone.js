@@ -193,6 +193,8 @@ export function registerUploadDropzone(Alpine) {
                     error: '',
                     uploadId: null,
                     fading: false,
+                    // × pressed on it while it is still going: the row asks before giving it up (askToStop).
+                    stopping: false,
                     // {from, to} in bytes once the server has made the picture lighter.
                     lighter: null,
                 });
@@ -493,6 +495,13 @@ export function registerUploadDropzone(Alpine) {
                     leaving.add(fade);
                 }, ADDED_STAYS_MS);
                 leaving.add(stay);
+            },
+
+            /** × on a file still going up asks first — one slip beside Pause would give a long upload up; a finished or
+             *  refused row goes at once. */
+            askToStop(item) {
+                if (['waiting', 'uploading', 'paused'].includes(item.status)) item.stopping = true;
+                else this.remove(item);
             },
 
             /** Cancel a file on its way, or take a finished or refused one off the list. */

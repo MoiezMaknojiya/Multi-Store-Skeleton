@@ -40,6 +40,8 @@
         .btn-primary { background: var(--brand); color: #ffffff; }
         .btn-primary:hover { background: var(--brand-hover); }
         .btn-secondary { background: var(--card); color: var(--text); border-color: var(--line); }
+        /* A finger's size on a touch screen, as the panel's own buttons are. */
+        @media (pointer: coarse) { .btn { height: 2.75rem; } .brand { min-height: 2.75rem; } }
     </style>
 </head>
 <body>

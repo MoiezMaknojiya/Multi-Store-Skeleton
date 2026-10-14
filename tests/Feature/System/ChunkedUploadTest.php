@@ -152,7 +152,10 @@ test('a chunk goes only where the upload is, and never past its end', function (
     Tus::send($this, $id, 5, '1234567')->assertStatus(413);
     Tus::send($this, $id, 5, '12345', ['Content-Type' => 'application/json'])->assertStatus(415);
 
-    Tus::ask($this, $id)->assertHeader('Upload-Offset', '5');
+    // tus 1.0: a HEAD answer is never cached — "no-store", which the store-to-organization rename once turned into a word
+    // no cache knows (0eb3740).
+    $asked = Tus::ask($this, $id)->assertHeader('Upload-Offset', '5');
+    expect($asked->headers->get('Cache-Control'))->toContain('no-store');
     expect(Storage::disk('uploads')->get("{$id}.part"))->toBe('12345');
 });
 

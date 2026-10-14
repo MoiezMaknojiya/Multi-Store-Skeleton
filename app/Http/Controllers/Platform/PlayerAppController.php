@@ -89,6 +89,13 @@ class PlayerAppController extends Controller
             throw ValidationException::withMessages(['file' => "This is another app ({$read['package']}), not the TV app."]);
         }
 
+        // A version the file says that is not newer is refused now, before anybody types notes for it and presses Publish.
+        $notNewer = $read['version_code'] !== null ? PlayerAppRelease::notNewerThanCurrent($read['version_name'], $read['version_code']) : null;
+
+        if ($notNewer !== null) {
+            throw ValidationException::withMessages(['file' => $notNewer]);
+        }
+
         $current = PlayerAppRelease::current();
 
         return response()->json([

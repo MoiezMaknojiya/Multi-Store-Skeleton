@@ -8,6 +8,8 @@
     $sharedAd = $ad !== null && $ad->organization_id === null;
     $forThePlatform = $ad !== null ? $sharedAd : ($platformUser && $newAdOrganizationId === null);
     $ownerLabel ??= null;
+    // The way back: above the organizations to the Ads page showing this ad's owner, where the ad is listed.
+    $backToAds = route('builder.index', $ownerLabel !== null ? ['owner' => ($ad !== null ? $ad->organization_id : $newAdOrganizationId) ?? 'platform'] : []);
 
     // The panel's lists are the server's own (AdCompiler, AdAnimations): every option is a value the
     // compiler writes and the request accepts — never a copy that could drift from them. Only the words
@@ -153,7 +155,7 @@
                 {{-- The editor opens with Create Ads or Update Ads, the gallery with View Ads — so the way
                      out goes to the gallery only for somebody who may see it. --}}
                 @can('ad-view')
-                    <a href="{{ route('builder.index') }}" class="btn-row-neutral shrink-0" dusk="builder-exit" aria-label="Back to Ads"><x-icon name="arrow-left" class="h-3.5 w-3.5" /> Ads</a>
+                    <a href="{{ $backToAds }}" data-back class="btn-row-neutral shrink-0" dusk="builder-exit" aria-label="Back to Ads"><x-icon name="arrow-left" class="h-3.5 w-3.5" /> Ads</a>
                 @else
                     <a href="{{ route('dashboard') }}" class="btn-row-neutral shrink-0" dusk="builder-exit"><x-icon name="arrow-left" class="h-3.5 w-3.5" /> Back</a>
                 @endcan
@@ -174,10 +176,11 @@
                       x-text="orientation === 'portrait' ? 'Portrait' : 'Landscape'"></span>
 
                 {{-- Above the organizations, whose ad it is: chosen with its shape in Create Ad (owner, 2026-10-09), said here beside
-                     the shape, and never changed after. --}}
+                     the shape, and never changed after. A long organization's name is cut short on a small laptop, where the
+                     bar holds everything, and said whole to a screen reader and in its tooltip. --}}
                 @if ($ownerLabel)
-                    <span class="{{ $forThePlatform ? 'badge-info' : 'badge-neutral' }} shrink-0" title="Chosen with its shape in Create Ad; it cannot change"
-                          dusk="ad-owner">{{ $ownerLabel }}</span>
+                    <span class="{{ $forThePlatform ? 'badge-info' : 'badge-neutral' }} min-w-0 max-w-32 xl:max-w-56" title="{{ $ownerLabel }}: chosen with its shape in Create Ad; it cannot change"
+                          dusk="ad-owner"><span class="truncate">{{ $ownerLabel }}</span></span>
                 @endif
 
                 {{-- Shrinks before anything else does: on a narrow bar each line is cut short, never drawn over
@@ -188,10 +191,10 @@
                     {{-- Where the ad stands with the screens — the industry's draft/publish model (docs/AD-BUILDER-SPEC.md
                          §9): changes are saved to a draft, and the screens keep the published version until they are
                          published. --}}
-                    <span class="truncate text-[11px]" x-show="publicationStatus() !== ''" x-cloak dusk="publication-status"
+                    <span class="truncate text-xs" x-show="publicationStatus() !== ''" x-cloak dusk="publication-status"
                           x-bind:class="publicationTone()"
                           x-bind:title="publicationHint()" x-text="publicationStatus()"></span>
-                    <label class="flex items-center gap-1 truncate text-[11px] text-gray-500 dark:text-gray-400" title="Saves the ad by itself every 30 seconds, once it has been saved">
+                    <label class="flex items-center gap-1 truncate text-xs text-gray-500 dark:text-gray-400" title="Saves the ad by itself every 30 seconds, once it has been saved">
                         <input type="checkbox" class="form-checkbox"
                                x-bind:checked="autosave" @change="toggleAutosave()" dusk="autosave-toggle" />
                         Autosave
@@ -610,7 +613,7 @@
                 </div>
 
                 {{-- The frame's size, stated once, so nobody wonders what they are designing for. --}}
-                <p class="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-xs text-gray-500 dark:text-gray-400"
+                <p class="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-xs text-gray-600 dark:text-gray-300"
                    dusk="stage-size-note"
                    x-text="previewing === 'all'
                        ? (hasOwnLength() ? 'Playing for ' + adSeconds() + ' seconds, then from the start — the way a screen shows it.' : 'Playing — the way a screen shows it.') + ' Click the stage or press Esc to stop.'
@@ -1118,7 +1121,7 @@
                     <div class="mt-6 flex flex-wrap justify-end gap-3">
                         <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-discard-changes')">Cancel</x-secondary-button>
                         <x-danger-button type="button" x-on:click="discardChanges()" x-bind:disabled="discarding"
-                                         dusk="confirm-discard-changes">Discard Changes</x-danger-button>
+                                         dusk="confirm-discard-changes"><x-spinner x-show="discarding" x-cloak /> Discard Changes</x-danger-button>
                     </div>
                 </div>
             </x-modal>
@@ -1135,7 +1138,7 @@
                     <div class="mt-6 flex flex-wrap justify-end gap-3">
                         <x-secondary-button x-on:click="$dispatch('close-modal', 'confirm-unpublish')">Cancel</x-secondary-button>
                         <x-danger-button type="button" x-on:click="unpublish()" x-bind:disabled="unpublishing"
-                                         dusk="confirm-unpublish">Unpublish</x-danger-button>
+                                         dusk="confirm-unpublish"><x-spinner x-show="unpublishing" x-cloak /> Unpublish</x-danger-button>
                     </div>
                 </div>
             </x-modal>

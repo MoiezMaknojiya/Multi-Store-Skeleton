@@ -2,8 +2,8 @@
 <x-app-layout :title="$channel->name">
     <x-slot name="header">
         <div class="flex min-w-0 items-center gap-2">
-            <a href="{{ route('channels.view') }}" dusk="back-to-channels" aria-label="Back to channels"
-               class="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200">
+            <a href="{{ route('channels.view') }}" data-back dusk="back-to-channels" aria-label="Back to channels"
+               class="touch-target inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
@@ -53,10 +53,14 @@
                  same pattern as a screen's playlist lines. --}}
             <div class="@container p-4 space-y-2">
                 <template x-if="loading">
-                    <p class="text-center text-muted-soft py-6">Loading...</p>
+                    <p class="text-center text-muted-soft py-6"><x-loading /></p>
                 </template>
 
-                <template x-if="!loading && ads.length === 0">
+                <template x-if="!loading && loadFailed">
+                    <x-load-failed retry="load()" what="the ads" dusk="channel-ads-load-failed" class="py-6" />
+                </template>
+
+                <template x-if="!loading && !loadFailed && ads.length === 0">
                     <p class="text-center text-muted-soft py-10" dusk="channel-ads-empty">
                         No ads yet.
                     </p>
@@ -78,7 +82,7 @@
                                      x-bind:class="ad.orientation === 'portrait' ? 'object-contain' : 'object-cover'">
                             </template>
                             <template x-if="!ad.thumbnail_url">
-                                <span class="text-[10px] text-gray-500 dark:text-gray-300" x-text="typeLabel(ad.type)"></span>
+                                <span class="text-xs text-gray-500 dark:text-gray-300" x-text="typeLabel(ad.type)"></span>
                             </template>
                         </div>
 
@@ -112,11 +116,11 @@
                                 <div class="flex items-center gap-2">
                                     <button @click="openAdModal(ad)" x-bind:dusk="'edit-channel-ad-' + ad.id"
                                         class="btn-row-neutral" x-bind:aria-label="'Edit ' + ad.title">Edit</button>
-                                    <button @click="move(index, -1)" x-bind:disabled="index === 0 || reordering"
+                                    <button @click="move(index, -1)" x-bind:disabled="index === 0" x-bind:aria-busy="reordering ? 'true' : 'false'"
                                         x-bind:dusk="'channel-ad-up-' + ad.id"
                                         class="btn-row-neutral" title="Move up"
                                         x-bind:aria-label="'Move ' + ad.title + ' up'"><span aria-hidden="true">&uarr;</span></button>
-                                    <button @click="move(index, 1)" x-bind:disabled="index === ads.length - 1 || reordering"
+                                    <button @click="move(index, 1)" x-bind:disabled="index === ads.length - 1" x-bind:aria-busy="reordering ? 'true' : 'false'"
                                         x-bind:dusk="'channel-ad-down-' + ad.id"
                                         class="btn-row-neutral" title="Move down"
                                         x-bind:aria-label="'Move ' + ad.title + ' down'"><span aria-hidden="true">&darr;</span></button>
@@ -220,9 +224,13 @@
                             <p x-show="picker.onPlaylists > 0 && picker.items.length > 0" x-cloak class="text-xs text-muted-soft" dusk="channel-ad-picker-note"
                                x-text="onPlaylistsText() + ', so not listed: nothing plays twice.'"></p>
 
-                            <p x-show="picker.loading && picker.items.length === 0" x-cloak class="py-6 text-center text-sm text-muted-soft">Loading…</p>
+                            <p x-show="picker.loading && picker.items.length === 0" x-cloak class="py-6 text-center text-sm text-muted-soft"><x-loading /></p>
 
-                            <p x-show="!picker.loading && picker.items.length === 0" x-cloak dusk="channel-ad-picker-empty"
+                            <template x-if="!picker.loading && picker.failed">
+                                <x-load-failed retry="loadPicker()" what="the library" dusk="channel-ad-picker-failed" class="py-6" />
+                            </template>
+
+                            <p x-show="!picker.loading && !picker.failed && picker.items.length === 0" x-cloak dusk="channel-ad-picker-empty"
                                class="py-6 text-center text-sm text-gray-500 dark:text-gray-400" x-text="pickerEmptyText()"></p>
 
                             {{-- As many tiles across as the column takes (two on a phone), each row as tall as its tiles:
@@ -250,8 +258,8 @@
                                             </template>
                                         </div>
                                         <div class="px-2 py-1.5">
-                                            <p class="truncate text-xs font-medium text-gray-800 dark:text-gray-100" x-bind:title="item.title" x-text="item.title"></p>
-                                            <p class="text-[11px] text-gray-500 dark:text-gray-400"
+                                            <p class="line-clamp-2 break-words text-xs font-medium text-gray-800 dark:text-gray-100" x-text="item.title"></p>
+                                            <p class="text-xs text-gray-500 dark:text-gray-400"
                                                x-text="typeLabel(item.type) + (item.orientation === 'portrait' ? ' · portrait' : '')"></p>
                                         </div>
                                     </button>
