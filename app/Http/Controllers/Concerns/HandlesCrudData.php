@@ -23,7 +23,8 @@ trait HandlesCrudData
      *
      * @param  Request  $request  HTTP request with search/page/per_page parameters
      * @param  Builder  $query  Base Eloquent query (may be pre-scoped with visibility constraints)
-     * @param  array  $searchColumns  Column names to apply LIKE search across
+     * @param  array  $searchColumns  Column names the search is looked for in, as typed (whereContains: `%` and `_` are
+     *                                no wildcards)
      * @param  string  $dataKey  Key name for the items array in the JSON response
      * @param  array  $selectColumns  Optional column subset to select (['*'] by default)
      * @param  \Closure|null  $batchTransform  Optional callback given the whole page's Collection at once, so
@@ -31,9 +32,9 @@ trait HandlesCrudData
      *                                         instead of one per row (avoids N+1)
      * @param  \Closure|null  $searchExtra  Optional ($query, $search) callback run INSIDE the same search
      *                                      group, for anything a plain LIKE cannot express — a date typed
-     *                                      the way the panel prints it, say. Use orWhere inside it, and only
-     *                                      alongside at least one $searchColumns entry, so the group still
-     *                                      starts with a where.
+     *                                      the way the panel prints it, say. Use orWhere inside it (and
+     *                                      orWhereContains for words), and only alongside at least one
+     *                                      $searchColumns entry, so the group still starts with a where.
      */
     protected function paginatedResponse(
         Request $request,
@@ -59,8 +60,8 @@ trait HandlesCrudData
         if ($search !== '') {
             $query->where(function (Builder $q) use ($search, $searchColumns, $searchExtra) {
                 foreach ($searchColumns as $i => $col) {
-                    $method = $i === 0 ? 'where' : 'orWhere';
-                    $q->$method($col, 'like', "%{$search}%");
+                    $method = $i === 0 ? 'whereContains' : 'orWhereContains';
+                    $q->$method($col, $search);
                 }
 
                 if ($searchExtra) {

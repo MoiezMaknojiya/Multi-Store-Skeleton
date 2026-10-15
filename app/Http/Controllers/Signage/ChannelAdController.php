@@ -102,7 +102,7 @@ class ChannelAdController extends Controller implements HasMiddleware
         // looking empty (owner, 2026-10-01: "Ad Builder k tab k ander khali q araha ha").
         $search = trim((string) ($filters['search'] ?? ''));
         $onPlaylists = $files()->onSomePlaylist()
-            ->when($search !== '', fn (Builder $query) => $query->where('title', 'like', "%{$search}%"))
+            ->when($search !== '', fn (Builder $query) => $query->whereContains('title', $search))
             ->count();
 
         $listing = $this->paginatedResponse($request, $files()->onNoPlaylist()->latest(), ['title'], 'media', ['*'],

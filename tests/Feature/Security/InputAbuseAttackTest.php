@@ -371,16 +371,19 @@ test('a search that carries quotes, wildcards or SQL is treated as text', functi
         expect($titles->all())->toBe([], "search [{$search}] matched a title that does not contain it");
     }
 
-    // A LIKE wildcard still matches everything it can — but only ever inside this organization.
+    // A LIKE wildcard is a character like any other (owner, 2026-10-15): it finds the titles that hold it, never every
+    // row — and only ever inside this organization, though another organization's title holds it too.
+    Media::factory()->create(['organization_id' => $this->organization->id, 'title' => 'Burger 50% off_now']);
+    Media::factory()->create(['organization_id' => $this->other->id, 'title' => 'Beta 50% off_now']);
     foreach (['%', '_'] as $search) {
         $titles = collect($this->getJson('/media/data?search='.urlencode($search))->assertOk()->json('media'))->pluck('title');
 
-        expect($titles->contains('Beta poster'))->toBeFalse("search [{$search}] leaked another organization's row")
-            ->and($titles->all())->toBe(['Burger deal']);
+        expect($titles->contains('Beta 50% off_now'))->toBeFalse("search [{$search}] leaked another organization's row")
+            ->and($titles->all())->toBe(['Burger 50% off_now']);
     }
 
     // The table is still there, and so are its rows.
-    expect(DB::table('media')->count())->toBe(2);
+    expect(DB::table('media')->count())->toBe(4);
 });
 
 test('pagination cannot be used to dump a table or to break the page', function () {

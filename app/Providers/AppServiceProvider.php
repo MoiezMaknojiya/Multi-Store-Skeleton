@@ -10,6 +10,7 @@ use App\Services\VideoDuration;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
@@ -50,6 +51,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->registerRateLimiters();
+        $this->registerSearchMacros();
 
         // Register gates for every permission in the database
         try {
@@ -88,6 +90,27 @@ class AppServiceProvider extends ServiceProvider
         if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
             URL::forceScheme('https');
         }
+    }
+
+    /**
+     * A search box's words found anywhere in a column, exactly as typed (owner, 2026-10-15): `whereContains('title', $search)`
+     * and `orWhereContains`, on every query and every Eloquent builder. `%` and `_` are LIKE's wildcards, so a plain LIKE
+     * found "Sale 500 off" for "50%" and "Taxi" for "a_i". They are escaped with `!` under an ESCAPE clause of its own:
+     * MySQL's default escape, a backslash, is no escape at all on SQLite, and `!` means nothing in a string on either.
+     */
+    private function registerSearchMacros(): void
+    {
+        QueryBuilder::macro('whereContains', function (string $column, string $text, string $boolean = 'and'): QueryBuilder {
+            /** @var QueryBuilder $this */
+            $pattern = '%'.strtr($text, ['!' => '!!', '%' => '!%', '_' => '!_']).'%';
+
+            return $this->whereRaw($this->getGrammar()->wrap($column)." like ? escape '!'", [$pattern], $boolean);
+        });
+
+        QueryBuilder::macro('orWhereContains', function (string $column, string $text): QueryBuilder {
+            /** @var QueryBuilder $this */
+            return $this->whereContains($column, $text, 'or');
+        });
     }
 
     /**

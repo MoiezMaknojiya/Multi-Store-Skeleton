@@ -42,7 +42,7 @@ class PlayerAppController extends Controller
 
         return $this->paginatedResponse(
             $request,
-            PlayerAppRelease::with('uploader:id,name')->newestFirst(),
+            PlayerAppRelease::with('uploader:id,first_name,last_name')->newestFirst(),
             ['version_name', 'notes'],
             'releases',
             batchTransform: fn ($releases) => $releases->transform(fn (PlayerAppRelease $release) => [

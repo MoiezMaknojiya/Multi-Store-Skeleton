@@ -74,8 +74,8 @@ class UserController extends Controller
 
                 if (count($words) === 2) {
                     $name->orWhere(fn (Builder $both) => $both
-                        ->where('first_name', 'like', "%{$words[0]}%")
-                        ->where('last_name', 'like', "%{$words[1]}%"));
+                        ->whereContains('first_name', $words[0])
+                        ->whereContains('last_name', $words[1]));
                 }
             }
         );

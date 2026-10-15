@@ -76,10 +76,10 @@ class ScreenController extends Controller
             function (Builder $q, string $search) use ($aboveTheOrganizations) {
                 // Stored as "2026-09-07 14:08:48", so a typed 2026-09-07 — or just
                 // 2026-09 — matches straight away.
-                $q->orWhere('paired_at', 'like', "%{$search}%");
+                $q->orWhereContains('paired_at', $search);
 
                 if ($aboveTheOrganizations) {
-                    $q->orWhereHas('organization', fn (Builder $organization) => $organization->where('name', 'like', "%{$search}%"));
+                    $q->orWhereHas('organization', fn (Builder $organization) => $organization->whereContains('name', $search));
                 }
 
                 // But the panel prints the date in the READER's own locale, so what
@@ -133,7 +133,7 @@ class ScreenController extends Controller
         // Never an Ad Builder page taken off the screens (unpublished): it plays nowhere until it is published again.
         $media = Media::where('organization_id', $screen->organization_id)
             ->withoutDrafts()
-            ->when($search !== '', fn (Builder $q) => $q->where('title', 'like', "%{$search}%"))
+            ->when($search !== '', fn (Builder $q) => $q->whereContains('title', $search))
             ->orderBy('title')
             ->limit(100)
             // The orientation, so the list can say which files are the other way round from the screen.

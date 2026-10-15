@@ -43,8 +43,8 @@ class PremiumTemplateController extends Controller
         $templates = BuilderAd::premiumTemplates()
             ->where('orientation', $filters['orientation'])
             ->when($search !== '', fn (Builder $query) => $query->where(fn (Builder $query) => $query
-                ->where('published_name', 'like', "%{$search}%")
-                ->orWhere(fn (Builder $query) => $query->whereNull('published_name')->where('name', 'like', "%{$search}%"))))
+                ->whereContains('published_name', $search)
+                ->orWhere(fn (Builder $query) => $query->whereNull('published_name')->whereContains('name', $search))))
             ->with('media:id,thumbnail_path,disk')
             ->latest('published_at')
             ->limit(self::LISTED)

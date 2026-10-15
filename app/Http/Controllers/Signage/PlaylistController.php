@@ -80,7 +80,7 @@ class PlaylistController extends Controller
         // (owner, 2026-10-01).
         $offered = Media::playableOn($screen)->withoutDrafts()->inNoChannel();
 
-        $matching = (clone $offered)->when($search !== '', fn (Builder $q) => $q->where('title', 'like', "%{$search}%"));
+        $matching = (clone $offered)->when($search !== '', fn (Builder $q) => $q->whereContains('title', $search));
 
         $media = (clone $matching)
             ->orderByDesc('created_at')
