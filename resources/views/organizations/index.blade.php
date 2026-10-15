@@ -283,7 +283,7 @@
         {{-- Billing of one organization (docs/BILLING-SPEC.md §4): the summary BillingSummary gives its own Settings → Billing tab, and —
              with Change Billing — a switch for each feature, saved together. Until billing starts the platform turns them; then Stripe. --}}
         @can('billing-view')
-            <x-modal name="organization-billing" :show="false" maxWidth="2xl" focusable>
+            <x-modal name="organization-billing" :show="false" maxWidth="2xl" focusable persistent>
                 <form @submit.prevent="saveBilling()" class="p-6" novalidate dusk="organization-billing">
                     <div class="flex items-center gap-2">
                         <x-icon name="credit-card" class="h-6 w-6 text-blue-600 dark:text-blue-400" />
@@ -292,7 +292,7 @@
                     </div>
                     <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
                         @can('billing-update')
-                            Unlock or lock what <span x-text="billingOrganization?.name"></span> has paid for. Its people see the same on their Billing tab, without the switches.
+                            Unlock or lock what <span x-text="billingOrganization?.name"></span> has paid for, and give it extra storage. Its people see the same on their Billing tab, without the switches.
                         @else
                             What <span x-text="billingOrganization?.name"></span> uses, and what it will cost once billing starts.
                         @endcan
@@ -344,6 +344,37 @@
                                 @endcan
                             </div>
                         @endforeach
+
+                        {{-- Storage (§8): the 512 MB every organization has and the extra given in whole GB, free for now, so it adds
+                             nothing to the month; said when the wall would be below what the organization already holds. --}}
+                        <div class="py-4 space-y-3" dusk="organization-billing-storage">
+                            <div class="flex flex-wrap items-center justify-between gap-3">
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-sm font-medium text-gray-900 dark:text-white">Storage</p>
+                                    <p id="billing-storage-line" class="text-xs text-gray-500 dark:text-gray-400" dusk="organization-billing-storage-line"
+                                       x-text="storageLine()"></p>
+                                </div>
+                                @can('billing-update')
+                                    <div class="w-full sm:w-36">
+                                        <label class="form-label" for="billing-extra-storage">Extra storage (GB)</label>
+                                        <div class="mt-1" x-bind:class="billingErrors.extra_storage_gb ? 'crud-field-error' : ''">
+                                            <input id="billing-extra-storage" type="number" min="0" max="{{ \App\Services\OrganizationStorage::MAX_EXTRA_GB }}" step="1"
+                                                   inputmode="numeric" class="form-input" x-model.number="billingForm.extra_storage_gb" x-bind:disabled="savingBilling"
+                                                   x-bind:aria-invalid="billingErrors.extra_storage_gb ? 'true' : null"
+                                                   x-bind:aria-describedby="billingErrors.extra_storage_gb ? 'billing-extra-storage-error billing-storage-line' : 'billing-storage-line'"
+                                                   dusk="billing-extra-storage" />
+                                        </div>
+                                    </div>
+                                @else
+                                    <span class="badge-neutral shrink-0" dusk="organization-billing-extra"
+                                          x-text="billing?.storage.extra_gb > 0 ? '+' + billing.storage.extra_gb + ' GB' : 'Included'"></span>
+                                @endcan
+                            </div>
+                            <template x-if="billingErrors.extra_storage_gb">
+                                <p id="billing-extra-storage-error" class="form-error" role="alert" x-text="billingErrors.extra_storage_gb[0]"></p>
+                            </template>
+                            <p x-show="storageWarning()" x-cloak class="alert-warning" role="status" dusk="billing-storage-warning" x-text="storageWarning()"></p>
+                        </div>
 
                         <div class="flex flex-wrap items-center justify-between gap-3 py-4">
                             <div class="min-w-0 flex-1">

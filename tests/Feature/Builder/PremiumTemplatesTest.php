@@ -314,6 +314,18 @@ test('without room on the organization\'s 512 MB nothing is written, and the ans
         ->and(count(Storage::disk('public')->allFiles()))->toBe($files);
 });
 
+test('with extra storage given, the template that did not fit is copied (docs/BILLING-SPEC.md §8)', function () {
+    $logo = templateFile('Brand logo', 4096);
+    $template = premiumTemplate('Burger menu', [$logo->id]);
+    Media::factory()->create(['organization_id' => $this->organization->id, 'size' => OrganizationStorage::LIMIT_BYTES - 1000, 'thumbnail_path' => null]);
+    $this->postJson("/builder/templates/{$template->id}")->assertStatus(422);
+
+    $this->organization->forceFill(['extra_storage_gb' => 1])->save();
+
+    $this->postJson("/builder/templates/{$template->id}")->assertOk();
+    expect(BuilderAsset::where('organization_id', $this->organization->id)->count())->toBe(1);
+});
+
 test('a template whose files the organization already holds needs no room for them: only the poster waits for room', function () {
     $logo = templateFile('Brand logo', 4096);
     $template = premiumTemplate('Burger menu', [$logo->id]);

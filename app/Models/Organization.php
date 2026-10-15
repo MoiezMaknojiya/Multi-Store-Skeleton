@@ -53,6 +53,8 @@ class Organization extends Model
         // What the organization has unlocked (docs/BILLING-SPEC.md): switched by the platform alone, never through $fillable.
         'premium_templates_unlocked' => 'boolean',
         'platform_channels_unlocked' => 'boolean',
+        // Storage beside the 512 MB, in whole GB (OrganizationStorage::limitOf): set by the platform alone, never through $fillable.
+        'extra_storage_gb' => 'integer',
     ];
 
     protected static function booted(): void

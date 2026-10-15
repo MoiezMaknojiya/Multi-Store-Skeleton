@@ -192,8 +192,8 @@ class DashboardSummary
 
             if ($free !== null) {
                 $cards[] = [
-                    'key' => 'disk', 'label' => 'Free on the server', 'value' => DiskGuard::inWords($free),
-                    'detail' => 'uploads pause below '.DiskGuard::inWords($this->disk->reserve()),
+                    'key' => 'disk', 'label' => 'Free on the server', 'value' => OrganizationStorage::inWords($free),
+                    'detail' => 'uploads pause below '.OrganizationStorage::inWords($this->disk->reserve()),
                     'href' => null,
                 ];
 
@@ -202,7 +202,7 @@ class DashboardSummary
                         'key' => 'disk',
                         'tone' => 'warning',
                         'text' => 'The server is running low on space',
-                        'detail' => DiskGuard::inWords($free).' free',
+                        'detail' => OrganizationStorage::inWords($free).' free',
                         'href' => null,
                     ];
                 }

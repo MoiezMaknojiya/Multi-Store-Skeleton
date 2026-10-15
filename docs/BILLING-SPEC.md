@@ -93,3 +93,37 @@ and shapes), `ContentLibraryIsOwnTest` (the picker and the save), `PlatformLines
 locks, server and payloads, and a locked line left out of the TV's answer and timeline), and in the browser `BillingFlowTest` (the tab, the platform dialog pressed hard, the locked gallery and
 Channels tab, the unlock dialog, the locked line with ×, ↑ and ↓ double-pressed, a phone) — plus the lists of `EveryPageRendersTest`, `EveryButtonWorksTest`,
 `EveryPageFitsAPhoneTest` and `EveryQuestionSurvivesADoubleClickTest`.
+
+## 8. Extra storage (owner, 2026-10-15)
+
+The owner: "kisi ko extra 1 gb dena ho toh uska 512mb full ho jaye toh kese bharao?" Asked how it should be given and what it
+costs, the answers were: a number of GB, and free for now, only shown.
+
+- **Data:** `organizations.extra_storage_gb` stores whole GB as an unsigned small integer, default 0. It comes from migration
+  `2026_10_15_100000`, which is guarded and reversible. It is not in `$fillable`: only the platform sets it.
+- **The wall:**
+  - `OrganizationStorage::limitOf($extraGb)` is 512 MB plus the extra GB, and `limitFor($organizationId)` gives one
+    organization's wall.
+  - Every door that asks the wall reads it this way: `withRoom` and the opening of a chunked upload read it from the row they
+    lock, while `assertRoomFor`, `TemplateCopier` and `summary()` read it fresh, so the meters show it too.
+  - The refusal names the organization's own wall: "… left of its 1.5 GB".
+  - Sizes from a GB up are said in GB on both sides (`OrganizationStorage::inWords`, `bytesInWords`). `DiskGuard`'s own copy of
+    this was folded into it.
+- **Giving it:**
+  - It is set in the Billing dialog on the Organizations page, under the two switches, through the field "Extra storage (GB)".
+    The field takes a whole number from 0 to `OrganizationStorage::MAX_EXTRA_GB` (50), and Change Billing alone may set it.
+  - `PUT …/billing` takes `extra_storage_gb`. When it is left out, the extra stays as it was, because a page from before still
+    sends the switches alone. Anything else is refused with "Extra storage is a whole number of GB, from 0 to 50.", under the
+    field.
+  - The dialog says the storage as it stands: "Uses 300 MB of 1.5 GB: 512 MB included and 1 GB extra, free for now".
+  - When the new wall is below what the organization already holds, the dialog warns before the save: nothing is deleted, but it
+    cannot upload until it deletes files to fit.
+  - Each change is logged as `organization.billing_updated`, for example "Set extra storage to 1 GB (1.5 GB in all) for Alpha Mart"
+    or "Removed the extra storage (512 MB in all) for …".
+  - The dialog is `persistent` now that it has a field, and a switch counts as a change there (`modal.js`, `aria-checked`).
+- **Reading it:**
+  - With View Billing alone, the dialog shows "+1 GB" or "Included".
+  - Settings → Billing has a Storage card: what is used of the wall, with the bar, Included 512 MB, Extra "1 GB, free for now",
+    and "Need more room? Contact us below."
+  - The month's sum lists "1 GB extra storage: Free for now". It adds nothing to the total.
+- **Tests:** `ExtraStorageTest`, with additions in `BillingAttackTest` and `BillingFlowTest`.

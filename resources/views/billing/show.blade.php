@@ -1,7 +1,8 @@
 {{-- Settings → Billing (owner, 2026-10-08 — "organization mein billing profile k ander ho jese sub ki honti ha professional kaam chiya";
      docs/BILLING-SPEC.md §3): what the organization uses and what it will cost once billing starts, from BillingSummary — the screens
-     (the one paired first free), the two features and their switches' state, its own work free, the invoices to come and whom to
-     ask. A page to read: nothing is charged yet, and only the platform turns a feature on or off. --}}
+     (the one paired first free), the two features and their switches' state, its own work free, its storage with any extra the
+     platform gave (§8), the invoices to come and whom to ask. A page to read: nothing is charged yet, and only the platform turns a
+     feature on or off or gives storage. --}}
 <x-app-layout>
     <x-slot name="header">
         <h1 class="page-title">{{ __('Settings') }}</h1>
@@ -52,6 +53,13 @@
                             </div>
                         @endif
                     @endforeach
+                    {{-- Extra storage is free for now (owner, 2026-10-15: "abhi muft, sirf dikhe"): said, and counted as nothing. --}}
+                    @if ($billing['storage']['extra_gb'] > 0)
+                        <div class="flex justify-between gap-3" dusk="billing-month-storage">
+                            <dt class="text-gray-600 dark:text-gray-300">{{ $billing['storage']['extra_gb'] }} GB extra storage</dt>
+                            <dd class="font-medium text-gray-900 dark:text-white">Free for now</dd>
+                        </div>
+                    @endif
                 </dl>
             </section>
 
@@ -143,6 +151,40 @@
             </section>
 
             <div class="space-y-6">
+                {{-- How full it is, drawn as the storage meter is: amber at three quarters, red at nine tenths. --}}
+                @php
+                    $storage = $billing['storage'];
+                    $storageWords = \App\Services\OrganizationStorage::inWords($storage['used']).' of '.\App\Services\OrganizationStorage::inWords($storage['limit']).' used';
+                    $storagePercent = $storage['limit'] > 0 ? min(100, (int) round($storage['used'] * 100 / $storage['limit'])) : 0;
+                @endphp
+                <section class="card p-6" aria-labelledby="billing-storage-title" dusk="billing-storage">
+                    <h2 id="billing-storage-title" class="text-subheading">Storage</h2>
+                    <p class="mt-2 text-sm tabular-nums text-gray-700 dark:text-gray-200" dusk="billing-storage-used">{{ $storageWords }}</p>
+                    <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700" role="progressbar" aria-label="Storage used"
+                         aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ $storagePercent }}" aria-valuetext="{{ $storageWords }}">
+                        <div class="h-full rounded-full {{ $storagePercent >= 90 ? 'bg-red-500' : ($storagePercent >= 75 ? 'bg-amber-500' : 'bg-blue-600') }}"
+                             style="width: {{ $storagePercent }}%"></div>
+                    </div>
+                    @if ($storagePercent >= 90)
+                        <p class="mt-2 text-xs text-red-600 dark:text-red-400" dusk="billing-storage-warning">
+                            {{ $storage['used'] >= $storage['limit'] ? 'Full.' : 'Almost full.' }} Delete files you no longer use to make room.
+                        </p>
+                    @endif
+                    <dl class="mt-4 space-y-2 border-t border-gray-100 pt-4 text-sm dark:border-gray-700">
+                        <div class="flex justify-between gap-3">
+                            <dt class="text-gray-600 dark:text-gray-300">Included</dt>
+                            <dd class="font-medium text-gray-900 dark:text-white">{{ \App\Services\OrganizationStorage::inWords($storage['included']) }}</dd>
+                        </div>
+                        @if ($storage['extra_gb'] > 0)
+                            <div class="flex justify-between gap-3" dusk="billing-storage-extra">
+                                <dt class="text-gray-600 dark:text-gray-300">Extra</dt>
+                                <dd class="font-medium text-gray-900 dark:text-white">{{ $storage['extra_gb'] }} GB, free for now</dd>
+                            </div>
+                        @endif
+                    </dl>
+                    <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">Need more room? Contact us below.</p>
+                </section>
+
                 <section class="card p-6" aria-labelledby="billing-invoices-title">
                     <h2 id="billing-invoices-title" class="text-subheading">Invoices</h2>
                     <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">No invoices yet. They appear here once billing starts.</p>

@@ -8,8 +8,10 @@ use App\Models\Screen;
 /**
  * What an organization uses and what it will cost once billing starts (owner, 2026-10-07 and 2026-10-08; docs/BILLING-SPEC.md §1):
  * the first screen free and $5 a month for each further one, Premium Templates and Platform Channels a subscription of $10 a month
- * each while unlocked (owner, 2026-10-10: "montly $10 ka ha subscription ha"), its own ads and uploads free. The prices live here and nowhere else; the Billing tab inside an organization and the platform's Billing dialog both
- * read this one summary. Nothing is charged yet: the amounts are what billing will ask.
+ * each while unlocked (owner, 2026-10-10: "montly $10 ka ha subscription ha"), its own ads and uploads free, and the extra storage the
+ * platform gives it beside its 512 MB free for now, only shown (owner, 2026-10-15). The prices live here and nowhere else; the Billing
+ * tab inside an organization and the platform's Billing dialog both read this one summary. Nothing is charged yet: the amounts are
+ * what billing will ask.
  */
 class BillingSummary
 {
@@ -25,6 +27,8 @@ class BillingSummary
     /** Platform Channels unlocked, in dollars a month. */
     public const PLATFORM_CHANNELS_PRICE = 10;
 
+    public function __construct(private readonly OrganizationStorage $storage) {}
+
     /**
      * @return array{
      *     organization: array{id: int, name: string},
@@ -32,6 +36,7 @@ class BillingSummary
      *     screen_count: int, free_screens: int, paid_screens: int, screen_price: int,
      *     screens_monthly: int, features_monthly: int, monthly_total: int,
      *     features: array{premium_templates: array{unlocked: bool, price: int}, platform_channels: array{unlocked: bool, price: int}},
+     *     storage: array{included: int, extra_gb: int, max_extra_gb: int, limit: int, used: int},
      *     contact: array{email: ?string, phone: ?string}
      * }
      */
@@ -70,6 +75,14 @@ class BillingSummary
             'features_monthly' => $featuresMonthly,
             'monthly_total' => $paid * self::SCREEN_PRICE + $featuresMonthly,
             'features' => $features,
+            // What the organization may hold: the 512 MB every one has and the extra GB the platform gave it, beside what it holds now.
+            'storage' => [
+                'included' => OrganizationStorage::LIMIT_BYTES,
+                'extra_gb' => (int) $organization->extra_storage_gb,
+                'max_extra_gb' => OrganizationStorage::MAX_EXTRA_GB,
+                'limit' => OrganizationStorage::limitOf((int) $organization->extra_storage_gb),
+                'used' => $this->storage->used($organization->id),
+            ],
             'contact' => self::contact(),
         ];
     }

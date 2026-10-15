@@ -80,14 +80,14 @@ export function videoLengthError(meta, maxSeconds = MAX_VIDEO_SECONDS, noun = 'A
     return `${noun} may be at most ${lengthInWords(maxSeconds)} long. This one is ${clock(seconds)}.`;
 }
 
-/** 1536 as "2 KB", 126 353 408 as "120.5 MB", 536 870 912 as "512 MB" — as App\Services\OrganizationStorage says it. */
+/** 1536 as "2 KB", 126 353 408 as "120.5 MB", 536 870 912 as "512 MB", 1 610 612 736 as "1.5 GB" — as App\Services\OrganizationStorage says it. */
 export function bytesInWords(bytes) {
     if (bytes <= 0) return '0 KB';
     if (bytes < 1024 * 1024) return `${Math.max(1, Math.ceil(bytes / 1024))} KB`;
 
-    const megabytes = bytes / (1024 * 1024);
+    const [amount, unit] = bytes < 1024 ** 3 ? [bytes / (1024 * 1024), 'MB'] : [bytes / 1024 ** 3, 'GB'];
 
-    return `${Number.isInteger(megabytes) ? megabytes : megabytes.toFixed(1)} MB`;
+    return `${Number.isInteger(amount) ? amount : amount.toFixed(1)} ${unit}`;
 }
 
 /**

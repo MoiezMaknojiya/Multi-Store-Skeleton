@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Services\DiskGuard;
+use App\Services\OrganizationStorage;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
@@ -27,11 +28,11 @@ class DiskSpaceLowNotification extends Notification
     public function toMail(object $notifiable): MailMessage
     {
         return (new MailMessage)
-            ->subject('The '.config('app.name').' server has only '.DiskGuard::inWords($this->freeBytes).' free')
+            ->subject('The '.config('app.name').' server has only '.OrganizationStorage::inWords($this->freeBytes).' free')
             ->view(['emails.disk-space-low', 'emails.disk-space-low-text'], [
-                'free' => DiskGuard::inWords($this->freeBytes),
-                'warning' => DiskGuard::inWords($this->warningBytes),
-                'reserve' => DiskGuard::inWords($this->reserveBytes),
+                'free' => OrganizationStorage::inWords($this->freeBytes),
+                'warning' => OrganizationStorage::inWords($this->warningBytes),
+                'reserve' => OrganizationStorage::inWords($this->reserveBytes),
                 'hours' => DiskGuard::WARNING_HOURS,
                 'url' => route('dashboard'),
             ]);

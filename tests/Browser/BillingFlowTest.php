@@ -138,6 +138,106 @@ class BillingFlowTest extends DuskTestCase
         });
     }
 
+    /** Extra storage (docs/BILLING-SPEC.md §8, owner 2026-10-15): typed in whole GB, refused under its field, warned of, saved once. */
+    public function test_the_super_admin_gives_extra_storage_from_the_billing_dialog(): void
+    {
+        [$owner, $smart] = $this->smartStop();
+        // 700 MB in all, beside Texas Toast's own size.
+        $toast = (int) Media::where('organization_id', $smart->id)->value('size');
+        Media::factory()->create(['organization_id' => $smart->id, 'title' => 'Big video', 'size' => 700 * 1024 * 1024 - $toast, 'thumbnail_path' => null]);
+        $admin = $this->seedSuperAdmin();
+
+        $this->browse(function (Browser $browser) use ($admin, $owner, $smart) {
+            $this->freshSession($browser);
+            $browser->loginAs($admin)->visit('/organizations');
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@billing-organization-'.$smart->id);
+            $this->watch($browser);
+
+            // Smart Stop holds more than its 512 MB: said as soon as the dialog opens.
+            $this->presses($browser, $this->centreOf($browser, '[dusk="billing-organization-'.$smart->id.'"]'), 1);
+            $browser->waitForTextIn('@organization-billing-storage-line', 'Uses 700 MB of 512 MB: 512 MB included')
+                ->assertInputValue('@billing-extra-storage', '0')
+                ->assertSeeIn('@billing-storage-warning', 'Smart Stop holds 700 MB, more than 512 MB. Nothing is deleted, but it cannot upload until it deletes files to fit.')
+                ->assertDisabled('@organization-billing-save');
+
+            // Typed, the line follows before Save, the warning goes, and the month does not move: free for now.
+            $browser->type('@billing-extra-storage', '1')->pause(200)
+                ->assertSeeIn('@organization-billing-storage-line', 'Uses 700 MB of 1.5 GB: 512 MB included and 1 GB extra, free for now')
+                ->assertMissing('@billing-storage-warning')
+                ->assertSeeIn('@organization-billing-total', '$35 / month')
+                ->assertEnabled('@organization-billing-save');
+
+            // Escape with a change in it asks first; Escape again keeps editing.
+            $this->key($browser, 'Escape');
+            $browser->waitFor('@organization-billing-discard-ask');
+            $this->key($browser, 'Escape');
+            $browser->waitUntilMissing('@organization-billing-discard-ask')->assertVisible('@organization-billing')->assertInputValue('@billing-extra-storage', '1');
+
+            // Past 50, and half a number, are refused under the field, the keyboard on it, and nothing is sent.
+            $this->countRequests($browser, 'PUT', '/organizations/'.$smart->id.'/billing');
+            foreach (['60', '1e'] as $typed) {
+                // A number Save would not send says no wall of its own (never "60.5 GB"), and warns of nothing: the dialog does not
+                // jump under the pointer on its way to Save.
+                $browser->type('@billing-extra-storage', $typed)->pause(150)
+                    ->assertSeeIn('@organization-billing-storage-line', 'Uses 700 MB: 512 MB included, and 0 to 50 GB extra')
+                    ->assertMissing('@billing-storage-warning');
+                $this->presses($browser, $this->centreOf($browser, '[dusk="organization-billing-save"]'), 1);
+                $browser->waitForText('Extra storage is a whole number of GB, from 0 to 50.')
+                    ->assertAttribute('@billing-extra-storage', 'aria-invalid', 'true');
+                $browser->pause(300);
+                [$on, $what] = $browser->script('var a = document.activeElement; return [a ? a.getAttribute("dusk") : null, a ? a.outerHTML.slice(0, 160) : "nothing"];')[0];
+                $this->assertSame('billing-extra-storage', $on, "the keyboard is not on the field after {$typed}, but on {$what}");
+            }
+            $this->assertSame(0, $this->requestsCounted($browser), 'a refused field was sent');
+
+            // Saved: Save pressed three times sends once.
+            $browser->type('@billing-extra-storage', '1')->screenshot('billing-extra-storage');
+            $this->presses($browser, $this->centreOf($browser, '[dusk="organization-billing-save"]'), 3);
+            $browser->waitForText('Set extra storage to 1 GB (1.5 GB in all) for Smart Stop.')->waitUntilMissing('@organization-billing');
+            $this->assertSame(1, $this->requestsCounted($browser), 'Save sent more than once');
+            $this->assertSame(1, $smart->fresh()->extra_storage_gb);
+
+            // Taken back to 0, the warning comes back; Discard Changes leaves the 1 GB as it was.
+            $this->presses($browser, $this->centreOf($browser, '[dusk="billing-organization-'.$smart->id.'"]'), 1);
+            $browser->waitForTextIn('@organization-billing-storage-line', '1 GB extra')
+                ->type('@billing-extra-storage', '0')->pause(200)
+                ->assertVisible('@billing-storage-warning');
+            $this->key($browser, 'Escape');
+            $browser->waitFor('@organization-billing-discard-ask')->click('@organization-billing-discard')->waitUntilMissing('@organization-billing');
+            $this->assertSame(1, $smart->fresh()->extra_storage_gb);
+
+            // A switch turned is a change too: Escape asks.
+            $this->presses($browser, $this->centreOf($browser, '[dusk="billing-organization-'.$smart->id.'"]'), 1);
+            $browser->waitFor('@billing-switch-premium_templates')->pause(400);
+            $this->presses($browser, $this->centreOf($browser, '[dusk="billing-switch-premium_templates"]'), 1);
+            $this->key($browser, 'Escape');
+            $browser->waitFor('@organization-billing-discard-ask');
+            $browser->resize(375, 812)->pause(300);
+            $this->assertFitsThePhone($browser, '[dusk="organization-billing"]');
+            $browser->screenshot('billing-extra-storage-phone')->resize(1440, 900)
+                ->click('@organization-billing-discard')->waitUntilMissing('@organization-billing');
+            $this->assertTrue($smart->fresh()->premium_templates_unlocked);
+
+            // The meters read the new wall: the Media page of Smart Stop's library.
+            $browser->visit('/media?library='.$smart->id);
+            $this->waitForAlpine($browser);
+            $browser->waitForTextIn('@storage-meter-text', 'of 1.5 GB used');
+            $this->assertCalm($browser);
+
+            // And Smart Stop's own Billing tab says it.
+            $this->freshSession($browser);
+            $browser->loginAs($owner);
+            $this->switchToOrganization($browser, $smart);
+            $browser->visit('/settings/billing')->waitFor('@billing-storage')
+                ->assertSeeIn('@billing-storage-used', 'of 1.5 GB used')
+                ->assertSeeIn('@billing-storage-extra', '1 GB, free for now')
+                ->assertSeeIn('@billing-month-storage', 'Free for now')
+                ->assertSeeIn('@billing-monthly-total', '$35')
+                ->screenshot('billing-tab-storage');
+        });
+    }
+
     public function test_a_locked_organization_sees_its_locks_and_the_one_unlock_dialog(): void
     {
         [$owner, $smart] = $this->smartStop();

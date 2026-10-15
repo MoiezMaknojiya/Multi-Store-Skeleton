@@ -10,9 +10,9 @@ use App\Models\Role;
 | Billing, attacked (docs/BILLING-SPEC.md)
 |--------------------------------------------------------------------------
 |
-| The two switches are what an organization will pay for, so every way of turning them from the wrong place is tried: an
-| organization's own people however much their role holds, a role made to carry Change Billing, a platform role without it,
-| another organization's id, ids and payloads nobody sends.
+| The two switches and the extra storage are what an organization will pay for, so every way of turning them from the wrong place
+| is tried: an organization's own people however much their role holds, a role made to carry Change Billing, a platform role
+| without it, another organization's id, ids and payloads nobody sends, and the extra smuggled through the organization's forms.
 |
 */
 
@@ -22,12 +22,13 @@ beforeEach(function () {
     $this->alpha->forceFill(['premium_templates_unlocked' => false, 'platform_channels_unlocked' => false])->save();
 });
 
-/** Neither switch moved, and nothing was logged of it. */
+/** Neither switch moved, no storage was given, and nothing was logged of it. */
 function switchesUntouched(Organization $organization): void
 {
     expect($organization->fresh())
         ->premium_templates_unlocked->toBeFalse()
         ->platform_channels_unlocked->toBeFalse()
+        ->extra_storage_gb->toBe(0)
         ->and(ActivityLog::where('action', 'organization.billing_updated')->exists())->toBeFalse();
 }
 
@@ -38,7 +39,7 @@ test('an organization’s own people never unlock their organization, whatever t
     foreach ([$everything, $owner] as $person) {
         $this->actingAs($person)->withSession(['current_organization_id' => $this->alpha->id]);
 
-        $this->putJson("/organizations/{$this->alpha->id}/billing", ['premium_templates_unlocked' => true, 'platform_channels_unlocked' => true])->assertForbidden();
+        $this->putJson("/organizations/{$this->alpha->id}/billing", ['premium_templates_unlocked' => true, 'platform_channels_unlocked' => true, 'extra_storage_gb' => 50])->assertForbidden();
         $this->getJson("/organizations/{$this->alpha->id}/billing")->assertForbidden();
         // The page they read has no switch, and takes no write.
         $this->get('/settings/billing')->assertOk()->assertDontSee('role="switch"', false);
@@ -46,6 +47,21 @@ test('an organization’s own people never unlock their organization, whatever t
     }
 
     switchesUntouched($this->alpha);
+});
+
+test('extra storage smuggled through the organization’s own forms is never kept', function () {
+    $owner = createOrganizationMember($this->alpha, Role::OWNER);
+    $details = ['name' => 'Alpha Mart', 'street' => '1 Main', 'city' => 'Dallas', 'state' => 'TX', 'zip_code' => '75001', 'country' => 'USA'];
+
+    // Settings → Organizations, inside the organization.
+    $this->actingAs($owner)->withSession(['current_organization_id' => $this->alpha->id])
+        ->put('/settings/organization', [...$details, 'extra_storage_gb' => 50])->assertRedirect()->assertSessionHasNoErrors();
+
+    // The platform's own Edit, which is not where storage is given either.
+    $this->actingAs(createSuperAdmin())->flushSession()
+        ->putJson("/organizations/{$this->alpha->id}", [...$details, 'extra_storage_gb' => 50])->assertOk();
+
+    expect($this->alpha->fresh()->extra_storage_gb)->toBe(0);
 });
 
 test('Change Billing cannot be put on an organization’s role, by the platform or from inside', function () {
@@ -91,6 +107,12 @@ test('ids and payloads nobody sends are refused, never a 500, and touch no organ
         ['premium_templates_unlocked' => null, 'platform_channels_unlocked' => null],
     ] as $payload) {
         $this->putJson("/organizations/{$this->alpha->id}/billing", $payload)->assertStatus(422);
+    }
+
+    // The extra storage in every shape nobody sends: refused, and nothing given.
+    foreach ([-1, 51, 1000000, '50', 1.5, [50], ['gb' => 50], true, '1 OR 1=1'] as $extra) {
+        $this->putJson("/organizations/{$this->alpha->id}/billing", ['premium_templates_unlocked' => false, 'platform_channels_unlocked' => false, 'extra_storage_gb' => $extra])
+            ->assertStatus(422)->assertJsonValidationErrors('extra_storage_gb');
     }
 
     // Saying more than the switches changes nothing more.

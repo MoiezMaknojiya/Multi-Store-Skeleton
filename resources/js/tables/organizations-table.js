@@ -6,7 +6,8 @@
  */
 import axios from 'axios';
 import { createCrudTable } from '../core/crud-table-base.js';
-import { validate, required, maxLen, digitsOnly, emailFormat } from '../core/validate.js';
+import { validate, required, maxLen, digitsOnly, emailFormat, requiredMessage, wholeNumber, minNumber, maxNumber, unreadableFields, showFirstError } from '../core/validate.js';
+import { bytesInWords } from '../core/media-file.js';
 
 export function registerOrganizationsTable(Alpine) {
     Alpine.data('organizationsTable', (config = {}) => createCrudTable({
@@ -32,10 +33,12 @@ export function registerOrganizationsTable(Alpine) {
             pendingAdsAccepts: null,   // what the confirm modal is about to do
             savingAds: false,
 
-            /* Billing of one organization (docs/BILLING-SPEC.md §4): its summary, and the two switches as they stand in the dialog. */
+            /* Billing of one organization (docs/BILLING-SPEC.md §4): its summary, and the two switches and the extra storage (§8) as
+             * they stand in the dialog. */
             billingOrganization: null,
             billing: null,
-            billingForm: { premium_templates_unlocked: true, platform_channels_unlocked: true },
+            billingForm: { premium_templates_unlocked: true, platform_channels_unlocked: true, extra_storage_gb: 0 },
+            billingErrors: {},
             billingLoading: false,
             billingFailed: false,
             billingAsked: 0,
@@ -79,6 +82,7 @@ export function registerOrganizationsTable(Alpine) {
             openBilling(organization) {
                 this.billingOrganization = organization;
                 this.billing = null;
+                this.billingErrors = {};
                 this.$dispatch('open-modal', 'organization-billing');
                 this.loadBilling();
             },
@@ -107,7 +111,43 @@ export function registerOrganizationsTable(Alpine) {
                 this.billingForm = {
                     premium_templates_unlocked: billing.features.premium_templates.unlocked,
                     platform_channels_unlocked: billing.features.platform_channels.unlocked,
+                    extra_storage_gb: billing.storage.extra_gb,
                 };
+            },
+
+            /** The wall as the dialog stands: 512 MB and the extra typed, or null while the field holds no number Save would send — left
+             *  empty or half typed (x-model.number reads it as null), or past 0 to 50 — so nothing is said of a wall that cannot be. */
+            billingLimit() {
+                const storage = this.billing?.storage;
+                const extra = this.billingForm.extra_storage_gb;
+                if (!storage || typeof extra !== 'number' || !Number.isInteger(extra) || extra < 0 || extra > storage.max_extra_gb) return null;
+
+                return storage.included + extra * 1024 ** 3;
+            },
+
+            /** "Uses 300 MB of 1.5 GB: 512 MB included and 1 GB extra, free for now" */
+            storageLine() {
+                const storage = this.billing?.storage;
+                if (!storage) return '';
+
+                const limit = this.billingLimit();
+                const included = bytesInWords(storage.included);
+                if (limit === null) return `Uses ${bytesInWords(storage.used)}: ${included} included, and 0 to ${storage.max_extra_gb} GB extra`;
+
+                const extra = this.billingForm.extra_storage_gb;
+
+                return `Uses ${bytesInWords(storage.used)} of ${bytesInWords(limit)}: `
+                    + (extra > 0 ? `${included} included and ${extra} GB extra, free for now` : `${included} included`);
+            },
+
+            /** Said while the wall in the dialog is below what the organization already holds: nothing is deleted, uploads stop. */
+            storageWarning() {
+                const storage = this.billing?.storage;
+                const limit = this.billingLimit();
+                if (!storage || limit === null || storage.used <= limit) return '';
+
+                return `${this.billingOrganization?.name ?? 'This organization'} holds ${bytesInWords(storage.used)}, more than ${bytesInWords(limit)}. `
+                    + 'Nothing is deleted, but it cannot upload until it deletes files to fit.';
             },
 
             /** "4 screens: the first is free, then $5 a month each" */
@@ -142,21 +182,45 @@ export function registerOrganizationsTable(Alpine) {
                 const features = this.billing?.features;
 
                 return !!features && (this.billingForm.premium_templates_unlocked !== features.premium_templates.unlocked
-                    || this.billingForm.platform_channels_unlocked !== features.platform_channels.unlocked);
+                    || this.billingForm.platform_channels_unlocked !== features.platform_channels.unlocked
+                    || String(this.billingForm.extra_storage_gb) !== String(this.billing.storage.extra_gb));
             },
 
             async saveBilling() {
                 if (this.savingBilling || !this.billingChanged()) return;
+
+                // The extra storage as the server takes it, said under its field; letters or half a number in the box reach the
+                // form as '' (unreadableFields), and are refused in the same words.
+                const form = document.querySelector('[dusk="organization-billing"]');
+                const most = this.billing.storage.max_extra_gb;
+                const message = `Extra storage is a whole number of GB, from 0 to ${most}.`;
+                const errors = validate(this.billingForm, {
+                    extra_storage_gb: [requiredMessage(message), wholeNumber(message), minNumber(message, 0), maxNumber(message, most)],
+                });
+                if (unreadableFields(form).extra_storage_gb) errors.extra_storage_gb = [message];
+
+                this.billingErrors = errors;
+                if (Object.keys(errors).length) {
+                    showFirstError(form);
+                    return;
+                }
+
                 this.savingBilling = true;
                 const organization = this.billingOrganization;
 
                 try {
-                    const { data } = await axios.put(`/organizations/${organization.id}/billing`, this.billingForm);
+                    const { data } = await axios.put(`/organizations/${organization.id}/billing`,
+                        { ...this.billingForm, extra_storage_gb: Number(this.billingForm.extra_storage_gb) });
                     if (this.billingOrganization?.id === organization.id) this.showBilling(data.billing);
                     window.toast(data.message, 'success');
                     this.$dispatch('close-modal', 'organization-billing');
                 } catch (error) {
-                    window.toast(error.response?.data?.message ?? 'Could not save the billing.');
+                    if (error.response?.status === 422 && error.response.data.errors?.extra_storage_gb) {
+                        this.billingErrors = error.response.data.errors;
+                        showFirstError(form);
+                    } else {
+                        window.toast(error.response?.data?.message ?? 'Could not save the billing.');
+                    }
                 } finally {
                     this.savingBilling = false;
                 }

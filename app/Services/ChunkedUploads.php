@@ -326,13 +326,15 @@ class ChunkedUploads
     private function reservedInOrganization(int $organizationId, int $size, Closure $create): Upload
     {
         return DB::transaction(function () use ($organizationId, $size, $create) {
-            if (Organization::whereKey($organizationId)->lockForUpdate()->first(['id']) === null) {
+            $organization = Organization::whereKey($organizationId)->lockForUpdate()->first(['id', 'extra_storage_gb']);
+
+            if ($organization === null) {
                 throw ValidationException::withMessages(['file' => 'That organization no longer exists. Reload the page and choose again.']);
             }
 
             $taken = $this->quota->used($organizationId) + (int) Upload::where('organization_id', $organizationId)->open()->sum('size');
 
-            if ($taken + $size > OrganizationStorage::LIMIT_BYTES) {
+            if ($taken + $size > OrganizationStorage::limitOf((int) $organization->extra_storage_gb)) {
                 throw ValidationException::withMessages(['file' => $this->quota->fullMessage($organizationId, $size, $taken)]);
             }
 

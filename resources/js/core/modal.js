@@ -46,23 +46,24 @@ function placeToReturnTo(back, hint) {
 }
 
 /* What a person changes in a dialog is read field by field: each field — or button that chooses (aria-pressed: a
- * weekday, a picked tile) — the person touches is remembered with the value it had just before, and the dialog has
+ * weekday, a picked tile; aria-checked: a switch) — the person touches is remembered with the value it had just before, and the dialog has
  * changes while one of them differs from it. A field the page fills in by itself is never touched, so it never counts
  * (the holding pictures that arrive after Edit Screen opens); typed and taken back is no change. A search box, a file
  * chooser and a password are not changes to keep, nor is anything inside `data-not-a-change`. */
 const NOT_A_CHANGE = ['search', 'file', 'hidden', 'password', 'button', 'submit'];
 
 function changeableOf(target) {
-    const el = target?.closest?.('input, select, textarea, [aria-pressed]') ?? (target?.closest?.('label')?.control ?? null);
+    const el = target?.closest?.('input, select, textarea, [aria-pressed], [role="switch"]') ?? (target?.closest?.('label')?.control ?? null);
 
     if (!el || el.closest('[data-not-a-change]')) return null;
 
     // A button that chooses is one before its type is asked: every <button> is a 'button' or a 'submit'.
-    return el.hasAttribute('aria-pressed') || !NOT_A_CHANGE.includes(el.type) ? el : null;
+    return el.hasAttribute('aria-pressed') || el.getAttribute('role') === 'switch' || !NOT_A_CHANGE.includes(el.type) ? el : null;
 }
 
 function valueOf(el) {
     if (el.hasAttribute('aria-pressed')) return el.getAttribute('aria-pressed');
+    if (el.getAttribute('role') === 'switch') return el.getAttribute('aria-checked');
 
     return el.type === 'checkbox' || el.type === 'radio' ? String(el.checked) : el.value;
 }

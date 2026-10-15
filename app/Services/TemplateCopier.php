@@ -57,7 +57,7 @@ class TemplateCopier
                     $needed = $this->bytesOf($platformFiles->reject(fn (BuilderAsset $file) => $held->has($file->id)));
                     $used = $this->quota->used($organizationId);
 
-                    if ($needed > 0 && $used + $needed > OrganizationStorage::LIMIT_BYTES) {
+                    if ($needed > 0 && $used + $needed > $this->quota->limitFor($organizationId)) {
                         throw ValidationException::withMessages(['template' => $this->quota->fullMessage($organizationId, $needed, $used)]);
                     }
 

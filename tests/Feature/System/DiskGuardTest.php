@@ -7,6 +7,7 @@ use App\Models\Organization;
 use App\Notifications\DiskAlmostFullNotification;
 use App\Notifications\DiskSpaceLowNotification;
 use App\Services\DiskGuard;
+use App\Services\OrganizationStorage;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Http\UploadedFile;
@@ -170,9 +171,9 @@ test('a system that cannot say how much is free refuses nothing', function () {
 
 test('the reserve is read from the config, and sizes are said in gigabytes', function () {
     expect((new DiskGuard(fn () => 0))->reserve())->toBe(5 * GB)
-        ->and(DiskGuard::inWords(5 * GB))->toBe('5 GB')
-        ->and(DiskGuard::inWords((int) (4.25 * GB)))->toBe('4.3 GB')
-        ->and(DiskGuard::inWords(700 * 1024 * 1024))->toBe('700 MB');
+        ->and(OrganizationStorage::inWords(5 * GB))->toBe('5 GB')
+        ->and(OrganizationStorage::inWords((int) (4.25 * GB)))->toBe('4.3 GB')
+        ->and(OrganizationStorage::inWords(700 * 1024 * 1024))->toBe('700 MB');
 });
 
 /** A campaign, as its form sends one. */

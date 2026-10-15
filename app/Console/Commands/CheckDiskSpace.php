@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\DiskGuard;
+use App\Services\OrganizationStorage;
 use Illuminate\Console\Command;
 
 /**
@@ -26,8 +27,8 @@ class CheckDiskSpace extends Command
             return self::SUCCESS;
         }
 
-        $this->info('Free: '.DiskGuard::inWords($free).'. The super admins are warned below '
-            .DiskGuard::inWords($disk->warning()).', and uploads stop below '.DiskGuard::inWords($disk->reserve()).'.');
+        $this->info('Free: '.OrganizationStorage::inWords($free).'. The super admins are warned below '
+            .OrganizationStorage::inWords($disk->warning()).', and uploads stop below '.OrganizationStorage::inWords($disk->reserve()).'.');
 
         if ($disk->warnWhenLow()) {
             $this->warn('Below the warning: the super admins have been emailed.');

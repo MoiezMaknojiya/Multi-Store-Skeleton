@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Services\DiskGuard;
+use App\Services\OrganizationStorage;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
@@ -28,8 +29,8 @@ class DiskAlmostFullNotification extends Notification
         return (new MailMessage)
             ->subject('Uploads are paused: the '.config('app.name').' server is almost full')
             ->view(['emails.disk-almost-full', 'emails.disk-almost-full-text'], [
-                'free' => DiskGuard::inWords($this->freeBytes),
-                'reserve' => DiskGuard::inWords($this->reserveBytes),
+                'free' => OrganizationStorage::inWords($this->freeBytes),
+                'reserve' => OrganizationStorage::inWords($this->reserveBytes),
                 'hours' => DiskGuard::ALERT_HOURS,
                 'url' => route('dashboard'),
             ]);

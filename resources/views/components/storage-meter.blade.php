@@ -1,5 +1,6 @@
 {{--
-    How full an organization's storage is: 512 MB each (App\Services\OrganizationStorage, owner's rule 2026-09-28). Drawn from the
+    How full an organization's storage is: 512 MB each and any extra the platform gives (App\Services\OrganizationStorage, owner's
+    rules 2026-09-28 and 2026-10-15). Drawn from the
     page's own Alpine state — `storage`, {used, limit} as the server sent it, or null for a library with no wall
     (the platform's own), when nothing shows — and its storageText() and storageLevel() methods. The bar turns amber
     at three quarters and red at nine tenths, and a screen reader hears the words ("120 MB of 512 MB used"), not a bare number.

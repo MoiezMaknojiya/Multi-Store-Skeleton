@@ -48,15 +48,16 @@ function fillTo(Organization $organization, int $leftKilobytes): void
 }
 
 /**
- * The moment the organization's row is locked — the upload's second, decisive look — another upload lands first:
- * one PHP process cannot race itself, so the competitor is written from inside the query listener.
+ * The moment the organization's row is locked — the upload's second, decisive look, which reads the wall (its extra storage)
+ * from that row — another upload lands first: one PHP process cannot race itself, so the competitor is written from inside the
+ * query listener.
  */
 function anotherUploadLandsAtTheLock(Organization $organization, int $kilobytes): object
 {
     $landed = (object) ['done' => false];
 
     DB::listen(function (QueryExecuted $query) use ($landed, $organization, $kilobytes) {
-        if (! $landed->done && str_starts_with($query->sql, 'select "id" from "organizations" where "organizations"."id" =')) {
+        if (! $landed->done && str_starts_with($query->sql, 'select "id", "extra_storage_gb" from "organizations" where "organizations"."id" =')) {
             $landed->done = true;
             Media::factory()->create(['organization_id' => $organization->id, 'title' => 'The other upload', 'thumbnail_path' => null, 'size' => $kilobytes * 1024]);
         }

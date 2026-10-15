@@ -101,18 +101,6 @@ class DiskGuard
         return is_numeric($free) ? (int) $free : null;
     }
 
-    /** 5368709120 as "5 GB", 734003200 as "700 MB" — the sizes a server's disk is spoken of in. */
-    public static function inWords(int $bytes): string
-    {
-        $gigabytes = $bytes / (1024 ** 3);
-
-        if ($gigabytes < 1) {
-            return OrganizationStorage::inWords($bytes);
-        }
-
-        return (fmod($gigabytes, 1.0) === 0.0 ? (string) (int) $gigabytes : number_format($gigabytes, 1)).' GB';
-    }
-
     /** Once in ALERT_HOURS: every super admin is told that uploads are paused. */
     private function warnTheSuperAdmins(int $free): void
     {

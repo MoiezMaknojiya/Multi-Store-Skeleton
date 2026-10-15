@@ -14,7 +14,7 @@ use Throwable;
 
 /**
  * How much of the server each organization holds, and the wall at 512 MB (owner's rule, 2026-09-28: "koi bhi store
- * 512 MB se upar na ja sake").
+ * 512 MB se upar na ja sake") and whatever extra storage the platform gives it in whole GB (owner, 2026-10-15; limitOf).
  *
  * An organization's storage is everything its rows name on disk: its library's files (uploads, channel uploads, the
  * Ad Builder's published pages) and the Ad Builder's shelf, each at the size it was stored with, and every
@@ -29,8 +29,26 @@ use Throwable;
  */
 class OrganizationStorage
 {
-    /** 512 MB, as the rest of the panel counts a megabyte (StoreMediaRequest::MAX_KILOBYTES). */
+    /** 512 MB, as the rest of the panel counts a megabyte (StoreMediaRequest::MAX_KILOBYTES): what every organization has. */
     public const LIMIT_BYTES = 512 * 1024 * 1024;
+
+    /** A gigabyte, the step extra storage is given in. */
+    public const GB = 1024 * 1024 * 1024;
+
+    /** The most extra storage the Billing dialog gives one organization, in GB: a mistyped 500 stops at the field. */
+    public const MAX_EXTRA_GB = 50;
+
+    /** The wall of an organization given $extraGb of extra storage: 512 MB, and 1.5 GB with one more. */
+    public static function limitOf(int $extraGb): int
+    {
+        return self::LIMIT_BYTES + max(0, $extraGb) * self::GB;
+    }
+
+    /** The wall of one organization now. */
+    public function limitFor(int $organizationId): int
+    {
+        return self::limitOf((int) Organization::whereKey($organizationId)->value('extra_storage_gb'));
+    }
 
     /** Bytes the organization holds on disk now. */
     public function used(int $organizationId): int
@@ -67,7 +85,7 @@ class OrganizationStorage
      */
     public function summary(?int $organizationId): ?array
     {
-        return $organizationId === null ? null : ['used' => $this->used($organizationId), 'limit' => self::LIMIT_BYTES];
+        return $organizationId === null ? null : ['used' => $this->used($organizationId), 'limit' => $this->limitFor($organizationId)];
     }
 
     /**
@@ -82,7 +100,7 @@ class OrganizationStorage
 
         $used = $this->used($organizationId);
 
-        if ($used + $bytes > self::LIMIT_BYTES) {
+        if ($used + $bytes > $this->limitFor($organizationId)) {
             throw ValidationException::withMessages([$attribute => $this->fullMessage($organizationId, $bytes, $used)]);
         }
     }
@@ -108,13 +126,16 @@ class OrganizationStorage
         }
 
         return DB::transaction(function () use ($organizationId, $bytes, $write, $attribute) {
-            if (Organization::whereKey($organizationId)->lockForUpdate()->first(['id']) === null) {
+            // The wall is read from the locked row too, so extra storage taken away meanwhile is the wall this write meets.
+            $organization = Organization::whereKey($organizationId)->lockForUpdate()->first(['id', 'extra_storage_gb']);
+
+            if ($organization === null) {
                 throw ValidationException::withMessages([$attribute => 'That organization no longer exists. Reload the page and choose again.']);
             }
 
             $used = $this->used($organizationId);
 
-            if ($bytes > 0 && $used + $bytes > self::LIMIT_BYTES) {
+            if ($bytes > 0 && $used + $bytes > self::limitOf((int) $organization->extra_storage_gb)) {
                 throw ValidationException::withMessages([$attribute => $this->fullMessage($organizationId, $bytes, $used)]);
             }
 
@@ -140,18 +161,19 @@ class OrganizationStorage
         }
     }
 
-    /** "Not enough storage: this needs 120.4 MB, and Alpha Mart has 30.2 MB left of its 512 MB. …" */
+    /** "Not enough storage: this needs 120.4 MB, and Alpha Mart has 30.2 MB left of its 512 MB. …" — or of its 1.5 GB. */
     public function fullMessage(int $organizationId, int $needed, int $used): string
     {
-        $name = Organization::whereKey($organizationId)->value('name') ?? 'This organization';
-        $left = max(0, self::LIMIT_BYTES - $used);
+        $organization = Organization::whereKey($organizationId)->first(['name', 'extra_storage_gb']);
+        $limit = self::limitOf((int) $organization?->extra_storage_gb);
+        $left = max(0, $limit - $used);
 
-        return 'Not enough storage: this needs '.self::inWords($needed).', and '.$name.' has '
+        return 'Not enough storage: this needs '.self::inWords($needed).', and '.($organization->name ?? 'This organization').' has '
             .($left > 0 ? self::inWords($left).' left' : 'no space left')
-            .' of its '.self::inWords(self::LIMIT_BYTES).'. Delete files you no longer use to make room.';
+            .' of its '.self::inWords($limit).'. Delete files you no longer use to make room.';
     }
 
-    /** 1536 as "2 KB", 126 353 408 as "120.5 MB", 536 870 912 as "512 MB". */
+    /** 1536 as "2 KB", 126 353 408 as "120.5 MB", 536 870 912 as "512 MB", 1 610 612 736 as "1.5 GB" (bytesInWords in media-file.js the same). */
     public static function inWords(int $bytes): string
     {
         if ($bytes <= 0) {
@@ -162,9 +184,9 @@ class OrganizationStorage
             return max(1, (int) ceil($bytes / 1024)).' KB';
         }
 
-        $megabytes = $bytes / (1024 * 1024);
+        [$amount, $unit] = $bytes < self::GB ? [$bytes / (1024 * 1024), 'MB'] : [$bytes / self::GB, 'GB'];
 
-        return (fmod($megabytes, 1.0) === 0.0 ? (string) (int) $megabytes : number_format($megabytes, 1)).' MB';
+        return (fmod($amount, 1.0) === 0.0 ? (string) (int) $amount : number_format($amount, 1)).' '.$unit;
     }
 
     private function sizeOnDisk(string $disk, string $path): int
