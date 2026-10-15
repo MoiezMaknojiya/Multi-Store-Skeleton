@@ -115,7 +115,7 @@ class ChunkedUploadFlowTest extends DuskTestCase
             $browser->script('window.__samePage = true;');
 
             try {
-                $this->network($browser, self::SLOW);
+                $this->network($browser, upload: self::SLOW);
                 $this->choose($browser, 'media-file', "window.__noise('Slow poster.gif', 2450)");
                 $this->waitForStatus($browser, 'media', 'Slow poster.gif', '/^Uploading ([1-9]\d?)%/', 60);
 
@@ -130,13 +130,13 @@ class ChunkedUploadFlowTest extends DuskTestCase
                 $this->waitForStatus($browser, 'media', 'Slow poster.gif', '/^Uploading \d+%/', 10);
 
                 // The connection drops: the row says so, and waits.
-                $this->network($browser, self::SLOW, offline: true);
+                $this->network($browser, offline: true, upload: self::SLOW);
                 $this->waitForStatus($browser, 'media', 'Slow poster.gif', '/^Connection lost\. Waiting for the internet…$/', 10);
                 $browser->pause(2000);
                 $this->assertSame(0, Media::count());
 
                 // Back, at full speed: it carries on from where the server kept it, on the same page.
-                $this->network($browser, null);
+                $this->network($browser);
                 $this->waitForStatus($browser, 'media', 'Slow poster.gif', '/^Added$/', 60);
                 $this->assertSame(1, Media::count());
                 $this->assertTrue($browser->script('return window.__samePage === true;')[0], 'the page was loaded again');
@@ -144,7 +144,7 @@ class ChunkedUploadFlowTest extends DuskTestCase
                     hash('sha256', (string) Storage::disk('public')->get(Media::sole()->path)));
 
                 // Cancelled on its way: the row goes, and so does the upload on the server.
-                $this->network($browser, self::SLOW);
+                $this->network($browser, upload: self::SLOW);
                 $this->choose($browser, 'media-file', "window.__noise('Changed my mind.gif', 2450)");
                 $this->waitForStatus($browser, 'media', 'Changed my mind.gif', '/^Uploading \d+%/', 60);
                 $this->assertSame(1, Upload::count());
@@ -166,7 +166,7 @@ class ChunkedUploadFlowTest extends DuskTestCase
                 $browser->waitUsing(20, 200, fn () => Upload::count() === 0, 'the cancelled upload stayed on the server');
                 $this->assertSame(1, Media::count());
             } finally {
-                $this->network($browser, null);
+                $this->network($browser);
             }
         });
     }
@@ -183,7 +183,7 @@ class ChunkedUploadFlowTest extends DuskTestCase
             $this->jsType($browser, '@campaign-name', 'Summer Cola');
 
             try {
-                $this->network($browser, self::SLOW);
+                $this->network($browser, upload: self::SLOW);
                 $this->choose($browser, 'campaign-file', "window.__noise('Summer advert.gif', 2060)");
                 $this->waitForStatus($browser, 'campaign', 'Summer advert.gif', '/^Uploading \d+%/', 60);
 
@@ -195,10 +195,10 @@ class ChunkedUploadFlowTest extends DuskTestCase
                 $browser->pause(500);
                 $this->assertSame(0, Campaign::count());
 
-                $this->network($browser, null);
+                $this->network($browser);
                 $this->waitForStatus($browser, 'campaign', 'Summer advert.gif', '/^Uploaded\. It is added when you save\.$/', 60);
             } finally {
-                $this->network($browser, null);
+                $this->network($browser);
             }
 
             $this->assertFalse($browser->script('return document.querySelector(\'[dusk="campaign-save"]\').disabled;')[0]);
@@ -217,22 +217,6 @@ class ChunkedUploadFlowTest extends DuskTestCase
         $this->waitForAlpine($browser);
         // The drop box is on the page itself (owner, 2026-09-30), not in a dialog.
         $browser->waitFor('@media-dropzone');
-    }
-
-    /**
-     * Chrome's network: uploads at most $uploadBytesPerSecond (null for no limit), or no network at all. The page hears
-     * it as a real one: `navigator.onLine`, and the `offline` and `online` events.
-     */
-    private function network(Browser $browser, ?int $uploadBytesPerSecond, bool $offline = false): void
-    {
-        $tools = new ChromeDevToolsDriver($browser->driver);
-        $tools->execute('Network.enable');
-        $tools->execute('Network.emulateNetworkConditions', [
-            'offline' => $offline,
-            'latency' => 0,
-            'downloadThroughput' => -1,
-            'uploadThroughput' => $uploadBytesPerSecond ?? -1,
-        ]);
     }
 
     /** Files made in the page: a plain picture (a PNG), and a GIF of noise $side pixels square (about 1.13 bytes a pixel). */

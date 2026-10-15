@@ -13,6 +13,7 @@ use App\Models\PlayerAppRelease;
 use App\Models\Role;
 use App\Models\Upload;
 use App\Models\User;
+use Facebook\WebDriver\Chrome\ChromeDevToolsDriver;
 use Facebook\WebDriver\Chrome\ChromeOptions;
 use Facebook\WebDriver\Exception\TimeoutException;
 use Facebook\WebDriver\Remote\DesiredCapabilities;
@@ -594,6 +595,34 @@ abstract class DuskTestCase extends BaseTestCase
                 }
             }
         }
+    }
+
+    /**
+     * Chrome's own line for this tab, from now until it is called again — with no arguments, a normal line: every
+     * answer starts no sooner than $latency ms after its request left (a minimum, not added to the server's own
+     * time), uploads and downloads go at most $upload and $download bytes a second (null for no limit), and offline
+     * there is no connection at all, which the page hears as a real one: `navigator.onLine` and the `offline` and
+     * `online` events. It holds across navigations in the tab.
+     *
+     * Network.emulateNetworkConditions did all of it in one command; Chrome has deprecated it for a rule on the
+     * requests — one rule whose empty urlPattern matches every request — and the navigator's own state.
+     */
+    protected function network(Browser $browser, int $latency = 0, bool $offline = false, ?int $upload = null, ?int $download = null): void
+    {
+        $line = [
+            'offline' => $offline,
+            'latency' => $latency,
+            'downloadThroughput' => $download ?? -1,
+            'uploadThroughput' => $upload ?? -1,
+        ];
+        $normal = $line === ['offline' => false, 'latency' => 0, 'downloadThroughput' => -1, 'uploadThroughput' => -1];
+
+        $tools = new ChromeDevToolsDriver($browser->driver);
+        $tools->execute('Network.enable');
+        $tools->execute('Network.emulateNetworkConditionsByRule', [
+            'matchedNetworkConditions' => $normal ? [] : [['urlPattern' => ''] + $line],
+        ]);
+        $tools->execute('Network.overrideNetworkState', $line);
     }
 
     /**

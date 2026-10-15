@@ -341,12 +341,7 @@ class AdEditorPolishFlowTest extends DuskTestCase
 
             // A slow line: the picture takes some twenty seconds to arrive — far longer than the photograph's own
             // fetch waits (eight seconds) once Save is pressed.
-            $tools = new ChromeDevToolsDriver($browser->driver);
-            $tools->execute('Network.enable');
-            $tools->execute('Network.emulateNetworkConditions', [
-                'offline' => false, 'latency' => 0, 'uploadThroughput' => -1,
-                'downloadThroughput' => max(1, (int) ($picture->size / 20)),
-            ]);
+            $this->network($browser, download: max(1, (int) ($picture->size / 20)));
 
             try {
                 $this->clickAndAwait($browser, '@add-image', fn (Browser $b) => $b->waitFor('@asset-picker', 3));
@@ -359,7 +354,7 @@ class AdEditorPolishFlowTest extends DuskTestCase
                 $this->jsClick($browser, '@ad-save');
                 $browser->waitUsing(45, 250, fn () => BuilderAd::where('name', 'Slow picture')->whereNotNull('thumbnail_path')->exists());
             } finally {
-                $tools->execute('Network.emulateNetworkConditions', ['offline' => false, 'latency' => 0, 'downloadThroughput' => -1, 'uploadThroughput' => -1]);
+                $this->network($browser);
             }
 
             // The picture's red where the picture is, not the stage showing through a gap.

@@ -384,14 +384,6 @@ class AdsPageStressTest extends DuskTestCase
         }
     }
 
-    /** Latency in ms for every request — or no connection at all. */
-    private function network(Browser $browser, int $latency, bool $offline = false): void
-    {
-        $tools = new ChromeDevToolsDriver($browser->driver);
-        $tools->execute('Network.enable');
-        $tools->execute('Network.emulateNetworkConditions', ['offline' => $offline, 'latency' => $latency, 'downloadThroughput' => -1, 'uploadThroughput' => -1]);
-    }
-
     /** The middle of an element, brought into sight first unless told not to move the page. */
     private function centreOf(Browser $browser, string $css, bool $scroll = true): array
     {

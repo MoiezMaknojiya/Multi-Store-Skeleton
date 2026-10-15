@@ -393,11 +393,4 @@ class BillingFlowTest extends DuskTestCase
         return $browser->script('const el = document.querySelector('.json_encode($css).'); el.scrollIntoView({ block: "center" }); '
             .'const r = el.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)];')[0];
     }
-
-    private function network(Browser $browser, int $latency): void
-    {
-        $tools = new ChromeDevToolsDriver($browser->driver);
-        $tools->execute('Network.enable');
-        $tools->execute('Network.emulateNetworkConditions', ['offline' => false, 'latency' => $latency, 'downloadThroughput' => -1, 'uploadThroughput' => -1]);
-    }
 }
