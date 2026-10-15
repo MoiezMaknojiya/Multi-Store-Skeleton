@@ -3,6 +3,19 @@
  * behind the menu, every time. Only the desktop's open/collapsed choice is remembered. */
 const wideScreen = () => window.matchMedia('(min-width: 1024px)').matches;
 
+/* Light to dark, or back, at once (owner, 2026-10-15): with their transitions running, the cards, fields and buttons each faded
+ * their colours at their own speed and the page looked odd while it changed. `theme-switching` (app.css) holds every transition
+ * off; the new colours are worked out while it is on, and it comes off straight after, so a hover still eases (the next-themes
+ * way, disableTransitionOnChange). */
+function switchThemeAtOnce(dark) {
+    const page = document.documentElement;
+
+    page.classList.add('theme-switching');
+    page.classList.toggle('dark', dark);
+    window.getComputedStyle(page).getPropertyValue('color');
+    setTimeout(() => page.classList.remove('theme-switching'), 1);
+}
+
 export function registerLayoutHandler(Alpine) {
     Alpine.data('layoutHandler', () => ({
         sidebarOpen: wideScreen() && localStorage.getItem('sidebarOpen') !== 'false',
@@ -18,7 +31,7 @@ export function registerLayoutHandler(Alpine) {
 
             this.$watch('darkMode', val => {
                 localStorage.setItem('darkMode', val);
-                document.documentElement.classList.toggle('dark', val);
+                switchThemeAtOnce(val);
             });
 
             this.$watch('sidebarOpen', val => {

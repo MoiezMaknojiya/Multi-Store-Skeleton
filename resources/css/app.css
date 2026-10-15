@@ -758,6 +758,16 @@ html.dark [data-theme-icon="light"] {
     }
 }
 
+/* Light to dark, or back, changes at once (owner, 2026-10-15: the cards looked odd while it changed): for the moment of the switch
+   nothing eases its colours, each at its own speed (core/layout.js puts this class on the page and takes it off again), while a
+   hover or a focus still eases as before. */
+.theme-switching,
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+    transition: none !important;
+}
+
 /* A control drawn small for a mouse — an icon in the header, a back arrow, a sort heading, a chip on a poster — that a finger
    must also hit: 44 px on a touch screen, as every btn-* is (below). */
 @utility touch-target {

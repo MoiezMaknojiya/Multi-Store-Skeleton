@@ -63,6 +63,43 @@ class DashboardFlowTest extends DuskTestCase
         });
     }
 
+    /**
+     * Light to dark and back changes at once (owner, 2026-10-15: the cards looked odd while it changed): the switch starts no CSS
+     * transition anywhere on the page, both ways, while a card keeps its own for a hover.
+     */
+    public function test_switching_light_and_dark_starts_no_transition_and_a_card_still_eases_on_hover(): void
+    {
+        $this->seedSuperAdmin();
+        $organization = Organization::factory()->create(['name' => 'Corner Organization']);
+        $owner = $this->organizationMember($organization);
+
+        $this->browse(function (Browser $browser) use ($owner) {
+            $this->freshSession($browser);
+            $browser->loginAs($owner)->visit('/dashboard')->waitFor('@dashboard-card-media');
+            $browser->script("localStorage.setItem('darkMode', 'false'); document.documentElement.classList.remove('dark');");
+            $browser->refresh()->waitFor('@dashboard-card-media');
+            $this->waitForAlpine($browser);
+
+            try {
+                foreach ([true, false, true, false] as $dark) {
+                    $browser->click($dark ? '[aria-label="Switch to dark mode"]' : '[aria-label="Switch to light mode"]');
+                    $seen = $browser->script('return [document.documentElement.classList.contains("dark"),'
+                        .' document.getAnimations().filter((a) => a.constructor.name === "CSSTransition").map((a) => a.effect.target.tagName + " " + a.transitionProperty)];')[0];
+
+                    $this->assertSame($dark, $seen[0], 'the theme did not change');
+                    $this->assertSame([], $seen[1], 'switching to '.($dark ? 'dark' : 'light').' eased colours: '.implode(', ', array_slice($seen[1], 0, 5)));
+                    $browser->pause(300);
+                }
+
+                // Nothing held off afterwards: a card still eases its colours on a hover.
+                $this->assertSame('0.15s', $browser->script('return getComputedStyle(document.querySelector(\'[dusk="dashboard-card-media"]\')).transitionDuration;')[0]);
+                $this->assertFalse($browser->script('return document.documentElement.classList.contains("theme-switching");')[0]);
+            } finally {
+                $browser->script("localStorage.setItem('darkMode', 'false');");
+            }
+        });
+    }
+
     /** Recent activity says the exact moment beside "1 hour ago", in the reader's own timezone (owner, 2026-10-15). */
     public function test_recent_activity_says_the_exact_moment_in_the_readers_own_timezone(): void
     {
