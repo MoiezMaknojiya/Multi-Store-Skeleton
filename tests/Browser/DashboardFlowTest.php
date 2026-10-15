@@ -2,7 +2,9 @@
 
 namespace Tests\Browser;
 
+use App\Models\ActivityLog;
 use App\Models\Organization;
+use Facebook\WebDriver\Chrome\ChromeDevToolsDriver;
 use Facebook\WebDriver\WebDriverKeys;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
@@ -58,6 +60,48 @@ class DashboardFlowTest extends DuskTestCase
             $browser->visit('/dashboard')->waitFor('@dashboard-card-media')
                 ->click('@dashboard-card-media')
                 ->waitForLocation('/media');
+        });
+    }
+
+    /** Recent activity says the exact moment beside "1 hour ago", in the reader's own timezone (owner, 2026-10-15). */
+    public function test_recent_activity_says_the_exact_moment_in_the_readers_own_timezone(): void
+    {
+        $admin = $this->seedSuperAdmin();
+        ActivityLog::create(['action' => 'test.long_ago', 'description' => 'Something last year', 'actor_name' => 'Ali Raza'])
+            ->forceFill(['created_at' => '2025-03-04 15:07:00'])->save();
+        $recent = ActivityLog::create(['action' => 'test.recent', 'description' => 'Something an hour ago', 'actor_name' => 'Ali Raza']);
+        $recent->forceFill(['created_at' => now()->subHour()])->save();
+
+        // As the browser in Chicago writes it: no year for this one, which is this year there.
+        $local = $recent->fresh()->created_at->setTimezone('America/Chicago');
+        $expected = $local->format('M j').($local->year === now('America/Chicago')->year ? '' : $local->format(', Y')).', '.$local->format('g:i A');
+
+        $this->browse(function (Browser $browser) use ($admin, $expected) {
+            $this->freshSession($browser);
+            $tools = new ChromeDevToolsDriver($browser->driver);
+            $tools->execute('Emulation.setTimezoneOverride', ['timezoneId' => 'America/Chicago']);
+            $tools->execute('Emulation.setLocaleOverride', ['locale' => 'en-US']);
+
+            try {
+                $browser->loginAs($admin)->visit('/dashboard')->waitFor('@dashboard-activity');
+                // Chrome puts a narrow no-break space before AM/PM: read as a plain space.
+                $said = $browser->script('return [...document.querySelectorAll(\'[dusk="dashboard-activity-entry"]\')].map((li) => li.innerText.replace(/\s+/g, " ").trim());')[0];
+
+                $this->assertSame([
+                    "Something an hour ago Ali Raza · 1 hour ago ({$expected})",
+                    'Something last year Ali Raza · 1 year ago (Mar 4, 2025, 9:07 AM)',
+                ], $said);
+                // Still a time a machine reads, and no raw stamp left as a tooltip.
+                $this->assertNull($browser->attribute('@dashboard-activity-when', 'title'));
+                $this->assertNotEmpty($browser->attribute('@dashboard-activity-when', 'datetime'));
+
+                $browser->resize(375, 812)->refresh()->waitFor('@dashboard-activity');
+                $this->assertLessThanOrEqual(0, $browser->script('return document.documentElement.scrollWidth - document.documentElement.clientWidth;')[0], 'The page scrolls sideways on a phone');
+                $browser->screenshot('dashboard-activity-exact-time-phone')->resize(1440, 900);
+            } finally {
+                $tools->execute('Emulation.setTimezoneOverride', ['timezoneId' => '']);
+                $tools->execute('Emulation.setLocaleOverride', []);
+            }
         });
     }
 

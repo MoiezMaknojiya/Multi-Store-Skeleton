@@ -1,5 +1,6 @@
 {{-- The last few entries of the activity log the person may read (the organization's own inside an organization), and the way to
-     the whole log. --}}
+     the whole log. Each says when as "1 hour ago (Oct 13, 8:42 PM)": the exact moment in the reader's own timezone, written by the
+     browser (core/local-time.js; owner, 2026-10-15). --}}
 <section class="card" aria-labelledby="dashboard-activity-title" dusk="dashboard-activity">
     <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-gray-700">
         <h2 id="dashboard-activity-title" class="text-base font-semibold text-gray-800 dark:text-white">Recent activity</h2>
@@ -17,7 +18,7 @@
                 <li class="px-5 py-3" dusk="dashboard-activity-entry">
                     <p class="text-sm text-gray-800 dark:text-gray-100 break-words">{{ $entry['what'] }}</p>
                     <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400 break-words">
-                        {{ $entry['who'] }}@if ($entry['at']) · <time datetime="{{ $entry['at'] }}" title="{{ $entry['at'] }}">{{ $entry['when'] }}</time>@endif
+                        {{ $entry['who'] }}@if ($entry['at']) · <time datetime="{{ $entry['at'] }}" data-local-time dusk="dashboard-activity-when">{{ $entry['when'] }}</time>@endif
                     </p>
                 </li>
             @endforeach

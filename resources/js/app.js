@@ -18,6 +18,7 @@ import { registerDigitsOnly }        from './core/digits-only.js';
 import { registerDropGuard }         from './core/drop-guard.js';
 import { registerTabLists }          from './core/tablist.js';
 import { registerBackLinks }         from './core/back-link.js';
+import { registerLocalTimes }        from './core/local-time.js';
 import { registerRegisterForm }      from './pages/register-form.js';
 import { registerAuthForms }         from './pages/auth-forms.js';
 import { registerOrganizationSettings }     from './pages/organization-settings.js';
@@ -101,6 +102,9 @@ registerTabLists();
 
 /* A way back to a list returns to it as it was left, when that is where the person came from. */
 registerBackLinks();
+
+/* An exact moment beside a relative one, in the reader's own timezone (`<time data-local-time>`). */
+registerLocalTimes();
 
 /* Register layout & UI components */
 registerHeader(Alpine);
