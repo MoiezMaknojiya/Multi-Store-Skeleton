@@ -49,7 +49,14 @@
                             </td></tr>
                         </template>
 
-                        <template x-if="!loading && mainRoles().length === 0">
+                        {{-- A list that did not come says so, with Try Again — never "No roles yet." over roles that exist. --}}
+                        <template x-if="!loading && loadFailed">
+                            <tr><td colspan="5" class="px-5 py-10">
+                                <x-load-failed retry="fetch()" what="the roles" dusk="roles-load-failed" />
+                            </td></tr>
+                        </template>
+
+                        <template x-if="!loading && !loadFailed && mainRoles().length === 0">
                             <tr><td colspan="5" class="px-5 py-6 text-center text-muted-soft">No roles yet.</td></tr>
                         </template>
 
@@ -140,7 +147,7 @@
 
         {{-- Create / edit --}}
         <x-modal name="role-form" :show="false" maxWidth="2xl" focusable persistent>
-            <form @submit.prevent="save()" novalidate class="p-6 space-y-5" dusk="role-form">
+            <form @submit.prevent="save($event)" novalidate class="p-6 space-y-5" dusk="role-form">
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100"
                         x-text="editingRole ? 'Edit ' + editingRole.name : {{ Js::from($organization ? 'Create Custom Role' : 'Create Role') }}"></h2>

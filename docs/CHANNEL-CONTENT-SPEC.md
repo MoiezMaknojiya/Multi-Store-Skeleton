@@ -197,7 +197,13 @@ plays twice in one pass, so:
   playlist still holding such a line, so it never spreads to more televisions.
 - Two people at the same moment, one putting a file on a playlist and one putting it into a channel, cannot
   both land it: both writes lock the file's row inside their transaction and look again under the lock
-  (`PlaylistController::assertFilesAreInNoChannelUnderLock`, `ChannelAdController::refuseAFileAPlaylistHolds`).
+  (`PlaylistController::holdTheLinesRows` then `assertFilesAreInNoChannelUnderLock`; `ChannelAdController::holdTheFile`
+  then `refuseAFileAPlaylistHolds`). Since 2026-10-15 every write that touches a file and a screen takes its locks in one
+  order, its first lock its transaction's first statement — files, then channels, then screens, then lines, each in id
+  order; a playlist's save and Copy to other screens take every one of their locks before any plain read, while a file's
+  or an ad's delete reads its channels between the file and its screens — and a file deleted
+  while an Add Ad was on its way is refused under the form's field ("{title} was deleted meanwhile. Choose another
+  file."), never the foreign key's 500 (rule 02, **Channels** (6)).
 - Taken out of every channel — or off every playlist — a file is the other side's to choose again.
 - The holding picture is neither a playlist line nor a channel's ad and keeps its own list.
 - An Ad Builder ad follows the same rule as soon as it is published: while a channel shows it, the playlist's

@@ -20,6 +20,9 @@ class BuilderAssetRequest extends FormRequest
 {
     use TakesAFinishedUpload;
 
+    /** The refusal of a shelf that is not one of the Owner list's (`organization_id`). */
+    private const SHELF_FROM_THE_LIST = 'Choose Platform or one organization from the Owner list.';
+
     /** A file sent in chunks arrives as `upload`, and is the `file` below from here on (docs/UPLOADS-SPEC.md). */
     protected function prepareForValidation(): void
     {
@@ -43,9 +46,10 @@ class BuilderAssetRequest extends FormRequest
             'height' => ['nullable', 'integer', 'min:1', 'max:16384'],
             'poster' => ['nullable', 'string', 'starts_with:data:image/', 'max:'.StoreMediaRequest::POSTER_MAX_CHARACTERS],
 
-            // The organization, said by the platform team only (an organization's person uploads to the organization they stand
-            // in, and whatever they send here is not read). Whether it exists is the controller's.
-            'organization_id' => ['nullable', 'integer', 'min:1'],
+            // The shelf it joins, said by the platform team only: an organization's id from the Owner list, or nothing for the
+            // platform's own. An organization's person uploads to the organization they stand in, and whatever they send here is
+            // dropped unread — their page has no Owner list to say it in. Whether it exists is the controller's.
+            'organization_id' => $this->user()?->globalRole() !== null ? ['nullable', 'integer', 'min:1'] : ['exclude'],
         ];
     }
 
@@ -57,6 +61,9 @@ class BuilderAssetRequest extends FormRequest
         return [
             'file.mimes' => 'Only '.StoreMediaRequest::FORMATS_IN_WORDS.' can be uploaded.',
             'file.max' => StoreMediaRequest::tooLargeMessage(),
+            // The Assets page's Owner list, as a request made by hand might bend it: a list, a word, or nought.
+            'organization_id.integer' => self::SHELF_FROM_THE_LIST,
+            'organization_id.min' => self::SHELF_FROM_THE_LIST,
         ];
     }
 }

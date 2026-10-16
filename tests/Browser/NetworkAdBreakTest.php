@@ -293,7 +293,7 @@ class NetworkAdBreakTest extends DuskTestCase
             $tv->visit('/player');
 
             $frame = 'document.querySelector("#layer-a:not([hidden]) iframe, #layer-b:not([hidden]) iframe")';
-            $isThePage = "(({$frame} || {}).dataset || {}).src && {$frame}.dataset.src.includes('/ads/{$ad->id}/')";
+            $isThePage = "(({$frame} || {}).dataset || {}).src && {$frame}.dataset.src.includes('/ads/{$ad->storage_key}/')";
 
             // The page comes on, and its frame is noted.
             $tv->waitUsing(30, 200, fn () => (bool) $tv->script("return {$isThePage};")[0]);

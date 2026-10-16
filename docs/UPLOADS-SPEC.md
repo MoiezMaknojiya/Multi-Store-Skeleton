@@ -7,7 +7,9 @@
 > What a file may be — its formats, size and length, the organization's 512 MB, the server's reserve — is still ruled by
 > `.claude/rules/02-project-conventions.md` (**Upload limits**), and nothing here loosens it.
 >
-> **Status: built, 2026-09-29.** Pictures made light on their way in: built, 2026-10-05 (§7).
+> **Status: built, 2026-09-29.** Pictures made light on their way in: built, 2026-10-05 (§7). The whole-site review of
+> 2026-10-15 changed what an open upload reserves, how long a finished one lives, where it may join and when it is given up
+> (§1–§4), and how many fill bytes a JPEG may have (§7).
 
 ---
 
@@ -31,8 +33,10 @@
    poster frame (`readVideoMeta`, `videoLengthError`). A refusal is said on the file's own row, in the server's words.
 2. `POST /uploads` opens an upload with its size and what it is for. The server refuses here, before any byte, what
    it would refuse at the end: the permission, the place (an organization the person works in, a channel within reach), the
-   format by name, the size, the organization's room **counting every upload still open for that organization**, and the server's
-   reserve counting every open upload's missing bytes.
+   format by name, the size, the organization's room **counting every upload still on its way into that organization** — and
+   every open upload into it, finished or not, never more than its storage together (2026-10-15: a finished upload is its
+   door's to decide again, and one the door refused held the room for a day while the meter showed it free;
+   `ChunkedUploads::reservedInOrganization`) — and the server's reserve counting every open upload's missing bytes.
 3. `PATCH /uploads/{id}` carries each 5 MB chunk at its offset; `HEAD` says how far it got; `DELETE` gives it up.
 4. With every byte in, the page posts the form it always posted, with `upload` in place of `file`. The row is
    made as it always was, and the upload is forgotten.
@@ -43,9 +47,9 @@
 | --- | --- |
 | `OPTIONS /uploads` | 204, `Tus-Version: 1.0.0`, `Tus-Extension: creation,termination`, `Tus-Max-Size` |
 | `POST /uploads` | 201 and `Location`; 413 too large; 415 a format that is not taken; 422 a refusal with its reason; 429 too many open |
-| `HEAD /uploads/{id}` | 200, `Upload-Offset`, `Upload-Length`, `Cache-Control: no-organization`; 404 for anybody else's |
+| `HEAD /uploads/{id}` | 200, `Upload-Offset`, `Upload-Length`, `Cache-Control: no-store`; 404 for anybody else's |
 | `PATCH /uploads/{id}` | 204 and the new `Upload-Offset`; 409 at the wrong offset; 415 not `application/offset+octet-stream`; 413 past the end |
-| `DELETE /uploads/{id}` | 204 |
+| `DELETE /uploads/{id}` | 204; 409 "This file is being added. Wait a moment." while its door is making its row from it (`ChunkedUploads::cancel`) |
 
 Every answer carries `Tus-Resumable: 1.0.0`. The routes sit behind `auth`, `verified` and the named limiter
 `uploads` (a chunk is a request, and 5 MB chunks on a fast line are many), and keep CSRF: the browser sends the page's
@@ -53,7 +57,9 @@ token with every request.
 
 **`uploads`** (a row per open upload, `App\Models\Upload`): a random uuid, the user, the organization it will count to (NULL for
 the platform's library and the ads network; the foreign key cascades), `purpose` (`media`, `channel`, `campaign`,
-`asset`, and `app-release` for the TV app — §3), the file's name and claimed type, its `size` and the bytes `received`, and `expires_at` — 24 hours. The bytes
+`asset`, and `app-release` for the TV app — §3), the file's name and claimed type (the Upload-Metadata's type kept only as a plain
+type of at most the 100 characters `file_type` holds, `ChunkedUploads::typeOf`), its `size` and the bytes `received`, and
+`expires_at` — 24 hours, and at most two once the last byte is in. The bytes
 are `{id}.part` on the `uploads` disk (config/filesystems.php): `storage/app/private/uploads`, private, never under
 `public/` — and a root of its own for the browser tests (`storage/app/dusk-uploads`) and the backend tests
 (`storage/framework/testing/uploads`), as the `public` disk has, because the prune takes every part no row names and
@@ -65,6 +71,7 @@ one database names none of another's.
 | Largest chunk the server takes | 16 MB |
 | Open uploads per person | 20 |
 | An unfinished upload is kept | 24 hours, then `uploads:prune` (hourly) takes it, and any part no row names |
+| A finished upload nobody posts is kept | 2 hours after its last byte (`ChunkedUploads::FINISHED_LIFETIME_HOURS`, set in `append`, never lengthening its day), then the prune takes it (2026-10-15: kept a day, twenty were 5 GB of the server's disk one person could hold) |
 | Uploads one page sends at once | 3 |
 | A chunk that failed is sent again | at once, after 1, 3, 5, 10, 20 and 30 seconds, then every minute: some 25 minutes, the count starting again whenever a chunk gets through |
 | A row that has sent nothing says "Connection trouble…" | after 6 seconds |
@@ -79,14 +86,31 @@ through the foreign key, and the next prune takes their parts.
 (`Concerns\TakesAFinishedUpload`): the person's own upload, complete, unexpired and opened for that purpose, becomes
 the request's `file` before any rule runs. Anything else is refused on `file`: "That upload is not finished, or it
 has expired. Choose the file again." — and a request carrying both is refused too. The controllers forget the upload
-once its row is made; a refused one stays for the person to try again, until it expires.
+once its row is made. Since 2026-10-15:
+
+- **One door at a time.** A door holds `ChunkedUploads::finishLock` (`upload-finish:{id}`) while it reads the finished upload
+  and makes its row: a second request naming it is refused ("This file is being added already. Wait a moment."), and the
+  others give way to it, none of them waiting: the box's × answers 409 ("This file is being added. Wait a moment."),
+  `uploads:prune` leaves the upload for the door or its next run, and the TV app's inspect refuses on `file` with "This
+  file is being added already. Wait a moment." (422).
+- **The place it was opened for.** An upload joins only the library or shelf it was opened for: one posted for another
+  organization than `uploads.organization_id` is refused and given up — "This file was uploaded for another library.
+  Choose it again to add it here." ("owner" on the shelf; `TakesAFinishedUpload::assertUploadOpenedFor`, which the Media
+  page, a channel's Add Ad and the shelf call). A file posted whole is not asked: the door's own target is where it goes.
+- **Refused for good, or kept.** A file the rules refuse for what it is — its format, its size, a video's length or one
+  nobody can measure, an APK that is not the TV app or not newer — is given up at once (`failedValidation` →
+  `ChunkedUploads::refuseForGood`), and the answer says `upload_given_up`, so the row offers no Try Again. A refusal room or
+  time can fix (the organization's wall, a date, the seconds) keeps the upload for Try Again, until it expires. An upload
+  that is gone or never finished is answered `upload_given_up` too: posting it again cannot help.
 
 **A fifth door, the TV app (2026-10-10):** Developer → TV App takes the Android player's APK through the same box in
 `form` mode (`kind="apk"`): purpose `app-release`, opened only for a super admin holding Upload TV App (403 otherwise),
 an `.apk` name (415, "Only the TV app can be uploaded here…") of at most 200 MB (`PlayerAppRelease::MAX_BYTES`, 413) —
 no organization's wall, the server's reserve still asked when it is published. `StorePlayerAppReleaseRequest` takes the
 finished upload like the four, and the page asks `POST /developer/app/inspect` for the version first (rule 02,
-**Developer → TV App**).
+**Developer → TV App**). Publish Version writes the file as `player-app/.incoming-{uuid}.apk` and gives it its version's name
+only inside the transaction that makes its row (`PlayerAppController::store`), so a tab whose row was refused takes away its
+own file alone; `uploads:prune` takes an incoming file older than an hour.
 
 ## 4. The browser
 
@@ -96,11 +120,28 @@ page has one), and `<x-upload-dropzone>` draws it. Two modes:
 - **`add`** — the Media page, the shelf and the editor's picker: each file that arrives is posted to its door at
   once, and the component dispatches `upload-added` with the server's answer, so the page refreshes its list and its
   storage meter (the picker puts the new file first on its grid). Eight seconds after it, the "Added" row fades away
-  (`ADDED_STAYS_MS`) — "3 of 5 added" still counts it until nothing is going any more — while a refused or a failed row stays
-  for its reason and its Try again.
+  (`ADDED_STAYS_MS`) — "3 of 5 added" still counts it until nothing is going any more — while a failed row (its bytes did
+  not get through, or its door refused what room or time can fix) stays with its reason and its Try Again, and a refused row
+  (by the browser's own checks before a byte is sent, or given up by the server, `upload_given_up`, §3) stays with its
+  reason alone.
 - **`form`** — a channel's Upload and a campaign's advert: the component dispatches `upload-ready` with the upload's
-  id and what the browser measured, `upload-cleared` when the file is taken away, and `upload-busy` while bytes are
-  still going, so the form can hold Save.
+  id and what the browser measured, `upload-cleared` when the file is taken away (`{givenUp: true}` when the server gave it
+  up, so the page forgets the upload), and `upload-busy` while bytes are still going, so the form can hold Save.
+
+**Where a file goes** (2026-10-15). The box decides a file's place once, at drop (`placeNow()`, kept on the row as
+`item.place`), so a file joins the library or the shelf it was dropped on whatever the page's list shows by the time it is in.
+The place's key — `placeKey(meta)`, what the upload tells the server plus the page's session-context, "{user}:{organization}" —
+is part of the Uppy file id and the tus fingerprint (`meta.relativePath`): a file cut short in one organization and dropped
+again in another is an upload of its own, while a reload in the same organization still carries on.
+
+**A form's box** (2026-10-15). A page finds it by its `dusk` through `emptyTheBox` and `giveUpUpload`
+(`resources/js/core/form-asked.js`), never through `$refs` from outside the dialog: a ref inside `<x-modal>` belongs to the
+dialog. The box is emptied every time its form opens and every time its dialog shuts, Escape and Discard Changes included
+(`$watch('show', (open) => open || clearFile())` on the box's listener inside the dialog), and an upload nobody saved is given
+up then. The upload a save carries (`uploadBeingSaved`) is never given up under it: the box is held, `inert`, while that save
+is out (`holdsTheSavedUpload`). After a successful save or publish the box lets its row go without giving it up —
+`emptyTheBox(selector, savedUploadId)`, never the box's `clear()`, which gives up the upload the server just used (campaigns,
+a channel's Add Ad, Developer → TV App's `startAgain`).
 
 ## 5. What a person sees
 
@@ -124,7 +165,9 @@ wearing a picture's name) and `tests/Browser/ChunkedUploadFlowTest.php` (several
 larger than a chunk sent in pieces, one request each, and arriving byte for byte; paused and resumed; a lost
 connection waited out on the same page — Chrome's own network emulation, offline and slow; cancelled on its way,
 and gone from the server; a form holding Save until its file is in). The pictures it compares byte for byte are GIFs
-of noise made in the page, because a GIF is stored exactly as it came (§7). The refusals as a person meets them are
+of noise made in the page, because a GIF is stored exactly as it came (§7). What only the box decides — the place kept per
+file, a form's upload the server gave up — is `tests/Feature/System/UploadDropzoneScriptTest.php` (the box's own script under
+Node, `Tests\Support\PageScript`), and in the browser `tests/Browser/ReviewFixesUploadsFlowTest.php`. The refusals as a person meets them are
 `tests/Browser/UploadLimitsTest.php`; pictures made light, `tests/Feature/Signage/PictureOptimizerTest.php`,
 `tests/Feature/Security/PictureOptimizerAttackTest.php` and `tests/Browser/PicturesMadeLighterTest.php`.
 
@@ -150,7 +193,10 @@ organization's 512 MB and sent to the televisions.
 | A video | the file as it came, always: there is no ffmpeg on the server |
 
 A WebP is written at 85 for a photograph (a JPEG) and 90 for a PNG or a WebP. Nothing the optimizer does refuses an
-upload: whatever goes wrong, the file is stored as it came.
+upload: whatever goes wrong, the file is stored as it came. A JPEG's fill bytes (0xFF before a marker) are read at most
+`MAX_JPEG_FILL_BYTES` (4096) in all (`PictureOptimizer::aboutJpeg`, 2026-10-15): more is a file not built as its format says,
+stored as it came — one made of 250 MB of them held every picture upload on the server for a minute, read a byte at a time
+under the one picture's turn.
 
 **Why words are measured.** A lossy WebP keeps colour at half resolution, as nearly every JPEG already has; a PNG keeps
 it whole. On a 4K menu written as PNG, thin red words on black came back maroon — a higher quality does not help, the

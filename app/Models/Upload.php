@@ -11,8 +11,10 @@ use Illuminate\Support\Facades\Storage;
 
 /**
  * A file on its way in, sent in chunks by the tus protocol (docs/UPLOADS-SPEC.md). It belongs to the person sending
- * it and to the purpose it was opened for, counts to the organization it will join (organization_id, NULL for the platform's library
- * and the ads network), and lives until the form it was chosen for makes its row — or until it expires.
+ * it and to the purpose it was opened for, joins only the place it was opened for (organization_id, NULL for the platform's library,
+ * the shared shelf and the ads network), counts to that organization's wall while its bytes are on their way and to what may wait
+ * for it on the server until it goes (ChunkedUploads::reservedInOrganization), and lives until the form it was chosen for makes its
+ * row, refuses the file itself, the box's × gives it up — or until it expires.
  *
  * @property string $id
  * @property int $user_id
@@ -79,5 +81,11 @@ class Upload extends Model
     public function scopeOpen(Builder $query): Builder
     {
         return $query->where('expires_at', '>', now());
+    }
+
+    /** Uploads whose bytes are still on their way: a finished one is its door's to decide (ChunkedUploads::open). */
+    public function scopeUnfinished(Builder $query): Builder
+    {
+        return $query->whereColumn('received', '<', 'size');
     }
 }

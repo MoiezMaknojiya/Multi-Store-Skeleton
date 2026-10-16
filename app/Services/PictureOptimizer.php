@@ -53,6 +53,14 @@ class PictureOptimizer
     private const MAX_PARTS = 10000;
 
     /**
+     * How many fill bytes (0xFF before a marker) a JPEG may have in all before its picture's data: the format allows any
+     * number and a real file has a handful, while one made of 250 MB of them held every picture upload on the server for a
+     * minute, read a byte at a time under the one picture's turn (MediaStorage::onePictureAtATime). More is a file not built
+     * as its format says, kept as it came.
+     */
+    private const MAX_JPEG_FILL_BYTES = 4096;
+
+    /**
      * How a lossy WebP is checked against a picture whose own colour is sharper than half resolution: in blocks this
      * many pixels square, every other pixel each way, a pixel whose colour (Cb/Cr) moved more than COLOUR_STEP is one a
      * person may see changed; a block where COLOUR_SHARE of them did is detail that changed (a thin coloured letter,
@@ -313,6 +321,7 @@ class PictureOptimizer
         $count = 0;
         $collected = 0;
         $fullColour = false;
+        $fill = 0;
 
         for ($i = 0; $i < self::MAX_PARTS; $i++) {
             if ($this->take($handle, 1) !== "\xFF") {
@@ -321,9 +330,9 @@ class PictureOptimizer
 
             do {
                 $code = $this->take($handle, 1);
-            } while ($code === "\xFF");
+            } while ($code === "\xFF" && ++$fill <= self::MAX_JPEG_FILL_BYTES);
 
-            if ($code === null) {
+            if ($code === null || $code === "\xFF") {
                 return null;
             }
 

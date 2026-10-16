@@ -135,7 +135,9 @@ Route::middleware(['auth', 'verified', 'organization.active', 'throttle:admin'])
     // this account's own confirmed address — the emailed link works as before. Open in a paused organization
     // (EnsureOrganizationIsActive::OPEN): it joins, or turns down, another one.
     // -------------------------------------------------------------------
-    Route::prefix('dashboard/invitations/{invitation}')->where(['invitation' => '[0-9]+'])->group(function () {
+    // An id an int can hold (at most 18 digits, no leading zero): the controller takes it as an int, and a longer one was a
+    // TypeError, a 500, where it should be a 404 like any invitation that is not there.
+    Route::prefix('dashboard/invitations/{invitation}')->where(['invitation' => '[1-9][0-9]{0,17}'])->group(function () {
         Route::post('/accept', [InvitationResponseController::class, 'acceptHere'])->name('dashboard.invitations.accept');
         Route::post('/decline', [InvitationResponseController::class, 'declineHere'])->name('dashboard.invitations.decline');
     });

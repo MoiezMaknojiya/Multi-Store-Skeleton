@@ -10,6 +10,7 @@ import axios from 'axios';
 import { takeAddressFlag } from '../core/address-flag.js';
 import { isARepeatPress } from '../core/click-beside.js';
 import { createCrudTable } from '../core/crud-table-base.js';
+import { formStillAsked, notSavedWords } from '../core/form-asked.js';
 
 export function registerAdsTable(Alpine) {
     Alpine.data('adsTable', (config = {}) => createCrudTable({
@@ -44,6 +45,8 @@ export function registerAdsTable(Alpine) {
             templatesAsked: 0,
             /* The template being copied: every Use This Template waits for it, and the page leaves for the editor. */
             usingTemplateId: null,
+            /* Moves each time the gallery opens: a copy's answer acts on the gallery it was asked from alone. */
+            galleryTicket: 0,
             /* Why the last copy was refused (the organization's storage is full): said above the tiles, with the way to make room. */
             templateRefusal: '',
         },
@@ -148,6 +151,7 @@ export function registerAdsTable(Alpine) {
             /** Premium Template: the gallery of the shape chosen, in a dialog as wide as the window. */
             openTemplates(event) {
                 if (isARepeatPress(event)) return;
+                this.galleryTicket++;
                 this.templates = [];
                 this.templateSearch = '';
                 this.$dispatch('close-modal', 'new-ad-orientation');
@@ -188,17 +192,30 @@ export function registerAdsTable(Alpine) {
             async useTemplate(template, event) {
                 if (this.usingTemplateId !== null || isARepeatPress(event)) return;
                 this.usingTemplateId = template.id;
+                // The answer acts on the gallery it was asked from alone: shut since (Escape), or opened again, the copy is
+                // said in a toast and the list takes it — the page does not leave for the editor from under what is open now,
+                // and a refusal is not put above another gallery's tiles. (The gallery, not the button: a search typed meanwhile
+                // may take the button away while the gallery is still the one asked.)
+                const asked = formStillAsked(() => this.galleryTicket, event?.currentTarget?.closest?.('[dusk="premium-templates"]') ?? null);
 
                 try {
                     const { data } = await axios.post(`/builder/templates/${template.id}`);
-                    window.location.assign(data.redirect);
+                    if (asked()) {
+                        window.location.assign(data.redirect);
+
+                        return;
+                    }
+                    this.usingTemplateId = null;
+                    window.toast(data.message, 'success');
+                    this.refreshInPlace();  // not awaited: the gallery's buttons are free again the moment the request is over
                 } catch (error) {
                     this.usingTemplateId = null;
                     // A refusal in words (no room, a template gone) stays in the dialog, beside the way to make room;
                     // anything else is a toast.
                     const refused = error.response?.status === 422 ? Object.values(error.response.data?.errors ?? {})[0]?.[0] : null;
-                    if (refused) this.templateRefusal = refused;
-                    else window.toast(error.response?.data?.message ?? 'Could not use this template.');
+                    if (refused && asked()) this.templateRefusal = refused;
+                    else window.toast((refused ? notSavedWords({ template: [refused] }, template.name, 'copied') : null)
+                        ?? error.response?.data?.message ?? 'Could not use this template.');
                 }
             },
         },

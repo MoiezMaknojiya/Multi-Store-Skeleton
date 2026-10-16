@@ -45,19 +45,20 @@ class NetworkAdResolver
         }
 
         return $screen->campaigns()
-            ->liveOn($local)
+            ->liveAround($local)
             ->orderBy('campaigns.id')          // stable order: same break every hour
             ->get()
             // The window inside a day is wall clock, so it can only be read once the
-            // screen's own timezone is known — which is why it is not part of the query.
+            // screen's own timezone is known — which is why it is not part of the query —
+            // and the contract is read against the day the window opened on (Campaign::isDueAt).
             ->filter(fn (Campaign $campaign) => $campaign->isDueAt($local))
             ->pipe(fn (Collection $due) => $this->trimToBreak($due));
     }
 
     /**
      * The break at each of many moments — the offline timeline (docs/AD-BUILDER-SPEC.md §15) — asking the
-     * database once per local DATE rather than once per moment: the dates are the query's, the window
-     * inside a day is wall clock and read here, exactly as breakFor() reads it.
+     * database once per local DATE rather than once per moment: which contracts could reach that date is the
+     * query's, the window inside a day and the night it belongs to are read here, exactly as breakFor() reads them.
      *
      * @param  list<CarbonImmutable>  $instants
      * @return array<int, Collection<int, Campaign>> keyed by each instant's timestamp
@@ -80,7 +81,7 @@ class NetworkAdResolver
             $local = $screen->localTime($instant);
             $date = $local->toDateString();
 
-            $byDate[$date] ??= $screen->campaigns()->liveOn($local)->orderBy('campaigns.id')->get();
+            $byDate[$date] ??= $screen->campaigns()->liveAround($local)->orderBy('campaigns.id')->get();
 
             $breaks[$instant->getTimestamp()] = $byDate[$date]
                 ->filter(fn (Campaign $campaign) => $campaign->isDueAt($local))

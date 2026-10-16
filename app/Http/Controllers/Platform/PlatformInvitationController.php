@@ -9,6 +9,7 @@ use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -71,7 +72,18 @@ class PlatformInvitationController extends Controller
             throw ValidationException::withMessages(['email' => 'An invitation is already waiting for this email — resend it instead.']);
         }
 
-        [$invitation, $token] = Invitation::open(null, $email, $role, auth()->user());
+        // Under the role's lock: deleted since it was found, it is refused in words, never a 500 from the foreign key, and a
+        // delete of the role waits for this invitation, and revokes it. The inviter's row first, whom the invitation names: the
+        // order every change takes a person and a role (OrganizationTeam::changeTeam) — an account's deletion holds its row
+        // while it clears the roles it made — and an inviter deleted a moment ago is 404, never the foreign key's 500.
+        [$invitation, $token] = DB::transaction(function () use ($email, $role) {
+            User::whereKey(auth()->id())->sharedLock()->firstOrFail(['id']);
+
+            Role::whereKey($role->id)->sharedLock()->first(['id'])
+                ?? throw ValidationException::withMessages(['role_id' => 'Choose a platform role.']);
+
+            return Invitation::open(null, $email, $role, auth()->user());
+        });
         $sent = $invitation->sendLink($token);
 
         ActivityLog::record('platform.invited', null, "Invited {$email} to the platform team as {$role->name}");
@@ -89,7 +101,7 @@ class PlatformInvitationController extends Controller
         abort_unless($invitation->isForPlatform(), 404);
 
         $token = $invitation->renew();
-        $sent = $invitation->fresh()->sendLink($token);
+        $sent = $invitation->sendLink($token);
 
         ActivityLog::record('invitation.resent', null, "Resent the platform invitation for {$invitation->email}");
 

@@ -6,6 +6,7 @@
 import axios from 'axios';
 import { expiresInWords } from '../core/clock.js';
 import { isARepeatPress } from '../core/click-beside.js';
+import { formStillAsked, notSavedWords } from '../core/form-asked.js';
 import { passwordRefusal } from '../core/password-refusal.js';
 import { validate, required, emailFormat, maxLen } from '../core/validate.js';
 
@@ -24,6 +25,9 @@ export function registerMembersPage(Alpine) {
         tab: 'members',
 
         formErrors: {},
+        // Moves each time a form opens — Invite or Change Role, which share formErrors: a save's answer acts on the form it
+        // was sent from alone (sendInvite, saveRole).
+        formTicket: 0,
         inviteForm: { email: '', role_id: '' },
         inviting: false,
 
@@ -100,6 +104,7 @@ export function registerMembersPage(Alpine) {
         /* ── Invite ────────────────────────────────────────────────────── */
 
         openInvite() {
+            this.formTicket++;
             this.formErrors = {};
             this.inviteForm = { email: '', role_id: '' };
             this.$dispatch('open-modal', 'invite-member');
@@ -110,7 +115,7 @@ export function registerMembersPage(Alpine) {
             return this.assignableRoles.find((role) => String(role.id) === String(roleId))?.description ?? '';
         },
 
-        async sendInvite() {
+        async sendInvite(event = null) {
             if (this.inviting) return;
 
             /* Mirrors InvitationController — the server checks it all again. */
@@ -125,14 +130,19 @@ export function registerMembersPage(Alpine) {
 
             this.inviting = true;
             this.formErrors = {};
+            // The answer acts on this form alone: shut since, or another form opened, it is not shut or marked by it.
+            const asked = formStillAsked(() => this.formTicket, event?.target);
+            const named = `The invitation to ${this.inviteForm.email}`;
             try {
                 const { data } = await axios.post('/members/invitations', this.inviteForm);
-                this.$dispatch('close-modal', 'invite-member');
                 window.toast(data.message, data.email_sent === false ? 'error' : 'success');
-                this.tab = 'invitations';
+                if (asked()) {
+                    this.$dispatch('close-modal', 'invite-member');
+                    this.tab = 'invitations';
+                }
                 this.fetch({ quiet: true });  // not awaited: the button is free again the moment the request is over
             } catch (error) {
-                this.handleError(error);
+                this.handleError(error, asked, named, 'sent');
             } finally {
                 this.inviting = false;
             }
@@ -160,9 +170,11 @@ export function registerMembersPage(Alpine) {
         async revoke() {
             if (!this.selectedInvitation || this.revoking) return;
             this.revoking = true;
+            // A late answer never shuts the question about another invitation (crud-table-base's deleteItem says why).
+            const target = this.selectedInvitation.id;
             try {
-                const { data } = await axios.delete(`/members/invitations/${this.selectedInvitation.id}`);
-                this.$dispatch('close-modal', 'revoke-invitation');
+                const { data } = await axios.delete(`/members/invitations/${target}`);
+                if (this.selectedInvitation?.id === target) this.$dispatch('close-modal', 'revoke-invitation');
                 window.toast(data.message, 'success');
                 this.fetch({ quiet: true });  // not awaited: the button is free again the moment the request is over
             } catch (error) {
@@ -175,13 +187,14 @@ export function registerMembersPage(Alpine) {
         /* ── Change role / remove ──────────────────────────────────────── */
 
         openChangeRole(member) {
+            this.formTicket++;
             this.selectedMember = member;
             this.formErrors = {};
             this.roleForm = { role_id: member.role?.id ?? '' };
             this.$dispatch('open-modal', 'change-member-role');
         },
 
-        async saveRole() {
+        async saveRole(event = null) {
             if (!this.selectedMember || this.changingRole) return;
 
             const errors = validate(this.roleForm, { role_id: [required('Role')] });
@@ -192,13 +205,16 @@ export function registerMembersPage(Alpine) {
 
             this.changingRole = true;
             this.formErrors = {};
+            // The answer acts on this form alone: shut since, or opened again for somebody else, it is not shut or marked.
+            const asked = formStillAsked(() => this.formTicket, event?.target);
+            const named = `${this.selectedMember.name}'s role`;
             try {
                 const { data } = await axios.put(`/members/${this.selectedMember.id}`, this.roleForm);
-                this.$dispatch('close-modal', 'change-member-role');
+                if (asked()) this.$dispatch('close-modal', 'change-member-role');
                 window.toast(data.message, 'success');
                 this.fetch({ quiet: true });  // not awaited: the button is free again the moment the request is over
             } catch (error) {
-                this.handleError(error);
+                this.handleError(error, asked, named);
             } finally {
                 this.changingRole = false;
             }
@@ -269,12 +285,15 @@ export function registerMembersPage(Alpine) {
             }
         },
 
-        /** Field errors go under their fields; anything else becomes a toast. */
-        handleError(error) {
-            if (error.response?.status === 422 && error.response.data.errors) {
-                this.formErrors = error.response.data.errors;
+        /** Field errors go under their fields while their form is still asked; anything else becomes a toast, naming what
+         *  was not saved (or sent) when its form is gone. */
+        handleError(error, asked = () => true, named = '', verb = 'saved') {
+            const errors = error.response?.status === 422 ? (error.response.data?.errors ?? null) : null;
+
+            if (errors && asked()) {
+                this.formErrors = errors;
             } else {
-                window.toast(error.response?.data?.message ?? 'Something went wrong. Please try again.');
+                window.toast(notSavedWords(errors, named, verb) ?? error.response?.data?.message ?? 'Something went wrong. Please try again.');
             }
         },
     }));

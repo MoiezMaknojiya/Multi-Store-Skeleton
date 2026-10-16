@@ -152,6 +152,12 @@ class OrganizationController extends Controller
      * Give an organization without an Owner one, from the platform's side — an organization left without one, or made for a customer
      * who never accepted (owner's rule, 2026-09-17: an organization that has an Owner is not offered this; more Owners come from
      * its own Members page, or Users → Organizations). A member of the organization becomes Owner at once; anybody else is invited.
+     *
+     * Decided under the organization's lock (OrganizationTeam::changeTeam), which is the transaction's first read: deleted since
+     * its address found it, the organization is 404 — never an invitation or an Owner of nothing, which the invitations'
+     * foreign key answered with a 500 — and an Owner given meanwhile, or a member who left, is seen. The super admin's own row
+     * is held next ($naming: an invitation names its inviter), before the earlier Owner invitations are retired and before the
+     * Owner role is read by the invitation's foreign key — the order every change takes a person, an invitation and a role.
      */
     public function inviteOwner(Request $request, Organization $organization): JsonResponse
     {
@@ -159,28 +165,22 @@ class OrganizationController extends Controller
         $email = Invitation::normalizeEmail($validated['email']);
         $ownerRole = Role::owner();
 
-        if ($this->team->ownerCount($organization) > 0) {
-            throw ValidationException::withMessages(['email' => "{$organization->name} already has an Owner."]);
-        }
+        $outcome = $this->team->changeTeam($organization, function () use ($organization, $email, $ownerRole) {
+            if ($this->team->ownerCount($organization) > 0) {
+                throw ValidationException::withMessages(['email' => "{$organization->name} already has an Owner."]);
+            }
 
-        $member = User::whereRaw('lower(email) = ?', [$email])->first();
+            $member = User::whereRaw('lower(email) = ?', [$email])->first();
 
-        if ($member !== null && $this->team->isMember($member, $organization)) {
-            $replaced = DB::transaction(function () use ($organization, $member, $email, $ownerRole) {
+            if ($member !== null && $this->team->isMember($member, $organization)) {
                 DB::table('organization_user')->where('organization_id', $organization->id)->where('user_id', $member->id)
                     ->update(['role_id' => $ownerRole->id, 'updated_at' => now()]);
 
-                return $this->retireOwnerInvitations($organization, $email);
-            });
+                return ['member' => $member, 'replaced' => $this->retireOwnerInvitations($organization, $email)];
+            }
 
-            ActivityLog::record('organization.owner_assigned', $organization, "Made {$member->name} ({$email}) an Owner of {$organization->name}".$this->replacedNote($replaced));
+            $this->ensureEmailCanOwnAnOrganization($email, 'email');
 
-            return response()->json(['message' => "{$member->name} is now an Owner of {$organization->name}.".$this->noLongerWorks($replaced)]);
-        }
-
-        $this->ensureEmailCanOwnAnOrganization($email, 'email');
-
-        [$invitation, $token, $renewed, $replaced] = DB::transaction(function () use ($organization, $email, $ownerRole) {
             $replaced = $this->retireOwnerInvitations($organization, $email);
 
             // The same address again — still open, expired, or invited by the organization to another
@@ -190,13 +190,29 @@ class OrganizationController extends Controller
             if ($existing !== null) {
                 $existing->update(['role_id' => $ownerRole->id, 'invited_by' => auth()->id()]);
 
-                return [$existing, $existing->renew(), true, $replaced];
+                return ['invitation' => $existing, 'token' => $existing->renew(), 'renewed' => true, 'replaced' => $replaced];
             }
 
-            return [...Invitation::open($organization, $email, $ownerRole, auth()->user()), false, $replaced];
-        });
+            [$invitation, $token] = Invitation::open($organization, $email, $ownerRole, auth()->user());
 
-        $sent = $invitation->fresh()->sendLink($token);
+            return ['invitation' => $invitation, 'token' => $token, 'renewed' => false, 'replaced' => $replaced];
+        }, naming: auth()->user());
+
+        $replaced = $outcome['replaced'];
+
+        if (isset($outcome['member'])) {
+            $member = $outcome['member'];
+
+            ActivityLog::record('organization.owner_assigned', $organization, "Made {$member->name} ({$email}) an Owner of {$organization->name}".$this->replacedNote($replaced));
+
+            return response()->json(['message' => "{$member->name} is now an Owner of {$organization->name}.".$this->noLongerWorks($replaced)]);
+        }
+
+        ['invitation' => $invitation, 'token' => $token, 'renewed' => $renewed] = $outcome;
+
+        // The row as the transaction left it — never read again: an organization deleted the moment this committed takes the
+        // invitation with it, and a fresh copy of nothing was a 500. sendLink() answers a link it cannot send with false.
+        $sent = $invitation->sendLink($token);
 
         ActivityLog::record('organization.owner_invited', $organization, ($renewed ? "Sent the invitation to own {$organization->name} to {$email} again" : "Invited {$email} to own {$organization->name}")
             .$this->replacedNote($replaced));

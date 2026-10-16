@@ -8,6 +8,7 @@ import axios from 'axios';
 import { expiresInWords } from '../core/clock.js';
 import { createCrudTable } from '../core/crud-table-base.js';
 import { isARepeatPress } from '../core/click-beside.js';
+import { formStillAsked, notSavedWords } from '../core/form-asked.js';
 import { passwordRefusal } from '../core/password-refusal.js';
 import { validate, required, emailFormat, maxLen } from '../core/validate.js';
 
@@ -33,6 +34,9 @@ export function registerUsersTable(Alpine) {
 
             /* Manage organizations, from the platform (super admins): a person's organizations, roles, and adding them to more. */
             accessTarget: null,
+            // Moves each time the dialog opens: an answer about one account never acts on the dialog opened since for
+            // another (or again) — its lists, its choices, its refusals.
+            accessTicket: 0,
             access: { memberships: [], organizations: [], organization_roles: [], custom_roles: {} },
             loadingAccess: false,
             assignForm: { organization_id: '', role_id: '' },
@@ -104,6 +108,7 @@ export function registerUsersTable(Alpine) {
             async openManageOrganizations(user) {
                 if (this.loadingAccess) return;
                 this.loadingAccess = true;
+                this.accessTicket++;
                 try {
                     this.accessTarget = user;
                     this.removing = null;
@@ -118,8 +123,11 @@ export function registerUsersTable(Alpine) {
                 }
             },
 
+            /** The dialog's lists — written only while it is the opening they were asked for: one opened since loads its own. */
             async loadAccess() {
+                const ticket = this.accessTicket;
                 const { data } = await axios.get(`/users/${this.accessTarget.id}/organizations`);
+                if (ticket !== this.accessTicket) return;
                 this.access = {
                     ...data,
                     // Each row keeps the role picked on screen apart from the one saved, until Save.
@@ -138,24 +146,44 @@ export function registerUsersTable(Alpine) {
                 return this.rolesFor(organizationId).find((role) => Number(role.id) === Number(roleId))?.description ?? '';
             },
 
-            /* After any change: this modal's lists, and the row's badges in the table behind it. */
-            async afterAccessChange(message) {
+            /* After any change: the row's badges in the table behind the dialog, and the dialog's lists while it is still the
+             * one the change was made from (`asked`) — reloaded under a dialog opened since, they threw away the roles
+             * picked there and not yet saved. One opened again for the same `account`, with no role picked there yet, is
+             * brought up to date: its own lists may have been read before the change. */
+            async afterAccessChange(message, asked = () => true, account = null) {
                 window.toast(message, 'success');
-                await Promise.all([this.loadAccess(), this.refreshInPlace()]);
+                const reload = asked() || (account !== null && this.accessTarget?.id === account.id && !this.rolesPicked());
+                await Promise.all([reload ? this.loadAccess() : null, this.refreshInPlace()]);
             },
 
-            async saveMembershipRole(membership) {
+            /** Whether a role is picked on a membership and not saved yet. */
+            rolesPicked() {
+                return this.access.memberships.some((membership) => membership.selected_role_id !== membership.role_id);
+            },
+
+            /** Is the dialog still the opening the press was made in? `press` is the control pressed: shut since, it has no
+             *  place on the screen, and a refusal is said in a toast rather than in a dialog nobody sees. */
+            accessStillAsked(press = null) {
+                return formStillAsked(() => this.accessTicket, press);
+            },
+
+            async saveMembershipRole(membership, event = null) {
                 if (membership.busy || membership.selected_role_id === membership.role_id) return;
                 membership.busy = true;
                 membership.error = '';
+                const asked = this.accessStillAsked(event?.currentTarget ?? null);
+                const account = this.accessTarget;
+                const named = `${account.name}'s role in ${membership.organization_name}`;
                 try {
                     const { data } = await axios.put(
-                        `/users/${this.accessTarget.id}/organizations/${membership.organization_id}/role`,
+                        `/users/${account.id}/organizations/${membership.organization_id}/role`,
                         { role_id: membership.selected_role_id },
                     );
-                    await this.afterAccessChange(data.message);
+                    await this.afterAccessChange(data.message, asked, account);
                 } catch (error) {
-                    membership.error = error.response?.data?.errors?.role_id?.[0] ?? error.response?.data?.message ?? 'Could not change the role.';
+                    const reason = error.response?.data?.errors?.role_id?.[0] ?? error.response?.data?.message ?? 'Could not change the role.';
+                    if (asked()) membership.error = reason;
+                    else window.toast(notSavedWords({ role_id: [reason] }, named));
                 } finally {
                     membership.busy = false;
                 }
@@ -192,10 +220,12 @@ export function registerUsersTable(Alpine) {
                 // A late answer never shuts the question about another organization (crud-table-base's deleteItem).
                 const target = this.removing;
                 const stillAsked = () => this.removing === target;
+                const dialogAsked = this.accessStillAsked();
+                const account = this.accessTarget;
                 let said;
                 try {
                     const { data } = await axios.delete(
-                        `/users/${this.accessTarget.id}/organizations/${target.organization_id}`,
+                        `/users/${account.id}/organizations/${target.organization_id}`,
                         { data: { password: this.removePassword } },
                     );
                     said = data.message;
@@ -216,10 +246,10 @@ export function registerUsersTable(Alpine) {
                 }
 
                 if (stillAsked()) this.removing = null;
-                await this.afterAccessChange(said);
+                await this.afterAccessChange(said, dialogAsked, account);
             },
 
-            async assignToOrganization() {
+            async assignToOrganization(event = null) {
                 if (this.assigning) return;
 
                 const errors = validate(this.assignForm, { organization_id: [required('Organization')], role_id: [required('Role')] });
@@ -230,18 +260,23 @@ export function registerUsersTable(Alpine) {
 
                 this.assigning = true;
                 this.assignErrors = {};
+                // The answer acts on this form alone: shut since, or opened again for another account, its choices and its
+                // fields are not touched by it.
+                const asked = this.accessStillAsked(event?.target ?? null);
+                const account = this.accessTarget;
                 try {
-                    const { data } = await axios.post(`/users/${this.accessTarget.id}/organizations`, {
+                    const { data } = await axios.post(`/users/${account.id}/organizations`, {
                         organization_id: Number(this.assignForm.organization_id),
                         role_id: Number(this.assignForm.role_id),
                     });
-                    this.assignForm = { organization_id: '', role_id: '' };
-                    await this.afterAccessChange(data.message);
+                    if (asked()) this.assignForm = { organization_id: '', role_id: '' };
+                    await this.afterAccessChange(data.message, asked, account);
                 } catch (error) {
-                    if (error.response?.status === 422 && error.response.data.errors) {
-                        this.assignErrors = error.response.data.errors;
+                    const refused = error.response?.status === 422 ? (error.response.data?.errors ?? null) : null;
+                    if (refused && asked()) {
+                        this.assignErrors = refused;
                     } else {
-                        window.toast(error.response?.data?.message ?? 'Could not add them to the organization.');
+                        window.toast(notSavedWords(refused, account.name, 'added') ?? error.response?.data?.message ?? 'Could not add them to the organization.');
                     }
                 } finally {
                     this.assigning = false;
@@ -385,12 +420,13 @@ export function registerUsersTable(Alpine) {
             },
 
             openInvite() {
+                this.formTicket++;
                 this.formErrors = {};
                 this.inviteForm = { email: '', role_id: '' };
                 this.$dispatch('open-modal', 'invite-platform-member');
             },
 
-            async sendInvite() {
+            async sendInvite(event = null) {
                 if (this.inviting) return;
 
                 const errors = validate(this.inviteForm, {
@@ -404,16 +440,20 @@ export function registerUsersTable(Alpine) {
 
                 this.inviting = true;
                 this.formErrors = {};
+                // The answer acts on this form alone: shut since, or opened again, it is not shut or marked by it.
+                const asked = formStillAsked(() => this.formTicket, event?.target);
+                const named = `The invitation to ${this.inviteForm.email}`;
                 try {
                     const { data } = await axios.post('/users/invitations', this.inviteForm);
-                    this.$dispatch('close-modal', 'invite-platform-member');
+                    if (asked()) this.$dispatch('close-modal', 'invite-platform-member');
                     window.toast(data.message, data.email_sent === false ? 'error' : 'success');
                     this.fetchInvitations();  // not awaited: the button is free again the moment the request is over
                 } catch (error) {
-                    if (error.response?.status === 422 && error.response.data.errors) {
-                        this.formErrors = error.response.data.errors;
+                    const refused = error.response?.status === 422 ? (error.response.data?.errors ?? null) : null;
+                    if (refused && asked()) {
+                        this.formErrors = refused;
                     } else {
-                        window.toast(error.response?.data?.message ?? 'Could not send the invitation.');
+                        window.toast(notSavedWords(refused, named, 'sent') ?? error.response?.data?.message ?? 'Could not send the invitation.');
                     }
                 } finally {
                     this.inviting = false;
@@ -442,9 +482,11 @@ export function registerUsersTable(Alpine) {
             async revokeInvitation() {
                 if (!this.selectedInvitation || this.revoking) return;
                 this.revoking = true;
+                // A late answer never shuts the question about another invitation (crud-table-base's deleteItem says why).
+                const target = this.selectedInvitation.id;
                 try {
-                    const { data } = await axios.delete(`/users/invitations/${this.selectedInvitation.id}`);
-                    this.$dispatch('close-modal', 'confirm-revoke-platform-invitation');
+                    const { data } = await axios.delete(`/users/invitations/${target}`);
+                    if (this.selectedInvitation?.id === target) this.$dispatch('close-modal', 'confirm-revoke-platform-invitation');
                     window.toast(data.message, 'success');
                     this.fetchInvitations();  // not awaited: the button is free again the moment the request is over
                 } catch (error) {

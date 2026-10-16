@@ -8,9 +8,9 @@ use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 /**
- * The email that confirms a changed address, sent to the NEW address from the Profile. The account keeps its old
- * address until this link is opened (users.pending_email), so a typo can never lock anybody out — the industry's
- * way of changing an email.
+ * The email that confirms a changed address, sent to the NEW address once the change has been approved from the old one
+ * (ApproveEmailChangeNotification, owner 2026-10-15). The account keeps its old address until this link is opened
+ * (users.pending_email), so a typo can never lock anybody out — the industry's way of changing an email.
  */
 class ConfirmNewEmailNotification extends Notification
 {

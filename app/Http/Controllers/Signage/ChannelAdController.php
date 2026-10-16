@@ -122,16 +122,21 @@ class ChannelAdController extends Controller implements HasMiddleware
     {
         $validated = $request->validated();
 
+        // A file sent in chunks joins the library it was dropped for — this channel's — never another's.
+        $request->assertUploadOpenedFor($channel->organization_id, 'library');
+
         // An upload joins the library first, in a transaction of its own under the organization's lock (OrganizationStorage) —
         // inside this one, what the organization holds would be read as this transaction first saw it, not as it is now.
         $uploaded = $request->hasFile('file') ? $this->uploadIntoLibrary($request, $channel) : null;
 
-        $ad = DB::transaction(function () use ($request, $validated, $channel, $uploaded) {
+        // Which file, found before the transaction: inside it the file's row lock is the first read (holdTheFile).
+        $media = $uploaded ?? $request->chosenMedia();
+
+        $ad = DB::transaction(function () use ($validated, $channel, $uploaded, $media) {
             if ($uploaded !== null) {
-                // A file uploaded this moment is on no playlist.
-                $media = $uploaded;
+                // A file uploaded this moment is on no playlist; it is held all the same.
+                $this->holdTheFile($media, 'file');
             } else {
-                $media = $request->chosenMedia();
                 $this->refuseAFileAPlaylistHolds($media);
             }
 
@@ -162,21 +167,26 @@ class ChannelAdController extends Controller implements HasMiddleware
     public function update(ChannelAdRequest $request, Channel $channel, ChannelAd $ad): JsonResponse
     {
         $validated = $request->validated();
+        $request->assertUploadOpenedFor($channel->organization_id, 'library');
 
         // An upload joins the library first, in a transaction of its own: see store().
         $uploaded = $request->hasFile('file') ? $this->uploadIntoLibrary($request, $channel) : null;
 
-        DB::transaction(function () use ($request, $validated, $ad, $uploaded) {
-            $media = match (true) {
-                $uploaded !== null => $uploaded,
-                filled($validated['media_id'] ?? null) => $request->chosenMedia(),
-                default => $ad->media,
-            };
+        // Which file, found before the transaction: inside it the file's row lock is the first read (holdTheFile).
+        $media = match (true) {
+            $uploaded !== null => $uploaded,
+            filled($validated['media_id'] ?? null) => $request->chosenMedia(),
+            // Its own file deleted since the ad was read takes the ad with it (the foreign key).
+            default => $ad->media ?? abort(404),
+        };
 
+        DB::transaction(function () use ($validated, $ad, $uploaded, $media) {
             // The file the ad already shows is its own, and one uploaded this moment is on no playlist: only a
-            // library file coming INTO the channel is asked about.
+            // library file coming INTO the channel is asked about. Every one is held until the ad is written.
             if ($uploaded === null && (int) $media->id !== (int) $ad->media_id) {
                 $this->refuseAFileAPlaylistHolds($media);
+            } else {
+                $this->holdTheFile($media, $uploaded !== null ? 'file' : 'media_id');
             }
 
             $ad->update([
@@ -245,14 +255,29 @@ class ChannelAdController extends Controller implements HasMiddleware
     /**
      * A file a playlist holds stays out of channels (owner's rule, 2026-09-26). ChannelAdRequest has refused it
      * already; this reads it again under the file's row lock — the lock a playlist's save takes too — so a line
-     * put on a playlist at the same moment is seen, and the two can never both land. Call inside the transaction.
+     * put on a playlist at the same moment is seen, and the two can never both land. Call inside the transaction before
+     * anything else is read there: on MySQL its plain read of the playlists is answered from the snapshot the transaction's
+     * first plain read takes, which must come after the lock — the file first, as a playlist's save and a file's delete
+     * take it (PlaylistController::update, MediaController::destroy).
      */
     private function refuseAFileAPlaylistHolds(Media $media): void
     {
-        Media::whereKey($media->id)->lockForUpdate()->first(['id']);
+        $this->holdTheFile($media, 'media_id');
 
         if (($keptOut = $media->keptOutOfChannelsMessage()) !== null) {
             throw ValidationException::withMessages(['media_id' => $keptOut]);
+        }
+    }
+
+    /**
+     * The file the ad will show, held under its row lock until the ad is written — and refused when it was deleted while
+     * the form was on its way (the review of 2026-10-15): the ad would name a row that is gone, the foreign key's 500 on
+     * MySQL. Held, nobody can delete it before the ad is in. Call inside the transaction.
+     */
+    private function holdTheFile(Media $media, string $field): void
+    {
+        if (Media::whereKey($media->id)->lockForUpdate()->first(['id']) === null) {
+            throw ValidationException::withMessages([$field => "{$media->title} was deleted meanwhile. Choose another file."]);
         }
     }
 

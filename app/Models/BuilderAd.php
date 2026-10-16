@@ -8,8 +8,11 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Encryption\MissingAppKeyException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use LogicException;
 
 /**
  * One advert designed in the Ad Builder (docs/AD-BUILDER-SPEC.md): a stage the shape of a television —
@@ -28,6 +31,7 @@ use Illuminate\Support\Facades\Storage;
  * it, "srif delete nahi kar sakta ha"), with Update Ads and Delete Ads there.
  *
  * @property int|null $organization_id
+ * @property string|null $storage_key the name of the ad's folder, nobody's to guess (storageDirectory)
  */
 class BuilderAd extends Model
 {
@@ -87,6 +91,9 @@ class BuilderAd extends Model
 
     protected $appends = ['thumbnail_url'];
 
+    /** The folder's name is for the server to know: a listing hands out a poster's address, never the key itself. */
+    protected $hidden = ['storage_key'];
+
     protected function casts(): array
     {
         return [
@@ -104,6 +111,21 @@ class BuilderAd extends Model
      */
     protected static function booted(): void
     {
+        // Every ad gets a folder nobody can guess the moment it is made (storageDirectory) — unless the table has no key yet: a
+        // migration of before it (2026_10_08_100200) makes ads through this model.
+        static::creating(function (BuilderAd $ad): void {
+            if ($ad->storage_key === null && self::tableHas('storage_key')) {
+                $ad->storage_key = self::newStorageKey();
+            }
+        });
+
+        // And a replica one of its own: two ads sharing a folder would overwrite each other's page and poster.
+        static::replicating(function (BuilderAd $ad): void {
+            if (array_key_exists('storage_key', $ad->getAttributes())) {
+                $ad->storage_key = self::newStorageKey();
+            }
+        });
+
         static::deleting(function (BuilderAd $ad) {
             $media = $ad->media;
             $disk = $media?->disk ?? 'public';
@@ -277,10 +299,160 @@ class BuilderAd extends Model
         return $value;
     }
 
-    /** Where this ad's published file and poster live: its organization's folder, or the platform's for a shared one. */
+    /**
+     * Where this ad's published page and posters live: under its organization's folder, or the platform's for a shared one, in a
+     * folder named by the ad's storage key. The public disk is served to anybody who has an address, so the address must be
+     * nobody's to guess (the review of 2026-10-15: `builder/{organization}/ads/{id}` let a stranger count through every organization's
+     * designs, drafts included). Never named after the ad's id — but on a database whose table has no key yet: a migration of
+     * before it (2026_10_08_100200) makes and publishes ads through this model, in the folder of that day, which
+     * 2026_10_15_220000 then moves.
+     */
     public function storageDirectory(): string
     {
-        return 'builder/'.($this->organization_id ?? 'platform')."/ads/{$this->id}";
+        if ($this->storage_key === null && $this->exists) {
+            if (! self::tableHas('storage_key')) {
+                return 'builder/'.($this->organization_id ?? 'platform')."/ads/{$this->id}";
+            }
+
+            $this->giveStorageKey();
+        }
+
+        // Never a folder every key-less ad would share (`builder/1/ads/`), nor one a key could climb out of.
+        if (! is_string($this->storage_key) || preg_match('/^[0-9a-f]{32}$/', $this->storage_key) !== 1) {
+            throw new LogicException("Ad #{$this->id} has no storage key, so it has no folder of its own.");
+        }
+
+        return 'builder/'.($this->organization_id ?? 'platform')."/ads/{$this->storage_key}";
+    }
+
+    /** Whether `builder_ads` has $column yet: the migrations of before it (2026_10_08_100200) make and publish ads through this model. */
+    public static function tableHas(string $column): bool
+    {
+        return Schema::hasColumn((new self)->getTable(), $column);
+    }
+
+    /**
+     * A key for a saved ad that has none — a row the code before the key wrote while a deploy switched over. Given once,
+     * whoever asks first (a second asker reads the first one's), and never as a change to the design: the clock that says
+     * whether a published ad shows its latest changes is not moved.
+     */
+    private function giveStorageKey(): void
+    {
+        $row = self::query()->toBase()->where('id', $this->getKey());
+
+        (clone $row)->whereNull('storage_key')->update(['storage_key' => self::newStorageKey()]);
+
+        $this->storage_key = $row->value('storage_key');
+        $this->syncOriginalAttribute('storage_key');
+    }
+
+    /** 128 random bits, as 32 lowercase hex digits: a folder's name nobody can count to. */
+    public static function newStorageKey(): string
+    {
+        return bin2hex(random_bytes(16));
+    }
+
+    /**
+     * Where the design's own poster is kept: the file it has, or its folder's poster name (posterNameFor). The name is its own,
+     * never `poster.jpg`: the published page and its poster's copy (`index.html`, `published.jpg`) are handed to every television
+     * and every organization a Premium Template or a platform channel reaches, and a draft's picture beside them under a name
+     * anybody could work out from theirs would show what is not published yet. A folder of before the key keeps the name of
+     * its day, which 2026_10_15_220000 changes as it moves the folder.
+     */
+    public function posterPath(): string
+    {
+        $directory = $this->storageDirectory();
+
+        if ($this->storage_key === null) {
+            return "{$directory}/poster.jpg";
+        }
+
+        if (is_string($this->thumbnail_path) && preg_match('#^'.preg_quote($directory, '#').'/poster-[0-9a-f]{32}\.jpg$#', $this->thumbnail_path) === 1) {
+            return $this->thumbnail_path;
+        }
+
+        return "{$directory}/poster-".self::posterNameFor($this->storage_key).'.jpg';
+    }
+
+    /**
+     * The poster's name in the folder $key names: drawn from the key with the app's own secret (APP_KEY, as a signed link is),
+     * so nobody who knows the folder can work it out, and it is the same whoever asks — two saves at the same moment write one
+     * file, never two with one of them named by no row, and 2026_10_15_220000 cut short carries on with the names it gave.
+     */
+    public static function posterNameFor(string $key): string
+    {
+        $secret = (string) config('app.key');
+
+        if ($secret === '') {
+            throw new MissingAppKeyException;
+        }
+
+        return substr(hash_hmac('sha256', "ad-poster|{$key}", $secret), 0, 32);
+    }
+
+    /**
+     * A file this design named before ($previous) and names no longer — a poster it replaced, a page or a poster's copy written
+     * somewhere else — taken away when it is the design's own (ownsFile) and no row names it any more. Decided once the
+     * transaction it is in has committed, as every file is deleted (Organization::purgeMedia).
+     */
+    public function forgetFile(?string $previous): void
+    {
+        if ($previous === null || ! $this->ownsFile($previous)) {
+            return;
+        }
+
+        DB::afterCommit(function () use ($previous): void {
+            $named = Media::where(fn (Builder $query): Builder => $query->where('path', $previous)->orWhere('thumbnail_path', $previous))->exists()
+                || self::where('thumbnail_path', $previous)->exists();
+
+            if ($named) {
+                return;
+            }
+
+            $disk = Storage::disk('public');
+            $disk->delete($previous);
+
+            // A folder named by the id, emptied, goes with its last file.
+            $folder = dirname($previous);
+
+            if ($folder !== $this->storageDirectory() && $disk->directoryExists($folder) && $disk->allFiles($folder) === []) {
+                $disk->deleteDirectory($folder);
+            }
+        });
+    }
+
+    /**
+     * A file of this design's folder, or of a folder named by its id — the folder of before the key, which the code of before it
+     * may still write into while a deploy switches over, under whichever owner the ad had then.
+     */
+    public function ownsFile(string $path): bool
+    {
+        return preg_match('#^'.preg_quote($this->storageDirectory(), '#').'/[^/]+$#', $path) === 1
+            || ($this->id !== null && preg_match('#^builder/[^/]+/ads/'.(int) $this->id.'/[^/]+$#', $path) === 1);
+    }
+
+    /**
+     * The design's poster brought into its own folder when its row names one in a folder named by its id — saved by the code of
+     * before the key while a deploy switched over — and the file left there forgotten (forgetFile). Publish asks it first, so
+     * a page is never published from a poster anybody could count to. Not a change to the design: its clock does not move.
+     */
+    public function bringItsPosterHome(): void
+    {
+        $from = $this->thumbnail_path;
+        $disk = Storage::disk('public');
+
+        if (! is_string($from) || ! $this->ownsFile($from) || str_starts_with($from, $this->storageDirectory().'/') || ! $disk->exists($from)) {
+            return;
+        }
+
+        $home = $this->posterPath();
+        $disk->put($home, (string) $disk->get($from));
+
+        self::query()->toBase()->where('id', $this->getKey())->update(['thumbnail_path' => $home]);
+        $this->thumbnail_path = $home;
+        $this->syncOriginalAttribute('thumbnail_path');
+
+        $this->forgetFile($from);
     }
 
     /** Mounted upright: a 1080 × 1920 stage. */

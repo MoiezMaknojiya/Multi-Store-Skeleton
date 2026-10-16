@@ -222,8 +222,10 @@ class UserController extends Controller
             'role_id.required' => 'Choose a role.',
         ]);
 
+        $onThePlatformTeam = "{$user->name} is on the platform team, which works above the organizations. Remove their platform role first.";
+
         if ($user->globalRole() !== null) {
-            throw ValidationException::withMessages(['organization_id' => "{$user->name} is on the platform team, which works above the organizations. Remove their platform role first."]);
+            throw ValidationException::withMessages(['organization_id' => $onThePlatformTeam]);
         }
 
         $organization = Organization::find($validated['organization_id'])
@@ -232,13 +234,22 @@ class UserController extends Controller
         $role = Role::availableInOrganization($organization->id)->find($validated['role_id'])
             ?? throw ValidationException::withMessages(['role_id' => 'Choose a role that exists in this organization.']);
 
-        $this->team->changeTeam($organization, function () use ($user, $organization, $role) {
+        // Under the organization's lock, the person's and then the role's (OrganizationTeam::changeTeam, the order an invitation's
+        // accept takes them): an organization, an account or a role deleted since they were found is refused, never written into
+        // a membership of nothing.
+        $this->team->changeTeam($organization, function () use ($user, $organization, $role, $onThePlatformTeam) {
+            // Read again after its row's lock: a platform invitation it accepted meanwhile (InvitationResponseController::join
+            // holds that row while it joins) is seen, so one account never ends up with both tiers.
+            if ($user->isOnThePlatformTeamNow()) {
+                throw ValidationException::withMessages(['organization_id' => $onThePlatformTeam]);
+            }
+
             if ($this->team->isMember($user, $organization)) {
                 throw ValidationException::withMessages(['organization_id' => "{$user->name} is already in {$organization->name}. Change their role there instead."]);
             }
 
             $user->organizations()->attach($organization->id, ['role_id' => $role->id]);
-        });
+        }, giving: $role, naming: $user);
 
         ActivityLog::record('member.assigned', $user,
             "Added {$user->name} ({$user->email}) to {$organization->name} as {$role->name}, from the platform",
@@ -304,7 +315,7 @@ class UserController extends Controller
             }
 
             return $current;
-        });
+        }, giving: $role);
 
         if ($role->id !== $current->id) {
             ActivityLog::record('member.role_changed', $user,

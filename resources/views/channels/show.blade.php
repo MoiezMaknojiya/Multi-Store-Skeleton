@@ -279,16 +279,23 @@
 
                         {{-- A fresh file: it joins the channel's library first, like an upload on the Media page. It goes up in
                              chunks the moment it is chosen (docs/UPLOADS-SPEC.md), and Save waits until it has arrived. The page
-                             listens here, not on the box: an expression on the box runs with the box's own `this`. --}}
-                        <div x-show="source === 'upload'" x-cloak x-ref="adUpload"
+                             listens here, not on the box: an expression on the box runs with the box's own `this`. However the
+                             dialog shuts (`show` is x-modal's own) — Escape and Discard Changes too — the box lets its file go,
+                             and a file nobody saved is given up. --}}
+                        <div x-show="source === 'upload'" x-cloak x-init="$watch('show', (open) => open || clearFile())"
                              x-on:upload-picked="onPicked($event.detail)"
                              x-on:upload-ready="onUploadReady($event.detail)"
                              x-on:upload-cleared="onUploadCleared()"
                              x-on:upload-busy="uploading = $event.detail.busy">
                             <x-crud.form-field label="File" field="file" :required="true">
-                                <x-upload-dropzone purpose="channel" mode="form" dusk="channel-ad"
-                                    context="{ channel: String(channelId), storage: storage }"
-                                    hint="JPG, PNG, GIF, WEBP, MP4 or WEBM — up to 250 MB, a video 5 minutes at most." />
+                                {{-- Held while the save carrying its file is on its way: its × or a new file would give that
+                                     upload up under the save. Bound here, in the page's scope, not on the box (see above). --}}
+                                <div x-bind:inert="holdsTheSavedUpload()" x-bind:data-held="holdsTheSavedUpload() ? 'true' : 'false'"
+                                     class="data-[held=true]:pointer-events-none data-[held=true]:opacity-50">
+                                    <x-upload-dropzone purpose="channel" mode="form" dusk="channel-ad"
+                                        context="{ channel: String(channelId), storage: storage }"
+                                        hint="JPG, PNG, GIF, WEBP, MP4 or WEBM — up to 250 MB, a video 5 minutes at most." />
+                                </div>
                             </x-crud.form-field>
                             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" dusk="channel-ad-upload-note">
                                 Plays muted. It joins <span x-text="uploadsJoin"></span>.

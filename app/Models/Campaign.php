@@ -97,46 +97,68 @@ class Campaign extends Model
     }
 
     /**
-     * Campaigns whose contract covers this date and which are switched on.
-     *
-     * The window inside a day is NOT applied here: it is wall clock, and has to be
-     * read on each screen's own timezone. That happens per screen, in isDueAt().
+     * Campaigns switched on whose contract could reach this moment on a screen's clock: live on its date, or on the day
+     * before, whose hours may run past midnight into this morning — the night of the 15th, 22:00 to 02:00, still plays at
+     * one on the 16th. Which of them is due is isDueAt()'s, per screen: the hours are wall clock.
      */
-    public function scopeLiveOn(Builder $query, CarbonInterface $day): Builder
+    public function scopeLiveAround(Builder $query, CarbonInterface $localMoment): Builder
     {
-        $date = CarbonImmutable::instance($day)->toDateString();
+        $today = CarbonImmutable::instance($localMoment)->toDateString();
+        $yesterday = CarbonImmutable::instance($localMoment)->subDay()->toDateString();
 
         // whereDate, not a plain comparison: the `date` cast writes these back as
         // "2026-03-20 00:00:00", and comparing that string against "2026-03-20" puts
         // the campaign's own first day outside its own contract.
         return $query
             ->where('is_active', true)
-            ->where(fn (Builder $q) => $q->whereNull('starts_on')->orWhereDate('starts_on', '<=', $date))
-            ->where(fn (Builder $q) => $q->whereNull('ends_on')->orWhereDate('ends_on', '>=', $date));
+            ->where(fn (Builder $q) => $q->whereNull('starts_on')->orWhereDate('starts_on', '<=', $today))
+            ->where(fn (Builder $q) => $q->whereNull('ends_on')->orWhereDate('ends_on', '>=', $yesterday));
     }
 
     /**
      * Is this campaign due at this moment, on this screen's clock?
      *
-     * The dates were already checked by the query; this is the window inside a day.
-     * No window means all day.
-     *
-     * The one expression covers both shapes: an ordinary window wants the time to be
-     * inside BOTH ends, and one that crosses midnight — 22:00 to 02:00 — wants it
-     * past the start OR before the end. The same rule a playlist line's schedule uses
-     * (ScheduleRule::coversAt).
+     * Its hours first — none means all day — and then its contract, read against the day those hours OPENED on, as a
+     * playlist line's schedule is (ScheduleRule::coversAt): a campaign of the nights of the 10th to the 15th, 22:00 to
+     * 02:00, plays until two on the morning of the 16th, and not at one on the morning of the 10th, which is the night
+     * of the 9th (the review of 2026-10-15: it was cut on its last night and spilled into the night before its first).
      */
     public function isDueAt(CarbonInterface $localMoment): bool
     {
-        if (! $this->start_time || ! $this->end_time) {
-            return true;
+        $day = $this->dayTheHoursOpenedOn(CarbonImmutable::instance($localMoment));
+
+        if ($day === null || ! $this->is_active) {
+            return false;
         }
 
-        $time = CarbonImmutable::instance($localMoment)->format('H:i');
+        $date = $day->toDateString();
 
-        return $this->end_time > $this->start_time
-            ? ($time >= $this->start_time && $time < $this->end_time)
-            : ($time >= $this->start_time || $time < $this->end_time);
+        return ($this->starts_on === null || $this->starts_on->toDateString() <= $date)
+            && ($this->ends_on === null || $this->ends_on->toDateString() >= $date);
+    }
+
+    /**
+     * Which day the hours open at this moment began on, or null when the clock is outside them. An ordinary window wants
+     * the time inside both ends; one that crosses midnight — 22:00 to 02:00 — opened today once past its start, and
+     * yesterday while before its end.
+     */
+    private function dayTheHoursOpenedOn(CarbonImmutable $at): ?CarbonImmutable
+    {
+        if (! $this->start_time || ! $this->end_time) {
+            return $at->startOfDay();
+        }
+
+        $time = $at->format('H:i');
+
+        if ($this->end_time > $this->start_time) {
+            return $time >= $this->start_time && $time < $this->end_time ? $at->startOfDay() : null;
+        }
+
+        if ($time >= $this->start_time) {
+            return $at->startOfDay();
+        }
+
+        return $time < $this->end_time ? $at->subDay()->startOfDay() : null;
     }
 
     /**

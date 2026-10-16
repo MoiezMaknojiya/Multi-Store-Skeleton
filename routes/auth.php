@@ -50,6 +50,10 @@ Route::middleware('auth')->group(function () {
     // controller reads the impersonation again, so the account itself is refused.
     Route::post('verify-email/confirm-for-them', [EmailVerificationController::class, 'confirmForThem'])
         ->middleware('throttle:admin')->name('verification.confirm-for-them');
+    // A confirmed account's change of email (owner, 2026-10-15): approved from the address it has now, then confirmed
+    // from the new one. Only a confirmed account has a change waiting, so the approval sits behind `verified`.
+    Route::get('approve-email/{id}/{hash}', [EmailVerificationController::class, 'approveNewEmail'])
+        ->whereNumber('id')->middleware(['verified', 'throttle:verification-link'])->name('email.approve');
     Route::get('confirm-email/{id}/{hash}', [EmailVerificationController::class, 'confirmNewEmail'])
         ->whereNumber('id')->middleware('throttle:verification-link')->name('email.confirm');
 

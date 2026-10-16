@@ -187,7 +187,7 @@
 
         {{-- Invite an owner: offered only for an organization that has none --}}
         <x-modal name="invite-organization-owner" :show="false" maxWidth="md" focusable>
-            <form @submit.prevent="sendOwnerInvite()" novalidate class="p-6 space-y-4" dusk="invite-owner-form">
+            <form @submit.prevent="sendOwnerInvite($event)" novalidate class="p-6 space-y-4" dusk="invite-owner-form">
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Give <span x-text="ownerOrganization?.name"></span> an owner</h2>
                     <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">

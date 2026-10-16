@@ -237,9 +237,13 @@ class BuilderAdRequest extends FormRequest
             // The poster the editor captures, as a data URI. Optional: an ad saves without one.
             'thumbnail' => ['nullable', 'string', 'starts_with:data:image/', 'max:4000000'],
 
-            // The organization a new ad is for, said by the platform team only (an organization's person builds in the organization
-            // they stand in, and whatever they send here is not read). Whether it exists is the controller's.
-            'organization_id' => ['nullable', 'integer', 'min:1'],
+            // The organization a new ad is for, said by the platform team only, from Create Ad's For list: an organization's id, or
+            // nothing for the platform's own. Read on a create alone — whose an ad is is fixed once it is made — so a save of an
+            // ad, and anything an organization's person sends (they build in the organization they stand in), is dropped unread.
+            // Whether it exists is the controller's.
+            'organization_id' => $this->user()?->globalRole() !== null && ! $this->route('ad') instanceof BuilderAd
+                ? ['nullable', 'integer', 'min:1']
+                : ['exclude'],
         ];
     }
 
@@ -262,6 +266,9 @@ class BuilderAdRequest extends FormRequest
             'document.stage.background.layers.max' => 'A background may stack at most '.self::MAX_LAYERS.' layers.',
             'document.guides.x.max' => 'A stage may keep at most '.self::MAX_GUIDES.' guides each way.',
             'document.guides.y.max' => 'A stage may keep at most '.self::MAX_GUIDES.' guides each way.',
+            // Create Ad's For list, as a request made by hand might bend it: a list, a word, or nought.
+            'organization_id.integer' => 'Choose Platform or one organization from the For list.',
+            'organization_id.min' => 'Choose Platform or one organization from the For list.',
         ];
     }
 

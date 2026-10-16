@@ -9,7 +9,9 @@ use App\Models\PlayerAppRelease;
 use App\Models\Upload;
 use App\Models\User;
 use Closure;
+use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
@@ -22,10 +24,14 @@ use Illuminate\Validation\ValidationException;
  *
  * Everything that would refuse the finished file is asked when the upload is OPENED, before a byte is sent: the
  * permission, the place (an organization the person works in, a channel within reach), the format by its name, the size, the
- * organization's 512 MB counting every upload still open for that organization — decided under the organization's lock, as OrganizationStorage
- * decides — and the server's reserve counting every open upload's missing bytes. When the last byte is in, the form
- * the file was chosen for posts the upload's id, and the file goes through the same door as ever
- * (Http\Requests\Concerns\TakesAFinishedUpload): its format read from its bytes, a video's length from the file.
+ * organization's 512 MB counting every upload still on its way into that organization, and every open upload into it at most
+ * that much — decided under the organization's lock, as OrganizationStorage decides — and the server's reserve counting every
+ * open upload's missing bytes. When the last byte is in, the
+ * form the file was chosen for posts the upload's id, and the file goes through the same door as ever
+ * (Http\Requests\Concerns\TakesAFinishedUpload): its format read from its bytes, a video's length from the file, the organization's
+ * wall decided again under its lock. A finished upload reserves no organization's room any more — the door decides that — so it is
+ * kept two hours for its door (FINISHED_LIFETIME_HOURS), not a day, and one the door refuses for what the file itself is goes at
+ * once (refuseForGood).
  */
 class ChunkedUploads
 {
@@ -40,6 +46,31 @@ class ChunkedUploads
 
     /** An unfinished upload is kept this long, then uploads:prune takes it. */
     public const LIFETIME_HOURS = 24;
+
+    /**
+     * A finished upload is kept at most this long for the form it was chosen for — its Save, or Try Again after a refusal room
+     * can fix — then uploads:prune takes it. It holds no organization's room any more (reservedInOrganization), so kept a day,
+     * twenty of them were 5 GB of the server's disk a person could hold for that long. Finishing never lengthens its day.
+     */
+    public const FINISHED_LIFETIME_HOURS = 2;
+
+    /**
+     * The name a finished upload's file has on its way into place, until the row naming its own place is made (the TV app's,
+     * PlayerAppController::store). A request that died in between leaves one; uploads:prune takes it after an hour.
+     */
+    public const INCOMING_PREFIX = '.incoming-';
+
+    /**
+     * Said in a refusal's answer when the upload is no use any more — gone, or given up because the file itself was refused —
+     * so the uploader shows the reason without a Try Again that could only fail (resources/js/core/upload-dropzone.js).
+     */
+    public const GIVEN_UP = 'upload_given_up';
+
+    /**
+     * How long a door may hold a finished upload while it makes its row (finishLock): the two minutes a picture's turn and its
+     * work fit in (MediaStorage::PICTURE_TURN_SECONDS).
+     */
+    public const FINISH_LOCK_SECONDS = 120;
 
     public function __construct(private readonly OrganizationStorage $quota, private readonly DiskGuard $disk) {}
 
@@ -152,7 +183,13 @@ class ChunkedUploads
                 fclose($out);
             }
 
-            $current->forceFill(['received' => $offset + $written])->save();
+            $current->received = $offset + $written;
+
+            if ($current->isComplete()) {
+                $current->expires_at = $current->expires_at->min(now()->addHours(self::FINISHED_LIFETIME_HOURS));
+            }
+
+            $current->save();
 
             return $current->received;
         });
@@ -182,21 +219,83 @@ class ChunkedUploads
         return new UploadedFile($upload->partPath(), $upload->filename, $upload->file_type, null, true);
     }
 
-    /** Give an upload up: its row, then its bytes. */
+    /**
+     * The lock a door holds while it reads a finished upload and makes its row (TakesAFinishedUpload): one upload makes one row,
+     * and nothing gives the upload up under the door meanwhile (cancel, prune).
+     */
+    public static function finishLock(string $id): Lock
+    {
+        return Cache::lock('upload-finish:'.$id, self::FINISH_LOCK_SECONDS);
+    }
+
+    /** Give an upload up: its row, then its bytes. Its door's own (it holds finishLock), and prune's under the same lock. */
     public function discard(Upload $upload): void
     {
         $upload->delete();
         Storage::disk(Upload::DISK)->delete($upload->partName());
     }
 
-    /** Take the expired uploads, and any part no row names (older than an hour) — nothing else there; how many went. */
+    /**
+     * Give an upload up at its person's word (tus termination: the box's ×, a form shut) — never while a door is making its row
+     * from it: its file would go from under the save that is reading it (409, and the door forgets the upload itself once done).
+     */
+    public function cancel(Upload $upload): void
+    {
+        $lock = self::finishLock($upload->id);
+
+        abort_unless($lock->get(), 409, 'This file is being added. Wait a moment.');
+
+        try {
+            $this->discard($upload);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * Refuse an upload for good: what is wrong is the file itself (its format, its size, its length, a file nobody can read), or
+     * the upload is gone, and posting it again would be refused again. It is given up at once — kept for a day, it held its
+     * place among the person's twenty and its bytes on the disk for nothing — and the answer says so (GIVEN_UP).
+     */
+    public function refuseForGood(ValidationException $refusal, ?Upload $upload = null): never
+    {
+        if ($upload !== null) {
+            $this->discard($upload);
+        }
+
+        if (request()->expectsJson()) {
+            $refusal->response = response()->json([
+                'message' => $refusal->getMessage(),
+                'errors' => $refusal->errors(),
+                self::GIVEN_UP => true,
+            ], $refusal->status);
+        }
+
+        throw $refusal;
+    }
+
+    /**
+     * Take the expired uploads, any part no row names (older than an hour) — nothing else there — and any TV app file a request
+     * left under its incoming name (older than an hour); how many went.
+     */
     public function prune(): int
     {
         $removed = 0;
 
+        // One a door is still making its row from (it found the upload just before its end) is left to the door, or the next run.
         Upload::where('expires_at', '<=', now())->lazyById()->each(function (Upload $upload) use (&$removed) {
-            $this->discard($upload);
-            $removed++;
+            $lock = self::finishLock($upload->id);
+
+            if (! $lock->get()) {
+                return;
+            }
+
+            try {
+                $this->discard($upload);
+                $removed++;
+            } finally {
+                $lock->release();
+            }
         });
 
         $disk = Storage::disk(Upload::DISK);
@@ -211,6 +310,16 @@ class ChunkedUploads
 
             if (! $named && $disk->lastModified($file) < now()->subHour()->getTimestamp()) {
                 $disk->delete($file);
+                $removed++;
+            }
+        }
+
+        // No row ever names one: a TV app version's row names the version's own file, which the incoming one becomes.
+        $public = Storage::disk('public');
+
+        foreach ($public->files(PlayerAppRelease::FOLDER) as $file) {
+            if (str_starts_with(basename($file), self::INCOMING_PREFIX) && $public->lastModified($file) < now()->subHour()->getTimestamp()) {
+                $public->delete($file);
                 $removed++;
             }
         }
@@ -317,25 +426,38 @@ class ChunkedUploads
     }
 
     /**
-     * Make the upload's row only while the organization has room for it beside what it holds and every upload still open for
-     * it — decided under the organization's row lock, reading inside the lock (OrganizationStorage::withRoom). Call it outside any
-     * other transaction.
+     * Make the upload's row only while the organization has room for it — decided under the organization's row lock, reading
+     * inside the lock (OrganizationStorage::withRoom), on two counts:
+     *  - the wall: what it holds and every upload still on its way into it. A finished upload is not counted there: its door
+     *    decides the wall again under the same lock when the file is posted, and one the door refused (the wall full) held the
+     *    organization's room for a day while the meter showed it free;
+     *  - what waits on the server's disk: every open upload into it, finished or not, never more than its storage — so its
+     *    people together park no more than that, as before (a finished upload that was never posted, then the next, held
+     *    twenty times 250 MB per person).
+     * Call it outside any other transaction.
      *
      * @param  Closure(): Upload  $create
      */
     private function reservedInOrganization(int $organizationId, int $size, Closure $create): Upload
     {
         return DB::transaction(function () use ($organizationId, $size, $create) {
-            $organization = Organization::whereKey($organizationId)->lockForUpdate()->first(['id', 'extra_storage_gb']);
+            $organization = Organization::whereKey($organizationId)->lockForUpdate()->first(['id', 'name', 'extra_storage_gb']);
 
             if ($organization === null) {
                 throw ValidationException::withMessages(['file' => 'That organization no longer exists. Reload the page and choose again.']);
             }
 
-            $taken = $this->quota->used($organizationId) + (int) Upload::where('organization_id', $organizationId)->open()->sum('size');
+            $limit = OrganizationStorage::limitOf((int) $organization->extra_storage_gb);
+            $open = Upload::where('organization_id', $organizationId)->open();
+            $taken = $this->quota->used($organizationId) + (int) (clone $open)->unfinished()->sum('size');
 
-            if ($taken + $size > OrganizationStorage::limitOf((int) $organization->extra_storage_gb)) {
+            if ($taken + $size > $limit) {
                 throw ValidationException::withMessages(['file' => $this->quota->fullMessage($organizationId, $size, $taken)]);
+            }
+
+            if ((int) $open->sum('size') + $size > $limit) {
+                throw ValidationException::withMessages(['file' => 'Files uploaded for '.$organization->name.' and not added yet already take its '
+                    .OrganizationStorage::inWords($limit).'. Add or remove them first, or try again later.']);
             }
 
             return $create();
@@ -354,9 +476,13 @@ class ChunkedUploads
         return $name;
     }
 
-    /** What the browser said the file is, kept only as a plain type ("video/mp4"); the rules read the bytes anyway. */
+    /**
+     * What the browser said the file is, kept only as a plain type ("video/mp4") of at most the 100 characters its column
+     * holds — a longer one was a 500 on MySQL's strict mode — and nothing after it (`\z`: a `$` lets a closing newline
+     * through); the rules read the bytes anyway.
+     */
     private function typeOf(mixed $type): ?string
     {
-        return is_string($type) && preg_match('#^[a-z]+/[a-z0-9.+-]{1,80}$#', $type) === 1 ? $type : null;
+        return is_string($type) && preg_match('#^[a-z]{1,19}/[a-z0-9.+-]{1,80}\z#', $type) === 1 ? $type : null;
     }
 }

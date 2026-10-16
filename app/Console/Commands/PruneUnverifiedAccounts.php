@@ -35,19 +35,34 @@ class PruneUnverifiedAccounts extends Command
             ->where('created_at', '<=', now()->subDays(User::UNVERIFIED_DAYS))
             ->lazyById()
             ->each(function (User $candidate) use (&$removed, &$kept) {
-                DB::transaction(function () use ($candidate, &$removed, &$kept) {
+                // Where they belong is looked up before the transaction: inside it the first read must be the lock, since
+                // MySQL's REPEATABLE READ answers every plain read of a transaction from the snapshot its first one took —
+                // and one taken before the wait would not see a file uploaded, or a person put in, while it waited.
+                $organizationIds = DB::table('organization_user')->where('user_id', $candidate->id)->pluck('organization_id');
+
+                DB::transaction(function () use ($candidate, $organizationIds, &$removed, &$kept) {
                     // The organization rows first, as every change to a team or a library takes them (OrganizationTeam::changeTeam,
                     // OrganizationStorage::withRoom), then the person's own row: nobody is put in, nothing is uploaded and
                     // the link is not opened between the look and the delete.
-                    $organizationIds = DB::table('organization_user')->where('user_id', $candidate->id)->pluck('organization_id');
-                    $organizations = Organization::whereIn('id', $organizationIds)->orderBy('id')->lockForUpdate()->get();
+                    $locked = Organization::whereIn('id', $organizationIds)->orderBy('id')->lockForUpdate()->get();
                     $user = User::whereKey($candidate->id)->lockForUpdate()->first();
 
                     if ($user === null || $user->hasVerifiedEmail()) {
                         return;   // gone meanwhile, or confirmed a moment ago
                     }
 
-                    $why = $this->whyKept($user->id, $organizationIds);
+                    // Looked at again under the locks: put in another organization since, they stay until the next run looks.
+                    $memberOf = DB::table('organization_user')->where('user_id', $user->id)->pluck('organization_id');
+
+                    if ($memberOf->diff($organizationIds)->isNotEmpty()) {
+                        $kept++;
+                        $this->warn("Kept {$user->email}: they were put in an organization during the run.");
+
+                        return;
+                    }
+
+                    $organizations = $locked->whereIn('id', $memberOf)->values();
+                    $why = $this->whyKept($user->id, $memberOf);
 
                     if ($why !== null) {
                         $kept++;

@@ -93,7 +93,7 @@ class AdExamplesOnTelevisionTest extends DuskTestCase
                 $tv->waitUsing(60, 250, function () use ($tv, $ad, &$layer) {
                     $layer = $tv->script(
                         'const frame = [...document.querySelectorAll("#layer-a iframe, #layer-b iframe")]'
-                        .'.find((f) => !f.closest("[id^=layer]").hidden && (f.dataset.src || "").includes("/ads/'.$ad->id.'/"));'
+                        .'.find((f) => !f.closest("[id^=layer]").hidden && (f.dataset.src || "").includes("/ads/'.$ad->storage_key.'/"));'
                         .'return frame ? frame.closest("[id^=layer]").id : null;'
                     )[0];
 

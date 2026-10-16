@@ -18,6 +18,8 @@ class BuilderAdFactory extends Factory
     {
         return [
             'organization_id' => Organization::factory(),
+            // Its folder's name, as the model gives one on create (BuilderAd::storageDirectory) — a made ad has one too.
+            'storage_key' => BuilderAd::newStorageKey(),
             'name' => fake()->words(2, true).' ad',
             'document' => BuilderAd::blankDocument(),
         ];

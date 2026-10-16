@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\BuilderAd;
+use App\Models\BuilderAsset;
 use App\Models\Channel;
 use App\Models\Media;
 use App\Models\Organization;
@@ -208,4 +209,84 @@ test('an upload is refused in the words its form shows', function () {
 
     $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->create('menu.pdf', 10, 'application/pdf')])
         ->assertStatus(422)->assertJsonValidationErrors(['file' => 'Only images (JPG, PNG, GIF, WEBP) and videos (MP4, WEBM) can be uploaded.']);
+});
+
+test("a library bent by hand on the Media page is refused in its Library list's words", function (mixed $library) {
+    $this->actingAs(createSuperAdmin())->withSession([]);
+
+    // Before: "The organization id field must be an integer." / "… must be at least 1."
+    $this->postJson('/media', ['file' => UploadedFile::fake()->image('menu.jpg'), 'organization_id' => $library])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['organization_id' => 'Choose the Platform library or one organization from the Library list.']);
+
+    expect(Media::count())->toBe(0);
+})->with([
+    'a list' => [[7]],
+    'a word' => ['alpha'],
+    'nought' => [0],
+    'below nought' => [-3],
+]);
+
+test("an organization's person sends no library: one bent by hand is dropped unread, and the file joins their own", function () {
+    // Before: refused in Laravel's words, for a field their page has no list to say.
+    $this->postJson('/media', ['file' => UploadedFile::fake()->image('menu.jpg'), 'organization_id' => ['x']])->assertOk();
+
+    expect(Media::sole()->organization_id)->toBe($this->organization->id);
+});
+
+test("a shelf bent by hand on the Ad Builder's Assets page is refused in its Owner list's words", function (mixed $owner) {
+    $this->actingAs(createSuperAdmin());
+    $this->flushSession();
+
+    // Before: "The organization id field must be an integer." / "… must be at least 1."
+    $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png'), 'organization_id' => $owner])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['organization_id' => 'Choose Platform or one organization from the Owner list.']);
+
+    expect(BuilderAsset::count())->toBe(0);
+})->with([
+    'a list' => [[7]],
+    'a word' => ['alpha'],
+    'nought' => [0],
+    'below nought' => [-3],
+]);
+
+test("an organization's person sends no shelf: one bent by hand is dropped unread, and the file joins their own", function () {
+    // Before: refused in Laravel's words, for a field their page has no Owner list to say.
+    $this->postJson('/builder/assets', ['file' => UploadedFile::fake()->image('logo.png'), 'organization_id' => ['x']])->assertOk();
+
+    expect(BuilderAsset::sole()->organization_id)->toBe($this->organization->id);
+});
+
+test("the organization a new ad is for, bent by hand, is refused in Create Ad's For list words", function (mixed $for) {
+    $this->actingAs(createSuperAdmin());
+    $this->flushSession();
+
+    // Before: "The organization id field must be an integer." / "… must be at least 1."
+    $this->postJson('/builder', ['name' => 'Winter sale', 'document' => BuilderAd::factory()->withText()->make()->document, 'organization_id' => $for])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['organization_id' => 'Choose Platform or one organization from the For list.']);
+
+    expect(BuilderAd::count())->toBe(0);
+})->with([
+    'a list' => [[7]],
+    'a word' => ['alpha'],
+    'nought' => [0],
+    'below nought' => [-3],
+]);
+
+test('whose an ad is is read on its create, from the platform alone: anything else sent is dropped unread', function () {
+    $document = BuilderAd::factory()->withText()->make()->document;
+
+    // An organization's person builds in the organization they stand in. Before: refused in Laravel's words.
+    $this->postJson('/builder', ['name' => 'Winter sale', 'document' => $document, 'organization_id' => ['x']])->assertOk();
+    expect(BuilderAd::sole()->organization_id)->toBe($this->organization->id);
+
+    // A save of an ad never moves it, and asks nothing of a field it does not read — the platform's included. Before: refused.
+    $this->actingAs(createSuperAdmin());
+    $this->flushSession();
+    $ad = BuilderAd::sole();
+
+    $this->putJson("/builder/{$ad->id}", ['name' => 'Winter sale', 'document' => $document, 'organization_id' => 'alpha'])->assertOk();
+    expect($ad->fresh()->organization_id)->toBe($this->organization->id);
 });

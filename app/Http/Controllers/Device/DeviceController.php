@@ -32,15 +32,17 @@ class DeviceController extends Controller
 
     /**
      * A screen with no token asks to be adopted. Returns the six-character code it
-     * should put on the TV, and the secret only it may poll with.
+     * should put on the TV, and the secret only it may poll with. A set that asked before sends that secret too: its own
+     * code comes back only with it (DevicePairing::register).
      */
     public function register(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'device_uuid' => ['nullable', 'string', 'max:40'],
+            'poll_secret' => ['nullable', 'string', 'max:64'],
         ]);
 
-        return response()->json($this->pairing->register($validated['device_uuid'] ?? null));
+        return response()->json($this->pairing->register($validated['device_uuid'] ?? null, $validated['poll_secret'] ?? null));
     }
 
     /**

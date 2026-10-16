@@ -158,7 +158,7 @@
 
         {{-- Invite to the platform team --}}
         <x-modal name="invite-platform-member" :show="false" maxWidth="md" focusable>
-            <form @submit.prevent="sendInvite()" novalidate class="p-6 space-y-4" dusk="invite-platform-form">
+            <form @submit.prevent="sendInvite($event)" novalidate class="p-6 space-y-4" dusk="invite-platform-form">
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Invite to the platform team</h2>
                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -212,7 +212,7 @@
                                         </select>
                                     </div>
                                     <div class="flex items-center gap-2 shrink-0">
-                                        <button type="button" class="btn-row-neutral" @click="saveMembershipRole(membership)"
+                                        <button type="button" class="btn-row-neutral" @click="saveMembershipRole(membership, $event)"
                                                 x-bind:disabled="membership.busy || membership.selected_role_id === membership.role_id"
                                                 x-bind:aria-label="'Save the role in ' + membership.organization_name"
                                                 x-bind:dusk="'membership-save-' + membership.organization_id">
@@ -251,7 +251,7 @@
                 <section class="border-t border-gray-200 dark:border-gray-700 pt-5">
                     <h3 class="text-sm font-semibold text-gray-800 dark:text-gray-100">Add to an organization</h3>
                     <p x-show="access.organizations.length === 0" class="mt-2 text-sm text-gray-500 dark:text-gray-400">They are already in every organization.</p>
-                    <form x-show="access.organizations.length > 0" @submit.prevent="assignToOrganization()" class="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-start" dusk="assign-organization-form">
+                    <form x-show="access.organizations.length > 0" @submit.prevent="assignToOrganization($event)" class="mt-3 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-start" dusk="assign-organization-form">
                         <div x-bind:class="assignErrors.organization_id ? 'crud-field-error' : ''">
                             <label for="assign-organization" class="form-label">Organization <span class="text-red-600" aria-hidden="true">*</span></label>
                             <select id="assign-organization" class="form-select" x-model="assignForm.organization_id" @change="assignForm.role_id = ''" dusk="assign-organization" aria-required="true">

@@ -144,7 +144,7 @@ class AdOrientationFlowTest extends DuskTestCase
                 ->assertMissing('@picker-orientation-'.$media->id);
 
             // The picker's thumbnail is the library row's own copy of the upright poster.
-            $thumb = 'document.querySelector(\'img[src*="/ads/'.$ad->id.'/published.jpg"]\')';
+            $thumb = 'document.querySelector(\'img[src*="/ads/'.$ad->storage_key.'/published.jpg"]\')';
             $panel->waitUntil("!!{$thumb} && {$thumb}.complete && {$thumb}.naturalWidth > 0", 10);
             $this->assertSame([360, 640], $panel->script("const i = {$thumb}; return [i.naturalWidth, i.naturalHeight];")[0], 'the picker shows the upright poster');
 
@@ -225,7 +225,7 @@ class AdOrientationFlowTest extends DuskTestCase
         $tv->waitUsing(60, 250, function () use ($tv, $ad, &$layer) {
             $layer = $tv->script(
                 'const frame = [...document.querySelectorAll("#layer-a iframe, #layer-b iframe")]'
-                .'.find((f) => !f.closest("[id^=layer]").hidden && (f.dataset.src || "").includes("/ads/'.$ad->id.'/"));'
+                .'.find((f) => !f.closest("[id^=layer]").hidden && (f.dataset.src || "").includes("/ads/'.$ad->storage_key.'/"));'
                 .'return frame ? frame.closest("[id^=layer]").id : null;'
             )[0];
 

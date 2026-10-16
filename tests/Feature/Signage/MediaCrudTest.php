@@ -1,12 +1,15 @@
 <?php
 
+use App\Models\ActivityLog;
 use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\Screen;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\VideoFiles;
 
@@ -346,6 +349,60 @@ test('a file a channel shows is not deleted until it is taken out of the channel
 
     expect(Media::find($media->id))->toBeNull();
     Storage::disk('public')->assertMissing($media->path);
+});
+
+/*
+| Somebody adds the file to a channel at the very moment somebody else deletes it: both lock the file's row and look again inside
+| the lock (ChannelAdController::refuseAFileAPlaylistHolds takes the same one). One PHP process cannot race itself, so the other
+| person's ad lands the moment this delete takes its lock — after the page's own look, before the delete's.
+*/
+test('a channel ad added while the file is being deleted is seen under the lock, and the delete refused', function () {
+    Storage::fake('public');
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['media-view', 'media-destroy']);
+    $media = Media::factory()->create(['organization_id' => $organization->id]);
+    Storage::disk('public')->put($media->path, 'image');
+    $channel = Channel::factory()->create(['organization_id' => $organization->id, 'name' => 'Weekly Deals']);
+
+    $landed = false;
+    DB::listen(function (QueryExecuted $query) use (&$landed, $media, $channel) {
+        if (! $landed && str_starts_with($query->sql, 'select "id" from "media" where "media"."id" =')) {
+            $landed = true;
+            ChannelAd::factory()->create(['channel_id' => $channel->id, 'media_id' => $media->id]);
+        }
+    });
+
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
+        ->deleteJson("/media/{$media->id}")
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['file' => 'Still used by the channel Weekly Deals. Take it out of that channel first.']);
+
+    // The file stays, on the disk too, so the ad is never taken away with it by the foreign key's cascade. (The ad itself was
+    // written inside this request's transaction, which the refusal rolled back: in life it is the other person's own.)
+    expect($landed)->toBeTrue()->and(Media::find($media->id))->not->toBeNull();
+    Storage::disk('public')->assertExists($media->path);
+});
+
+test('a file deleted in another tab while it is being deleted here says it is no longer here', function () {
+    $organization = Organization::factory()->create();
+    $actor = createOrganizationUser($organization, ['media-view', 'media-destroy']);
+    $media = Media::factory()->create(['organization_id' => $organization->id]);
+
+    // Gone the moment after this request found it within its organization, before it took the lock.
+    $gone = false;
+    DB::listen(function (QueryExecuted $query) use (&$gone, $media) {
+        if (! $gone && str_starts_with($query->sql, 'select * from "media"') && str_contains($query->sql, '"media"."id" =')) {
+            $gone = true;
+            DB::table('media')->where('id', $media->id)->delete();
+        }
+    });
+
+    $this->actingAs($actor)->withSession(['current_organization_id' => $organization->id])
+        ->deleteJson("/media/{$media->id}")
+        ->assertNotFound();
+
+    // Nobody is told a file was deleted that this request never deleted.
+    expect($gone)->toBeTrue()->and(ActivityLog::where('action', 'media.deleted')->exists())->toBeFalse();
 });
 
 test('the listing carries the refusal with each file a channel shows, so the page says it before any confirmation', function () {

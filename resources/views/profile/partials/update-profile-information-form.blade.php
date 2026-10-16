@@ -20,7 +20,9 @@
         <x-auth.form-field name="phone" label="Phone (10 digits)" type="tel" :required="true" :value="$user->phone"
             placeholder="1234567890" data-digits="10" inputmode="numeric" autocomplete="tel-national" />
 
-        <x-auth.form-field name="email" label="Email" type="email" :required="true" :value="$user->email" maxlength="255" autocomplete="username" />
+        {{-- Read-only for a super admin viewing as an account not confirmed yet (ProfileController::emailIsTheirsAlone). --}}
+        <x-auth.form-field name="email" label="Email" type="email" :required="true" :value="$user->email" maxlength="255" autocomplete="username"
+            :readonly="$emailIsTheirsAlone" :hint="$emailIsTheirsAlone ? 'Only '.$user->name.' can correct this email, signed in themselves.' : null" />
 
         {{-- "Your profile is saved." arrives as a toast (components/toasts.blade.php). --}}
         <div class="flex items-center gap-4">
@@ -28,8 +30,9 @@
         </div>
     </form>
 
-    {{-- The email, confirmed by a link to it (owner's rule, 2026-09-29): a changed address waits here until its link
-         is opened, and the account keeps the one it has meanwhile. --}}
+    {{-- The email, confirmed by a link to it (owner's rule, 2026-09-29): a changed address waits here, and the account
+         keeps the one it has meanwhile — approved first from that address, then confirmed from the new one (owner,
+         2026-10-15), so an open session alone cannot move the account to another inbox. --}}
     @if (session('error'))
         <p class="alert-error mt-4" role="alert" dusk="profile-email-error">{{ session('error') }}</p>
     @endif
@@ -42,10 +45,9 @@
         <p class="alert-success mt-4" role="status" dusk="profile-verification-sent">A new link is on its way to {{ $user->email }}. Open it to confirm your email.</p>
     @elseif (! $user->hasVerifiedEmail())
         {{-- Not confirmed yet: only this page and "Check your inbox" open until it is. --}}
-        <div class="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
-             dusk="profile-email-unconfirmed">
+        <div class="alert-warning mt-4" dusk="profile-email-unconfirmed">
             <p>
-                Your email is not confirmed yet. Open the link we sent to
+                Your email is not confirmed yet. Open the link in the email to
                 <strong class="break-all">{{ $user->email }}</strong> to use the panel.
             </p>
             <form method="POST" action="{{ route('verification.send') }}" class="mt-3">
@@ -56,12 +58,25 @@
     @endif
 
     @if ($user->pending_email)
-        <div class="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
-             dusk="profile-email-pending">
-            <p>
-                We sent a link to <strong class="break-all">{{ $user->pending_email }}</strong>. Your email changes once
-                you open it; until then it stays {{ $user->email }}.
-            </p>
+        {{-- Which of the two steps it stands at, said as a step: the approval from the address it has, then the new one's link.
+             Neither says its email went out — a change waiting from before the approval step had none, and a mail server may
+             have refused one — so each says what to do when it has not come. --}}
+        <div class="alert-warning mt-4" dusk="profile-email-pending">
+            @if ($user->emailChangeApproved())
+                <p dusk="profile-email-step-confirm">
+                    <span class="font-medium">Step 2 of 2:</span> approved. Open the link in the email to
+                    <strong class="break-all">{{ $user->pending_email }}</strong> to finish.
+                    Until then your email stays <span class="break-all">{{ $user->email }}</span>.
+                    No email? Press Send the Link Again.
+                </p>
+            @else
+                <p dusk="profile-email-step-approve">
+                    <span class="font-medium">Step 1 of 2:</span> approve the change to
+                    <strong class="break-all">{{ $user->pending_email }}</strong> with the link in the email to
+                    <strong class="break-all">{{ $user->email }}</strong>, which stays your email until the change is done.
+                    No email? Press Send the Link Again.
+                </p>
+            @endif
             @if (session('status') === 'email-link-resent')
                 <p class="mt-2 font-medium" dusk="profile-email-resent">A new link is on its way.</p>
             @endif

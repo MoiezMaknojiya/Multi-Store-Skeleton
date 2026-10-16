@@ -186,6 +186,36 @@ test('a PNG claiming a picture of two billion pixels a side is stored as it came
     expect($media)->mime_type->toBe('image/png')->thumbnail_path->toBeNull();
 })->with(['2^31 - 1' => 0x7FFFFFFF, '2^30' => 0x40000000, 'a mere 2^24' => 0x1000000]);
 
+/** The JPEG with $count fill bytes (0xFF) after its frame header, before the next marker: legal, and a real file has a handful. */
+function poaWithFill(string $jpeg, int $count): string
+{
+    $frame = strpos($jpeg, "\xFF\xC0");
+    $end = $frame + 2 + unpack('n', substr($jpeg, $frame + 2, 2))[1];
+
+    return substr($jpeg, 0, $end).str_repeat("\xFF", $count).substr($jpeg, $end);
+}
+
+test('a JPEG padded with more fill bytes than any real one is stored as it came at once; a handful is a JPEG like any other', function () {
+    $optimizer = app(PictureOptimizer::class);
+    // Over 4K, so it is always written again when it is read as a JPEG.
+    $jpeg = poaPicture(3900, 60, 'jpeg');
+
+    expect($optimizer->optimize(poaFile(poaWithFill($jpeg, 7)), 'image/jpeg'))->toBeArray()
+        ->and($optimizer->optimize(poaFile(poaWithFill($jpeg, 5000)), 'image/jpeg'))->toBeNull();
+
+    // 25 MB of them were read a byte at a time — five seconds here, a minute for the 250 MB an upload may be — while every
+    // other picture upload on the server waited for its turn.
+    $started = microtime(true);
+
+    expect($optimizer->optimize(poaFile(poaWithFill($jpeg, 25 << 20)), 'image/jpeg'))->toBeNull()
+        ->and(microtime(true) - $started)->toBeLessThan(1.0);
+
+    // Uploaded, it is stored exactly as it came, never refused.
+    [$response, $media] = poaUpload(poaFile($padded = poaWithFill($jpeg, 5000)), 'padded.jpg', 'image/jpeg');
+    $response->assertOk();
+    expect(Storage::disk('public')->get($media->path))->toBe($padded);
+});
+
 test('the memory a picture would need is reckoned without overflowing, however large it claims to be', function () {
     expect(PictureOptimizer::fitsInMemory(PHP_INT_MAX * 4.0))->toBeFalse()
         ->and(app(PictureOptimizer::class)->optimize(poaClaimingPng(0x7FFFFFFF, 0x7FFFFFFF), 'image/png'))->toBeNull();

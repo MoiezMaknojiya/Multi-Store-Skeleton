@@ -76,10 +76,10 @@ class UploadController extends Controller
         return response()->noContent(204, ['Upload-Offset' => (string) $received]);
     }
 
-    /** Give an upload up. */
+    /** Give an upload up — not while a door is making its row from it (409). */
     public function destroy(Request $request, string $upload): Response
     {
-        $this->uploads->discard($this->mine($request, $upload));
+        $this->uploads->cancel($this->mine($request, $upload));
 
         return response()->noContent();
     }
@@ -94,10 +94,10 @@ class UploadController extends Controller
         return $upload;
     }
 
-    /** A header that is one whole number, or null. */
+    /** A header that is one whole number and nothing after it (`\z`: a `$` lets a closing newline through), or null. */
     private function number(mixed $value): ?int
     {
-        return is_string($value) && preg_match('/^\d{1,15}$/', $value) === 1 ? (int) $value : null;
+        return is_string($value) && preg_match('/^\d{1,15}\z/', $value) === 1 ? (int) $value : null;
     }
 
     /**

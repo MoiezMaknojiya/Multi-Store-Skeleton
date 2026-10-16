@@ -113,6 +113,8 @@ class BuilderAssetController extends Controller
     public function store(BuilderAssetRequest $request): JsonResponse
     {
         $organizationId = $this->targetOrganizationId($request->validated());
+        // A file sent in chunks goes onto the shelf it was dropped on, never the one the page's Owner list shows by now.
+        $request->assertUploadOpenedFor($organizationId, 'owner');
 
         $file = $request->file('file');
         // What came, before a picture is made lighter (PictureOptimizer) — read now, while the upload is still on disk.

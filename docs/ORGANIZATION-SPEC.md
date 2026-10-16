@@ -190,8 +190,10 @@ schema and the starter data directly.
 9. **At least one Owner, always.** The last Owner cannot be demoted, removed, leave, or delete their account —
    whoever asks: reach is permissions only (rules 7–8), so every change or removal of a member checks this on its own,
    and the Members page offers no Change role or Remove on an organization's only Owner.
-   Every change that could break this is decided under a lock on the organization row (`OrganizationTeam::changeTeam`),
-   so two co-owners acting at the same moment cannot both pass.
+   Every change that could break this is decided under a lock on the organization row (`OrganizationTeam::changeTeam`;
+   an account deleting itself holds every organization it is in, Owner or not, then its own row:
+   `OrganizationTeam::whileTheirOrganizationsAreLocked`), so two co-owners acting at the same moment cannot both pass.
+   Locks are taken in one order everywhere — organization, person, invitation, role (2026-10-15).
 10. **Leave organization:** any member, except the last Owner — from the Members page, from "Your organizations" on Settings →
     Organizations, or — for whoever has no Organizations tab (no View Organizations where they work, like Staff and Viewer) — from
     "Your organizations" on the profile. Leaving returns to the page it came from; leaving the organization being worked in goes
@@ -211,14 +213,18 @@ schema and the starter data directly.
 ### E. Joining
 15. **Invite** (`member-invite`): email + role (rule 7). Refused when the email is already a member, a
     pending invitation for that email exists (use Resend), or the email belongs to a platform account.
-    Link valid **7 days**. Resend rotates the token and resets the expiry; Revoke deletes it.
+    Link valid **7 days**. Resend rotates the token and resets the expiry, under the invitation's own row lock (Resend on
+    one revoked a moment ago is 404 and sends nothing); Revoke deletes it.
 16. **Accept:** the link shows organization, role and inviter.
     - Signed out, account exists → "Sign in to accept" (returns to the link).
     - Signed out, no account → create account (email fixed from the invitation, marked verified).
     - Signed in with the same email → Accept / Decline.
     - Signed in with another email → explanation + sign out.
     - Accepting creates the membership, deletes the invitation, and switches the session to that organization.
-      The invitation row is taken under a lock, so a double submit or a second tab never uses a link twice.
+      The organization's row is taken under a lock, then the person's, then the invitation's (2026-10-15), so a double
+      submit or a second tab never uses a link twice, and an organization deleted while the answer waited is said where it
+      lands ("{organization} has been deleted, so this invitation can no longer be used." on the dashboard, "no longer
+      valid" on the link's page).
     - Accepting an invitation to an organization you are already in only uses it up (logged).
     - The email is sent through `Invitation::sendLink()`: a mail server that refuses is reported, the
       invitation stands, and the response says the email was not sent (shown as an error, not a 500).

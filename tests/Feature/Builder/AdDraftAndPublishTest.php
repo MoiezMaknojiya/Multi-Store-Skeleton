@@ -87,7 +87,7 @@ test('a changed published ad keeps its published version on its screens until th
     } else {
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->id, 'position' => 0, 'duration_seconds' => 12]);
     }
-    $pageOnScreen = fn () => collect(addressesOnScreen($this, 'live-token'))->filter(fn (string $url) => str_contains($url, "/ads/{$ad->id}/"));
+    $pageOnScreen = fn () => collect(addressesOnScreen($this, 'live-token'))->filter(fn (string $url) => str_contains($url, "/ads/{$ad->storage_key}/"));
     // The picker of where it plays offers it; the other side's leaves it out.
     [$offering, $leavingOut] = $from === 'a channel'
         ? ["/channels/{$channel->id}/library?type=html", "/screens/{$screen->id}/available-media"]
@@ -194,7 +194,7 @@ test('unpublishing takes the page off its screens, channel and pickers — and p
         PlaylistItem::create(['screen_id' => $screen->id, 'position' => $position, ...$line]);
     }
 
-    $pageOnScreen = fn () => collect(addressesOnScreen($this, 'draft-token'))->filter(fn (string $url) => str_contains($url, "/ads/{$ad->id}/"));
+    $pageOnScreen = fn () => collect(addressesOnScreen($this, 'draft-token'))->filter(fn (string $url) => str_contains($url, "/ads/{$ad->storage_key}/"));
     $pickers = fn () => [
         'playlist' => idsFrom($this, "/screens/{$screen->id}/available-media"),
         'holding picture' => idsFrom($this, "/screens/{$screen->id}/media-options"),

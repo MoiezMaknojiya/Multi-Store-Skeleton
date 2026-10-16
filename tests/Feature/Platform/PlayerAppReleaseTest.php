@@ -172,18 +172,29 @@ test('a version must be newer than the one every TV is offered', function () {
     $this->actingAs($this->admin);
     aRelease(2, '1.1');
 
-    // Said the moment the file is read, before anybody types notes and presses Publish — and Publish refuses it too.
-    $same = uploadTheApp($this, ApkFiles::apk(ApkFiles::manifest(versionCode: 2, versionName: '1.1')));
+    // Said the moment the file is read, before anybody types notes and presses Publish — and the upload is given up, being the
+    // file it is. Publish refuses it too, posted straight to it.
+    $apk = ApkFiles::apk(ApkFiles::manifest(versionCode: 2, versionName: '1.1'));
+    $same = uploadTheApp($this, $apk);
     $this->postJson('/developer/app/inspect', ['upload' => $same])->assertStatus(422)
-        ->assertJsonValidationErrors(['file' => 'This is version 1.1 (code 2): it must be newer than 1.1 (code 2), the one every TV is offered now.']);
+        ->assertJsonValidationErrors(['file' => 'This is version 1.1 (code 2): it must be newer than 1.1 (code 2), the one every TV is offered now.'])
+        ->assertJsonPath('upload_given_up', true);
+    expect(Upload::whereKey($same)->exists())->toBeFalse();
+
+    $same = uploadTheApp($this, $apk);
     $this->postJson('/developer/app/releases', ['upload' => $same])->assertStatus(422)
-        ->assertJsonValidationErrors(['file' => 'This is version 1.1 (code 2): it must be newer than 1.1 (code 2), the one every TV is offered now.']);
+        ->assertJsonValidationErrors(['file' => 'This is version 1.1 (code 2): it must be newer than 1.1 (code 2), the one every TV is offered now.'])
+        ->assertJsonPath('upload_given_up', true);
+    expect(Upload::whereKey($same)->exists())->toBeFalse();
 
     $typed = uploadTheApp($this, ApkFiles::apk(ApkFiles::manifest(versionCode: null, versionName: null)));
     $this->postJson('/developer/app/releases', ['upload' => $typed, 'version_code' => 1, 'version_name' => '1.0'])->assertStatus(422)
-        ->assertJsonValidationErrors(['version_code' => 'This is version 1.0 (code 1): it must be newer than 1.1 (code 2), the one every TV is offered now.']);
+        ->assertJsonValidationErrors(['version_code' => 'This is version 1.0 (code 1): it must be newer than 1.1 (code 2), the one every TV is offered now.'])
+        ->assertJsonMissingPath('upload_given_up');
 
-    expect(PlayerAppRelease::count())->toBe(1);
+    // A typed number is the page's to change: the file waits for it.
+    expect(PlayerAppRelease::count())->toBe(1)->and(Upload::whereKey($typed)->exists())->toBeTrue();
+    $this->postJson('/developer/app/releases', ['upload' => $typed, 'version_code' => 3, 'version_name' => '1.2'])->assertOk();
 });
 
 test('only the TV app: another kind of file is refused before a byte, and another app or no app once it is in', function () {
@@ -194,17 +205,24 @@ test('only the TV app: another kind of file is refused before a byte, and anothe
     Tus::open($this, PlayerAppRelease::MAX_BYTES + 1, ['name' => 'big.apk', 'type' => 'application/vnd.android.package-archive', 'purpose' => 'app-release'])
         ->assertStatus(413)->assertSee('The app may not be larger than 200 MB.');
 
-    $other = uploadTheApp($this, ApkFiles::apk(ApkFiles::manifest(package: 'com.example.game')));
-    $this->postJson('/developer/app/inspect', ['upload' => $other])->assertStatus(422)
-        ->assertJsonValidationErrors(['file' => 'This is another app (com.example.game), not the TV app.']);
-    $this->postJson('/developer/app/releases', ['upload' => $other])->assertStatus(422)
-        ->assertJsonValidationErrors(['file' => 'This is another app (com.example.game), not the TV app.']);
+    // Asked, or posted straight to Publish, each is refused for what it is, and its upload goes at once.
+    $game = ApkFiles::apk(ApkFiles::manifest(package: 'com.example.game'));
+    foreach (['/developer/app/inspect', '/developer/app/releases'] as $door) {
+        $other = uploadTheApp($this, $game);
+        $this->postJson($door, ['upload' => $other])->assertStatus(422)
+            ->assertJsonValidationErrors(['file' => 'This is another app (com.example.game), not the TV app.'])
+            ->assertJsonPath('upload_given_up', true);
 
-    $notAnApp = uploadTheApp($this, '<html>surprise</html>', 'evil.apk');
-    $this->postJson('/developer/app/inspect', ['upload' => $notAnApp])->assertStatus(422)->assertJsonValidationErrors(['file' => PlayerAppRelease::ONLY_AN_APK]);
-    $this->postJson('/developer/app/releases', ['upload' => $notAnApp])->assertStatus(422)->assertJsonValidationErrors(['file' => PlayerAppRelease::ONLY_AN_APK]);
+        $notAnApp = uploadTheApp($this, '<html>surprise</html>', 'evil.apk');
+        $this->postJson($door, ['upload' => $notAnApp])->assertStatus(422)
+            ->assertJsonValidationErrors(['file' => PlayerAppRelease::ONLY_AN_APK])
+            ->assertJsonPath('upload_given_up', true);
+    }
 
-    expect(PlayerAppRelease::count())->toBe(0)->and(Storage::disk('public')->allFiles())->toBe([]);
+    expect(PlayerAppRelease::count())->toBe(0)
+        ->and(Storage::disk('public')->allFiles())->toBe([])
+        ->and(Upload::count())->toBe(0)
+        ->and(Storage::disk('uploads')->allFiles())->toBe([]);
 });
 
 test('nobody but the super admin opens an upload for the TV app', function () {

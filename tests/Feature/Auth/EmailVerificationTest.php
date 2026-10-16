@@ -129,7 +129,9 @@ test('a mail server that refuses is said on the page; the signup stands', functi
     $this->post('/register', newCustomer())->assertRedirect(route('verification.notice'));
 
     expect(User::where('email', 'sana@example.com')->exists())->toBeTrue();
-    $this->get('/verify-email')->assertSee('The email could not be sent just now.');
+    // … and the page beside it never says the link was sent.
+    $this->get('/verify-email')->assertSee('The email could not be sent just now.')
+        ->assertSee('Open the link in the email to')->assertDontSee('We sent a link');
 });
 
 test('an account made through an invitation counts as confirmed', function () {
@@ -171,6 +173,35 @@ test('a super admin viewing as an account that has not confirmed confirms its em
     $this->get('/dashboard')->assertOk();
     $this->post('/impersonate/stop')->assertRedirect(route('dashboard'));
     expect(auth()->id())->toBe($admin->id);
+});
+
+test('"Check your inbox" says whose page it is, so Confirm Email sent from a tab left on another account confirms nobody', function () {
+    // The page is drawn in the guest layout, which said nothing of the session: a super admin viewing as one account in
+    // tab 1 and as another in tab 2 confirmed the second from tab 1 (RefuseAStaleTab had no context to compare).
+    $admin = createSuperAdmin();
+    $first = User::factory()->unverified()->create(['email' => 'first@example.com']);
+    $second = User::factory()->unverified()->create(['email' => 'second@example.com']);
+
+    // Tab 1: viewing as the first account.
+    $this->actingAs($admin)->post("/users/{$first->id}/impersonate");
+    $page = $this->get('/verify-email')->assertOk()->assertSee('Confirm Email and Continue')->getContent();
+    expect(preg_match('/<meta name="session-context" content="([^"]+)">/', $page, $context))->toBe(1)
+        ->and($context[1])->toBe("{$first->id}:0");
+
+    // Tab 2: back to the super admin, and on to the second account.
+    $this->post('/impersonate/stop');
+    $this->post("/users/{$second->id}/impersonate");
+
+    // Tab 1's button, sent with the context it was drawn with (core/form-guard.js): refused, and said on the page.
+    $this->from('/verify-email')->post('/verify-email/confirm-for-them', ['_context' => $context[1]])->assertRedirect('/verify-email');
+    expect($second->fresh()->hasVerifiedEmail())->toBeFalse()
+        ->and($first->fresh()->hasVerifiedEmail())->toBeFalse()
+        ->and(ActivityLog::where('action', 'account.verified')->count())->toBe(0);
+    $this->get('/verify-email')->assertSee('This page is out of date: this browser is now signed in as');
+
+    // Sent from the second account's own page, it confirms the second account.
+    $this->post('/verify-email/confirm-for-them', ['_context' => "{$second->id}:0"])->assertRedirect(route('dashboard'));
+    expect($second->fresh()->hasVerifiedEmail())->toBeTrue();
 });
 
 test('the account itself never sees the button, and is refused when it asks to be confirmed', function () {

@@ -101,9 +101,9 @@ test('an ad for every organization is the platform\'s: no organization, its own 
 
     expect($ad->organization_id)->toBeNull()
         ->and($ad->isShared())->toBeTrue()
-        ->and($ad->thumbnail_path)->toBe("builder/platform/ads/{$ad->id}/poster.jpg")
+        ->and($ad->thumbnail_path)->toMatch('#^builder/platform/ads/'.$ad->storage_key.'/poster-[0-9a-f]{32}\.jpg$#')
         ->and($ad->media->organization_id)->toBeNull()
-        ->and($ad->media->path)->toBe("builder/platform/ads/{$ad->id}/index.html")
+        ->and($ad->media->path)->toBe("builder/platform/ads/{$ad->storage_key}/index.html")
         ->and(app(OrganizationStorage::class)->summary($this->organization->id)['used'])->toBe($before);
 
     Storage::disk('public')->assertExists([$ad->thumbnail_path, $ad->media->path, $ad->media->thumbnail_path]);
@@ -202,7 +202,7 @@ test('above the organizations the platform\'s ads are changed with Update Ads an
         ->and(Media::find($ad->media_id))->toBeNull()
         ->and(BuilderAd::find($copyId)?->organization_id)->toBe($this->other->id)
         ->and(ActivityLog::where('action', 'ad.deleted')->sole()->description)->toBe('Deleted ad Winter sale, shared with every organization');
-    Storage::disk('public')->assertMissing("builder/platform/ads/{$ad->id}/index.html");
+    Storage::disk('public')->assertMissing("builder/platform/ads/{$ad->storage_key}/index.html");
 });
 
 test('above the organizations a copy of the platform\'s ad stays the platform\'s; without Update Ads a platform role only looks', function () {

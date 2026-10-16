@@ -6,6 +6,7 @@
  * (roles, playlists and channel ads have their own components instead).
  */
 import axios from 'axios';
+import { formStillAsked, notSavedWords } from './form-asked.js';
 import { passwordRefusal } from './password-refusal.js';
 import { showFirstError, unreadableFields } from './validate.js';
 
@@ -81,6 +82,7 @@ export function createCrudTable({
         editingItem: null,
         form: blankForm(),
         formErrors: {},
+        formTicket: 0,          // moves each time the form opens: a save's answer acts on the form it was sent from alone
         searchDebounceTimer: null,
         fetchToken: 0,
         refreshFailed: false,   // a quiet refresh failed and has said so; cleared by the next success
@@ -342,6 +344,7 @@ export function createCrudTable({
 
         /* ── Form modal open/close ─────────────────────────────────────── */
         openFormModal(item = null) {
+            this.formTicket++;
             this.editingItem = item;
             this.formErrors = {};
             this.form = item && mapItemToForm
@@ -377,6 +380,11 @@ export function createCrudTable({
             this.formErrors = {};
             this.saving = true;
             const wasEditing = Boolean(this.editingItem);
+            // The row by the name it has (a new one by the name typed), for a refusal said out of its form.
+            const named = this.editingItem?.name ?? this.editingItem?.title ?? this.form.name ?? this.form.title ?? '';
+            /* By the time the answer comes the dialog may have been shut and opened again for another row: the answer
+             * acts on its own form alone (core/form-asked.js), never on the one asked now. */
+            const asked = formStillAsked(() => this.formTicket, event?.target);
             let data;
             try {
                 const baseUrl = fetchUrl.replace('/data', '');
@@ -384,13 +392,14 @@ export function createCrudTable({
                     ? await axios.put(`${baseUrl}/${this.editingItem.id}`, this.form)
                     : await axios.post(baseUrl, this.form));
             } catch (error) {
-                if (error.response?.status === 422 && error.response.data.errors) {
-                    this.formErrors = error.response.data.errors;
+                const errors = error.response?.status === 422 ? (error.response.data?.errors ?? null) : null;
+                if (errors && asked()) {
+                    this.formErrors = errors;
                     this.focusFirstError();
                 } else {
-                    // Message-only 422s (guard rules) and everything else: show the
-                    // server's actual reason instead of swallowing it.
-                    window.toast(error.response?.data?.message ?? 'An error occurred. Please try again.');
+                    // A refusal of a form shut since, message-only 422s (guard rules) and everything else: the
+                    // server's actual reason, in a toast, instead of swallowing it.
+                    window.toast(notSavedWords(errors, named) ?? error.response?.data?.message ?? 'An error occurred. Please try again.');
                 }
                 return;
             } finally {
@@ -399,7 +408,7 @@ export function createCrudTable({
                 this.saving = false;
             }
 
-            this.closeFormModal();
+            if (asked()) this.closeFormModal();
             if (onSaved) onSaved(data, wasEditing);
             else window.toast(data?.message ?? 'Saved.', 'success');
             await this.refreshInPlace();

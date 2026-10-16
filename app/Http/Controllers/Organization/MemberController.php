@@ -127,7 +127,7 @@ class MemberController extends Controller
             }
 
             return $current;
-        });
+        }, giving: $role);
 
         if ($role->id !== $current->id) {
             ActivityLog::record('member.role_changed', $user,

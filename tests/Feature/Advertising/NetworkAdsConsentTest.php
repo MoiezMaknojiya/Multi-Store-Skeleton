@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\ActivityLog;
 use App\Models\Campaign;
 use App\Models\Media;
 use App\Models\Organization;
@@ -117,6 +118,42 @@ test('screens are switched one at a time or all at once through the same call', 
 
     expect($this->screen->fresh()->accepts_network_ads)->toBeTrue();
     expect($second->fresh()->accepts_network_ads)->toBeFalse();
+});
+
+test('every screen in this organization at once means every one, not the page the list shows', function () {
+    // The Screens page lists fifty a page, narrowed by its search and its Online/Offline filter — and its Adverts On for
+    // every screen sent exactly those rows (the review of 2026-10-15). `all` is the organization's every screen, worked
+    // out on the server, and nothing of another organization's.
+    $many = Screen::factory()->count(60)->create(['organization_id' => $this->organization->id]);
+    $theirs = Screen::factory()->create(['organization_id' => Organization::factory()->create()->id]);
+
+    impersonating($this->actor, $this->organization, $this->admin);
+
+    $this->putJson('/network-ads/screens', ['all' => true, 'accepts' => true])
+        ->assertOk()->assertJson(['message' => 'Updated 61 screens']);
+
+    expect(Screen::where('organization_id', $this->organization->id)->where('accepts_network_ads', true)->count())->toBe(61)
+        ->and($theirs->fresh()->accepts_network_ads)->toBeFalse()
+        ->and(ActivityLog::where('action', 'screen.network_ads_updated')->latest('id')->value('description'))
+        ->toBe("Enabled network advertising on all 61 screens in organization {$this->organization->name}");
+
+    $this->putJson('/network-ads/screens', ['all' => true, 'accepts' => false])->assertOk();
+    expect(Screen::whereIn('id', $many->pluck('id')->push($this->screen->id))->where('accepts_network_ads', true)->exists())->toBeFalse();
+
+    // `all` said by hand in any other shape is refused in the switch's own words, and changes nothing.
+    $this->putJson('/network-ads/screens', ['all' => ['x'], 'accepts' => true])
+        ->assertStatus(422)->assertJsonValidationErrors(['all' => 'Choose the screens from the list.']);
+    expect(Screen::where('accepts_network_ads', true)->exists())->toBeFalse();
+});
+
+test('every screen of an organization with none says so', function () {
+    $empty = Organization::factory()->create();
+    $actor = createOrganizationUser($empty, ['screen-view', 'screen-update']);
+
+    impersonating($actor, $empty, $this->admin);
+
+    $this->putJson('/network-ads/screens', ['all' => true, 'accepts' => true])
+        ->assertStatus(422)->assertJsonValidationErrors(['all' => 'This organization has no screens yet.']);
 });
 
 test('a screen in another organization cannot be switched from this one', function () {

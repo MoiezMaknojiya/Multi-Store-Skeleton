@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
+use Illuminate\Auth\Events\PasswordResetLinkSent;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Throwable;
 
 class PasswordResetLinkController extends Controller
 {
@@ -37,7 +40,19 @@ class PasswordResetLinkController extends Controller
         // throttled. Somebody who mistyped their own address now gets the neutral line and no email,
         // which is the trade this buys. The throttle on the route (`password-reset`) is what stops a
         // list being walked; this stops it being read.
-        Password::sendResetLink($request->only('email'));
+        //
+        // A mail server that refuses is reported, never thrown (as Invitation::sendLink and User::sendALink do): thrown, it
+        // was a 500 for a real address alone, which said just as loudly which addresses have an account. The link it would
+        // have carried is forgotten, so the person asking again in a minute is not refused as "too soon".
+        Password::sendResetLink($request->only('email'), function (User $user, string $token): void {
+            try {
+                $user->sendPasswordResetNotification($token);
+                event(new PasswordResetLinkSent($user));
+            } catch (Throwable $e) {
+                report($e);
+                Password::deleteToken($user);
+            }
+        });
 
         // Said honestly for both (a link comes only if there is an account), with where it may land, and the
         // address kept in its field so a typo can be seen and put right.

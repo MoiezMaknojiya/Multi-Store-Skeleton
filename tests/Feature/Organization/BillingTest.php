@@ -113,6 +113,25 @@ test('the Owner reads Settings → Billing: the month, the features, every scree
     expect((string) $month)->toContain('Premium Templates')->not->toContain('Platform Channels');
 });
 
+test('the notice above says what is true however the platform switched the features: nothing is charged yet', function () {
+    // The review of 2026-10-15: it said "every feature is open for now" over a Premium Templates marked Locked.
+    $owner = createOrganizationMember($this->organization, Role::OWNER);
+    $this->actingAs($owner)->withSession(['current_organization_id' => $this->organization->id]);
+    $notice = fn () => (string) str($this->get('/settings/billing')->assertOk()->getContent())
+        ->after('dusk="billing-not-started"')->before('</p>')->squish();
+
+    foreach ([[true, true], [false, true], [false, false]] as [$templates, $channels]) {
+        $this->organization->forceFill(['premium_templates_unlocked' => $templates, 'platform_channels_unlocked' => $channels])->save();
+
+        expect($notice())->toBe('> Billing has not started yet, so nothing is charged. This page shows what Smart Stop will pay once it starts.');
+    }
+
+    // Which features are open is said once, feature by feature, under Features.
+    $this->get('/settings/billing')
+        ->assertSeeInOrder(['Premium Templates', 'Locked', 'Platform Channels', 'Locked'])
+        ->assertDontSee('every feature is open');
+});
+
 test('the contact lines are the owner’s once given', function () {
     config(['signage.billing_contact_email' => 'help@example.com', 'signage.billing_contact_phone' => '555 0100']);
     $owner = createOrganizationMember($this->organization, Role::OWNER);

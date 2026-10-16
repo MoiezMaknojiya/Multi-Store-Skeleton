@@ -9,6 +9,7 @@
  * role can hold — nothing greyed out — so the checklist never offers what RoleController would refuse.
  */
 import axios from 'axios';
+import { formStillAsked, notSavedWords } from '../core/form-asked.js';
 import { passwordRefusal } from '../core/password-refusal.js';
 import { validate, required, maxLen, minCount } from '../core/validate.js';
 
@@ -45,6 +46,8 @@ export function registerRolesPage(Alpine) {
         organizationName: config.organizationName ?? null,
 
         loading: true,
+        // The roles could not be loaded at all: the list says so, with Try Again — never "No roles yet."
+        loadFailed: false,
         roles: [],
         assignable: [],
         loadingAssignable: false,
@@ -55,6 +58,8 @@ export function registerRolesPage(Alpine) {
         openingForm: false,
         saving: false,
         assignableToken: 0,
+        // Moves each time the form opens: a save's answer acts on the form it was sent from alone (save).
+        formTicket: 0,
 
         selectedRole: null,
         deleting: false,
@@ -69,12 +74,18 @@ export function registerRolesPage(Alpine) {
         /* After a change (`quiet`), the rows stay where they are until the new ones are in, with no "Loading..." row
          * pushing them down under the pointer — as crud-table-base's refreshInPlace (owner, 2026-10-07). */
         async fetch({ quiet = false } = {}) {
-            if (!quiet) this.loading = true;
+            if (!quiet) {
+                this.loading = true;
+                this.loadFailed = false;
+            }
             try {
                 const { data } = await axios.get('/roles/data');
                 this.roles = data.roles;
+                this.loadFailed = false;
             } catch (error) {
-                window.toast(error.response?.data?.message ?? 'Could not load the roles. Please refresh the page.');
+                // The first load says so where the roles would be, with Try Again; a refresh after a change keeps its rows.
+                if (quiet) window.toast(error.response?.data?.message ?? 'Could not load the roles. Please refresh the page.');
+                else this.loadFailed = true;
             } finally {
                 this.loading = false;
             }
@@ -159,6 +170,7 @@ export function registerRolesPage(Alpine) {
         async openForm(role = null) {
             if (this.openingForm) return;
             this.openingForm = true;
+            this.formTicket++;
             try {
                 this.editingRole = role;
                 this.formErrors = {};
@@ -212,7 +224,7 @@ export function registerRolesPage(Alpine) {
                 : [...new Set([...this.form.permissions.map(Number), ...ids])];
         },
 
-        async save() {
+        async save(event = null) {
             if (this.saving || this.loadingAssignable) return;
 
             /* Mirrors RoleController (name clashes are the server's to find: it knows every list). */
@@ -227,19 +239,24 @@ export function registerRolesPage(Alpine) {
 
             this.saving = true;
             this.formErrors = {};
+            // The answer acts on this form alone: shut since, or opened again for another role, the dialog is neither
+            // shut nor marked by it (core/form-asked.js).
+            const asked = formStillAsked(() => this.formTicket, event?.target);
+            const named = this.editingRole?.name ?? this.form.name;
             try {
                 const payload = { name: this.form.name, permissions: this.form.permissions };
                 const { data } = this.editingRole
                     ? await axios.put(`/roles/${this.editingRole.id}`, payload)
                     : await axios.post('/roles', this.isPlatform ? { ...payload, type: this.form.type } : payload);
-                this.$dispatch('close-modal', 'role-form');
+                if (asked()) this.$dispatch('close-modal', 'role-form');
                 window.toast(data.message, 'success');
                 this.fetch({ quiet: true });  // not awaited: the button is free again the moment the request is over
             } catch (error) {
-                if (error.response?.status === 422 && error.response.data.errors) {
-                    this.formErrors = error.response.data.errors;
+                const errors = error.response?.status === 422 ? (error.response.data?.errors ?? null) : null;
+                if (errors && asked()) {
+                    this.formErrors = errors;
                 } else {
-                    window.toast(error.response?.data?.message ?? 'Could not save the role.');
+                    window.toast(notSavedWords(errors, named) ?? error.response?.data?.message ?? 'Could not save the role.');
                 }
             } finally {
                 this.saving = false;

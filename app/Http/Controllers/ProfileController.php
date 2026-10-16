@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ConfirmsPassword;
+use App\Http\Controllers\Platform\ImpersonateController;
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\ActivityLog;
 use App\Models\Organization;
@@ -11,7 +12,6 @@ use App\Services\OrganizationTeam;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -31,7 +31,18 @@ class ProfileController extends Controller
         return view('profile.edit', [
             'user' => $user,
             'memberships' => $team->membershipsOf($user),
+            'emailIsTheirsAlone' => self::emailIsTheirsAlone($request),
         ]);
+    }
+
+    /**
+     * Whether the email on this profile is read-only here: an account not confirmed yet, viewed as through "Log In As". Its
+     * corrected address would be taken at once (update), so only its person may correct it — a confirmed account's change
+     * may be started, since it is approved from the person's own inbox (EmailVerificationController::approveNewEmail).
+     */
+    private static function emailIsTheirsAlone(Request $request): bool
+    {
+        return ! $request->user()->hasVerifiedEmail() && $request->session()->has(ImpersonateController::SESSION_KEYS[0]);
     }
 
     /**
@@ -46,12 +57,22 @@ class ProfileController extends Controller
 
         // A new address is confirmed by the link sent to IT (owner's rule, 2026-09-29). An account that has not
         // confirmed its email yet is simply correcting it — the new one takes its place and the link goes there.
-        // A confirmed account keeps its address until the new one's link is opened (users.pending_email), so a
-        // typo can never lock anybody out.
+        // A confirmed account keeps its address until the change is done (users.pending_email), so a typo can never
+        // lock anybody out — and the change is first APPROVED from the address it has now (owner, 2026-10-15 — "email
+        // badalne per email verification ho jese sub karte ha"): only then does the new address get its link, so
+        // somebody at an open session, or viewing as the person, cannot move the account to an inbox of their own.
+        // A new address typed again starts that over.
         $newEmail = $request->email !== $user->email ? $request->email : null;
 
-        // A new address is an email to it, which draws on the account's budget (User::LINKS_PER_ACCOUNT): asked
-        // BEFORE anything is saved, so a refusal leaves the account as it was and the form as it was typed.
+        // An account not confirmed yet takes its corrected address at once, so nobody but its person corrects it: a super
+        // admin viewing as them could otherwise move it to an inbox of their own, confirm it with "Confirm Email and
+        // Continue" and then learn its password through "forgot password".
+        if ($newEmail !== null && self::emailIsTheirsAlone($request)) {
+            return Redirect::route('profile.edit')->withErrors(['email' => "Only {$user->name} can correct their email, signed in themselves: not by Log In As."])->withInput();
+        }
+
+        // A new address is an email, which draws on the account's budget (User::LINKS_PER_ACCOUNT): asked BEFORE
+        // anything is saved, so a refusal leaves the account as it was and the form as it was typed.
         if ($newEmail !== null && ($refusal = $user->linkRefusal()) !== null) {
             return Redirect::route('profile.edit')->withErrors(['email' => $refusal])->withInput();
         }
@@ -59,7 +80,7 @@ class ProfileController extends Controller
         if ($newEmail !== null && ! $user->hasVerifiedEmail()) {
             $user->email = $newEmail;
         } elseif ($newEmail !== null) {
-            $user->pending_email = $newEmail;
+            $user->forceFill(['pending_email' => $newEmail, 'pending_email_approved_at' => null]);
         }
 
         $changed = $user->isDirty();
@@ -67,21 +88,21 @@ class ProfileController extends Controller
 
         if ($changed) {
             ActivityLog::record('profile.updated', $user, 'Updated their own profile'
-                .($newEmail !== null ? ($user->hasVerifiedEmail() ? ", asking to change their email to {$newEmail}" : ", correcting their email to {$newEmail}") : ''));
+                .($newEmail !== null ? ($user->hasVerifiedEmail() ? ", asking to change their email to {$newEmail} (to be approved from {$user->email})" : ", correcting their email to {$newEmail}") : ''));
         }
 
         if ($newEmail === null) {
             return Redirect::route('profile.edit')->with('status', 'profile-updated');
         }
 
-        $problem = $user->hasVerifiedEmail() ? $user->sendNewEmailLink() : $user->sendVerificationLink();
+        $problem = $user->hasVerifiedEmail() ? $user->sendEmailChangeApproval() : $user->sendVerificationLink();
 
         return $problem === null
             ? Redirect::route('profile.edit')->with('status', $user->hasVerifiedEmail() ? 'email-pending' : 'verification-link-sent')
             : Redirect::route('profile.edit')->with('error', $problem);
     }
 
-    /** The link for a changed email, sent again. */
+    /** The link of the step a changed email stands at, sent again: the approval to the address it has, or the new one's. */
     public function resendNewEmail(Request $request): RedirectResponse
     {
         $user = $request->user();
@@ -90,21 +111,21 @@ class ProfileController extends Controller
             return Redirect::route('profile.edit');
         }
 
-        $problem = $user->sendNewEmailLink();
+        $problem = $user->sendEmailChangeLink();
 
         return $problem === null
             ? Redirect::route('profile.edit')->with('status', 'email-link-resent')
             : Redirect::route('profile.edit')->with('error', $problem);
     }
 
-    /** A changed email given up: the account keeps the address it has. */
+    /** A changed email given up, at either step: the account keeps the address it has. */
     public function cancelNewEmail(Request $request): RedirectResponse
     {
         $user = $request->user();
 
         if ($user->pending_email !== null) {
             $pending = $user->pending_email;
-            $user->forceFill(['pending_email' => null])->save();
+            $user->forceFill(['pending_email' => null, 'pending_email_approved_at' => null])->save();
 
             ActivityLog::record('profile.updated', $user, "Gave up changing their email to {$pending}");
         }
@@ -159,8 +180,7 @@ class ProfileController extends Controller
 
         $this->confirmPassword($request, 'userDeletion');
 
-        DB::transaction(function () use ($team, $user) {
-            $team->lockOrganizationsOwnedBy($user);
+        $team->whileTheirOrganizationsAreLocked($user, function () use ($team, $user) {
             $this->refuseWhileSoleOwner($team, $user);
 
             // Logged while still authenticated so the actor snapshot is correct.

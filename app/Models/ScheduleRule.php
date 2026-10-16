@@ -225,10 +225,9 @@ class ScheduleRule extends Model
             return true;
         }
 
-        // Every repeat is counted from somewhere. starts_on is that somewhere; with
-        // none, "every 2 weeks" has nothing to be every-2-weeks FROM, so the rule's
-        // own creation date stands in.
-        $anchor = $this->bareDate($this->starts_on ?? $this->created_at ?? $day);
+        // Every repeat is counted from somewhere: its Starting date, which a save gives every repeat that needs one
+        // (startsOnFor). Only a row from before that has none, and stands on its creation date (countsFrom).
+        $anchor = $this->countsFrom() ?? $day;
         $interval = max(1, (int) $this->recurrence_interval);
 
         return match ($this->recurrence_type) {
@@ -239,6 +238,109 @@ class ScheduleRule extends Model
             self::YEARLY => $this->yearlyCovers($day, $anchor, $interval),
             default => false,
         };
+    }
+
+    /**
+     * Whether a repeat's answer depends on the day it counts from: every N days, weeks or months with N above one
+     * (which weeks are the on weeks), and every year (the day and month it repeats). Every Friday needs no such day.
+     */
+    public static function repeatNeedsAnAnchor(?string $type, int|string|null $interval): bool
+    {
+        return $type === self::YEARLY || ($type !== null && (int) $interval > 1);
+    }
+
+    public function needsAnAnchor(): bool
+    {
+        return self::repeatNeedsAnAnchor($this->recurrence_type, $this->recurrence_interval);
+    }
+
+    /**
+     * The day the repeat counts from, as coversDay() reads it: the Starting date — or, for a row saved before every repeat
+     * that needs one was given one (2026-10-15), the date it was created on. Null for a row with neither.
+     */
+    public function countsFrom(): ?CarbonImmutable
+    {
+        $from = $this->starts_on ?? $this->created_at;
+
+        return $from === null ? null : $this->bareDate($from);
+    }
+
+    /**
+     * The Starting date to show and to copy: the rule's own — or, for a repeat that needs one and was saved without it,
+     * the day it counts from, so a copy, or the page saving it back, plays exactly as this rule does. Never a day after
+     * the repeat's own end (a row from before 2026-10-15 can have been created after its repeat was over): sent back as
+     * its Starting date, the save would refuse a rule nobody touched ("The repeat cannot end before the schedule starts.").
+     */
+    public function startsOnAsPlayed(): ?string
+    {
+        $from = $this->needsAnAnchor() ? $this->countsFrom()?->toDateString() : null;
+
+        return $from !== null && ! $this->endsBefore($from) ? $from : $this->starts_on?->toDateString();
+    }
+
+    /**
+     * The Starting date a save writes for one rule (owner's review, 2026-10-15: "every 2 weeks" flipped weeks, and a
+     * yearly day moved, whenever anybody saved the playlist — the rules are written afresh on every save, and a repeat
+     * with no start counted from the row's own creation). A repeat that needs a day to count from is never stored
+     * without one: the one it was given; else the one the same repeat had on this line before the save, while that day
+     * has come — a request that leaves the date out, or a Starting cleared, never moves which weeks are on (one still
+     * to come was a start the person took away); else the first day of the screen's own period (firstDayOfThePeriod),
+     * the day the preview counts from too. Never a day after the repeat's own end: a repeat already over plays nothing
+     * any more, and keeps no Starting date of its own — with one after its end, the next save of the page was refused.
+     *
+     * @param  array<string, mixed>  $attributes  the rule as the save writes it (PlaylistController::ruleAttributes)
+     * @param  iterable<int, self>  $earlier  the rules the same file or channel had on this screen before the save
+     * @param  string  $today  the screen's own date, "Y-m-d"
+     */
+    public static function startsOnFor(array $attributes, iterable $earlier, string $today): ?string
+    {
+        $rule = new self($attributes);
+
+        if ($rule->starts_on !== null || ! $rule->needsAnAnchor()) {
+            return $rule->starts_on?->toDateString();
+        }
+
+        $from = null;
+
+        foreach ($earlier as $before) {
+            $day = $before->countsFrom()?->toDateString();
+
+            if ($day !== null && $day <= $today && $before->repeatSignature() === $rule->repeatSignature()) {
+                $from = $day;
+
+                break;
+            }
+        }
+
+        $from ??= $rule->firstDayOfThePeriod(CarbonImmutable::parse($today))->toDateString();
+
+        return $rule->endsBefore($from) ? null : $from;
+    }
+
+    /**
+     * The day a repeat set today counts from: the Monday of this week for every N weeks (its weeks run Monday to Sunday),
+     * the 1st of this month for every N months — the same on weeks and months as counting from today, without making
+     * today the first day it may play, which cut tonight's hours that opened yesterday (22:00–02:00, saved at one in the
+     * morning). Every N days and every year count from today itself: no day before it is one of theirs.
+     */
+    private function firstDayOfThePeriod(CarbonImmutable $today): CarbonImmutable
+    {
+        return match ($this->recurrence_type) {
+            self::WEEKLY => $today->startOfWeek(CarbonInterface::MONDAY),
+            self::MONTHLY_DAY, self::MONTHLY_WEEKDAY => $today->startOfMonth(),
+            default => $today,
+        };
+    }
+
+    /** Whether the rule's last day — its end date or its repeat's, whichever comes first — is before this "Y-m-d" day. */
+    private function endsBefore(string $day): bool
+    {
+        $last = collect([$this->ends_on, $this->recurrence_until])
+            ->filter()
+            ->map(fn (CarbonInterface $end) => $end->toDateString())
+            ->min();
+
+        return $last !== null && $last < $day;
     }
 
     /**
@@ -355,6 +457,23 @@ class ScheduleRule extends Model
             $this->recurrence_type,
             $this->recurrence_interval,
             implode('.', $this->recurrence_weekdays ?? []),
+            $this->recurrence_monthday,
+            $this->recurrence_ordinal,
+            $this->recurrence_weekday,
+            $this->recurrence_until?->toDateString(),
+        ]);
+    }
+
+    /** Everything the fingerprint holds but the Starting date: the same repeat, whichever day it counts from (startsOnFor). */
+    private function repeatSignature(): string
+    {
+        return implode(',', [
+            $this->start_time,
+            $this->end_time,
+            $this->ends_on?->toDateString(),
+            $this->recurrence_type,
+            (int) $this->recurrence_interval,
+            implode('.', array_map('intval', $this->recurrence_weekdays ?? [])),
             $this->recurrence_monthday,
             $this->recurrence_ordinal,
             $this->recurrence_weekday,

@@ -112,7 +112,7 @@ class EveryLineKeepsItsTimeTest extends DuskTestCase
             // Name each showing by what it is: the file's own name, or the ad's page.
             $names = [
                 basename($first->path) => 'first', basename($old->path) => 'old', basename($inChannel->path) => 'in-channel',
-                basename($clip->path) => 'clip', "/ads/{$ten->builderAd->id}/" => 'ten', "/ads/{$eleven->builderAd->id}/" => 'eleven',
+                basename($clip->path) => 'clip', "/ads/{$ten->builderAd->storage_key}/" => 'ten', "/ads/{$eleven->builderAd->storage_key}/" => 'eleven',
             ];
             $nameOf = function (string $src) use ($names): string {
                 foreach ($names as $needle => $name) {

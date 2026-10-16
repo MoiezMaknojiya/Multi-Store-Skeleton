@@ -9,6 +9,7 @@ use App\Http\Requests\Signage\UpdateMediaRequest;
 use App\Models\ActivityLog;
 use App\Models\Media;
 use App\Models\Organization;
+use App\Models\Screen;
 use App\Services\MediaStorage;
 use App\Services\OrganizationStorage;
 use Illuminate\Http\JsonResponse;
@@ -109,12 +110,16 @@ class MediaController extends Controller
     /** Upload a file into a library: the current organization's, or — above the organizations — the one the page chose. */
     public function store(StoreMediaRequest $request, MediaStorage $storage, OrganizationStorage $quota): JsonResponse
     {
+        $target = $this->uploadTarget($request);
+        // A file sent in chunks joins the library it was dropped on, never the one the page's Library list shows by now.
+        $request->assertUploadOpenedFor($target, 'library');
+
         // What came, before a picture is made lighter (PictureOptimizer) — read now, while the upload is still on disk.
         $uploaded = (int) $request->file('file')->getSize();
 
         $media = $storage->addToLibrary(
             $request->file('file'),
-            $this->uploadTarget($request),
+            $target,
             $request->only(['duration_seconds', 'width', 'height', 'poster']),
             $request->validated('title'),
             auth()->id(),
@@ -160,14 +165,25 @@ class MediaController extends Controller
         $media = Media::visibleTo(auth()->user())->withoutAdPages()->findOrFail($media->id);
         $title = $media->title;
 
-        // A channel showing this file would lose the ad without anybody deciding so: refused, naming them.
-        if (($inUse = $media->stillInAChannelMessage()) !== null) {
-            throw ValidationException::withMessages(['file' => $inUse]);
-        }
-
         // The row goes first and the files only once that has committed: a stale file on disk is
         // harmless, a row pointing at a deleted file is a broken thumbnail on every screen that lists it.
         DB::transaction(function () use ($media, $storage) {
+            // Decided under the file's row lock, the one a channel's Add Ad takes before it reads the file
+            // (ChannelAdController::refuseAFileAPlaylistHolds): an ad added at the same moment is seen here, and is never
+            // taken away with the file by the foreign key's cascade. Gone meanwhile (another tab): no longer here.
+            abort_if(Media::whereKey($media->id)->lockForUpdate()->first(['id']) === null, 404);
+
+            // A channel showing this file would lose the ad without anybody deciding so: refused, naming them.
+            if (($inUse = $media->stillInAChannelMessage()) !== null) {
+                throw ValidationException::withMessages(['file' => $inUse]);
+            }
+
+            // The screens it is the holding picture of, held before the row goes: the foreign key empties their holding
+            // picture, which locks them — after the playlist lines it takes away, were they not held already. A playlist's
+            // save holds its files and then its screen and then takes its lines (PlaylistController::update): held here
+            // first, file then screens, the two take turns rather than each waiting on the other (a deadlock, a 500).
+            Screen::where('default_media_id', $media->id)->orderBy('id')->lockForUpdate()->pluck('id');
+
             $media->delete();
 
             DB::afterCommit(fn () => $storage->deleteFiles($media->disk, $media->path, $media->thumbnail_path));

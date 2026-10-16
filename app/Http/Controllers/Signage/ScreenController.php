@@ -139,7 +139,8 @@ class ScreenController extends Controller
             // The orientation, so the list can say which files are the other way round from the screen.
             ->get(['id', 'title', 'type', 'orientation']);
 
-        return response()->json(['media' => $media]);
+        // What an option says and nothing more: serialised whole, the row's addresses were drawn from columns never loaded.
+        return response()->json(['media' => $media->map(fn (Media $item) => $item->only(['id', 'title', 'type', 'orientation']))->all()]);
     }
 
     /** The playlist page for one screen. */
@@ -280,7 +281,22 @@ class ScreenController extends Controller
         $this->assertBelongsToSameOrganization($screen, $validated['default_media_id'] ?? null,
             'default_media_id', 'That file is not in this organization\'s library.');
 
-        $screen->update($validated);
+        // The files, then the screen: the order a playlist's save and a file's delete take them in (PlaylistController::update,
+        // MediaController::destroy; the third review of 2026-10-15). A new holding picture's foreign key is checked by MySQL
+        // with a shared lock on the file, asked for once the UPDATE holds the screen — while a save holding that file waited
+        // for this screen (a deadlock, a 500). Unlocked, the file could also go between the check above and the write (the
+        // foreign key's 500 again).
+        DB::transaction(function () use ($screen, $validated) {
+            if (array_key_exists('default_media_id', $validated)
+                && (int) $validated['default_media_id'] !== (int) $screen->default_media_id) {
+                $this->holdTheHoldingPictures($screen, $validated['default_media_id']);
+            }
+
+            // Deleted meanwhile (another tab): no longer here.
+            abort_if(Screen::whereKey($screen->id)->lockForUpdate()->first(['id']) === null, 404);
+
+            $screen->update($validated);
+        });
 
         ActivityLog::record('screen.updated', $screen, "Updated screen {$screen->name}");
 
@@ -304,6 +320,22 @@ class ScreenController extends Controller
 
         if (! Media::where('id', $id)->where('organization_id', $screen->organization_id)->exists()) {
             throw ValidationException::withMessages([$field => $message]);
+        }
+    }
+
+    /**
+     * The holding picture a screen had and the one it is given, in id order, under shared locks — the screen only reads
+     * them, as the foreign key does, and a file's delete (which takes its file's lock for itself) waits until the screen is
+     * written. The one it had, too: its delete scans the screens naming it and would hold that entry while waiting for this
+     * screen. Call first in the transaction, before the screen's own lock. The one it is given gone meanwhile is refused.
+     */
+    private function holdTheHoldingPictures(Screen $screen, int|string|null $given): void
+    {
+        $ids = collect([$screen->default_media_id, $given])->filter()->map(fn (int|string $id) => (int) $id)->unique()->sort()->values();
+        $held = Media::whereIn('id', $ids)->orderBy('id')->sharedLock()->pluck('id')->map(fn (int|string $id) => (int) $id);
+
+        if ($given !== null && ! $held->contains((int) $given)) {
+            throw ValidationException::withMessages(['default_media_id' => 'That file was deleted meanwhile. Choose another one.']);
         }
     }
 

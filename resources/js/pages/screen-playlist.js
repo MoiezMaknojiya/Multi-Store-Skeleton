@@ -532,8 +532,11 @@ export function registerScreenPlaylist(Alpine) {
             else this.copyToKeys.splice(at, 1);
         },
 
-        /** Every other line at once — or none, when they are all ticked already. */
-        toggleEveryCopyLine() {
+        /** Every other line at once — or none, when they are all ticked already. Once for a double click
+         *  (isARepeatPress): its second press turned it straight back. */
+        toggleEveryCopyLine(event) {
+            if (isARepeatPress(event)) return;
+
             const keys = this.otherLines().map((line) => line.key);
 
             this.copyToKeys = this.copyToKeys.length === keys.length ? [] : keys;
@@ -679,9 +682,14 @@ export function registerScreenPlaylist(Alpine) {
 
                 this.previewing = true;
                 try {
+                    // The line's file or channel goes with it: a repeat with no Starting date counts from the day its
+                    // save would keep (ScheduleRule::startsOnFor), and the preview from that very day.
+                    const line = this.items[this.scheduleIndex] ?? {};
                     const { data } = await axios.post(`/screens/${this.screenId}/playlist/preview`, {
                         rules: this.scheduleRules.map(ruleToServer),
                         days: 7,
+                        media_id: line.media_id ?? null,
+                        channel_id: line.channel_id ?? null,
                     });
                     if (token !== this.previewToken) return;
                     this.preview = data.occurrences;
@@ -867,12 +875,9 @@ export function registerScreenPlaylist(Alpine) {
             return item.type === 'image' || (item.type === 'html' && ! item.runs_own_length);
         },
 
-        /** How long one line holds the screen: a file its seconds, a channel about one
+        /** How long one line holds the screen when it plays: a file its seconds, a channel about one
          *  pass of its ads (they rotate when a pass plays only some of them). */
         lineSeconds(item) {
-            // A platform channel while Platform Channels are locked plays nothing (docs/BILLING-SPEC.md §6).
-            if (item.locked) return 0;
-
             return item.type === 'channel'
                 ? (Number(item.pass_seconds) || 0)
                 : (Number(item.duration_seconds) || 0);
@@ -927,13 +932,15 @@ export function registerScreenPlaylist(Alpine) {
             return ad.ends_on ? `${length} · until ${ad.ends_on}` : length;
         },
 
+        /* What the time and "N playing" count: a line that plays — never a draft or a locked one, which keep their place
+         * and play nothing. */
         summary() {
-            const seconds = this.items.reduce((total, item) => total + this.lineSeconds(item), 0);
+            const playing = this.items.filter((item) => !item.locked && !item.is_draft);
+            const seconds = playing.reduce((total, item) => total + this.lineSeconds(item), 0);
             const count = `${this.items.length} ${this.items.length === 1 ? 'item' : 'items'}`;
-            const resting = this.items.filter((item) => item.locked || item.is_draft).length;
-            const playing = resting > 0 ? ` · ${this.items.length - resting} playing` : '';
+            const someRest = playing.length < this.items.length ? ` · ${playing.length} playing` : '';
 
-            return `${count}${playing} · ${this.formatDuration(seconds)}`;
+            return `${count}${someRest} · ${this.formatDuration(seconds)}`;
         },
 
         formatDuration(seconds) {

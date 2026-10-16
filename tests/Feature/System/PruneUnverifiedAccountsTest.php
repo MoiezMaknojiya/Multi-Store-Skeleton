@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\DB;
+use Tests\Support\TransactionStatements;
 
 /*
 |--------------------------------------------------------------------------
@@ -88,6 +89,45 @@ test('many at once are all removed, however the walk pages', function () {
 
     expect(User::whereNull('email_verified_at')->count())->toBe(0)
         ->and(Organization::count())->toBe(0);
+});
+
+test('inside each account’s transaction the organizations are locked before anything is read', function () {
+    // MySQL's REPEATABLE READ answers every plain read from the snapshot the transaction's first read took: a look at the
+    // memberships before the lock would not see a file uploaded, or a person put in, while the run waited for it.
+    signedUpDaysAgo(8);
+    $log = TransactionStatements::record();
+
+    $this->artisan('accounts:prune-unverified')->expectsOutputToContain('1 account(s) removed.')->assertSuccessful();
+
+    expect(array_slice($log->of('/^delete from "users"/'), 0, 2))->sequence(
+        fn ($statement) => $statement->toStartWith('select * from "organizations" where "id" in (?)')->toEndWith('/* for update */'),
+        fn ($statement) => $statement->toStartWith('select * from "users" where "users"."id" = ?')->toEndWith('/* for update */'),
+    );
+});
+
+test('an account put in an organization while the run waited for the lock is kept, and the run says so', function () {
+    $user = signedUpDaysAgo(8);
+    $elsewhere = Organization::factory()->create(['name' => 'Elsewhere']);
+    createOrganizationMember($elsewhere, Role::OWNER);
+
+    // The platform's Users → Organizations commits as the run is given the lock on the account's own organization.
+    $outside = DB::transactionLevel();
+    $done = false;
+    DB::connection()->beforeExecuting(function (string $sql) use (&$done, $outside, $user, $elsewhere) {
+        if (! $done && DB::transactionLevel() > $outside && str_starts_with($sql, 'select * from "organizations" where "id" in')) {
+            $done = true;
+            $user->organizations()->attach($elsewhere->id, ['role_id' => Role::starter(Role::STAFF)->id]);
+        }
+    });
+
+    $this->artisan('accounts:prune-unverified')
+        ->expectsOutputToContain('Kept spam@example.com: they were put in an organization during the run.')
+        ->expectsOutputToContain('0 account(s) removed. 1 kept')
+        ->assertSuccessful();
+
+    expect($done)->toBeTrue()
+        ->and(User::find($user->id))->not->toBeNull()
+        ->and(roleKeyIn($user, $elsewhere))->toBe(Role::STAFF);
 });
 
 test('it runs every night', function () {

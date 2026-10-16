@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Notifications\ApproveEmailChangeNotification;
 use App\Notifications\ConfirmNewEmailNotification;
 use App\Notifications\ResetPasswordNotification;
 use App\Notifications\VerifyEmailNotification;
@@ -10,6 +11,7 @@ use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
@@ -65,11 +67,16 @@ class User extends Authenticatable implements MustVerifyEmail
         });
     }
 
-    /** Every sign-in of this account ends, on every device (the database session driver keeps them in a table). */
-    public function endEverySession(): void
+    /**
+     * Every sign-in of this account ends, on every device (the database session driver keeps them in a table) — but the
+     * session named by $except: the browser that changed the password stays signed in (Auth\PasswordController).
+     */
+    public function endEverySession(?string $except = null): void
     {
         if (config('session.driver') === 'database') {
-            DB::table(config('session.table', 'sessions'))->where('user_id', $this->id)->delete();
+            DB::table(config('session.table', 'sessions'))->where('user_id', $this->id)
+                ->when($except !== null, fn (QueryBuilder $sessions) => $sessions->where('id', '!=', $except))
+                ->delete();
         }
     }
 
@@ -103,8 +110,40 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
-     * The link that confirms a changed address, to that address — the account keeps its own until it is opened:
-     * null once it is on its way, or the words that say why not.
+     * A confirmed account's change of email goes in two steps (owner, 2026-10-15 — "email badalne per email verification ho
+     * jese sub karte ha"): approved from the address it has now, then confirmed from the new one. Whether the first is done.
+     */
+    public function emailChangeApproved(): bool
+    {
+        return $this->pending_email !== null && $this->pending_email_approved_at !== null;
+    }
+
+    /**
+     * The link of whichever step of a change of email stands: the approval, to the address the account has now, until it
+     * is opened — then the link that confirms the new address, to that address. Null once it is on its way, or the words
+     * that say why not.
+     */
+    public function sendEmailChangeLink(): ?string
+    {
+        return $this->emailChangeApproved() ? $this->sendNewEmailLink() : $this->sendEmailChangeApproval();
+    }
+
+    /**
+     * The first step: a link to the address the account has NOW, asking its person to approve the new one — so an open
+     * session alone can never move the account to another inbox. Null once it is on its way, or the words that say why not.
+     */
+    public function sendEmailChangeApproval(): ?string
+    {
+        if ($this->pending_email === null) {
+            return 'There is no change of email waiting to be approved.';
+        }
+
+        return $this->sendALink(fn () => $this->notify(new ApproveEmailChangeNotification));
+    }
+
+    /**
+     * The second step, once the change is approved: the link that confirms the new address, to that address — the account
+     * keeps its own until it is opened. Null once it is on its way, or the words that say why not.
      */
     public function sendNewEmailLink(): ?string
     {
@@ -112,7 +151,20 @@ class User extends Authenticatable implements MustVerifyEmail
             return 'There is no change of email waiting to be confirmed.';
         }
 
+        if (! $this->emailChangeApproved()) {
+            return self::approveFirstWords($this->email);
+        }
+
         return $this->sendALink(fn () => Notification::route('mail', $this->pending_email)->notify(new ConfirmNewEmailNotification($this)));
+    }
+
+    /**
+     * What a change of email not approved yet asks for. It never says the approval email went out: a change waiting from
+     * before the approval step had none, and a mail server may have refused one — Send the Link Again sends it.
+     */
+    public static function approveFirstWords(string $currentEmail): string
+    {
+        return "Approve the change from {$currentEmail} first. No email there? Press Send the Link Again below.";
     }
 
     /**
@@ -238,6 +290,7 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return [
             'email_verified_at' => 'datetime',
+            'pending_email_approved_at' => 'datetime',
             'password' => 'hashed',
         ];
     }
@@ -321,6 +374,16 @@ class User extends Authenticatable implements MustVerifyEmail
         }
 
         return $this->globalRoleMemo;
+    }
+
+    /**
+     * Whether this person is on the platform team, read from the table NOW — never globalRole()'s memo: a decision taken
+     * under the lock of their account row (joining by an invitation, the platform putting them in an organization) must see
+     * a platform membership another request committed while it waited, or one account could end up with both tiers.
+     */
+    public function isOnThePlatformTeamNow(): bool
+    {
+        return DB::table('organization_user')->where('user_id', $this->id)->where('organization_id', 0)->exists();
     }
 
     /**

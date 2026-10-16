@@ -114,9 +114,25 @@ class Organization extends Model
      * Accounts are not the organization's: the people stay, and may be members elsewhere. The organization
      * row goes too, for good (owner's rule, 2026-09-17: "A to Z"); the activity log keeps its
      * entries, which carry the organization's name in their words.
+     *
+     * The organization's own row is locked first, as every change to its team or its library takes it
+     * (OrganizationTeam::changeTeam, OrganizationStorage::withRoom, ChunkedUploads): an upload deciding
+     * under that lock lands before the library is read here, and goes with it — read after, its row would
+     * go by the cascade of this row's delete and leave its file on disk with nothing naming it. Being the
+     * transaction's first read, the lock also makes every read after it see what committed meanwhile. Gone
+     * already — deleted in another tab a moment ago — it is 404, and nothing is deleted or logged twice.
      */
     public function purgeContents(): void
     {
+        static::whereKey($this->id)->lockForUpdate()->firstOrFail(['id']);
+
+        // Its files, then its own channels, each in id order, held before its screens go: the order a playlist's save takes
+        // them in (PlaylistController::update — the files, the channels, then the screens; the third review of 2026-10-15).
+        // Its screens deleted first, this held a screen a save was waiting for while it waited for a file the save held (a
+        // deadlock, a 500), and the same with a file's delete, which takes the file and then its screens.
+        Media::where('organization_id', $this->id)->orderBy('id')->lockForUpdate()->pluck('id');
+        Channel::where('organization_id', $this->id)->orderBy('id')->lockForUpdate()->pluck('id');
+
         DB::table('organization_user')->where('organization_id', $this->id)->delete();
         Invitation::where('organization_id', $this->id)->delete();
         Screen::where('organization_id', $this->id)->delete();

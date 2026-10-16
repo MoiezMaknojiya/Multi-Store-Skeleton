@@ -69,8 +69,10 @@ class TemplateCopier
 
                     return BuilderAd::create([
                         'organization_id' => $organizationId,
-                        // So the copy says where it came from: above the organizations it looks like its template.
-                        'copied_from_id' => $template->id,
+                        // So the copy says where it came from: above the organizations it looks like its template. Not on a
+                        // table without the column — 2026_10_08_100200 copies templates before 2026_10_08_100400 adds it, and
+                        // names its copies from their pages.
+                        ...(BuilderAd::tableHas('copied_from_id') ? ['copied_from_id' => $template->id] : []),
                         'name' => $name,
                         'orientation' => $template->orientation,
                         'document' => BuilderAd::withAssetsSwapped($document, $swaps),
@@ -89,7 +91,7 @@ class TemplateCopier
 
         // The poster is the design's picture, so the copy starts with it — a nicety: with no room it is simply not written.
         if ($poster !== null) {
-            $copy = $ad->storageDirectory().'/poster.jpg';
+            $copy = $ad->posterPath();
 
             $this->quota->withRoomOrSkip($organizationId, (int) Storage::disk('public')->size($poster), function () use ($poster, $copy, $ad) {
                 Storage::disk('public')->copy($poster, $copy);

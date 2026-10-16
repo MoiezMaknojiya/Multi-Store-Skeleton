@@ -8,10 +8,15 @@
  */
 import axios from 'axios';
 import { dayLabel, windowLabel as clockRange } from '../core/clock.js';
+import { isARepeatPress } from '../core/click-beside.js';
 import { createCrudTable } from '../core/crud-table-base.js';
+import { emptyTheBox, formStillAsked, giveUpUpload, notSavedWords } from '../core/form-asked.js';
 
 import { validate, required, maxLen, maxNumber, minNumber, requiredMessage, unreadableFields, wholeNumber } from '../core/validate.js';
 import { PlaylistItemDefaults } from '../core/playlist-defaults.js';
+
+/* The advert's upload box, inside the dialog (campaigns/index.blade.php). */
+const ADVERT_BOX = '[dusk="campaign-dropzone"]';
 
 const blankForm = () => ({
     name: '',
@@ -48,6 +53,9 @@ export function registerCampaignsTable(Alpine) {
             uploading: false,
             // Cancel pressed while the advert was still going up: the dialog asks before it gives the upload up.
             confirmingClose: false,
+            // The upload a save on its way carries: the box is held meanwhile (holdsTheSavedUpload), and lets go of it
+            // without giving it up (clearFile).
+            uploadBeingSaved: null,
         },
 
         defaultForm: blankForm(),
@@ -127,14 +135,23 @@ export function registerCampaignsTable(Alpine) {
                 return `At least ${PlaylistItemDefaults.minImageSeconds} seconds, at most ${this.maxBreakSeconds}: one break.`;
             },
 
-            /** Forget the uploaded advert, and take it out of the uploader — one still going is cancelled. */
+            /** Forget the advert, and take it out of the uploader: one still going is cancelled, and one that came is given
+             *  up on the server — unless a save on its way carries it. The box is found on the page: a ref inside the
+             *  dialog is the dialog's own, and from Add Campaign or a row's Edit, outside it, it was never found, so a
+             *  dialog shut with Escape opened again saying "Uploaded" while the form had forgotten the file. */
             clearFile() {
                 this.picked = null;
                 this.uploaded = null;
                 this.uploading = false;
 
-                const box = this.$refs.advertUpload?.querySelector('[dusk="campaign-dropzone"]');
-                if (box) window.Alpine.$data(box).clear();
+                emptyTheBox(ADVERT_BOX, this.uploadBeingSaved);
+            },
+
+            /** Is the box still showing the advert a save on its way carries? Then it is held (campaigns/index.blade.php):
+             *  its × and a new file would give that upload up under the save. Shut with Escape meanwhile, the box has let
+             *  go of it and takes the next file at once. */
+            holdsTheSavedUpload() {
+                return this.uploadBeingSaved !== null && this.uploaded?.upload === this.uploadBeingSaved;
             },
 
             /* The uploader's events (docs/UPLOADS-SPEC.md). */
@@ -222,10 +239,16 @@ export function registerCampaignsTable(Alpine) {
 
                 this.formErrors = {};
                 this.saving = true;
+                const named = this.editingItem?.name ?? this.form.name;
+                // The answer acts on this form alone: shut since, or opened again for another campaign, the dialog is
+                // neither shut nor marked by it (core/form-asked.js).
+                const asked = formStillAsked(() => this.formTicket, event?.target);
+                const sent = this.uploaded?.upload ?? null;
+                this.uploadBeingSaved = sent;
                 try {
                     const payload = new FormData();
 
-                    if (this.uploaded) payload.append('upload', this.uploaded.upload);
+                    if (sent) payload.append('upload', sent);
 
                     Object.entries({
                         name: this.form.name,
@@ -259,14 +282,22 @@ export function registerCampaignsTable(Alpine) {
                     const url = this.editingItem ? `/campaigns/${this.editingItem.id}` : '/campaigns';
                     const { data } = await axios.post(url, payload);
 
-                    this.closeCampaignModal();
+                    // Its upload is the campaign's now: the box lets go of it, and nothing gives it up (uploadBeingSaved).
+                    if (asked()) this.closeCampaignModal();
                     window.toast(data?.message ?? 'Campaign saved.', 'success');
                     this.currentPage = 1;
                     this.refreshInPlace();  // not awaited: the button is free again the moment the request is over
                     this.loadScreens();  // not awaited, the booked seconds have moved
                 } catch (error) {
-                    if (error.response?.status === 422 && error.response.data.errors) {
-                        this.formErrors = error.response.data.errors;
+                    const errors = error.response?.status === 422 ? (error.response.data?.errors ?? null) : null;
+
+                    if (! asked()) {
+                        // Its dialog is gone, and the box let go of the advert when it went: given up now, and the refusal
+                        // said in a toast.
+                        giveUpUpload(ADVERT_BOX, sent, error);
+                        window.toast(notSavedWords(errors, named) ?? error.response?.data?.message ?? 'Could not save the campaign.');
+                    } else if (errors) {
+                        this.formErrors = errors;
 
                         // A refusal the form has no place for (a video's measurements) would otherwise say nothing at
                         // all; the screens' own refusal is said under the list (screensError).
@@ -281,6 +312,7 @@ export function registerCampaignsTable(Alpine) {
                     }
                 } finally {
                     this.saving = false;
+                    this.uploadBeingSaved = null;
                 }
             },
 
@@ -317,8 +349,11 @@ export function registerCampaignsTable(Alpine) {
                 return eligible.length > 0 && eligible.every((screen) => this.isChosen(screen.id));
             },
 
-            /** Every screen in one organization that CAN carry advertising, in one click. */
-            toggleOrganization(group) {
+            /** Every screen in one organization that CAN carry advertising, in one click — once for a double click, whose
+             *  second press cleared them again. */
+            toggleOrganization(group, event = null) {
+                if (isARepeatPress(event)) return;
+
                 const eligible = group.screens.filter((screen) => screen.carries_ads).map((s) => s.id);
                 const allChosen = this.organizationAllChosen(group);
 
@@ -344,21 +379,37 @@ export function registerCampaignsTable(Alpine) {
              * not at a lunch counter watching a three-minute advert break.
              */
             bookedLabel(screen) {
-                const mine = this.editingItem ? 0 : this.thisAdSeconds();
-                const total = screen.booked_seconds + (this.isChosen(screen.id) ? mine : 0);
-
-                return `${total}s of ${this.maxBreakSeconds}s booked`;
+                return `${this.bookedWith(screen)}s of ${this.maxBreakSeconds}s booked`;
             },
 
             isOversold(screen) {
-                const mine = this.editingItem ? 0 : this.thisAdSeconds();
-
-                return screen.booked_seconds + (this.isChosen(screen.id) ? mine : 0) > this.maxBreakSeconds;
+                return this.bookedWith(screen) > this.maxBreakSeconds;
             },
 
-            /** A video runs to its own length; an image to the typed seconds. */
+            /** The screen's break with this campaign as the form has it: its seconds counted once on a screen ticked, and
+             *  not at all on one left unticked. The server's booked_seconds already holds the campaign being edited, as it
+             *  was saved, on the screens it was saved on while switched on (CampaignController::bookedSecondsPerScreen). */
+            bookedWith(screen) {
+                const saved = this.editingItem;
+                const savedHere = saved?.is_active && (saved.screens ?? []).some((each) => each.id === screen.id)
+                    ? Number(saved.play_seconds) || 0
+                    : 0;
+
+                return (Number(screen.booked_seconds) || 0) - savedHere + (this.isChosen(screen.id) ? this.thisAdSeconds() : 0);
+            },
+
+            /** A video runs to its own length; an image to the typed seconds. The file chosen in the form decides, else
+             *  the advert the campaign already has. */
             thisAdSeconds() {
-                return Number(this.picked?.meta?.duration_seconds) || Number(this.form.duration_seconds) || 0;
+                if (this.picked) {
+                    return this.picked.type?.startsWith('video/')
+                        ? Number(this.picked.meta?.duration_seconds) || 0
+                        : Number(this.form.duration_seconds) || 0;
+                }
+
+                return this.editingItem?.type === 'video'
+                    ? Number(this.editingItem.play_seconds) || 0
+                    : Number(this.form.duration_seconds) || 0;
             },
 
             /* ── Labels ────────────────────────────────────────────────── */

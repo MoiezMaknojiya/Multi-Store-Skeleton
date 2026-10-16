@@ -115,6 +115,11 @@ class RoleController extends Controller
         $permissions = $this->permissionsFor($validated['permissions'], $type, $organization);
 
         $role = DB::transaction(function () use ($validated, $organization, $type, $permissions) {
+            // A custom role's organization may have been deleted since it was found: 404, never a role of nothing.
+            if ($organization !== null) {
+                Organization::whereKey($organization->id)->sharedLock()->firstOrFail(['id']);
+            }
+
             $role = Role::create([
                 'name' => $validated['name'],
                 'organization_id' => $organization?->id,
@@ -147,6 +152,10 @@ class RoleController extends Controller
         $before = $role->name;
 
         DB::transaction(function () use ($role, $validated, $permissions) {
+            // Deleted since it was found — by the super admin, or with its organization — it is 404, never a 500 from
+            // permissions written for a role that is gone.
+            Role::whereKey($role->id)->lockForUpdate()->firstOrFail(['id']);
+
             $role->update(['name' => $validated['name']]);
             $role->permissions()->sync($permissions->pluck('id'));
         });
@@ -168,13 +177,9 @@ class RoleController extends Controller
         $organization = $this->context();
         $this->ensureManageable($role, $organization, deleting: true);
 
-        // Nobody may still hold it (owner's rule, 2026-09-17): the page offers Delete, and this says why not yet.
-        $holders = $role->users()->count();
-        if ($holders > 0) {
-            return response()->json([
-                'message' => "Please unassign {$role->name} from everyone first: {$holders} ".str('person')->plural($holders).' still '.($holders === 1 ? 'holds' : 'hold').' it.',
-            ], 422);
-        }
+        // Nobody may still hold it (owner's rule, 2026-09-17): the page offers Delete, and this says why not yet —
+        // before the password, and again below under the locks.
+        $this->refuseWhileHeld($role);
 
         $this->confirmPassword($request);
 
@@ -183,6 +188,29 @@ class RoleController extends Controller
         $name = $role->name;
         $organizationId = $role->organization_id;
         $invitations = DB::transaction(function () use ($role) {
+            // Locked in the order every change that gives a role takes them — a custom role's organization row
+            // (OrganizationTeam::changeTeam), the invitations to the role (an invitation being accepted holds its own
+            // row while it adds the membership), then the role — and only then counted again: somebody given the role
+            // while the password was typed is seen and keeps it, and nobody can be given it until this is over. The
+            // memberships would otherwise go by the cascade, with no word to anybody.
+            //
+            // The invitations are locked by id, row by row, never as a range of the role's index: an invitation being
+            // sent holds the role (shared) before it adds its row there, so a range held here while this waits for the
+            // role would close a circle with it. One sent meanwhile is in the delete's own read below, and revoked.
+            if ($role->organization_id !== null) {
+                Organization::whereKey($role->organization_id)->lockForUpdate()->first(['id']);
+            }
+
+            $invitationIds = Invitation::where('role_id', $role->id)->pluck('id');
+
+            if ($invitationIds->isNotEmpty()) {
+                Invitation::whereKey($invitationIds)->orderBy('id')->lockForUpdate()->pluck('id');
+            }
+
+            Role::whereKey($role->id)->lockForUpdate()->firstOrFail(['id']);
+
+            $this->refuseWhileHeld($role);
+
             $revoked = Invitation::where('role_id', $role->id)->delete();
             $role->delete();
 
@@ -196,6 +224,22 @@ class RoleController extends Controller
         ActivityLog::record('role.deleted', null, "Deleted role {$name}.{$revokedNote}", organizationId: $organizationId);
 
         return response()->json(['message' => "Role {$name} deleted.{$revokedNote}"]);
+    }
+
+    /**
+     * A role somebody still holds is not deleted: the 422 says so, in the Roles page's own words. Counted with a
+     * locking read, which says what is committed now — inside the delete's transaction, whatever its snapshot — and
+     * keeps a membership of this role from being added until that transaction is over.
+     */
+    private function refuseWhileHeld(Role $role): void
+    {
+        $holders = DB::table('organization_user')->where('role_id', $role->id)->sharedLock()->count();
+
+        if ($holders > 0) {
+            abort(response()->json([
+                'message' => "Please unassign {$role->name} from everyone first: {$holders} ".str('person')->plural($holders).' still '.($holders === 1 ? 'holds' : 'hold').' it.',
+            ], 422));
+        }
     }
 
     /**

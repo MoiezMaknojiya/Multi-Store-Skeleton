@@ -1,10 +1,14 @@
 <?php
 
+use App\Models\BuilderAsset;
 use App\Models\Channel;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\Upload;
+use App\Models\User;
 use App\Services\ChunkedUploads;
+use App\Services\DiskGuard;
+use App\Services\OrganizationStorage;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
@@ -136,6 +140,120 @@ test('the description is small and readable', function () {
 
     // A key it does not know is kept but never read.
     Tus::open($this, 10, ['name' => 'a.jpg', 'purpose' => 'media', 'role' => 'Super-Admin', 'organization_id' => 999])->assertCreated();
+});
+
+test('the type the browser claims is kept only as a plain type that fits its column, whatever its length', function () {
+    // uploads.file_type holds 100 characters: a longer type, before its slash or after it, was a 500 on MySQL's strict mode.
+    foreach ([str_repeat('a', 300).'/jpeg', 'image/'.str_repeat('b', 81), 'image', 'IMAGE/JPEG', "image/jpeg\n"] as $type) {
+        $id = Tus::idOf(Tus::open($this, 10, ['name' => 'a.jpg', 'type' => $type, 'purpose' => 'media']));
+
+        expect(Upload::find($id)->file_type)->toBeNull();
+    }
+
+    $longest = str_repeat('a', 19).'/'.str_repeat('b', 80);
+    $id = Tus::idOf(Tus::open($this, 10, ['name' => 'a.jpg', 'type' => $longest, 'purpose' => 'media']));
+
+    expect(Upload::find($id)->file_type)->toBe($longest)->and(strlen($longest))->toBe(100);
+});
+
+test('above the organizations, a finished upload joins only the library or the shelf it was opened for', function () {
+    $this->actingAs(createSuperAdmin());
+    session()->forget('current_organization_id');
+    $bravo = Organization::factory()->create(['name' => 'Bravo Foods']);
+
+    // Opened for the platform's library and posted for Bravo's (a file dropped again on another library carried on the upload a
+    // reload had cut short): refused, nothing lands in Bravo's library, and the upload goes — nothing will add it where it was
+    // opened for, and the file chosen again makes an upload of its own.
+    $id = Tus::upload($this, smallJpeg(), ['name' => 'menu.jpg', 'purpose' => 'media', 'library' => 'platform']);
+    $this->postJson('/media', ['upload' => $id, 'organization_id' => $bravo->id])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['file' => 'This file was uploaded for another library. Choose it again to add it here.'])
+        ->assertJsonPath('upload_given_up', true);
+    expect(Media::count())->toBe(0)->and(Upload::whereKey($id)->exists())->toBeFalse()
+        ->and(Storage::disk('uploads')->exists("{$id}.part"))->toBeFalse();
+
+    // Posted for the library it was opened for, an upload joins it.
+    $id = Tus::upload($this, smallJpeg(), ['name' => 'menu.jpg', 'purpose' => 'media', 'library' => 'platform']);
+    $this->postJson('/media', ['upload' => $id])->assertOk();
+    expect(Media::sole()->organization_id)->toBeNull();
+
+    // And the other way: dropped on Bravo's, posted for the platform's.
+    $id = Tus::upload($this, smallJpeg(), ['name' => 'deal.jpg', 'purpose' => 'media', 'library' => (string) $bravo->id]);
+    $this->postJson('/media', ['upload' => $id])
+        ->assertStatus(422)->assertJsonValidationErrors(['file' => 'This file was uploaded for another library. Choose it again to add it here.']);
+    $id = Tus::upload($this, smallJpeg(), ['name' => 'deal.jpg', 'purpose' => 'media', 'library' => (string) $bravo->id]);
+    $this->postJson('/media', ['upload' => $id, 'organization_id' => $bravo->id])->assertOk();
+    expect(Media::where('organization_id', $bravo->id)->count())->toBe(1);
+
+    // The Ad Builder's shelf: dropped on Bravo's files, posted for the platform's, and back.
+    $id = Tus::upload($this, smallJpeg(), ['name' => 'logo.jpg', 'purpose' => 'asset', 'organization' => (string) $bravo->id]);
+    $this->postJson('/builder/assets', ['upload' => $id])
+        ->assertStatus(422)->assertJsonPath('upload_given_up', true)
+        ->assertJsonValidationErrors(['file' => 'This file was uploaded for another owner. Choose it again to add it here.']);
+    expect(BuilderAsset::count())->toBe(0)->and(Upload::whereKey($id)->exists())->toBeFalse();
+    $id = Tus::upload($this, smallJpeg(), ['name' => 'logo.jpg', 'purpose' => 'asset', 'organization' => (string) $bravo->id]);
+    $this->postJson('/builder/assets', ['upload' => $id, 'organization_id' => $bravo->id])->assertOk();
+
+    $id = Tus::upload($this, smallJpeg(), ['name' => 'badge.jpg', 'purpose' => 'asset']);
+    $this->postJson('/builder/assets', ['upload' => $id, 'organization_id' => $bravo->id])
+        ->assertStatus(422)->assertJsonValidationErrors(['file' => 'This file was uploaded for another owner. Choose it again to add it here.']);
+    $id = Tus::upload($this, smallJpeg(), ['name' => 'badge.jpg', 'purpose' => 'asset']);
+    $this->postJson('/builder/assets', ['upload' => $id])->assertOk();
+
+    expect(BuilderAsset::where('organization_id', $bravo->id)->pluck('title')->all())->toBe(['logo'])
+        ->and(BuilderAsset::whereNull('organization_id')->pluck('title')->all())->toBe(['badge'])
+        ->and(Upload::count())->toBe(0);
+});
+
+test('an upload is not given up while a door is making its row from it, nor taken by the prune', function () {
+    $id = Tus::upload($this, smallJpeg(), ['name' => 'menu.jpg', 'purpose' => 'media']);
+
+    // A door holds it (its save is reading the file): the box's × waits, and the bytes stay under the save.
+    $lock = ChunkedUploads::finishLock($id);
+    $lock->get();
+    Tus::giveUp($this, $id)->assertStatus(409)->assertJsonPath('message', 'This file is being added. Wait a moment.');
+    expect(Upload::whereKey($id)->exists())->toBeTrue()->and(Storage::disk('uploads')->exists("{$id}.part"))->toBeTrue();
+
+    // Past its end while the door still has it (it found the upload a moment before): uploads:prune leaves it to the door, or to
+    // its next run.
+    Upload::whereKey($id)->update(['expires_at' => now()->subSecond()]);
+    $this->artisan('uploads:prune')->expectsOutputToContain('0 upload(s) removed.')->assertSuccessful();
+    expect(Upload::whereKey($id)->exists())->toBeTrue()->and(Storage::disk('uploads')->exists("{$id}.part"))->toBeTrue();
+
+    $lock->release();
+    $this->artisan('uploads:prune')->expectsOutputToContain('1 upload(s) removed.')->assertSuccessful();
+    expect(Upload::whereKey($id)->exists())->toBeFalse();
+
+    // With nobody holding it, × gives it up at once.
+    $other = Tus::upload($this, smallJpeg(), ['name' => 'deal.jpg', 'purpose' => 'media']);
+    Tus::giveUp($this, $other)->assertNoContent();
+    expect(Upload::whereKey($other)->exists())->toBeFalse()->and(Storage::disk('uploads')->exists("{$other}.part"))->toBeFalse();
+});
+
+test('a door that finds its upload given up once it holds it says it is gone, and makes nothing', function () {
+    $id = Tus::upload($this, smallJpeg(), ['name' => 'menu.jpg', 'purpose' => 'media']);
+
+    // The box's × lands between the door's first look and its lock.
+    app()->instance(ChunkedUploads::class, new class(app(OrganizationStorage::class), app(DiskGuard::class)) extends ChunkedUploads
+    {
+        public int $looks = 0;
+
+        public function finished(User $user, string $id, string $purpose): ?Upload
+        {
+            $found = parent::finished($user, $id, $purpose);
+
+            if (++$this->looks === 1 && $found !== null) {
+                $this->cancel($found);
+            }
+
+            return $found;
+        }
+    });
+
+    $this->postJson('/media', ['upload' => $id])
+        ->assertStatus(422)->assertJsonPath('upload_given_up', true)
+        ->assertJsonValidationErrors(['file' => 'That upload is not finished, or it has expired. Choose the file again.']);
+    expect(Media::count())->toBe(0)->and(app(ChunkedUploads::class)->looks)->toBe(2);
 });
 
 test('nobody opens more than twenty at once', function () {

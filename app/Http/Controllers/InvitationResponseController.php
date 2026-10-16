@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
 use App\Models\Invitation;
+use App\Models\Organization;
 use App\Models\User;
 use App\Services\OrganizationTeam;
 use Illuminate\Http\RedirectResponse;
@@ -24,6 +25,14 @@ use Illuminate\View\View;
  */
 class InvitationResponseController extends Controller
 {
+    /** What join() found under its locks, beside the tier rule's own words: the link used a moment ago, or a member already. */
+    private const USED = 'used';
+
+    private const ALREADY_IN = 'already-in';
+
+    /** What join() found under its first lock: the invitation's organization deleted while the answer waited. */
+    private const GONE = 'gone';
+
     public function __construct(private OrganizationTeam $team) {}
 
     public function show(string $token): View
@@ -71,20 +80,16 @@ class InvitationResponseController extends Controller
             ActivityLog::record('account.verified', $user, "Confirmed their email {$user->email} by an invitation's link");
         }
 
-        if (! $invitation->isForPlatform() && $this->team->isMember($user, $invitation->organization)) {
-            return $this->alreadyAMember($invitation, $user);
-        }
-
-        if ($reason = $this->whyCannotJoin($invitation, $user)) {
-            return redirect()->route('invitations.show', $token)->with('error', $reason);
-        }
-
-        if (! $this->join($invitation, $user)) {
+        return match ($outcome = $this->join($invitation, $user)) {
+            null => redirect()->route('dashboard')->with('status', $this->welcome($invitation)),
             // Used a moment ago — a double submit, or another tab. The page says what is left.
-            return redirect()->route('invitations.show', $token);
-        }
-
-        return redirect()->route('dashboard')->with('status', $this->welcome($invitation));
+            self::USED => redirect()->route('invitations.show', $token),
+            self::ALREADY_IN => $this->alreadyAMember($invitation, $user),
+            // The invitation went with its organization, so its own page could only say "no longer valid": the dashboard
+            // (the email is confirmed above) says why.
+            self::GONE => redirect()->route('dashboard')->with('invitation-problem', $this->organizationGone($invitation)),
+            default => redirect()->route('invitations.show', $token)->with('error', $outcome),
+        };
     }
 
     public function register(Request $request, string $token): RedirectResponse
@@ -103,10 +108,11 @@ class InvitationResponseController extends Controller
             'password' => ['required', 'confirmed', Password::defaults()],
         ]);
 
-        // One transaction under the invitation's lock: a double submit or a second tab can neither
-        // make a second account for this email nor use the link twice.
+        // One transaction under the organization's lock and then the invitation's: a double submit or a second tab can
+        // neither make a second account for this email nor use the link twice, and an organization being deleted is waited
+        // for. Deleted meanwhile, it took the invitation with it: nobody is made, and the link's page says it is no longer valid.
         $user = DB::transaction(function () use ($validated, $invitation): ?User {
-            if (! $this->lockOpen($invitation) || $this->accountFor($invitation) !== null) {
+            if (! $this->lockItsOrganization($invitation) || ! $this->lockOpen($invitation) || $this->accountFor($invitation) !== null) {
                 return null;
             }
 
@@ -142,18 +148,19 @@ class InvitationResponseController extends Controller
 
     public function decline(string $token): RedirectResponse
     {
-        $invitation = Invitation::findByToken($token);
+        // Its organization read now, while the invitation is there: the log line names it.
+        $invitation = Invitation::findByToken($token)?->load('organization');
 
         if ($invitation !== null) {
             abort_if(auth()->check() && ! $invitation->isFor(auth()->user()), 403, 'This invitation is for a different email address.');
 
-            $invitation->delete();
-
             // A guest holding the emailed link speaks for that inbox, like a password-reset link:
             // name the account behind it when there is one, rather than "System".
-            ActivityLog::record('invitation.declined', $invitation->organization,
-                "{$invitation->email} declined the invitation to ".$this->placeName($invitation),
-                auth()->user() ?? $this->accountFor($invitation));
+            if ($this->deleteDeclined($invitation)) {
+                ActivityLog::record('invitation.declined', $invitation->organization,
+                    "{$invitation->email} declined the invitation to ".$this->placeName($invitation),
+                    auth()->user() ?? $this->accountFor($invitation));
+            }
         }
 
         return redirect()->route(auth()->check() ? 'dashboard' : 'login')->with('status', 'Invitation declined.');
@@ -175,18 +182,14 @@ class InvitationResponseController extends Controller
                 "The invitation to {$invitation->organization->name} has expired. Ask them to send it again.");
         }
 
-        if ($this->team->isMember($user, $invitation->organization)) {
-            return $this->alreadyAMember($invitation, $user);
-        }
-
-        if ($reason = $this->whyCannotJoin($invitation, $user)) {
-            return redirect()->route('dashboard')->with('invitation-problem', $reason);
-        }
-
-        // False only when a double submit used it a moment ago: the dashboard shows where things stand.
-        return $this->join($invitation, $user)
-            ? redirect()->route('dashboard')->with('status', $this->welcome($invitation))
-            : redirect()->route('dashboard');
+        return match ($outcome = $this->join($invitation, $user)) {
+            null => redirect()->route('dashboard')->with('status', $this->welcome($invitation)),
+            // A double submit used it a moment ago: the dashboard shows where things stand.
+            self::USED => redirect()->route('dashboard'),
+            self::ALREADY_IN => $this->alreadyAMember($invitation, $user),
+            self::GONE => redirect()->route('dashboard')->with('invitation-problem', $this->organizationGone($invitation)),
+            default => redirect()->route('dashboard')->with('invitation-problem', $outcome),
+        };
     }
 
     /** Turned down on the dashboard: the invitation goes and the log says so — nobody is emailed (owner, 2026-10-07). */
@@ -194,12 +197,25 @@ class InvitationResponseController extends Controller
     {
         $user = auth()->user();
         $invitation = $this->sentHere($invitation, $user);
-        $invitation->delete();
 
-        ActivityLog::record('invitation.declined', $invitation->organization,
-            "{$user->email} declined the invitation to {$invitation->organization->name} on their dashboard", $user);
+        if ($this->deleteDeclined($invitation)) {
+            ActivityLog::record('invitation.declined', $invitation->organization,
+                "{$user->email} declined the invitation to {$invitation->organization->name} on their dashboard", $user);
+        }
 
         return redirect()->route('dashboard')->with('status', 'Invitation declined.');
+    }
+
+    /**
+     * Delete a declined invitation — its organization read beforehand. False when nothing was there to delete: declined
+     * in another tab, revoked, or taken with its organization (Organization::purgeContents, which this delete waits for on
+     * MySQL). Nothing was declined then, so nothing is logged and the organization is never asked for its name; and since
+     * an invitation goes with its organization (its foreign key cascades), one deleted here had its organization loaded.
+     * The answer is the same either way, as for a link declined twice: the invitation is no longer open.
+     */
+    private function deleteDeclined(Invitation $invitation): bool
+    {
+        return Invitation::whereKey($invitation->id)->delete() > 0;
     }
 
     /**
@@ -246,11 +262,16 @@ class InvitationResponseController extends Controller
         return User::whereRaw('lower(email) = ?', [$invitation->email])->first();
     }
 
-    /** Platform and organization tiers never mix (rule 3). */
+    /**
+     * Platform and organization tiers never mix (rule 3) — read from the database as it is now, never from what the person's
+     * model remembered earlier in the request (User::globalRole() is kept for the request): join() asks it under the lock.
+     */
     private function whyCannotJoin(Invitation $invitation, User $user): ?string
     {
+        $onThePlatform = $user->isOnThePlatformTeamNow();
+
         if ($invitation->isForPlatform()) {
-            if ($user->globalRole() !== null) {
+            if ($onThePlatform) {
                 return 'You are already on the platform team.';
             }
 
@@ -260,29 +281,77 @@ class InvitationResponseController extends Controller
                 : null;
         }
 
-        return $user->globalRole() !== null
+        return $onThePlatform
             ? 'Platform accounts cannot join an organization.'
             : null;
     }
 
-    /** Use the invitation for this person. False, and nothing changed, when the link was used already. */
-    private function join(Invitation $invitation, User $user): bool
+    /**
+     * Use the invitation for this person, deciding under the lock of its organization's row, then their own account row,
+     * then the invitation's: a second tab accepting another invitation at the same moment — of the other tier, or to the
+     * same organization — waits for this one, and then sees the membership it added. The role comes last, read by the
+     * membership's foreign key as it is written: the order every change takes them (OrganizationTeam::changeTeam names the
+     * person before the role it gives), so nothing holding the role waits here for the person's row. Never the role before
+     * the invitation: RoleController::destroy takes the invitations to a role, then the role. Null once they joined; GONE when its
+     * organization was deleted while this waited (lockItsOrganization); USED when the link was used a moment ago; ALREADY_IN
+     * when they are in its organization already; otherwise the words of the tier rule. Nothing changes but on null. The
+     * account itself, deleted from the platform's Users page meanwhile, is 404 — never a membership of nobody, the foreign key's 500.
+     */
+    private function join(Invitation $invitation, User $user): ?string
     {
-        $joined = DB::transaction(function () use ($invitation, $user): bool {
+        $outcome = DB::transaction(function () use ($invitation, $user): ?string {
+            if (! $this->lockItsOrganization($invitation)) {
+                return self::GONE;
+            }
+
+            User::whereKey($user->id)->lockForUpdate()->firstOrFail(['id']);
+
             if (! $this->lockOpen($invitation)) {
-                return false;
+                return self::USED;
+            }
+
+            if (! $invitation->isForPlatform() && $this->team->isMember($user, $invitation->organization)) {
+                return self::ALREADY_IN;
+            }
+
+            if ($reason = $this->whyCannotJoin($invitation, $user)) {
+                return $reason;
             }
 
             $this->addMembership($invitation, $user);
 
-            return true;
+            return null;
         });
 
-        if ($joined) {
+        if ($outcome === null) {
             $this->afterJoining($invitation, $user);
         }
 
-        return $joined;
+        return $outcome;
+    }
+
+    /**
+     * Take the invitation's organization row under a lock — call inside a transaction, as its first statement. It is the
+     * first lock every change to a team takes (OrganizationTeam::changeTeam, Platform\UserController::assignToOrganization,
+     * OrganizationTeam::whileTheirOrganizationsAreLocked), and the first Organization::purgeContents takes before it deletes
+     * the memberships and then the invitations: an accept holding the person's row and the invitation's, then writing its
+     * membership, met that delete the other way round on MySQL — a deadlock, a 500. A lock takes no snapshot, so the reads
+     * after it see what committed while it waited. False when the organization was deleted meanwhile — it took the
+     * invitation with it, and the caller joins nobody. A platform invitation has no organization row.
+     */
+    private function lockItsOrganization(Invitation $invitation): bool
+    {
+        return $invitation->isForPlatform()
+            || Organization::whereKey($invitation->organization_id)->lockForUpdate()->first(['id']) !== null;
+    }
+
+    /**
+     * Why an invitation answered as its organization was deleted did nothing — said on the dashboard. The name is the one
+     * both doors loaded with the invitation (openInvitation, sentHere), before the organization went.
+     */
+    private function organizationGone(Invitation $invitation): string
+    {
+        return "{$invitation->organization->name} has been deleted, so this invitation can no longer be used.";
     }
 
     /** Take the invitation's row under a lock — call inside a transaction. False when it is gone. */

@@ -236,7 +236,7 @@ theek ek set hota hai, aur rules **line** par lagte hain — file ho ya channel.
 |---|---|---|
 | `playlist_item_id` | FK playlist_items, cascade | |
 | `daypart_id` | FK dayparts, nullOnDelete, nullable | `null` = poora din |
-| `starts_on` | date, nullable | `null` = hamesha se |
+| `starts_on` | date, nullable | `null` = hamesha se — magar jo repeat kisi din se ginta hai (har N din, hafte ya mahine jab N ek se zyada ho, aur har saal) us ka kabhi `null` nahi hota (§22) |
 | `ends_on` | date, nullable | `null` = hamesha tak |
 | `recurrence_type` | string, nullable | `daily` `weekly` `monthly_day` `monthly_weekday` `yearly` · `null` = seedhi date range |
 | `recurrence_interval` | tinyint, default 1 | "har N" |
@@ -844,3 +844,43 @@ rows ka jawab — purane models ke usoolon se nikala hua — migration ke baad w
 
 Pehle "Deli hours" ek jagah badalne se us par lagi har line badal jati thi. Ab ek line ka schedule badal kar
 **Copy to Other Lines** dabana hota hai (aur doosri screens ke liye Copy to Other Screens). 21 products isi tarah chalte hain.
+
+## 22. Repeat ka shuru ka din — Starting date (2026-10-15)
+
+Poori site ke review mein mila: playlist ka har save rules naye sire se likhta hai (§7), aur jis repeat ka Starting date na
+ho wo apni row ke `created_at` se ginta tha. To "har 2 hafte" ke on hafte badal jate the, aur saal wala din khisak jata tha —
+jab bhi koi playlist save karta.
+
+### Naya usool
+
+- **Jo repeat kisi din se ginta hai, us ka Starting date kabhi khali store nahi hota** — har N din, hafte ya mahine (N ek se
+  zyada), aur har saal (`ScheduleRule::repeatNeedsAnAnchor`). "Har Jumma" ko kisi din ki zaroorat nahi.
+- `ScheduleRule::startsOnFor` din is tarteeb se deta hai:
+  1. jo date bheji gayi;
+  2. warna wohi din jis se isi file ya channel ka wohi repeat save se pehle ginta tha — agar wo din aa chuka ho (request ne
+     date chhor di ho, ya Starting saaf kiya gaya ho, on hafte phir bhi nahi badalte);
+  3. warna screen ke apne period ka pehla din: har N hafte ke liye screen ke hafte ka Peer, har N mahine ke liye screen ke
+     mahine ki 1 tareekh, har N din aur har saal ke liye screen ka aaj — server ki UTC tareekh kabhi nahi.
+- Hafte ka Peer, aaj nahi: on hafte wohi rehte hain, magar aaj pehla din nahi banta — raat 1 baje save kiya hua 22:00–02:00
+  kal raat khule ghante nahi katta.
+- **Repeat ke apne khatam hone ke baad kabhi nahi:** jo repeat khatam ho chuka wo koi Starting date nahi rakhta, aur
+  `startsOnAsPlayed` us ke liye kuch nahi bhejta — warna page ka agla save inkaar ho jata ("The repeat cannot end before the
+  schedule starts.").
+- Save (`PlaylistController::writeItems`), Copy to Other Screens (`itemsForCopy`) aur preview (`preview()`, jo line ka
+  `media_id`/`channel_id` leta hai) — teeno yehi method parhte hain.
+
+### Migration — `2026_10_15_210000_give_every_repeat_the_day_it_counts_from`
+
+- Sirf data. Har rule jis ka `starts_on` khali ho, `created_at` ho, aur repeat ko din chahiye: `starts_on` = us turn ka shuru
+  jis mein `created_at` ki tareekh aati thi — weekly ke liye us hafte ka Peer, `monthly_day`/`monthly_weekday` ke liye us mahine
+  ki 1, har N din ke liye ek turn pehle (created minus N din), aur yearly ke liye wohi tareekh. TV par ek din ya ek shaam bhi nahi
+  badalti.
+- Har badli row ko ek hi stamp milta hai, `updated_at = '2026-10-15 21:00:00'`. Jis row ka din us ke `ends_on`/`recurrence_until`
+  ke baad aata (wo ab kuch nahi chalata) wo chhor di jati hai.
+- `down()` sirf stamp wali un rows ka `starts_on` khali karta hai jin ka din abhi tak wohi hai jo `up()` ne diya tha, aur
+  `updated_at` ko `created_at` par wapas rakhta hai. Do baar chalana be-zarar; `Schema::hasTable` se mehfooz.
+
+### Tests
+
+`ScheduleRepeatAnchorTest` (teeno raste, screen ka period, khatam repeat, migration dono taraf), `MigrationsTest`, aur Dusk
+`ReviewFixesSignageFlowTest` (har 2 hafte wala repeat har save mein apna din rakhta hai; khatam repeat waisa hi wapas save hota hai).

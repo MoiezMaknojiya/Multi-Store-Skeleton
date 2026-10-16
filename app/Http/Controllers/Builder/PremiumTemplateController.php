@@ -45,7 +45,10 @@ class PremiumTemplateController extends Controller
             ->when($search !== '', fn (Builder $query) => $query->where(fn (Builder $query) => $query
                 ->whereContains('published_name', $search)
                 ->orWhere(fn (Builder $query) => $query->whereNull('published_name')->whereContains('name', $search))))
-            ->with('media:id,thumbnail_path,disk')
+            // Everything the poster's address is made of: a published page's poster is drawn again in place on every publish,
+            // so its address carries the page's version (`type`, `updated_at`) — without it a browser kept the old poster for
+            // as long as the server lets it cache one, a week.
+            ->with('media:id,type,disk,thumbnail_path,updated_at')
             ->latest('published_at')
             ->limit(self::LISTED)
             ->get(['id', 'name', 'published_name', 'orientation', 'media_id', 'published_at']);

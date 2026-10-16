@@ -217,42 +217,68 @@ function resetToPairing(message = null) {
 
 /* ── Pairing ───────────────────────────────────────────────────────────── */
 
+/** The code on the television, and its poll every POLL_MS. */
+function showPairingCode(code, knownDevice) {
+    el('pairing-code').textContent = code;
+    setPairingInstruction(knownDevice);
+    show('view-pairing');
+    clearTimers();
+    state.pollTimer = setInterval(pollPairStatus, POLL_MS);
+}
+
 /**
  * Show the pairing code.
  *
  * A code already on file and still alive is reused: reloading the page must not
  * cost a registration, both because the number on the TV should not keep
  * changing under the owner's fingers and because the endpoint is rate limited.
+ *
+ * `asked` says the server was asked about the code on file a moment ago (its poll said it is over), so it is not asked
+ * again before a new one is fetched.
  */
-async function startPairing() {
+async function startPairing(asked = false) {
     show('view-loading');
 
     const cachedCode = store.get(CODE_KEY);
     const cachedExpiry = Number(store.get(CODE_EXPIRES_KEY) || 0);
+    const uuid = store.get(UUID_KEY);
+    const secret = store.get(SECRET_KEY);
 
-    if (cachedCode && store.get(SECRET_KEY) && cachedExpiry > Date.now()) {
-        el('pairing-code').textContent = cachedCode;
-        setPairingInstruction(store.get(KNOWN_KEY) === '1');
-        show('view-pairing');
-        clearTimers();
-        state.pollTimer = setInterval(pollPairStatus, POLL_MS);
+    if (cachedCode && secret && cachedExpiry > Date.now()) {
+        showPairingCode(cachedCode, store.get(KNOWN_KEY) === '1');
 
         // Ask once straight away, not only after the first interval. This branch
         // is a REOPEN — the page is coming back with a code it already had — so
         // the owner may well have typed that code while the screen was off. The
         // token would be sitting on the server, and waiting a whole POLL_MS to
-        // discover it is a blank screen for no reason. The register path below
-        // needs no such call: nobody can have claimed a code minted a moment ago.
+        // discover it is a blank screen for no reason.
         pollPairStatus();
 
         return;
     }
 
+    // A code this set's own clock calls over may not be: the owner may have typed it while the set was off, its token
+    // waiting on the server, or the set's clock is simply wrong. So the server is asked with the secret first, and a
+    // code is replaced only once it says so (the review of 2026-10-15: registering in its place threw the waiting token
+    // away, and the screen stayed paired to a token nobody held).
+    if (!asked && uuid && secret) {
+        const status = await askPairStatus(uuid, secret);
+
+        if (status === 'paired') return;
+
+        if (status === 'pending' && cachedCode) {
+            showPairingCode(cachedCode, store.get(KNOWN_KEY) === '1');
+
+            return;
+        }
+    }
+
     try {
+        // The secret goes with the uuid: the server hands this set's own code back only to the set that holds it.
         const response = await fetch('/device/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({ device_uuid: store.get(UUID_KEY) }),
+            body: JSON.stringify({ device_uuid: uuid, poll_secret: secret }),
         });
 
         if (response.status === 429) {
@@ -273,15 +299,43 @@ async function startPairing() {
         store.set(CODE_EXPIRES_KEY, String(Date.parse(data.expires_at)));
         store.set(KNOWN_KEY, data.known_device ? '1' : '');
 
-        el('pairing-code').textContent = data.code;
-        setPairingInstruction(!!data.known_device);
-        show('view-pairing');
+        showPairingCode(data.code, !!data.known_device);
 
-        clearTimers();
-        state.pollTimer = setInterval(pollPairStatus, POLL_MS);
+        // Its own code given back (the secret it sent is the one on file): the owner may have typed it already, so it is
+        // asked about at once. A code minted a moment ago needs no such call: nobody can have claimed it.
+        if (secret && data.poll_secret === secret) pollPairStatus();
     } catch {
         showError('No connection to the server. Check this TV’s internet: it keeps trying by itself.');
         setTimeout(startPairing, 10000);
+    }
+}
+
+/**
+ * Asks the server about this set's code, with its secret, and takes the token up the moment it is there. The status it
+ * said — paired, pending, expired or unknown — or null when it could not be asked.
+ */
+async function askPairStatus(uuid, secret) {
+    try {
+        const query = new URLSearchParams({ device_uuid: uuid, poll_secret: secret });
+        const response = await fetch(`/device/pair-status?${query}`, { headers: { Accept: 'application/json' } });
+        if (!response.ok) return null;
+
+        const data = await response.json();
+
+        if (data.status === 'paired' && data.token) {
+            store.set(TOKEN_KEY, data.token);
+            state.token = data.token;
+            store.remove(SECRET_KEY);
+            store.remove(CODE_KEY);
+            store.remove(CODE_EXPIRES_KEY);
+            clearTimers();
+            startPlayback();
+        }
+
+        return data.status ?? null;
+    } catch {
+        /* Offline for a moment: whoever asked tries again. */
+        return null;
     }
 }
 
@@ -309,33 +363,14 @@ async function pollPairStatus() {
         return resetToPairing();
     }
 
-    try {
-        const query = new URLSearchParams({ device_uuid: uuid, poll_secret: secret });
-        const response = await fetch(`/device/pair-status?${query}`, { headers: { Accept: 'application/json' } });
-        if (!response.ok) return;
+    const status = await askPairStatus(uuid, secret);
 
-        const data = await response.json();
-
-        if (data.status === 'paired' && data.token) {
-            store.set(TOKEN_KEY, data.token);
-            state.token = data.token;
-            store.remove(SECRET_KEY);
-            store.remove(CODE_KEY);
-            store.remove(CODE_EXPIRES_KEY);
-            clearTimers();
-            startPlayback();
-            return;
-        }
-
-        // An unclaimed code eventually dies; fetch a fresh one so the TV never
-        // shows a number that no longer works.
-        if (data.status === 'expired' || data.status === 'unknown') {
-            store.remove(CODE_KEY);
-            store.remove(CODE_EXPIRES_KEY);
-            startPairing();
-        }
-    } catch {
-        /* Offline for a moment: the next tick tries again. */
+    // An unclaimed code eventually dies; fetch a fresh one so the TV never
+    // shows a number that no longer works — the server has just been asked.
+    if (status === 'expired' || status === 'unknown') {
+        store.remove(CODE_KEY);
+        store.remove(CODE_EXPIRES_KEY);
+        startPairing(true);
     }
 }
 

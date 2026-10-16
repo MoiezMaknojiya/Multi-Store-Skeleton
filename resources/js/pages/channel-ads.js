@@ -17,6 +17,7 @@
  */
 import axios from 'axios';
 import { announce } from '../core/announce.js';
+import { emptyTheBox, formStillAsked, giveUpUpload, notSavedWords } from '../core/form-asked.js';
 import { lengthInWords } from '../core/media-file.js';
 import { PlaylistItemDefaults } from '../core/playlist-defaults.js';
 import { showFirstError, unreadableFields } from '../core/validate.js';
@@ -29,6 +30,9 @@ const blankPicker = () => ({ items: [], page: 1, lastPage: 1, loading: false, fa
 
 /** Tiles fetched at a time; "Load more" asks for the next ones. */
 const PICKER_PAGE_SIZE = 24;
+
+/** The upload box of the Upload way, inside the dialog (channels/show.blade.php). */
+const AD_BOX = '[dusk="channel-ad-dropzone"]';
 
 /** The two ways that choose a row of the library, rather than upload one. */
 const PICKING = ['library', 'ads'];
@@ -55,6 +59,8 @@ export function registerChannelAds(Alpine) {
         removingAd: null,
         form: blankForm(),
         formErrors: {},
+        // Moves each time the form opens: a save's answer acts on the form it was sent from alone (saveAd).
+        formTicket: 0,
 
         // Where the ad's file comes from: 'keep' (an edit only), 'library', 'ads' or 'upload'.
         source: 'library',
@@ -69,6 +75,9 @@ export function registerChannelAds(Alpine) {
         picked: null,
         uploaded: null,
         uploading: false,
+        // The upload a save on its way carries: the box is held meanwhile (holdsTheSavedUpload), and lets go of it without
+        // giving it up (clearFile).
+        uploadBeingSaved: null,
         // Cancel pressed while a file was still going up: the dialog asks before it gives the upload up.
         confirmingClose: false,
         // How full the library an upload here joins is ({used, limit}), or null for the platform's own.
@@ -103,6 +112,7 @@ export function registerChannelAds(Alpine) {
         /* ── Add / edit ──────────────────────────────────────────────────── */
 
         openAdModal(ad = null) {
+            this.formTicket++;
             this.editingAd = ad;
             this.formErrors = {};
             this.confirmingClose = false;
@@ -173,14 +183,23 @@ export function registerChannelAds(Alpine) {
             }
         },
 
-        /** Forget the uploaded file, and take it out of the uploader — a file still going is cancelled. */
+        /** Forget the uploaded file, and take it out of the uploader: a file still going is cancelled, and one that came is
+         *  given up on the server — unless a save on its way carries it. The box is found on the page: a ref inside the
+         *  dialog is the dialog's own, and from Add Ad or an ad's Edit, outside it, it was never found, so a dialog shut
+         *  with Escape opened again saying "Uploaded" while the form had forgotten the file. */
         clearFile() {
             this.picked = null;
             this.uploaded = null;
             this.uploading = false;
 
-            const box = this.$refs.adUpload?.querySelector('[dusk="channel-ad-dropzone"]');
-            if (box) window.Alpine.$data(box).clear();
+            emptyTheBox(AD_BOX, this.uploadBeingSaved);
+        },
+
+        /** Is the box still showing the file a save on its way carries? Then it is held (channels/show.blade.php): its ×
+         *  and a new file would give that upload up under the save. Shut with Escape meanwhile, the box has let go of it
+         *  and takes the next file at once. */
+        holdsTheSavedUpload() {
+            return this.uploadBeingSaved !== null && this.uploaded?.upload === this.uploadBeingSaved;
         },
 
         /* The uploader's events (docs/UPLOADS-SPEC.md). */
@@ -379,9 +398,15 @@ export function registerChannelAds(Alpine) {
 
             this.formErrors = {};
             this.saving = true;
+            const named = this.editingAd?.title ?? this.form.title;
+            // The answer acts on this form alone: shut since, or opened again for another ad, the dialog is neither shut
+            // nor marked by it (core/form-asked.js).
+            const asked = formStillAsked(() => this.formTicket, event?.target);
+            const sent = this.source === 'upload' ? this.uploaded.upload : null;
+            this.uploadBeingSaved = sent;
             try {
                 const payload = new FormData();
-                if (this.source === 'upload') payload.append('upload', this.uploaded.upload);
+                if (sent) payload.append('upload', sent);
                 if (PICKING.includes(this.source)) payload.append('media_id', this.chosen.id);
 
                 const fields = {
@@ -411,12 +436,18 @@ export function registerChannelAds(Alpine) {
                 const { data } = await axios.post(url, payload);
                 this.ads = data.ads;
                 this.storage = data.storage ?? this.storage;
-                this.closeAdModal();
+                // Its upload is the ad's now: the box lets go of it, and nothing gives it up (uploadBeingSaved).
+                if (asked()) this.closeAdModal();
                 window.toast(data.message, 'success');
             } catch (error) {
-                const errors = error.response?.status === 422 ? error.response.data.errors : null;
+                const errors = error.response?.status === 422 ? (error.response.data?.errors ?? null) : null;
 
-                if (errors) {
+                if (! asked()) {
+                    // Its dialog is gone, and the box let go of the file when it went: given up now, and the refusal said
+                    // in a toast.
+                    giveUpUpload(AD_BOX, sent, error);
+                    window.toast(notSavedWords(errors, named) ?? error.response?.data?.message ?? 'Could not save the ad.');
+                } else if (errors) {
                     this.formErrors = errors;
                     showFirstError(event?.target);
                     // A refusal the form has no place for (a video's measurements, the other way's
@@ -429,6 +460,7 @@ export function registerChannelAds(Alpine) {
                 }
             } finally {
                 this.saving = false;
+                this.uploadBeingSaved = null;
             }
         },
 
@@ -480,11 +512,15 @@ export function registerChannelAds(Alpine) {
             if (! this.removingAd || this.removing) return;
 
             this.removing = true;
+            // A late answer never shuts the question about another ad (crud-table-base's deleteItem says why).
+            const target = this.removingAd.id;
             try {
-                const { data } = await axios.delete(`/channels/${this.channelId}/ads/${this.removingAd.id}`);
+                const { data } = await axios.delete(`/channels/${this.channelId}/ads/${target}`);
                 this.ads = data.ads;
-                this.$dispatch('close-modal', 'confirm-channel-ad-deletion');
-                this.removingAd = null;
+                if (this.removingAd?.id === target) {
+                    this.$dispatch('close-modal', 'confirm-channel-ad-deletion');
+                    this.removingAd = null;
+                }
             } catch (error) {
                 window.toast(error.response?.data?.message ?? 'Could not remove the ad.');
             } finally {

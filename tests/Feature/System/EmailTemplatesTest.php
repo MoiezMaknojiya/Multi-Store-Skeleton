@@ -4,6 +4,7 @@ use App\Models\Invitation;
 use App\Models\Organization;
 use App\Models\Role;
 use App\Models\User;
+use App\Notifications\ApproveEmailChangeNotification;
 use App\Notifications\ConfirmNewEmailNotification;
 use App\Notifications\DiskAlmostFullNotification;
 use App\Notifications\DiskSpaceLowNotification;
@@ -176,6 +177,38 @@ test('the email that confirms a changed address goes to the new one and says the
         ->not->toContain('<img');
 });
 
+test('the email that approves a change of address goes to the address the account has, and shows the new one masked', function () {
+    $user = User::factory()->create(['first_name' => 'Zebulon', 'email' => 'ali@example.com']);
+    $user->forceFill(['pending_email' => 'attacker@evil.test'])->save();
+    config(['app.name' => 'The Display Solution']);
+
+    $mail = (new ApproveEmailChangeNotification)->toMail($user);
+    $html = (string) $mail->render();
+
+    expect($mail->view)->toBe(['emails.approve-email-change', 'emails.approve-email-change-text'])
+        ->and($mail->subject)->toBe('Approve a new sign-in email for The Display Solution')
+        ->and($user->routeNotificationFor('mail'))->toBe('ali@example.com')
+        ->and($mail->viewData['url'])->toStartWith(url("/approve-email/{$user->id}/".ApproveEmailChangeNotification::hashOf('ali@example.com', 'attacker@evil.test')))
+        ->toContain('expires=')->toContain('signature=');
+
+    expect($html)
+        ->toContain(e($mail->viewData['url']))
+        ->toContain('a•••@evil.test')                             // enough for its person to know it …
+        ->not->toContain('attacker@')                             // … and nothing more of what was typed
+        ->not->toContain('Zebulon')
+        ->toContain('ali@example.com')                            // the recipient's own address
+        ->toContain(VerifyEmailNotification::minutes().' minutes')
+        ->toContain('Approve the Change')
+        ->toContain("If you didn't ask for this change")
+        ->toContain('<table')
+        ->toContain('#2563eb')
+        ->not->toContain('<img')
+        ->not->toContain('having trouble clicking');
+
+    expect(ApproveEmailChangeNotification::masked('b@x.org'))->toBe('b•••@x.org')
+        ->and(ApproveEmailChangeNotification::masked('not-an-address'))->toBe('•••');
+});
+
 test('the disk warning says what is left, what is kept free and how often it is sent', function () {
     $mail = (new DiskAlmostFullNotification((int) (3.5 * 1024 ** 3), 5 * 1024 ** 3))->toMail(User::factory()->create());
 
@@ -215,6 +248,7 @@ test('every plain-text twin prints its link and its words as they are, never HTM
     foreach ([
         (new VerifyEmailNotification)->toMail($user),
         (new ConfirmNewEmailNotification($user))->toMail(new AnonymousNotifiable),
+        (new ApproveEmailChangeNotification)->toMail($user),
         (new ResetPasswordNotification('reset-token'))->toMail($user),
         (new InvitationNotification($invitation, 'text-twin'))->toMail(new AnonymousNotifiable),
         (new DiskAlmostFullNotification(1024 ** 3, 5 * 1024 ** 3))->toMail($user),

@@ -83,7 +83,7 @@ function premiumTemplate(string $name, array $assetIds = [], string $orientation
         ->published()
         ->create();
 
-    $template->media->update(['thumbnail_path' => "builder/platform/ads/{$template->id}/published.jpg"]);
+    $template->media->update(['thumbnail_path' => $template->storageDirectory().'/published.jpg']);
     Storage::disk('public')->put($template->media->thumbnail_path, str_repeat('j', 500));
 
     return $template->fresh();
@@ -116,12 +116,28 @@ test('the gallery lists the platform\'s published templates of the shape chosen,
 
     $row = collect($this->getJson('/builder/templates?orientation=landscape')->json('templates'))->firstWhere('id', $newer->id);
     expect($row)->toMatchArray(['orientation' => 'landscape', 'preview_url' => route('builder.preview', $newer)])
-        ->and($row['thumbnail_url'])->toContain("builder/platform/ads/{$newer->id}/published.jpg")
+        ->and($row['thumbnail_url'])->toContain("builder/platform/ads/{$newer->storage_key}/published.jpg")
         ->and(array_keys($row))->toBe(['id', 'name', 'orientation', 'thumbnail_url', 'preview_url']);
 
     // Searched by the name it was published under.
     expect(templatesListed($this, 'orientation=landscape&search=burger'))->toBe([$older->id => 'Burger menu'])
         ->and(templatesListed($this, 'orientation=landscape&search=half'))->toBe([]);
+});
+
+test("the gallery's poster carries the published page's version: a template published again shows its new poster at once", function () {
+    $template = premiumTemplate('Coffee menu');
+    $poster = fn (): string => collect($this->getJson('/builder/templates?orientation=landscape')->assertOk()->json('templates'))
+        ->firstWhere('id', $template->id)['thumbnail_url'];
+
+    // The poster is drawn again under the same name on every publish, and the server lets a browser keep a picture for a
+    // week: only the version in its address makes a browser fetch the new one — as everywhere else a page's poster shows.
+    $first = $poster();
+    expect($first)->toContain('?v=')->toBe($template->media->fresh()->thumbnail_url);
+
+    $this->travel(1)->minutes();
+    $template->media->touch();
+
+    expect($poster())->not->toBe($first)->toBe($template->media->fresh()->thumbnail_url);
 });
 
 test('the gallery asks which way the screen is first', function () {
@@ -164,7 +180,7 @@ test('Use This Template makes the organization\'s own ad, with its own copy of e
     }
 
     // The poster too, and all of it counted to the organization's 512 MB.
-    expect($copy->thumbnail_path)->toBe("builder/{$this->organization->id}/ads/{$copy->id}/poster.jpg")
+    expect($copy->thumbnail_path)->toMatch('#^builder/'.$this->organization->id.'/ads/'.$copy->storage_key.'/poster-[0-9a-f]{32}\.jpg$#')
         ->and(app(OrganizationStorage::class)->used($this->organization->id))->toBe($before + 4096 + 8192 + 100 + 100 + 500);
     Storage::disk('public')->assertExists($copy->thumbnail_path);
 

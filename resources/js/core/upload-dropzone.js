@@ -11,11 +11,17 @@
  *    and `upload-added` is dispatched with the server's answer, so the page refreshes its list and its storage. Its
  *    "Added" row then goes by itself after a few seconds, as a notification does.
  *  - `form` (a channel's Upload, a campaign's advert): one file. `upload-picked` when it is accepted, `upload-ready`
- *    with its upload id and what the browser measured once every byte is in, `upload-cleared` when it is taken away,
- *    and `upload-busy` while bytes are still going, so the form can hold its Save.
+ *    with its upload id and what the browser measured once every byte is in, `upload-cleared` when it is taken away —
+ *    or the server gave it up (`{givenUp: true}`, the row left saying why) — and `upload-busy` while bytes are still
+ *    going, so the form can hold its Save.
  *
  * `context` is kept up to date by the page (the component's x-effect): where the file goes (library, organization, channel),
- * the fields its door needs besides, and the organization's storage ({used, limit}) for the check before a byte is sent.
+ * the fields its door needs besides, and the organization's storage ({used, limit}) for the check before a byte is sent. A row
+ * keeps the place its file was dropped for (`place`), whatever the page's lists say by the time its bytes are in: the server
+ * refuses an upload posted for another place than it was opened for (TakesAFinishedUpload::assertUploadOpenedFor).
+ *
+ * A refusal whose answer says `upload_given_up` (ChunkedUploads::GIVEN_UP) is for good — the file itself was refused, or the
+ * upload is gone — so its row is refused, with no Try Again that could only fail.
  */
 import axios from 'axios';
 import { bytesInWords, clock, fileError, MAX_VIDEO_SECONDS, readVideoMeta, storageError, videoLengthError } from './media-file.js';
@@ -75,6 +81,30 @@ function wordsFrom(body) {
     }
 }
 
+/** The upload a request posted, whatever its body was: FormData, an object, or the JSON axios made of one. */
+function uploadIn(data) {
+    if (data instanceof FormData) return data.get('upload');
+
+    try {
+        return (typeof data === 'string' ? JSON.parse(data) : data)?.upload ?? null;
+    } catch {
+        return null;
+    }
+}
+
+/** Whose page this is, "{user}:{organization}" — the layout's session-context (RefuseAStaleTab::contextFor). */
+function sessionContext() {
+    return document.querySelector('meta[name="session-context"]')?.content ?? '';
+}
+
+/** A place told apart from every other: what its upload tells the server, and whose page, in which organization, it is dropped
+ *  on. The server takes an organization's own library or shelf from the session (ChunkedUploads::libraryFor, shelfFor), which
+ *  the meta never names: without it, a person of two organizations whose upload a reload cut short carried it on for the first
+ *  when the same file was dropped again in the second, and the door refused it. */
+function placeKey(meta) {
+    return JSON.stringify({ ...meta, session: sessionContext() });
+}
+
 /** Developer → TV App's box takes the app alone, under its ceiling: what the server says too (ChunkedUploads::open). */
 function apkError(file, maxBytes) {
     if ((file.name.split('.').pop() ?? '').toLowerCase() !== 'apk') {
@@ -94,6 +124,8 @@ export function registerUploadDropzone(Alpine) {
         let watch = null;
         // The "Added" rows waiting to fade away.
         const leaving = new Set();
+        // `form`: what hears the page post its form, for an upload the server gave up (noteGivenUp).
+        let listening = null;
 
         return {
             purpose: config.purpose,
@@ -136,12 +168,22 @@ export function registerUploadDropzone(Alpine) {
                 window.addEventListener('online', this.onOnline);
                 window.addEventListener('offline', this.onOffline);
                 watch = setInterval(() => this.checkQuiet(), 1000);
+
+                // `form`: the page posts the upload with its form, so the box hears the answer here.
+                if (this.mode === 'form') {
+                    listening = axios.interceptors.response.use(null, (error) => {
+                        this.noteGivenUp(error);
+
+                        return Promise.reject(error);
+                    });
+                }
             },
 
             destroy() {
                 window.removeEventListener('beforeunload', this.onLeave);
                 window.removeEventListener('online', this.onOnline);
                 window.removeEventListener('offline', this.onOffline);
+                if (listening !== null) axios.interceptors.response.eject(listening);
                 clearInterval(watch);
                 leaving.forEach((timer) => clearTimeout(timer));
                 this.uploads.forEach((item) => this.forgetPreview(item));
@@ -161,8 +203,13 @@ export function registerUploadDropzone(Alpine) {
                 // One file where only one is taken: a new pick replaces the old.
                 if (! this.multiple) this.clear();
 
+                // Where the files go is decided now, as they are dropped, and kept on each row: the page's Library or Owner
+                // list may change while their bytes go up (a file dropped on one library once joined the one shown when it
+                // was in), and while the files before it are being measured.
+                const place = this.placeNow();
+
                 for (const file of (this.multiple ? files : files.slice(0, 1))) {
-                    await this.accept(file);
+                    await this.accept(file, place);
                 }
             },
 
@@ -171,9 +218,10 @@ export function registerUploadDropzone(Alpine) {
                 if (! event.currentTarget.contains(event.relatedTarget)) this.dragging = false;
             },
 
-            /** Check what can be checked before a byte is sent — then send it. */
-            async accept(file) {
+            /** Check what can be checked before a byte is sent — then send it, to the place it was dropped for. */
+            async accept(file, place) {
                 this.uploads.push({
+                    place,
                     key: `upload-${++rows}`,
                     fileId: null,
                     name: file.name,
@@ -232,7 +280,13 @@ export function registerUploadDropzone(Alpine) {
                     const { Uppy, Tus } = await loadEngine();
                     this.startEngine(Uppy, Tus);
 
-                    item.fileId = uppy.addFile({ name: file.name, type: file.type, data: file, meta: this.metaFor() });
+                    // The place is part of the file's id (Uppy's relativePath, which the server is never sent), and so of the
+                    // fingerprint a reload carries on from: a file cut short on one library — or in one organization — and
+                    // dropped again on another carried on the upload the first had opened, which the server refuses for the
+                    // second (placeKey).
+                    item.fileId = uppy.addFile({
+                        name: file.name, type: file.type, data: file, meta: { ...place.meta, relativePath: place.key },
+                    });
                     item.status = 'waiting';
                     uppy.upload().catch(() => {});
                 } catch (error) {
@@ -242,17 +296,29 @@ export function registerUploadDropzone(Alpine) {
                 }
             },
 
-            /** The organization's storage as it will be once the rows before this one are in. */
+            /** The storage of the row's place as it will be once the rows before this one, going to the same place, are in. */
             roomLeft(item) {
-                const storage = this.context.storage;
+                const storage = this.isShown(item.place) ? this.context.storage : item.place.storage;
 
                 if (! storage) return null;
 
                 const pending = this.uploads
-                    .filter((each) => each !== item && PENDING.includes(each.status))
+                    .filter((each) => each !== item && each.place.key === item.place.key && PENDING.includes(each.status))
                     .reduce((sum, each) => sum + each.size, 0);
 
                 return { used: storage.used + pending, limit: storage.limit };
+            },
+
+            /** Where a file dropped now goes: what its upload tells the server, the fields its door needs, that place's storage. */
+            placeNow() {
+                const meta = this.metaFor();
+
+                return { meta, fields: { ...(this.context.fields ?? {}) }, storage: this.context.storage ?? null, key: placeKey(meta) };
+            },
+
+            /** Is $place the one the page shows now? */
+            isShown(place) {
+                return place.key === placeKey(this.metaFor());
             },
 
             /** What the upload tells the server: what it is for, and where it goes. */
@@ -299,7 +365,7 @@ export function registerUploadDropzone(Alpine) {
                         headers: {
                             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
                             // Whose page it is, as every request of the page says it (RefuseAStaleTab).
-                            'X-Session-Context': document.querySelector('meta[name="session-context"]')?.content ?? '',
+                            'X-Session-Context': sessionContext(),
                             'X-Requested-With': 'XMLHttpRequest',
                             Accept: 'application/json',
                         },
@@ -393,7 +459,7 @@ export function registerUploadDropzone(Alpine) {
                 this.announceBusy();
             },
 
-            /** `add`: the door the page's form would have posted to, with the upload in place of the file. */
+            /** `add`: the door the page's form would have posted to, with the upload in place of the file — for the place it was dropped for. */
             async addToPlace(item) {
                 item.status = 'adding';
                 item.error = '';
@@ -402,7 +468,7 @@ export function registerUploadDropzone(Alpine) {
                 const form = new FormData();
                 form.append('upload', item.uploadId);
 
-                Object.entries({ ...(this.context.fields ?? {}), ...item.meta }).forEach(([key, value]) => {
+                Object.entries({ ...item.place.fields, ...item.meta }).forEach(([key, value]) => {
                     if (value !== null && value !== undefined && value !== '') form.append(key, value);
                 });
 
@@ -413,15 +479,45 @@ export function registerUploadDropzone(Alpine) {
                     item.lighter = data?.lighter ?? null;
                     item.status = 'done';
                     this.say(`${item.name} is added.`);
-                    this.$dispatch('upload-added', { response: data, name: item.name });
+                    // The storage in the answer is the place the file joined: a page showing another one by now keeps its own.
+                    const response = this.isShown(item.place) ? data : { ...data, storage: undefined };
+                    this.$dispatch('upload-added', { response, name: item.name });
                     this.fadeAway(item);
                 } catch (error) {
+                    const words = wordsFrom(error.response?.data) ?? 'This file could not be added. Try again.';
+
+                    // Refused for good (the file itself, or the upload is gone): no Try Again, and nothing left to give up.
+                    if (error.response?.data?.upload_given_up) {
+                        item.uploadId = null;
+                        this.refuse(item, words);
+
+                        return;
+                    }
+
                     item.status = 'failed';
-                    item.error = wordsFrom(error.response?.data) ?? 'This file could not be added. Try again.';
+                    item.error = words;
                     this.say(`${item.name}: ${item.error}`);
                 } finally {
                     this.announceBusy();
                 }
+            },
+
+            /** `form`: the page posted this box's upload and the server gave it up for good — the row says why, with nothing to
+             *  retry, and the form forgets the upload (`upload-cleared` with `givenUp`): saved again, it said only that the
+             *  upload was gone, in place of the reason. */
+            noteGivenUp(error) {
+                const data = error?.response?.data;
+
+                if (! data?.upload_given_up) return;
+
+                const sent = uploadIn(error.config?.data);
+                const item = sent ? this.uploads.find((each) => each.uploadId === sent) : null;
+
+                if (! item) return;
+
+                item.uploadId = null;
+                this.refuse(item, wordsFrom(data) ?? 'This file cannot be used. Choose another.');
+                this.$dispatch('upload-cleared', { givenUp: true });
             },
 
             /* ── The row's buttons ────────────────────────────────────────── */
@@ -537,7 +633,7 @@ export function registerUploadDropzone(Alpine) {
                     headers: {
                         'Tus-Resumable': '1.0.0',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
-                        'X-Session-Context': document.querySelector('meta[name="session-context"]')?.content ?? '',
+                        'X-Session-Context': sessionContext(),
                         Accept: 'application/json',
                     },
                 }).catch(() => {});

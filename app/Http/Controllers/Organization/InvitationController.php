@@ -51,7 +51,11 @@ class InvitationController extends Controller
             throw ValidationException::withMessages(['email' => 'An invitation is already waiting for this email — resend it instead.']);
         }
 
-        [$invitation, $token] = Invitation::open($organization, $email, $role, $actor);
+        // Under the organization's lock, the inviter's (the invitation names them) and then the role's (OrganizationTeam::changeTeam):
+        // a role deleted since it was found is refused in words, never a 500 from the foreign key, and a delete of the role waits
+        // for this invitation, and revokes it.
+        [$invitation, $token] = $this->team->changeTeam($organization, fn () => Invitation::open($organization, $email, $role, $actor),
+            giving: $role, naming: $actor);
         $sent = $invitation->sendLink($token);
 
         ActivityLog::record('member.invited', $organization, "Invited {$email} to {$organization->name} as {$role->name}");
@@ -71,7 +75,7 @@ class InvitationController extends Controller
         $this->ensureManageable($invitation, $organization);
 
         $token = $invitation->renew();
-        $sent = $invitation->fresh()->sendLink($token);
+        $sent = $invitation->sendLink($token);
 
         ActivityLog::record('invitation.resent', $organization, "Resent the invitation for {$invitation->email} to {$organization->name}");
 
@@ -116,7 +120,8 @@ class InvitationController extends Controller
     {
         abort_unless($invitation->organization_id === $organization->id, 404);
 
-        abort_unless($this->team->mayAssign(auth()->user(), $organization, $invitation->role), 403,
+        // Its role deleted a moment ago took the invitation with it.
+        abort_unless($this->team->mayAssign(auth()->user(), $organization, $invitation->role ?? abort(404)), 403,
             'You cannot manage an invitation to a role whose access you do not have.');
     }
 }

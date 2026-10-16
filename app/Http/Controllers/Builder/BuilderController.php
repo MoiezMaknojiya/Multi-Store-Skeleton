@@ -12,6 +12,7 @@ use App\Models\BuilderAsset;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\PlaylistItem;
+use App\Models\Screen;
 use App\Services\AdCompiler;
 use App\Services\AdPublisher;
 use App\Services\MediaStorage;
@@ -251,7 +252,7 @@ class BuilderController extends Controller
         // original's file would let deleting the original take the copy's picture with it. An organization with no room
         // for it gets its copy without one: a poster is never a reason to refuse (OrganizationStorage).
         if ($original && Storage::disk('public')->exists($original)) {
-            $poster = $copy->storageDirectory().'/poster.jpg';
+            $poster = $copy->posterPath();
 
             $this->quota->withRoomOrSkip($copy->organization_id, (int) Storage::disk('public')->size($original), function () use ($original, $copy, $poster) {
                 Storage::disk('public')->copy($original, $poster);
@@ -430,20 +431,80 @@ class BuilderController extends Controller
         $name = $ad->name;
         $shared = $ad->isShared();
         $organizationId = $this->logOrganizationOf($ad);
-        $screens = $ad->media_id === null
-            ? 0
-            : PlaylistItem::where('media_id', $ad->media_id)->count();
-
-        DB::transaction(fn () => $ad->delete());
+        $lines = $this->deleteUnderItsLocks($ad);
 
         // The copies organizations made of a Premium Template are theirs, files and all, and stay.
         ActivityLog::record('ad.deleted', null, $shared ? "Deleted ad {$name}, shared with every organization" : "Deleted ad {$name}", organizationId: $organizationId);
 
         return response()->json([
-            'message' => $screens > 0
-                ? "Ad deleted, and taken off {$screens} playlist ".($screens === 1 ? 'line' : 'lines')
+            'message' => $lines > 0
+                ? "Ad deleted, and taken off {$lines} playlist ".($lines === 1 ? 'line' : 'lines')
                 : 'Ad deleted',
         ]);
+    }
+
+    /**
+     * The design and its page go, each decided under the lock that guards it; answers how many playlist lines the page leaves.
+     *
+     * A draft as read may have been published since — its first Publish committed between that read and this delete — and its
+     * new page would then be left with no design: in no library, in no editor, and counted to the 512 MB for good. So a draft
+     * is held and asked again (a locking read sees what is committed); one published meanwhile is let go and deleted as a
+     * published design, its page's lock first: the order a publish takes them in (AdPublisher: the page, then the design),
+     * never the design and then the page, which would wait on a publish waiting on it. Gone meanwhile — deleted in another
+     * tab — it is no longer here (404), and logged once.
+     */
+    private function deleteUnderItsLocks(BuilderAd $ad): int
+    {
+        if ($ad->media_id === null) {
+            $page = DB::transaction(function () use ($ad): ?int {
+                $row = BuilderAd::whereKey($ad->id)->lockForUpdate()->first(['id', 'media_id']);
+
+                abort_if($row === null, 404);
+
+                if ($row->media_id !== null) {
+                    return (int) $row->media_id;
+                }
+
+                $ad->delete();
+
+                return null;
+            });
+
+            if ($page === null) {
+                return 0;
+            }
+
+            $ad->media_id = $page;
+            $ad->unsetRelation('media');
+        }
+
+        return DB::transaction(function () use ($ad): int {
+            // Asked again under its page's row lock, the one a channel's Add Ad takes (ChannelAdController::holdTheFile,
+            // MediaController::destroy) — the transaction's first statement, so on MySQL the channels are read after it, as
+            // they are now: an ad a channel added since the question before the password is seen, and never taken away by
+            // the foreign key's cascade.
+            $page = Media::whereKey($ad->media_id)->lockForUpdate()->first(['id']);
+
+            // Gone meanwhile: the design was deleted in another tab, its page with it. No longer here.
+            abort_if($page === null, 404);
+
+            if (($inUse = $page->stillInAChannelMessage()) !== null) {
+                throw ValidationException::withMessages(['name' => $inUse]);
+            }
+
+            // The screens it is the holding picture of, held before the page goes, as MediaController::destroy holds them: the
+            // foreign key empties their holding picture — after the playlist lines it takes away, were they not held already.
+            // A playlist's save holds its files, then its screen, then takes its lines (PlaylistController::update): held here
+            // first, page then screens, the two take turns rather than each waiting on the other (a deadlock, a 500).
+            Screen::where('default_media_id', $page->id)->orderBy('id')->lockForUpdate()->pluck('id');
+
+            // Counted under the page's lock, which a save putting it on a playlist takes too: the lines the cascade takes.
+            $lines = PlaylistItem::where('media_id', $page->id)->count();
+
+            $ad->delete();
+
+            return $lines;
+        });
     }
 
     /**
@@ -572,8 +633,14 @@ class BuilderController extends Controller
         // counted from the moment it exists; without room the design keeps the poster it had (OrganizationStorage). A
         // photograph of the design is not a change to it: it must not move `updated_at`, which would make a
         // published ad read as edited since — a draft, off every screen (BuilderAd::isPublished()).
-        $this->storage->storePosterWithin($ad->organization_id, "{$ad->storageDirectory()}/poster.jpg", $dataUri,
+        $previous = $ad->thumbnail_path;
+
+        $this->storage->storePosterWithin($ad->organization_id, $ad->posterPath(), $dataUri,
             fn (string $path) => BuilderAd::withoutTimestamps(fn () => $ad->update(['thumbnail_path' => $path])));
+
+        // A poster of another name — from before its name was its own (BuilderAd::posterPath), or one the code before the key
+        // wrote in the folder named by the ad's id while a deploy switched over — goes once the new one is in its place.
+        $ad->forgetFile($previous);
     }
 
     /**

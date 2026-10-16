@@ -6,6 +6,7 @@
  */
 import axios from 'axios';
 import { createCrudTable } from '../core/crud-table-base.js';
+import { formStillAsked, notSavedWords } from '../core/form-asked.js';
 import { validate, required, maxLen, digitsOnly, emailFormat, requiredMessage, wholeNumber, minNumber, maxNumber, unreadableFields, showFirstError } from '../core/validate.js';
 import { bytesInWords } from '../core/media-file.js';
 
@@ -80,6 +81,7 @@ export function registerOrganizationsTable(Alpine) {
             /* ── Billing ───────────────────────────────────────────────── */
 
             openBilling(organization) {
+                this.formTicket++;
                 this.billingOrganization = organization;
                 this.billing = null;
                 this.billingErrors = {};
@@ -207,19 +209,33 @@ export function registerOrganizationsTable(Alpine) {
 
                 this.savingBilling = true;
                 const organization = this.billingOrganization;
+                // The answer acts on this dialog alone: shut since, or opened again for another organization (or this one),
+                // it is neither shut nor marked by it — nor are the switches turned there since put back.
+                const asked = formStillAsked(() => this.formTicket, form);
 
                 try {
                     const { data } = await axios.put(`/organizations/${organization.id}/billing`,
                         { ...this.billingForm, extra_storage_gb: Number(this.billingForm.extra_storage_gb) });
-                    if (this.billingOrganization?.id === organization.id) this.showBilling(data.billing);
                     window.toast(data.message, 'success');
-                    this.$dispatch('close-modal', 'organization-billing');
+                    if (asked()) {
+                        this.showBilling(data.billing);
+                        this.$dispatch('close-modal', 'organization-billing');
+                    } else if (this.billingOrganization?.id === organization.id && !this.billingChanged()) {
+                        // Opened again for the same organization, nothing changed there yet: it shows what was saved, never a
+                        // summary its loading may have read before the save (saved again, that would undo it).
+                        this.billingAsked++;
+                        this.billingLoading = false;
+                        this.billingFailed = false;
+                        this.showBilling(data.billing);
+                    }
                 } catch (error) {
-                    if (error.response?.status === 422 && error.response.data.errors?.extra_storage_gb) {
-                        this.billingErrors = error.response.data.errors;
+                    const refused = error.response?.status === 422 ? (error.response.data?.errors ?? null) : null;
+                    if (refused?.extra_storage_gb && asked()) {
+                        this.billingErrors = refused;
                         showFirstError(form);
                     } else {
-                        window.toast(error.response?.data?.message ?? 'Could not save the billing.');
+                        window.toast((asked() ? null : notSavedWords(refused, `${organization.name}'s billing`))
+                            ?? error.response?.data?.message ?? 'Could not save the billing.');
                     }
                 } finally {
                     this.savingBilling = false;
@@ -229,13 +245,14 @@ export function registerOrganizationsTable(Alpine) {
             /* ── Owners ────────────────────────────────────────────────── */
 
             openInviteOwner(organization) {
+                this.formTicket++;
                 this.ownerOrganization = organization;
                 this.ownerEmail = '';
                 this.ownerErrors = {};
                 this.$dispatch('open-modal', 'invite-organization-owner');
             },
 
-            async sendOwnerInvite() {
+            async sendOwnerInvite(event = null) {
                 if (!this.ownerOrganization || this.invitingOwner) return;
 
                 const errors = validate({ email: this.ownerEmail }, { email: [required('Email'), emailFormat('Email'), maxLen('Email', 255)] });
@@ -246,16 +263,21 @@ export function registerOrganizationsTable(Alpine) {
 
                 this.invitingOwner = true;
                 this.ownerErrors = {};
+                // The answer acts on this form alone: shut since, or opened again for another organization, it is neither
+                // shut nor marked by it.
+                const asked = formStillAsked(() => this.formTicket, event?.target);
+                const named = `The invitation to ${this.ownerEmail}`;
                 try {
                     const { data } = await axios.post('/organizations/' + this.ownerOrganization.id + '/owner-invitation', { email: this.ownerEmail });
-                    this.$dispatch('close-modal', 'invite-organization-owner');
+                    if (asked()) this.$dispatch('close-modal', 'invite-organization-owner');
                     window.toast(data.message, data.email_sent === false ? 'error' : 'success');
                     this.refreshInPlace();  // not awaited: the button is free again the moment the request is over
                 } catch (error) {
-                    if (error.response?.status === 422 && error.response.data.errors) {
-                        this.ownerErrors = error.response.data.errors;
+                    const refused = error.response?.status === 422 ? (error.response.data?.errors ?? null) : null;
+                    if (refused && asked()) {
+                        this.ownerErrors = refused;
                     } else {
-                        window.toast(error.response?.data?.message ?? 'Could not send the invitation.');
+                        window.toast(notSavedWords(refused, named, 'sent') ?? error.response?.data?.message ?? 'Could not send the invitation.');
                     }
                 } finally {
                     this.invitingOwner = false;

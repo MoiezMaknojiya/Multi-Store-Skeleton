@@ -53,7 +53,7 @@ test('a poster is kept in the ad’s own folder as a JPEG the server drew itself
     $sent = pictureDataUri('png');
     $ad = saveWithPoster($this, $sent);
 
-    expect($ad->thumbnail_path)->toBe("builder/{$this->organization->id}/ads/{$ad->id}/poster.jpg");
+    expect($ad->thumbnail_path)->toMatch('#^builder/'.$this->organization->id.'/ads/'.$ad->storage_key.'/poster-[0-9a-f]{32}\.jpg$#');
 
     $stored = Storage::disk('public')->get($ad->thumbnail_path);
     $size = getimagesizefromstring($stored);
@@ -64,7 +64,7 @@ test('a poster is kept in the ad’s own folder as a JPEG the server drew itself
         ->and($stored)->not->toBe(base64_decode(substr($sent, strlen('data:image/png;base64,'))));
 
     // The address carries the version, so a cache never shows an old poster.
-    expect($ad->thumbnail_url)->toEndWith('/poster.jpg?v='.$ad->updated_at->getTimestamp());
+    expect($ad->thumbnail_url)->toEndWith('/'.basename($ad->thumbnail_path).'?v='.$ad->updated_at->getTimestamp());
 });
 
 test('a poster that is not a picture never reaches the disk', function (string $thumbnail) {
@@ -145,7 +145,8 @@ test('a copy gets a poster file of its own, so deleting the original leaves the 
     $copyId = $this->postJson("/builder/{$ad->id}/duplicate")->assertOk()->json('ad.id');
     $copy = BuilderAd::find($copyId);
 
-    expect($copy->thumbnail_path)->toBe("builder/{$this->organization->id}/ads/{$copy->id}/poster.jpg")
+    expect($copy->thumbnail_path)->toMatch('#^builder/'.$this->organization->id.'/ads/'.$copy->storage_key.'/poster-[0-9a-f]{32}\.jpg$#')
+        ->and($copy->storage_key)->not->toBe($ad->storage_key)
         ->and($copy->thumbnail_path)->not->toBe($ad->thumbnail_path);
 
     Storage::disk('public')->assertExists($copy->thumbnail_path);

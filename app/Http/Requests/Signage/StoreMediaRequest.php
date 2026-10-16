@@ -29,6 +29,9 @@ class StoreMediaRequest extends FormRequest
     /** ALLOWED_MIMES in words, for every message that refuses anything else. */
     public const FORMATS_IN_WORDS = 'images (JPG, PNG, GIF, WEBP) and videos (MP4, WEBM)';
 
+    /** The refusal of a library that is not one of the Library list's (`organization_id`). */
+    private const LIBRARY_FROM_THE_LIST = 'Choose the Platform library or one organization from the Library list.';
+
     /** The refusal for a file over MAX_KILOBYTES, on every form that uploads one. */
     public static function tooLargeMessage(): string
     {
@@ -59,8 +62,9 @@ class StoreMediaRequest extends FormRequest
             'poster' => ['nullable', 'string', 'starts_with:data:image/', 'max:'.self::POSTER_MAX_CHARACTERS],
 
             // The library it joins, said by the platform team only: an organization's id, or nothing for the platform's
-            // own. An organization's person uploads to the organization they stand in, and whatever they send here is not read.
-            'organization_id' => ['nullable', 'integer', 'min:1'],
+            // own. An organization's person uploads to the organization they stand in, and whatever they send here is
+            // dropped unread — their page has no Library list to say it in.
+            'organization_id' => $this->user()?->globalRole() !== null ? ['nullable', 'integer', 'min:1'] : ['exclude'],
         ];
     }
 
@@ -73,6 +77,9 @@ class StoreMediaRequest extends FormRequest
             'file.mimes' => 'Only '.self::FORMATS_IN_WORDS.' can be uploaded.',
             'file.max' => self::tooLargeMessage(),
             'title.max' => 'Title may not be longer than 255 characters.',
+            // The Media page's Library list, as a request made by hand might bend it: a list, a word, or nought.
+            'organization_id.integer' => self::LIBRARY_FROM_THE_LIST,
+            'organization_id.min' => self::LIBRARY_FROM_THE_LIST,
         ];
     }
 }

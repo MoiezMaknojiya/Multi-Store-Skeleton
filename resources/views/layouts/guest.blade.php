@@ -4,6 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    {{-- A signed-in person sees a few of these pages too ("Check your inbox", an invitation): whose page it is goes back with
+         each form (core/form-guard.js), so one left open while the session changed in another tab is refused (RefuseAStaleTab). --}}
+    @auth<meta name="session-context" content="{{ \App\Http\Middleware\RefuseAStaleTab::contextFor(request()) }}">@endauth
     <title>{{ filled($title ?? null) ? $title.' · ' : '' }}{{ config('app.name', 'Laravel') }}</title>
     <x-favicons />
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -24,6 +27,11 @@
                     <img src="/brand/logo.svg" alt="" width="32" height="32" class="h-8 w-8">
                     <span class="font-semibold text-gray-800">{{ config('app.name', 'Laravel') }}</span>
                 </div>
+
+                {{-- These pages have no toasts: a form sent from one left open while the session changed is said here. --}}
+                @if (is_string(session('stale_tab')))
+                    <p class="alert-error mb-6" role="alert" dusk="stale-tab">{{ session('stale_tab') }}</p>
+                @endif
 
                 {{ $slot }}
             </div>

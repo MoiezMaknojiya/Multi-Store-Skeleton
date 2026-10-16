@@ -2,8 +2,14 @@
 
 use App\Models\User;
 use App\Notifications\ResetPasswordNotification;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
+use Symfony\Component\Mailer\Exception\TransportException;
+use Symfony\Component\Mailer\SentMessage;
+use Symfony\Component\Mailer\Transport\AbstractTransport;
 
 test('reset password link screen can be rendered', function () {
     $response = $this->get('/forgot-password');
@@ -88,4 +94,38 @@ test('the reset pages take only plain values — a list in the link or the form 
     $this->from('/login')->post('/login', ['email' => ['someone@example.com'], 'password' => 'x'])
         ->assertRedirect('/login');
     $this->get('/login')->assertOk();
+});
+
+test('a mail server that refuses the link answers a real address exactly as an unknown one, and asking again works', function () {
+    Exceptions::fake();
+    Mail::extend('refusing', fn () => new class extends AbstractTransport
+    {
+        protected function doSend(SentMessage $message): void
+        {
+            throw new TransportException('550 refused');
+        }
+
+        public function __toString(): string
+        {
+            return 'refusing://';
+        }
+    });
+    config(['mail.mailers.refusing' => ['transport' => 'refusing'], 'mail.default' => 'refusing']);
+    $user = User::factory()->create(['email' => 'real@example.com']);
+
+    // A 500 for a real address alone once said which addresses have an account here.
+    $real = $this->from('/forgot-password')->post('/forgot-password', ['email' => 'real@example.com']);
+    $unknown = $this->from('/forgot-password')->post('/forgot-password', ['email' => 'nobody@example.com']);
+
+    expect($real->status())->toBe(302)->toBe($unknown->status())
+        ->and($real->headers->get('Location'))->toBe($unknown->headers->get('Location'));
+    $real->assertSessionHasNoErrors();
+    Exceptions::assertReported(fn (TransportException $e) => str_contains($e->getMessage(), '550 refused'));
+
+    // The link that never went out is forgotten, so asking again once the mail server is back is not "too soon".
+    expect(DB::table('password_reset_tokens')->where('email', 'real@example.com')->exists())->toBeFalse();
+
+    Notification::fake();
+    $this->post('/forgot-password', ['email' => 'real@example.com'])->assertSessionHasNoErrors();
+    Notification::assertSentTo($user, ResetPasswordNotification::class);
 });

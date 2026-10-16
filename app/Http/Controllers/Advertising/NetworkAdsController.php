@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\Organization;
 use App\Models\Screen;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -61,17 +62,24 @@ class NetworkAdsController extends Controller
     /**
      * And which of its televisions do.
      *
-     * Takes a list rather than one id, so "all the screens in this organization" and "just
-     * this one" are the same call — the bulk switch is not a second endpoint with a
-     * second set of rules to keep in step.
+     * Takes a list rather than one id, so "just this one" and a few are the same call — or `all`, every screen of the
+     * organization being worked in (the review of 2026-10-15: the panel's Adverts On and Off for every screen sent the
+     * rows of the page it showed, fifty at most and narrowed by its search and its Online/Offline filter). The bulk switch
+     * is not a second endpoint with a second set of rules to keep in step.
      */
     public function screens(Request $request): JsonResponse
     {
+        $every = $request->boolean('all');
+
         $validated = $request->validate([
-            'screen_ids' => ['required', 'array', 'min:1'],
-            'screen_ids.*' => ['integer', 'min:1'],
+            'all' => ['sometimes', 'boolean'],
+            ...($every ? [] : [
+                'screen_ids' => ['required', 'array', 'min:1'],
+                'screen_ids.*' => ['integer', 'min:1'],
+            ]),
             'accepts' => ['required', 'boolean'],
         ], [
+            'all' => 'Choose the screens from the list.',
             'screen_ids' => 'Choose the screens from the list.',
             'screen_ids.*' => 'Choose the screens from the list.',
             'accepts' => self::ON_OR_OFF,
@@ -82,28 +90,32 @@ class NetworkAdsController extends Controller
         // Scoped to the organization being worked in, so a stray id from another organization
         // changes nothing rather than reaching across the wall.
         $screens = Screen::where('organization_id', $organization->id)
-            ->whereIn('id', $validated['screen_ids'])
-            ->get();
+            ->when(! $every, fn (Builder $query) => $query->whereIn('id', $validated['screen_ids']))
+            ->get(['id']);
 
         if ($screens->isEmpty()) {
             throw ValidationException::withMessages([
-                'screen_ids' => 'None of those screens are in this organization.',
+                $every ? 'all' : 'screen_ids' => $every
+                    ? 'This organization has no screens yet.'
+                    : 'None of those screens are in this organization.',
             ]);
         }
 
         Screen::whereIn('id', $screens->pluck('id'))
             ->update(['accepts_network_ads' => $validated['accepts']]);
 
+        $count = $screens->count().' screen'.($screens->count() === 1 ? '' : 's');
+
         ActivityLog::record(
             'screen.network_ads_updated',
             $organization,
             ($validated['accepts'] ? 'Enabled' : 'Disabled').' network advertising on '
-                .$screens->count().' screen'.($screens->count() === 1 ? '' : 's')
+                .($every && $screens->count() > 1 ? 'all '.$count : $count)
                 .' in organization '.$organization->name
         );
 
         return response()->json([
-            'message' => 'Updated '.$screens->count().' screen'.($screens->count() === 1 ? '' : 's'),
+            'message' => 'Updated '.$count,
             'screen_ids' => $screens->pluck('id')->all(),
             'accepts' => $validated['accepts'],
         ]);

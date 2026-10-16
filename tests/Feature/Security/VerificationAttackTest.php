@@ -2,6 +2,9 @@
 
 use App\Models\ActivityLog;
 use App\Models\User;
+use App\Notifications\ApproveEmailChangeNotification;
+use App\Notifications\ConfirmNewEmailNotification;
+use App\Notifications\ResetPasswordNotification;
 use App\Notifications\VerifyEmailNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -60,7 +63,14 @@ test("a signup link's signature opens no other route: not the one that changes a
     $transplanted = str_replace('/verify-email/', '/confirm-email/', emailLink('verification.verify', $user, 'ali@newshop.com'));
     $this->get($transplanted)->assertRedirect(route('profile.edit'));
 
-    expect($user->fresh())->email->toBe('ali@example.com')->pending_email->toBe('ali@newshop.com');
+    // Nor does a confirmation's signature approve a change, or an approval's confirm one (owner, 2026-10-15).
+    $approval = URL::temporarySignedRoute('email.approve', now()->addHour(), [
+        'id' => $user->id, 'hash' => ApproveEmailChangeNotification::hashOf('ali@example.com', 'ali@newshop.com'),
+    ]);
+    $this->get(str_replace('/confirm-email/', '/approve-email/', emailLink('email.confirm', $user, 'ali@newshop.com')))->assertRedirect(route('profile.edit'));
+    $this->get(str_replace('/approve-email/', '/confirm-email/', $approval))->assertRedirect(route('profile.edit'));
+
+    expect($user->fresh())->email->toBe('ali@example.com')->pending_email->toBe('ali@newshop.com')->pending_email_approved_at->toBeNull();
 });
 
 test('a link to an address the account has given up confirms nothing, though it is signed and in time', function () {
@@ -205,4 +215,101 @@ test('only a super admin viewing as the account confirms it for them: a session 
 
     expect($customer->fresh()->hasVerifiedEmail())->toBeFalse()
         ->and(ActivityLog::where('action', 'account.verified')->count())->toBe(0);
+});
+
+test('an open session alone cannot move an account to another inbox, and so cannot take it over by "forgot password"', function () {
+    Notification::fake();
+    $victim = User::factory()->create(['email' => 'victim@example.com']);
+
+    // Somebody at the victim's open session (a shared computer, a stolen cookie) types an address of their own.
+    $this->actingAs($victim)->patch('/profile', [
+        'first_name' => $victim->first_name, 'last_name' => $victim->last_name, 'phone' => $victim->phone, 'email' => 'attacker@evil.test',
+    ])->assertRedirect('/profile');
+
+    // Nothing reaches the attacker's inbox: the approval goes to the victim's own, which the attacker does not have.
+    Notification::assertSentOnDemandTimes(ConfirmNewEmailNotification::class, 0);
+    Notification::assertSentTo($victim, ApproveEmailChangeNotification::class,
+        fn ($notification, array $channels, User $to) => $to->routeNotificationFor('mail') === 'victim@example.com');
+
+    // Even a link to the new address signed by the app itself does nothing while the change is not approved.
+    $this->get(emailLink('email.confirm', $victim, 'attacker@evil.test'))->assertRedirect(route('profile.edit'));
+    expect($victim->fresh())->email->toBe('victim@example.com')->pending_email_approved_at->toBeNull();
+
+    // So "forgot password" for the attacker's address finds no account, and only the victim's password opens it.
+    auth()->logout();
+    $this->post('/forgot-password', ['email' => 'attacker@evil.test'])->assertRedirect();
+    Notification::assertNotSentTo($victim, ResetPasswordNotification::class);
+    $this->post('/login', ['email' => 'attacker@evil.test', 'password' => 'password'])->assertSessionHasErrors();
+    $this->assertGuest();
+});
+
+test('somebody viewing as the person through Log In As may start a change of email but never finish it', function () {
+    Notification::fake();
+    $admin = createSuperAdmin();
+    $customer = User::factory()->create(['email' => 'customer@example.com']);
+    $viewing = ['impersonating_original_id' => $admin->id, 'impersonating_user_id' => $customer->id];
+
+    $this->actingAs($customer)->withSession($viewing)->patch('/profile', [
+        'first_name' => $customer->first_name, 'last_name' => $customer->last_name, 'phone' => $customer->phone, 'email' => 'admin-inbox@example.com',
+    ])->assertRedirect('/profile');
+
+    // The approval goes to the customer's own inbox …
+    Notification::assertSentTo($customer, ApproveEmailChangeNotification::class);
+    Notification::assertSentOnDemandTimes(ConfirmNewEmailNotification::class, 0);
+
+    // … and its link, or the new address's, opened while viewing as them, does nothing, however it was come by.
+    $customer->refresh();
+    $this->actingAs($customer)->withSession($viewing)->get(URL::temporarySignedRoute('email.approve', now()->addHour(), [
+        'id' => $customer->id, 'hash' => ApproveEmailChangeNotification::hashOf('customer@example.com', 'admin-inbox@example.com'),
+    ]))->assertRedirect(route('profile.edit'));
+    $this->get('/profile')->assertSee('Only the person can approve or confirm a change of their email');
+    expect($customer->fresh()->pending_email_approved_at)->toBeNull();
+
+    $customer->forceFill(['pending_email_approved_at' => now()])->save();
+    $this->actingAs($customer)->withSession($viewing)->get(emailLink('email.confirm', $customer, 'admin-inbox@example.com'))
+        ->assertRedirect(route('profile.edit'));
+    expect($customer->fresh()->email)->toBe('customer@example.com')
+        ->and(ActivityLog::whereIn('action', ['account.email_change_approved', 'account.email_changed'])->count())->toBe(0);
+
+    // The person, signed in themselves, finishes it.
+    $this->flushSession()->actingAs($customer->fresh())->get(emailLink('email.confirm', $customer, 'admin-inbox@example.com'))
+        ->assertRedirect(route('profile.edit'));
+    expect($customer->fresh()->email)->toBe('admin-inbox@example.com');
+});
+
+test('somebody viewing as an account not confirmed yet cannot correct its email to an inbox of their own', function () {
+    Notification::fake();
+    $admin = createSuperAdmin();
+    $customer = User::factory()->unverified()->create(['first_name' => 'Nida', 'last_name' => 'Khan', 'email' => 'customer@example.com']);
+    $viewing = ['impersonating_original_id' => $admin->id, 'impersonating_user_id' => $customer->id];
+    $form = fn (string $email, string $firstName = 'Nida') => ['first_name' => $firstName, 'last_name' => 'Khan', 'phone' => $customer->phone, 'email' => $email];
+
+    // The page does not offer it: the email is read-only and says whose it is to correct, and "Check your inbox" sends
+    // nobody to the profile to change it.
+    $profile = $this->actingAs($customer)->withSession($viewing)->get('/profile')->assertOk()
+        ->assertSee('Only Nida Khan can correct this email, signed in themselves.');
+    expect($profile->getContent())->toMatch('/<input id="email"[^>]*\sreadonly="readonly"/');
+    $this->get('/verify-email')->assertOk()->assertDontSee('Wrong address?');
+
+    // Sent by hand, the correction is refused: corrected, the address would be taken at once, then "Confirm Email and
+    // Continue" would confirm it and "forgot password" would hand over the account.
+    $this->from('/profile')->patch('/profile', $form('admin-inbox@example.com'))
+        ->assertRedirect('/profile')
+        ->assertSessionHasErrors(['email' => 'Only Nida Khan can correct their email, signed in themselves: not by Log In As.']);
+    expect($customer->fresh())->email->toBe('customer@example.com')->pending_email->toBeNull();
+    Notification::assertNothingSent();
+
+    // The rest of the profile still saves, and the address confirmed for them is the person's own.
+    $this->patch('/profile', $form('customer@example.com', 'Nidaa'))->assertRedirect('/profile')->assertSessionHasNoErrors();
+    $this->post(route('verification.confirm-for-them'))->assertRedirect(route('dashboard'));
+    expect($customer->fresh())->first_name->toBe('Nidaa')->email->toBe('customer@example.com')
+        ->and($customer->fresh()->hasVerifiedEmail())->toBeTrue();
+
+    // The person, signed in themselves, corrects an unconfirmed address as before.
+    $own = User::factory()->unverified()->create(['first_name' => 'Sana', 'last_name' => 'Ali', 'email' => 'sana@exmaple.com']);
+    $this->flushSession()->actingAs($own)->get('/profile')->assertDontSee('can correct this email, signed in themselves.');
+    $this->patch('/profile', ['first_name' => 'Sana', 'last_name' => 'Ali', 'phone' => $own->phone, 'email' => 'sana@example.com'])
+        ->assertRedirect('/profile')->assertSessionHasNoErrors();
+    expect($own->fresh()->email)->toBe('sana@example.com');
+    $this->get('/verify-email')->assertSee('Wrong address?');
 });

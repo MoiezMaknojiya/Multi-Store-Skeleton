@@ -4,6 +4,7 @@ use App\Models\Organization;
 use App\Models\PlayerAppRelease;
 use App\Models\Upload;
 use App\Services\ApkInspector;
+use App\Services\ChunkedUploads;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -32,6 +33,25 @@ beforeEach(function () {
 function uploadAnApp(object $test, string $bytes, string $name = 'app.apk'): string
 {
     return Tus::upload($test, $bytes, ['name' => $name, 'type' => 'application/vnd.android.package-archive', 'purpose' => 'app-release']);
+}
+
+/**
+ * The other tab's row of the same version, made between this request's checks and its own row â€” before the transaction its row
+ * is made in begins, and so outside it, as a row another request committed is (on MySQL this request's row waits for that one,
+ * then meets the unique version code); or, with no transaction, just before its row.
+ */
+function otherTabPublishesFirst(Closure $publish): void
+{
+    $once = false;
+    $publishOnce = function () use (&$once, $publish): void {
+        if (! $once) {
+            $once = true;
+            $publish();
+        }
+    };
+
+    DB::connection()->beforeStartingTransaction(fn () => $publishOnce());
+    PlayerAppRelease::creating(fn () => $publishOnce());
 }
 
 /** What the inspector makes of a manifest inside an otherwise good APK. */
@@ -211,16 +231,10 @@ test('two uploads of one version at the same moment make one row, and the loserâ
     $id = uploadAnApp($this, ApkFiles::apk(ApkFiles::manifest(versionCode: 3, versionName: '1.2')));
 
     // The other tab's row lands between this request's checks and its own row.
-    PlayerAppRelease::creating(function () {
-        static $once = false;
-        if (! $once) {
-            $once = true;
-            DB::table('player_app_releases')->insert([
-                'version_code' => 3, 'version_name' => '1.2', 'version_read_from_file' => true, 'path' => 'player-app/other-tab.apk',
-                'size' => 1, 'sha256' => str_repeat('b', 64), 'created_at' => now(), 'updated_at' => now(),
-            ]);
-        }
-    });
+    otherTabPublishesFirst(fn () => DB::table('player_app_releases')->insert([
+        'version_code' => 3, 'version_name' => '1.2', 'version_read_from_file' => true, 'path' => 'player-app/other-tab.apk',
+        'size' => 1, 'sha256' => str_repeat('b', 64), 'created_at' => now(), 'updated_at' => now(),
+    ]));
 
     $this->postJson('/developer/app/releases', ['upload' => $id])->assertStatus(422)
         ->assertJsonValidationErrors(['file' => 'Version code 3 has just been uploaded. Reload the page.']);
@@ -228,6 +242,88 @@ test('two uploads of one version at the same moment make one row, and the loserâ
     expect(PlayerAppRelease::count())->toBe(1)
         ->and(PlayerAppRelease::sole()->path)->toBe('player-app/other-tab.apk')
         ->and(Storage::disk('public')->allFiles())->toBe([]);
+});
+
+test('two tabs publishing one version write one file: the tab whose row was refused never touches the file every TV is offered', function () {
+    $this->actingAs($this->admin);
+    $id = uploadAnApp($this, ApkFiles::apk(ApkFiles::manifest(versionCode: 3, versionName: '1.2')));
+    $path = PlayerAppRelease::FOLDER.'/'.PlayerAppRelease::fileNameFor('1.2', 3);
+    $theirs = ApkFiles::apk(ApkFiles::manifest(versionCode: 3, versionName: '1.2')).'built in the other tab';
+
+    // The other tab published the same version a moment earlier: its file under the version's own name, and its row naming it.
+    otherTabPublishesFirst(function () use ($path, $theirs) {
+        Storage::disk('public')->put($path, $theirs);
+        DB::table('player_app_releases')->insert([
+            'version_code' => 3, 'version_name' => '1.2', 'version_read_from_file' => true, 'path' => $path,
+            'size' => strlen($theirs), 'sha256' => hash('sha256', $theirs), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+    });
+
+    $this->postJson('/developer/app/releases', ['upload' => $id])->assertStatus(422)
+        ->assertJsonValidationErrors(['file' => 'Version code 3 has just been uploaded. Reload the page.']);
+
+    // Its file is there, as that tab wrote it â€” the size and the SHA-256 a TV checks â€” and nothing else is left behind.
+    $release = PlayerAppRelease::sole();
+    expect(Storage::disk('public')->allFiles())->toBe([$path])
+        ->and(Storage::disk('public')->get($release->path))->toBe($theirs)
+        ->and(hash('sha256', (string) Storage::disk('public')->get($release->path)))->toBe($release->sha256);
+
+    $this->getJson('/player-app/latest.json')->assertOk()->assertJsonPath('version_code', 3);
+});
+
+test('reading a file for its version never gives it up under a publish that is reading it', function () {
+    $this->actingAs($this->admin);
+    $id = uploadAnApp($this, ApkFiles::apk(ApkFiles::manifest(package: 'com.example.game')));
+
+    // A publish holds it (its door is reading the file): asked meanwhile, the page is told to wait, and nothing is given up.
+    $lock = ChunkedUploads::finishLock($id);
+    $lock->get();
+    $this->postJson('/developer/app/inspect', ['upload' => $id])->assertStatus(422)
+        ->assertJsonMissingPath('upload_given_up')
+        ->assertJsonValidationErrors(['file' => 'This file is being added already. Wait a moment.']);
+    expect(Upload::whereKey($id)->exists())->toBeTrue()->and(Storage::disk('uploads')->exists("{$id}.part"))->toBeTrue();
+    $lock->release();
+
+    // Asked again with nobody holding it, another app is refused for good.
+    $this->postJson('/developer/app/inspect', ['upload' => $id])->assertStatus(422)->assertJsonPath('upload_given_up', true)
+        ->assertJsonValidationErrors(['file' => 'This is another app (com.example.game), not the TV app.']);
+    expect(Upload::whereKey($id)->exists())->toBeFalse();
+
+    // A read lets go of the upload once it has answered: the publish after it takes it.
+    $good = uploadAnApp($this, ApkFiles::apk(ApkFiles::manifest(versionCode: 3, versionName: '1.2')));
+    $this->postJson('/developer/app/inspect', ['upload' => $good])->assertOk()->assertJsonPath('version_code', 3);
+    $this->postJson('/developer/app/releases', ['upload' => $good])->assertOk();
+    expect(PlayerAppRelease::sole()->version_code)->toBe(3);
+});
+
+test('a TV is offered a version only once its file is there: a request that dies between its row and its file leaves neither', function () {
+    $this->actingAs($this->admin);
+    $id = uploadAnApp($this, ApkFiles::apk(ApkFiles::manifest(versionCode: 3, versionName: '1.2')));
+
+    // The request dies the moment its row is made, before its file has the version's name: a timeout, the server's memory, a kill.
+    PlayerAppRelease::created(fn () => throw new RuntimeException('The request died here.'));
+
+    $this->postJson('/developer/app/releases', ['upload' => $id])->assertStatus(500);
+
+    // No version names a file that is not there, and the file it wrote under a name of its own is gone too.
+    expect(PlayerAppRelease::count())->toBe(0)
+        ->and(Storage::disk('public')->allFiles())->toBe([]);
+    $this->getJson('/player-app/latest.json')->assertNotFound();
+});
+
+test('a version whose file cannot be given its name is not offered, and says so', function () {
+    $this->actingAs($this->admin);
+    $id = uploadAnApp($this, ApkFiles::apk(ApkFiles::manifest(versionCode: 3, versionName: '1.2')));
+
+    // Something already stands where the version's file goes, and the move cannot take its place.
+    Storage::disk('public')->makeDirectory(PlayerAppRelease::FOLDER.'/'.PlayerAppRelease::fileNameFor('1.2', 3));
+
+    $this->postJson('/developer/app/releases', ['upload' => $id])->assertStatus(422)
+        ->assertJsonValidationErrors(['file' => 'The app could not be saved. Try again.']);
+
+    expect(PlayerAppRelease::count())->toBe(0)
+        ->and(Storage::disk('public')->allFiles())->toBe([]);
+    $this->getJson('/player-app/latest.json')->assertNotFound();
 });
 
 test('deleting a version that is gone, or an id that is no id, says it is not there', function () {

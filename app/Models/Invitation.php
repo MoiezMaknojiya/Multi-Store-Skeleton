@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Throwable;
@@ -89,15 +90,24 @@ class Invitation extends Model
         }
     }
 
-    /** A new link and a new week; the old link stops working at once. Returns the new token. */
+    /**
+     * A new link and a new week; the old link stops working at once. Returns the new token.
+     *
+     * Under the row's own lock: revoked, accepted, or taken with its role a moment ago, the invitation is 404 — never a
+     * link made for a row that is gone, which the page then failed to send with a 500.
+     */
     public function renew(): string
     {
         $token = Str::random(64);
 
-        $this->update([
-            'token_hash' => self::hashToken($token),
-            'expires_at' => now()->addDays(self::LIFETIME_DAYS),
-        ]);
+        DB::transaction(function () use ($token) {
+            static::whereKey($this->id)->lockForUpdate()->firstOrFail(['id']);
+
+            $this->update([
+                'token_hash' => self::hashToken($token),
+                'expires_at' => now()->addDays(self::LIFETIME_DAYS),
+            ]);
+        });
 
         return $token;
     }

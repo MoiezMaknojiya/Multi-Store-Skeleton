@@ -37,7 +37,8 @@ A tab of Settings (`<x-settings-tabs>`, after Profile and Organizations), `GET /
 `can:billing-view`, inside the organization worked in, behind `verified` and `organization.active`), shown to a member whose role
 there holds View Billing (`User::hasBillingTab()`). A page, like every Settings tab:
 
-- a note that billing has not started: nothing is charged, everything open for now;
+- a note of what holds whatever the platform has switched: "Billing has not started yet, so nothing is charged." — never that
+  every feature is open (2026-10-15: it said so over a locked one); which features are unlocked is said under **Features**;
 - **Estimated every month** — the screens' total, with its sum (first screen free, N × $5);
 - **Features** — Premium Templates and Platform Channels, each with its price and Unlocked / Locked; the organization's own ads and
   uploads, Free;

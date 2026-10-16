@@ -53,8 +53,9 @@ class ProfilePageTest extends DuskTestCase
     }
 
     /**
-     * A changed email is confirmed by a link to the NEW address (owner's rule, 2026-09-29): the profile says it
-     * is waiting and keeps the old one meanwhile, and the link from the email changes it.
+     * A changed email is approved by a link to the address the account has (owner, 2026-10-15), then confirmed by a
+     * link to the NEW address (owner's rule, 2026-09-29): the profile says which step is waiting and keeps the old one
+     * meanwhile, and the second link changes it.
      */
     public function test_a_changed_email_waits_for_the_link_sent_to_it(): void
     {
@@ -72,7 +73,16 @@ class ProfilePageTest extends DuskTestCase
             // Waiting: the new address is named, and the field still holds the old one.
             $browser->waitFor('@profile-email-pending')
                 ->assertSeeIn('@profile-email-pending', 'sara@newshop.com')
+                ->assertPresent('@profile-email-step-approve')
                 ->assertInputValue('input[name="email"]', 'sara@example.com');
+            $this->assertSame('sara@example.com', $user->fresh()->email);
+
+            // Step 1 (owner, 2026-10-15): approved from the address the account has, and then the new one gets its link.
+            $approval = $this->linkFromMailLog($logSizeBefore, 'approve-email');
+            $logSizeBefore = $this->mailLogSize();
+            $browser->visit($approval)
+                ->waitFor('@profile-email-step-confirm')
+                ->assertSeeIn('@profile-email-pending', 'Step 2 of 2:');
             $this->assertSame('sara@example.com', $user->fresh()->email);
 
             $browser->visit($this->linkFromMailLog($logSizeBefore, 'confirm-email'))

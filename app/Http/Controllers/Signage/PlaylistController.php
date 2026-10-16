@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Signage;
 
+use App\Cache\DeadlockRetryingDatabaseStore;
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\Channel;
@@ -12,9 +13,12 @@ use App\Models\ScheduleRule;
 use App\Models\Screen;
 use App\Rules\VideoLength;
 use Carbon\CarbonInterface;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -42,6 +46,12 @@ class PlaylistController extends Controller
     private const UNREADABLE_PLAYLIST = 'The playlist could not be read. Reload the page and try again.';
 
     private const UNREADABLE_SCHEDULE = 'A schedule could not be read. Set it again.';
+
+    /** How often a copy reads its source again when a save of the source lands between that read and the source's lock. */
+    private const COPY_ATTEMPTS = 3;
+
+    /** How often a write of lines runs again when MySQL made it the victim of a deadlock (inTurn). */
+    private const WRITE_ATTEMPTS = 3;
 
     /** The current playlist, with just enough of each file to render a row. */
     public function index(Screen $screen): JsonResponse
@@ -85,7 +95,8 @@ class PlaylistController extends Controller
         $media = (clone $matching)
             ->orderByDesc('created_at')
             ->limit(self::PICKER_LISTS)
-            ->get(['id', 'organization_id', 'title', 'type', 'duration_seconds', 'orientation', 'disk', 'path', 'thumbnail_path']);
+            // updated_at too: an ad page's poster is redrawn under the same name, and its address carries that version.
+            ->get(['id', 'organization_id', 'title', 'type', 'duration_seconds', 'orientation', 'disk', 'path', 'thumbnail_path', 'updated_at']);
 
         return response()->json([
             // Every file the library offers, whatever the search says and however many are listed: the number on
@@ -199,16 +210,42 @@ class PlaylistController extends Controller
         // would quietly wipe out whatever changed in the meantime — a colleague
         // adds a poster, you retime one item, and their poster is gone with no
         // sign of it. Refuse instead, and say so.
-        if ($validated['version'] !== $screen->playlistFingerprint()) {
+        //
+        // In the order every write of a screen's lines keeps (the reviews of 2026-10-15): the files the lines name, then
+        // their channels, then the screen, each under its row lock, and only then is anything read plainly. A file's delete
+        // takes the file and then the screens it is the holding picture of (MediaController::destroy), a screen's new
+        // holding picture the file and then the screen (ScreenController::update), a channel's Add Ad the file before it
+        // reads the playlists (ChannelAdController::refuseAFileAPlaylistHolds), and an organization's delete its files and
+        // channels before its screens (Organization::purgeContents) — one order, so no two of them wait on each other's rows
+        // in a circle. And on MySQL every plain read of a transaction is answered from the snapshot its first one takes:
+        // taken once the locks are granted, it sees the ad a channel committed just before, which a snapshot taken before
+        // the files' locks did not. What the order cannot prevent — the gaps the lines' delete holds — inTurn runs again.
+        $stale = $this->inTurn(function () use ($screen, $items, $validated): bool {
+            $rows = $this->holdTheLinesRows($items);
+            $held = $this->holdScreens(collect([$screen->id]))->get($screen->id);
+
+            // Deleted while the save was on its way: there is nothing left to write the lines to (the foreign key's 500).
+            if ($held === null) {
+                abort(404);
+            }
+
+            // Measured under the screen's lock: two saves sent at the same moment take turns, and the second is measured
+            // against what the first wrote, never against the list both started from — or one was lost without a word.
+            if ($validated['version'] !== $held->playlistFingerprint()) {
+                return true;
+            }
+
+            $this->assertFilesAreInNoChannelUnderLock($items, $rows);
+            $this->writeItems($held, $items);
+
+            return false;
+        });
+
+        if ($stale) {
             return response()->json([
                 'message' => 'Someone else changed this playlist while you were editing. Reload the page to see their changes, then make yours again.',
             ], 409);
         }
-
-        DB::transaction(function () use ($screen, $items) {
-            $this->assertFilesAreInNoChannelUnderLock($items);
-            $this->writeItems($screen, $items);
-        });
 
         ActivityLog::record(
             'screen.playlist_updated',
@@ -262,27 +299,61 @@ class PlaylistController extends Controller
             ]);
         }
 
-        // Read the source once, then write it to each target. Everything in one
+        // Read the source, then write it to each target. Everything in one
         // transaction: half the televisions carrying the new playlist and half the
-        // old one is worse than none of them changing.
-        $items = $this->itemsForCopy($screen);
+        // old one is worse than none of them changing. In the order a save keeps (update()): the files and channels the
+        // source's lines name, then the source and every target — a save of any of them at the same moment waits for the
+        // copy, or the copy for it — and only then is anything read plainly. Which files those are is read before the
+        // transaction; a save of the source landing between that read and the source's lock names others, and the copy
+        // reads the source again.
+        $copied = null;
 
-        // A line from before 2026-09-26 whose file a channel shows would carry the double play to every target, and one from
-        // before the Content Library became the organization's own (docs/BILLING-SPEC.md §5) a platform file.
-        $this->assertFilesAreInNoChannel($items);
-        $this->assertMediaBelongsToTheSameOrganization($screen, $items);
+        for ($attempt = 1; $copied === null && $attempt <= self::COPY_ATTEMPTS; $attempt++) {
+            $planned = $this->itemsForCopy($screen);
 
-        foreach ($targets as $target) {
-            $this->assertPlatformChannelsMayBeAdded($target, $items);
+            $copied = $this->inTurn(function () use ($screen, $targets, $planned): ?Collection {
+                $rows = $this->holdTheLinesRows($planned);
+                $held = $this->holdScreens($targets->pluck('id')->push($screen->id));
+                $source = $held->get($screen->id);
+                $within = $targets->map(fn (Screen $target) => $held->get($target->id))->filter()->values();
+
+                // The source, or every target, deleted while the copy was on its way.
+                if ($source === null || $within->isEmpty()) {
+                    abort(404);
+                }
+
+                $items = $this->itemsForCopy($source);
+
+                // Saved meanwhile with a file or a channel that is not held: read the source again, holding those.
+                if (! $this->namesOnlyWhatIsHeld($items, $rows)) {
+                    return null;
+                }
+
+                // A line from before 2026-09-26 whose file a channel shows would carry the double play to every target, and one
+                // from before the Content Library became the organization's own (docs/BILLING-SPEC.md §5) a platform file. Read
+                // under the files' locks, which a channel's write takes too.
+                $this->assertFilesAreInNoChannel($items);
+                $this->assertMediaBelongsToTheSameOrganization($source, $items);
+
+                foreach ($within as $target) {
+                    $this->assertPlatformChannelsMayBeAdded($target, $items);
+                }
+
+                foreach ($within as $target) {
+                    $this->writeItems($target, $items);
+                }
+
+                return $within;
+            });
         }
 
-        DB::transaction(function () use ($targets, $items) {
-            $this->assertFilesAreInNoChannelUnderLock($items);
+        if ($copied === null) {
+            return response()->json([
+                'message' => 'This playlist kept changing while it was being copied. Reload the page and copy it again.',
+            ], 409);
+        }
 
-            foreach ($targets as $target) {
-                $this->writeItems($target, $items);
-            }
-        });
+        $targets = $copied;
 
         ActivityLog::record(
             'screen.playlist_copied',
@@ -347,10 +418,16 @@ class PlaylistController extends Controller
             ...$perRule,
             'rules' => ['present', 'array', 'max:'.self::MAX_RULES],
             'days' => ['nullable', 'integer', 'min:1', 'max:60'],
+            // The line whose schedule this is — its file or its channel — so a repeat with no Starting date counts from
+            // the day the save would give it (ScheduleRule::startsOnFor). A new line, or a request with neither, has none.
+            'media_id' => ['nullable', 'integer', 'min:1'],
+            'channel_id' => ['nullable', 'integer', 'min:1'],
         ], [
             ...collect($this->ruleMessages())->mapWithKeys(fn (string $message, string $key) => [$rekey($key) => $message])->all(),
             'rules.present' => self::UNREADABLE_SCHEDULE,
             'days' => 'Show between 1 and 60 days.',
+            'media_id' => self::UNREADABLE_SCHEDULE,
+            'channel_id' => self::UNREADABLE_SCHEDULE,
         ]);
 
         // From the screen's own today, not the server's — a preview shown to somebody
@@ -358,20 +435,19 @@ class PlaylistController extends Controller
         // television will actually do.
         $from = $screen->localTime();
         $days = $validated['days'] ?? 7;
+        $line = filled($validated['media_id'] ?? null) || filled($validated['channel_id'] ?? null)
+            ? $this->rulesByLine($screen)->get($this->lineKey($validated['media_id'] ?? null, $validated['channel_id'] ?? null), collect())
+            : collect();
 
         // A rule with none of a rule's fields is left out of validated(), as the save leaves it out of the line —
         // and with nothing else posted, so is `rules` itself.
         $occurrences = collect($validated['rules'] ?? [])
-            ->map(function (array $posted) use ($from) {
-                $rule = new ScheduleRule($this->ruleAttributes($posted));
+            ->map(function (array $posted) use ($from, $line) {
+                $attributes = $this->ruleAttributes($posted);
 
-                // "Every 2 weeks" has to be every-2-weeks FROM something. A saved rule
-                // with no start date anchors on its creation date, so the preview has
-                // to anchor on today or it would show a different answer from the one
-                // saving it a moment later would produce.
-                $rule->created_at = $from;
-
-                return $rule;
+                // "Every 2 weeks" has to be every-2-weeks FROM something: the very day saving it would give it, or the
+                // preview would show a different answer from the one the screen plays a moment later.
+                return new ScheduleRule([...$attributes, 'starts_on' => ScheduleRule::startsOnFor($attributes, $line, $from->toDateString())]);
             })
             // The item plays if ANY rule says yes, so the preview is the union of
             // them all — showing each rule's answer separately would leave the reader
@@ -465,36 +541,79 @@ class PlaylistController extends Controller
     }
 
     /**
-     * The same check read again under the files' row locks — the lock a channel's write takes too — so a file put
-     * into a channel at the same moment is seen, and the two can never both land. Call inside the transaction,
-     * before the lines are written; the rows are locked in id order, so two saves sharing files never deadlock.
+     * The same check read again with the files held (holdTheLinesRows) — the lock a channel's write takes too — so a file
+     * put into a channel at the same moment is seen, and the two can never both land. And a file or a channel deleted
+     * between the checks before the transaction and its locks is refused here, never left to the foreign key's 500 (the
+     * brute-force round, 2026-09-29): held, none can go until the lines are written. Call inside the transaction after
+     * EVERY lock it takes, the screens' included: on MySQL this plain read is answered from the snapshot the
+     * transaction's first plain read takes, which must not come before the locks.
+     *
+     * @param  array<int|string, array<string, mixed>>  $items
+     * @param  array{media: Collection<int, int>, channels: Collection<int, int>}  $held
      */
-    private function assertFilesAreInNoChannelUnderLock(array $items): void
+    private function assertFilesAreInNoChannelUnderLock(array $items, array $held): void
     {
-        $ids = collect($items)->pluck('media_id')->reject(fn (int|string|null $id) => $id === null)->unique();
-
-        if ($ids->isNotEmpty()) {
-            $locked = Media::whereIn('id', $ids)->orderBy('id')->lockForUpdate()->get(['id']);
-
-            // A file deleted between the checks above and this lock would otherwise end the save on the foreign key
-            // (a 500); held here, none can go until the lines are written (the brute-force round, 2026-09-29).
-            if ($locked->count() < $ids->count()) {
-                throw ValidationException::withMessages([
-                    'items' => 'A file on the playlist was deleted meanwhile. Reload the page and save again.',
-                ]);
-            }
-
-            $this->assertFilesAreInNoChannel($items);
+        if ($this->idsOn($items, 'media_id')->diff($held['media'])->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'items' => 'A file on the playlist was deleted meanwhile. Reload the page and save again.',
+            ]);
         }
 
-        // The same for a channel deleted meanwhile, which a playlist of channels alone must be told too.
-        $channelIds = collect($items)->pluck('channel_id')->reject(fn (int|string|null $id) => $id === null)->unique();
+        $this->assertFilesAreInNoChannel($items);
 
-        if ($channelIds->isNotEmpty() && Channel::whereIn('id', $channelIds)->orderBy('id')->lockForUpdate()->count() < $channelIds->count()) {
+        // The same for a channel deleted meanwhile, which a playlist of channels alone must be told too.
+        if ($this->idsOn($items, 'channel_id')->diff($held['channels'])->isNotEmpty()) {
             throw ValidationException::withMessages([
                 'items' => 'A channel on the playlist was deleted meanwhile. Reload the page and save again.',
             ]);
         }
+    }
+
+    /**
+     * The files and then the channels a write's lines name, each in id order, held under their row locks: the FIRST reads of
+     * the transaction that writes them, before its screens (holdScreens) and before anything is read plainly — the order
+     * every write of lines keeps (update()). A file or a channel no longer there is simply not among the ids it returns.
+     *
+     * @param  array<int|string, array<string, mixed>>  $items
+     * @return array{media: Collection<int, int>, channels: Collection<int, int>}
+     */
+    private function holdTheLinesRows(array $items): array
+    {
+        $files = $this->idsOn($items, 'media_id');
+        $channels = $this->idsOn($items, 'channel_id');
+
+        return [
+            'media' => $files->isEmpty() ? collect()
+                : Media::whereIn('id', $files)->orderBy('id')->lockForUpdate()->pluck('id')->map(fn (int|string $id) => (int) $id),
+            'channels' => $channels->isEmpty() ? collect()
+                : Channel::whereIn('id', $channels)->orderBy('id')->lockForUpdate()->pluck('id')->map(fn (int|string $id) => (int) $id),
+        ];
+    }
+
+    /**
+     * Does every line name a file or a channel among those held?
+     *
+     * @param  array<int|string, array<string, mixed>>  $items
+     * @param  array{media: Collection<int, int>, channels: Collection<int, int>}  $held
+     */
+    private function namesOnlyWhatIsHeld(array $items, array $held): bool
+    {
+        return $this->idsOn($items, 'media_id')->diff($held['media'])->isEmpty()
+            && $this->idsOn($items, 'channel_id')->diff($held['channels'])->isEmpty();
+    }
+
+    /**
+     * The distinct ids the lines name in one column (`media_id` or `channel_id`), in order.
+     *
+     * @param  array<int|string, array<string, mixed>>  $items
+     * @return Collection<int, int>
+     */
+    private function idsOn(array $items, string $column): Collection
+    {
+        return collect($items)->pluck($column)
+            ->reject(fn (int|string|null $id) => $id === null)
+            ->map(fn (int|string $id) => (int) $id)
+            ->unique()->sort()->values();
     }
 
     /**
@@ -536,9 +655,75 @@ class PlaylistController extends Controller
         }
     }
 
+    /**
+     * The screens a write is about to change, read under their row locks — after the files and channels of its lines
+     * (holdTheLinesRows) and before anything is read plainly, in id order, so a save and a copy that share screens never
+     * wait on each other in a circle — keyed by id. A screen deleted meanwhile is simply not there.
+     *
+     * @param  Collection<int, int>  $ids
+     * @return Collection<int, Screen>
+     */
+    private function holdScreens(Collection $ids): Collection
+    {
+        return Screen::whereIn('id', $ids->unique()->values())->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+    }
+
+    /**
+     * $write in a transaction of its own, run again when MySQL made it the victim of a deadlock (1213) — rolled back whole by
+     * then, nothing written — up to WRITE_ATTEMPTS times; anything else, a lock-wait timeout included, is not run again
+     * (DeadlockRetryingDatabaseStore::isADeadlock: retried, a 50-second wait would come round three times).
+     *
+     * The rows a write of lines locks are taken in one order (holdTheLinesRows, holdScreens), but replacing the lines deletes
+     * them before it inserts, and on MySQL that delete holds the gaps of the lines' (screen_id, position) index — and, through
+     * the foreign key, of their schedule rules' — beyond the screen's own rows (the third review of 2026-10-15): two saves of
+     * neighbouring screens with no lines between them hold one gap, and each one's insert waits on the other's. InnoDB undoes
+     * one of the two; it runs again, and waits its turn. Inside a caller's transaction a deadlock is the caller's to handle
+     * (Laravel rethrows it as a DeadlockException, which is not caught here).
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $write
+     * @return T
+     */
+    private function inTurn(Closure $write): mixed
+    {
+        for ($attempt = 1; ; $attempt++) {
+            try {
+                return DB::transaction($write);
+            } catch (QueryException $e) {
+                if ($attempt >= self::WRITE_ATTEMPTS || ! DeadlockRetryingDatabaseStore::isADeadlock($e)) {
+                    throw $e;
+                }
+            }
+        }
+    }
+
+    /** Where a line's rules are looked for before a save: its file's, or its channel's. */
+    private function lineKey(int|string|null $mediaId, int|string|null $channelId): string
+    {
+        return filled($channelId) ? 'channel:'.$channelId : 'file:'.$mediaId;
+    }
+
+    /**
+     * The rules each file and channel has on this screen now, by lineKey — what a save that leaves a repeat's Starting
+     * date out keeps it from (ScheduleRule::startsOnFor).
+     *
+     * @return Collection<string, Collection<int, ScheduleRule>>
+     */
+    private function rulesByLine(Screen $screen): Collection
+    {
+        return $screen->playlistItems()->with('scheduleRules')->get()
+            ->groupBy(fn (PlaylistItem $item) => $this->lineKey($item->media_id, $item->channel_id))
+            ->map(fn (Collection $lines) => $lines->flatMap(fn (PlaylistItem $item) => $item->scheduleRules)->values());
+    }
+
     /** Write a whole playlist, rules and all, replacing whatever was there. */
     private function writeItems(Screen $screen, array $items): void
     {
+        // What the lines say now, read before they go: a repeat saved with no Starting date keeps the day it counted from.
+        $earlier = $this->rulesByLine($screen);
+        $today = $screen->localTime()->toDateString();
+
         // The items go first; their rules go with them through the foreign key.
         $screen->playlistItems()->delete();
 
@@ -581,10 +766,15 @@ class PlaylistController extends Controller
             // land after it — and their order is the order they are shown back in.
             $rules = $item['rules'] ?? [];
             ksort($rules);
+            $before = $earlier->get($this->lineKey($created->media_id, $created->channel_id), collect());
 
             foreach (array_values($rules) as $index => $rule) {
+                $attributes = $this->ruleAttributes($rule);
+
                 $created->scheduleRules()->create([
-                    ...$this->ruleAttributes($rule),
+                    ...$attributes,
+                    // A repeat that counts from a day is never stored without one (ScheduleRule::startsOnFor).
+                    'starts_on' => ScheduleRule::startsOnFor($attributes, $before, $today),
                     'position' => $index,
                 ]);
             }
@@ -640,7 +830,7 @@ class PlaylistController extends Controller
                 'rules' => $item->scheduleRules->map(fn (ScheduleRule $rule) => [
                     'start_time' => $rule->start_time,
                     'end_time' => $rule->end_time,
-                    'starts_on' => $rule->starts_on?->toDateString(),
+                    'starts_on' => $rule->startsOnAsPlayed(),
                     'ends_on' => $rule->ends_on?->toDateString(),
                     'recurrence_type' => $rule->recurrence_type,
                     'recurrence_interval' => $rule->recurrence_interval,
@@ -828,7 +1018,7 @@ class PlaylistController extends Controller
                 'rules' => $item->scheduleRules->map(fn (ScheduleRule $rule) => [
                     'start_time' => $rule->start_time,
                     'end_time' => $rule->end_time,
-                    'starts_on' => $rule->starts_on?->toDateString(),
+                    'starts_on' => $rule->startsOnAsPlayed(),
                     'ends_on' => $rule->ends_on?->toDateString(),
                     'recurrence_type' => $rule->recurrence_type,
                     'recurrence_interval' => $rule->recurrence_interval,

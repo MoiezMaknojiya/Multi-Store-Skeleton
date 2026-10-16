@@ -7,16 +7,20 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Platform\StorePlayerAppReleaseRequest;
 use App\Models\ActivityLog;
 use App\Models\PlayerAppRelease;
+use App\Models\Upload;
 use App\Services\ApkInspector;
 use App\Services\ChunkedUploads;
 use App\Services\DiskGuard;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Number;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Throwable;
 
 /**
  * Developer → TV App (owner, 2026-10-10 — "mein new apk apne super admin mein upload karu waha super admin mein developer ka
@@ -27,6 +31,9 @@ use Illuminate\View\View;
 class PlayerAppController extends Controller
 {
     use HandlesCrudData;
+
+    /** Said when the file could not be written or given its version's name. */
+    private const NOT_SAVED = 'The app could not be saved. Try again.';
 
     public function __construct(private readonly ApkInspector $inspector, private readonly DiskGuard $disk) {}
 
@@ -73,27 +80,40 @@ class PlayerAppController extends Controller
             'upload.*' => 'That upload is not finished, or it has expired. Choose the file again.',
         ])['upload'];
 
-        $upload = $uploads->finished($request->user(), $id, 'app-release');
+        $gone = ValidationException::withMessages(['file' => 'That upload is not finished, or it has expired. Choose the file again.']);
+        $upload = $uploads->finished($request->user(), $id, 'app-release') ?? $uploads->refuseForGood($gone);
 
-        if ($upload === null) {
-            throw ValidationException::withMessages(['file' => 'That upload is not finished, or it has expired. Choose the file again.']);
+        // Read under the lock its door takes (ChunkedUploads::finishLock): a refusal here never gives the upload up under a
+        // publish that is reading it, nor does the box's × give it up under this.
+        $lock = ChunkedUploads::finishLock($upload->id);
+
+        if (! $lock->get()) {
+            throw ValidationException::withMessages(['file' => 'This file is being added already. Wait a moment.']);
         }
 
+        try {
+            return $this->readTheApp($uploads, $uploads->finished($request->user(), $id, 'app-release') ?? $uploads->refuseForGood($gone));
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /** What inspect answers for the finished upload it holds: its version, or the refusal that gives it up. */
+    private function readTheApp(ChunkedUploads $uploads, Upload $upload): JsonResponse
+    {
         $read = $this->inspector->inspect($upload->partPath());
 
-        if (! $read['is_apk']) {
-            throw ValidationException::withMessages(['file' => PlayerAppRelease::ONLY_AN_APK]);
-        }
+        // What the file itself is refuses it however often it is asked: its upload goes at once (ChunkedUploads::refuseForGood).
+        $refusal = match (true) {
+            ! $read['is_apk'] => PlayerAppRelease::ONLY_AN_APK,
+            $read['package'] !== null && $read['package'] !== PlayerAppRelease::PACKAGE => "This is another app ({$read['package']}), not the TV app.",
+            // A version the file says that is not newer is refused now, before anybody types notes for it and presses Publish.
+            $read['version_code'] !== null => PlayerAppRelease::notNewerThanCurrent($read['version_name'], $read['version_code']),
+            default => null,
+        };
 
-        if ($read['package'] !== null && $read['package'] !== PlayerAppRelease::PACKAGE) {
-            throw ValidationException::withMessages(['file' => "This is another app ({$read['package']}), not the TV app."]);
-        }
-
-        // A version the file says that is not newer is refused now, before anybody types notes for it and presses Publish.
-        $notNewer = $read['version_code'] !== null ? PlayerAppRelease::notNewerThanCurrent($read['version_name'], $read['version_code']) : null;
-
-        if ($notNewer !== null) {
-            throw ValidationException::withMessages(['file' => $notNewer]);
+        if ($refusal !== null) {
+            $uploads->refuseForGood(ValidationException::withMessages(['file' => $refusal]), $upload);
         }
 
         $current = PlayerAppRelease::current();
@@ -115,24 +135,51 @@ class PlayerAppController extends Controller
         $this->disk->assertRoomFor($size);
 
         $sha256 = hash_file('sha256', $file->getRealPath());
-        $path = Storage::disk('public')->putFileAs(PlayerAppRelease::FOLDER, $file, PlayerAppRelease::fileNameFor($name, $code));
+        $public = Storage::disk('public');
+        $path = PlayerAppRelease::FOLDER.'/'.PlayerAppRelease::fileNameFor($name, $code);
+
+        // Written under a name of its own first, outside any lock, and given the version's name only once its row is made: the
+        // same version published in two tabs at the same moment writes two files, and the tab whose row was refused takes away
+        // its own — never the file the other tab's row names, which every TV is offered (it once deleted it, and every TV got
+        // a 404). A file a request left under that name (it died before the move) goes with uploads:prune (ChunkedUploads::prune).
+        $incoming = $public->putFileAs(PlayerAppRelease::FOLDER, $file, ChunkedUploads::INCOMING_PREFIX.Str::uuid().'.apk');
+
+        if ($incoming === false) {
+            throw ValidationException::withMessages(['file' => self::NOT_SAVED]);
+        }
 
         try {
-            $release = PlayerAppRelease::create([
-                'version_code' => $code,
-                'version_name' => $name,
-                'version_read_from_file' => $request->versionWasRead(),
-                'path' => $path,
-                'size' => $size,
-                'sha256' => $sha256,
-                'notes' => filled($request->input('notes')) ? trim((string) $request->input('notes')) : null,
-                'uploaded_by' => $request->user()->id,
-            ]);
+            // The row and its file's name in one transaction: a TV reads the row only once its file is there, and a move
+            // that fails — or a request that dies before it — takes the row back with it. On MySQL the other tab's row of
+            // the same version waits for this one to be decided, then is refused by the unique version code.
+            $release = DB::transaction(function () use ($request, $public, $incoming, $path, $code, $name, $size, $sha256) {
+                $release = PlayerAppRelease::create([
+                    'version_code' => $code,
+                    'version_name' => $name,
+                    'version_read_from_file' => $request->versionWasRead(),
+                    'path' => $path,
+                    'size' => $size,
+                    'sha256' => $sha256,
+                    'notes' => filled($request->input('notes')) ? trim((string) $request->input('notes')) : null,
+                    'uploaded_by' => $request->user()->id,
+                ]);
+
+                if (! $public->move($incoming, $path)) {
+                    throw ValidationException::withMessages(['file' => self::NOT_SAVED]);
+                }
+
+                return $release;
+            });
         } catch (UniqueConstraintViolationException) {
             // The same version code, uploaded at the same moment in another tab.
-            Storage::disk('public')->delete($path);
+            $public->delete($incoming);
 
             throw ValidationException::withMessages(['file' => "Version code {$code} has just been uploaded. Reload the page."]);
+        } catch (Throwable $failure) {
+            // Its own file alone, while it still has the name it was written under; the row went back with the transaction.
+            $public->delete($incoming);
+
+            throw $failure;
         }
 
         $request->forgetFinishedUpload();

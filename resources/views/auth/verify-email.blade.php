@@ -11,8 +11,9 @@
         <h1 class="auth-title">Check your inbox</h1>
 
         <p class="mt-3 text-sm text-gray-600">
-            We sent a link to <strong class="text-gray-900 break-all" dusk="verify-email-address">{{ $email }}</strong>.
-            Open it to confirm your email, and your account is ready: screens, pictures, videos and ads.
+            {{-- Never "we sent": a mail server may have refused the signup's email, and the box below says so. --}}
+            Open the link in the email to <strong class="text-gray-900 break-all" dusk="verify-email-address">{{ $email }}</strong>
+            to confirm your email, and your account is ready: screens, pictures, videos and ads.
         </p>
 
         @if ($canConfirmForThem)
@@ -41,11 +42,14 @@
             <button type="submit" class="btn-primary-auth" dusk="verify-email-resend">Send the Link Again</button>
         </form>
 
-        <p class="mt-6 text-sm text-gray-600">
-            Wrong address?
-            <a href="{{ route('profile.edit') }}" class="text-blue-600 underline underline-offset-2 hover:decoration-2" dusk="verify-email-change">Change it in your profile</a>,
-            and a new link goes to the right one.
-        </p>
+        {{-- Not while viewing as the account: only its person corrects its address (ProfileController::emailIsTheirsAlone). --}}
+        @unless (session('impersonating_original_id'))
+            <p class="mt-6 text-sm text-gray-600">
+                Wrong address?
+                <a href="{{ route('profile.edit') }}" class="text-blue-600 underline underline-offset-2 hover:decoration-2" dusk="verify-email-change">Change it in your profile</a>,
+                and a new link goes to the right one.
+            </p>
+        @endunless
 
         @if ($removedOn)
             <p class="mt-3 text-xs text-gray-500" dusk="verify-email-removal">

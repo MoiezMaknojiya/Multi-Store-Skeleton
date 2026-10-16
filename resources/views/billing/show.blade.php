@@ -11,8 +11,10 @@
     <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6" dusk="billing-page">
         <x-settings-tabs active="billing" />
 
+        {{-- What is true whatever the platform has switched: nothing is charged. Which features are unlocked is said under
+             Features, each with its own Unlocked or Locked. --}}
         <p class="alert-info" dusk="billing-not-started">
-            Billing has not started yet: nothing is charged, and every feature is open for now. This page shows what
+            Billing has not started yet, so nothing is charged. This page shows what
             {{ $billing['organization']['name'] }} will pay once it starts.
         </p>
 

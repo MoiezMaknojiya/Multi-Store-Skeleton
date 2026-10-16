@@ -82,6 +82,8 @@ one output.
 ```
 builder_ads
   id, organization_id → organizations (cascade), name,
+  storage_key     string(32)|null, unique -- the ad's folder, 32 random hex digits nobody can guess, given on create
+                                --   (2026-10-15, see its addendum); hidden from every JSON answer
   orientation     string (landscape) -- landscape 1920×1080 or portrait 1080×1920: chosen when the ad is made, fixed after (§12)
   document        json          -- the editable design
   thumbnail_path  string|null   -- poster captured in the browser at save
@@ -111,12 +113,15 @@ Files (the `public` disk, like media and channels):
 builder/{organization_id}/assets/{random}.{ext}          the asset
 builder/{organization_id}/assets/thumbs/{random}.jpg     its thumbnail
 builder/platform/assets/…                         an asset the platform shares with every organization (organization_id NULL)
-builder/{organization_id}/ads/{ad_id}/index.html         the published ad
-builder/{organization_id}/ads/{ad_id}/poster.jpg         the ad's poster
-builder/{organization_id}/ads/{ad_id}/published.jpg      the published media row's own copy of that poster
+builder/{organization_id|platform}/ads/{storage_key}/index.html          the published ad
+builder/{organization_id|platform}/ads/{storage_key}/poster-{name}.jpg   the ad's poster ({name} drawn from the key with APP_KEY)
+builder/{organization_id|platform}/ads/{storage_key}/published.jpg       the published media row's own copy of that poster
 fonts/{slug}/{weight}-{style}-{n}.woff2           self-hosted Google fonts (one file per weight, style and subset)
 fonts/{slug}/font.css                             the family's own stylesheet, pointing at those files
 ```
+
+Until 2026-10-15 an ad's folder was named by its id (`builder/{organization_id}/ads/{ad_id}/`) and its poster `poster.jpg`; see
+the addendum of that day.
 
 **Deleting.** An organization's deletion purges its ads, its assets and their files — `Organization::purgeBuilder()`,
 called from `purgeContents()` alongside `purgeMedia()`/`purgeChannels()`, rows inside the transaction and
@@ -463,9 +468,10 @@ rewrite what is already there and are not asked.
   it with a CSS transform to whatever the screen is, centred, so a television of that shape is pixel-exact
   and anything else is letterboxed (or pillarboxed) rather than reflowed. The page's body takes the stage's
   own colour, so those bars are the ad's ground, never black.
-- The file is written to `builder/{organization}/ads/{ad}/index.html`; the ad's **media row** (`type = 'html'`,
+- The file is written to `index.html` in the ad's own folder (`BuilderAd::storageDirectory()`,
+  `builder/{organization|platform}/ads/{storage_key}` since 2026-10-15); the ad's **media row** (`type = 'html'`,
   `mime_type = 'text/html'`, `path` = that file) is created or refreshed. Its `thumbnail_path` names a copy of
-  its own, `builder/{organization}/ads/{ad}/published.jpg`, which every publish rewrites from the design's poster
+  its own, `published.jpg` in the same folder, which every publish rewrites from the design's poster
   (`AdPublisher::posterFor`); when the design has no poster the copy is removed and `thumbnail_path` is NULL.
   A copy rather than the design's file, because deleting the row from the Media library takes the files it
   names, and the design must keep its poster.
@@ -581,7 +587,7 @@ version so no cache shows an old one. A copy gets its own poster file rather tha
 **Draft preview.** `GET /builder/{ad}/preview` (`ad-view` or `ad-update`, checked in the controller; the
 organization wall) answers the page the compiler would publish, from the SAVED design, full screen in a new tab —
 with `Content-Security-Policy: sandbox allow-scripts` (it runs in an opaque origin, as the player's frame does on a set no worker keeps — §15)
-and `Cache-Control: no-organization, private`. Nothing is written.
+and `Cache-Control: no-cache, private` (an ETag of the draft: 304 while it is unchanged). Nothing is written.
 
 **Platform listing.** Above the organizations, the Ads and Assets pages gain an organization filter (`?organization_id=`); inside an
 organization it is not offered, and sending it cannot widen what `visibleTo` allows. On the Assets page the same Organization
@@ -1070,7 +1076,8 @@ baad"; asked how to split the permissions, "teen alag".
 
 - **What it is.** An ad with no organization (`builder_ads.organization_id` NULL — migration `2026_10_01_110000`, whose `down()`
   takes the shared ads, their library rows and their files) is the platform's, made for every organization, as a shelf asset
-  with no organization already is (§3). Its poster and page live under `builder/platform/ads/{id}/`; it uses the shared files
+  with no organization already is (§3). Its poster and page live under `builder/platform/ads/{storage_key}/` (named by the ad's id until
+  2026-10-15); it uses the shared files
   alone (`BuilderAsset::onShelfOf(null)`); its page is published into the platform's own library (`media.organization_id`
   NULL), which no organization's wall counts and which only the platform's channels reach — so it has no Show in playlists
   (refused, 422), and an organization plays it from its own copy.
@@ -1236,3 +1243,46 @@ replaces the editor's Organization list described on 2026-10-01.
 - **Tests.** `NewAdOwnerTest` (the dialog's list, the editor for an organization or the platform, the addresses refused, an
   organization's person ignored) and, in the browser, `NewAdOwnerFlowTest` (real mouse presses, a double one among them: the For
   list following the Owner list, an ad saved for Alpha Mart and one for the platform, a choice left with Cancel forgotten).
+
+## Addendum — 2026-10-15: an ad's folder nobody can guess
+
+The whole-site review found that the public disk, served to anyone with an address, answered `/storage/builder/18/ads/13/poster.jpg`
+to a stranger on the live site: counting through the ids reached every organization's designs, drafts included. Asked whether to
+name the folders by something random, the owner: "#1 han".
+
+- **The folder.** An ad's files live in `builder/{organization|platform}/ads/{storage_key}` (`BuilderAd::storageDirectory`), never
+  in a folder named by an id.
+  - `builder_ads.storage_key` is 32 random hex digits: given on create, a new one on replicate, set by the factory, and hidden
+    from every JSON answer.
+  - A new file an ad keeps goes in `storageDirectory()`. A new public file anywhere is named by something random (a ULID, a key),
+    never by an id.
+- **The poster's name.** The design's own poster is `poster-{hmac(key, APP_KEY)}.jpg` (`BuilderAd::posterPath`, `posterNameFor`),
+  never `poster.jpg`. Nobody handed the published `index.html` or `published.jpg` — a television, a Premium Template, a platform
+  channel — can work out the draft's picture beside them. Every save writes that one file.
+- **Files left behind.** A file a design no longer names goes through `BuilderAd::forgetFile`, after commit and only when no row
+  names it: from its key folder, or any folder named by its own id. Publish first brings a poster saved in an id folder home
+  (`BuilderAd::bringItsPosterHome`).
+- **The migration and every deploy.** `2026_10_15_220000_give_every_ad_a_folder_nobody_can_guess` adds the column and gives every
+  ad a key before any file moves, moves every folder named by an ad's id — under any owner — into its key folder, renames the
+  poster, and rewrites the rows that name the files (`builder_ads.thumbnail_path`, `media.path`/`thumbnail_path`).
+  - When the target is taken, a file no row names goes, a named file takes the place of an unnamed one, and when rows name both,
+    both stay (logged). A row naming a missing file is logged and follows; id folders still holding files are logged ("Ad
+    folders: …"), never deleted.
+  - It can be run again (the same keys and names), changes nothing on a second run or an empty table, and `down()` moves every
+    folder back to its id and drops the column.
+  - Every deploy runs it again after the switch with `php artisan builder:move-ad-folders` (`deploy/server/release.sh`), because
+    the release before goes on writing by the id while the new one migrates.
+  - The creating hook writes `storage_key`, and `TemplateCopier` writes `copied_from_id`, only when the table has the column
+    (`BuilderAd::tableHas`), so `2026_10_08_100200` still runs on an older database.
+- **Whose a new ad is.** `BuilderAdRequest` reads `organization_id` from a platform user alone and on a create alone (whose an ad
+  is is fixed once made), dropping it unread anywhere else; a bent value (a list, a word, nought) is refused "Choose Platform or
+  one organization from the For list." The shelf's upload says "Choose Platform or one organization from the Owner list."
+  (`BuilderAssetRequest`).
+- **Deleting a design** (`BuilderController::deleteUnderItsLocks`). For a published design, the page's row is locked FOR UPDATE
+  first, then its channels are read (one showing it refuses in the words of rule 02), then the screens it is the holding picture of
+  are locked FOR UPDATE in id order, then its playlist lines are counted, then the design goes — the order a playlist save and
+  a file's delete take them in. A draft is first locked and asked again: one published meanwhile is deleted as a published design,
+  page first (`AdPublisher`'s order), and one deleted meanwhile answers 404 and is logged once.
+- **Tests.** `AdFoldersNobodyCanGuessTest`, `AdFoldersMigrationTest` (both ways), `AdFolderGuessingAttackTest` (counting through
+  the ids, a television looking beside its page, a key posted by hand, what the release before wrote during a deploy) and
+  `AdDeleteUnderLockTest`.

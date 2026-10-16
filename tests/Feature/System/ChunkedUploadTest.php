@@ -6,7 +6,9 @@ use App\Models\Channel;
 use App\Models\ChannelAd;
 use App\Models\Media;
 use App\Models\Organization;
+use App\Models\PlayerAppRelease;
 use App\Models\Upload;
+use App\Services\ChunkedUploads;
 use App\Services\DiskGuard;
 use App\Services\OrganizationStorage;
 use Illuminate\Console\Scheduling\Event;
@@ -91,14 +93,18 @@ test('every door takes a finished upload: a channel, the ads network and the Ad 
         ->and(Upload::count())->toBe(0);
 });
 
-test('a video is measured from its bytes when it is added: one too long is refused, and the upload waits', function () {
+test('a video is measured from its bytes when it is added: one too long is refused for good, and its upload goes at once', function () {
     $id = Tus::upload($this, VideoFiles::mp4(360), ['name' => 'long.mp4', 'type' => 'video/mp4', 'purpose' => 'media']);
 
+    // Posting it again would be refused again: it is given up, and the answer says so, so the uploader offers no Try Again.
     $this->postJson('/media', ['upload' => $id])
         ->assertStatus(422)
-        ->assertJsonValidationErrors(['file' => 'A video may be at most 5 minutes long. This one is 6:00.']);
+        ->assertJsonValidationErrors(['file' => 'A video may be at most 5 minutes long. This one is 6:00.'])
+        ->assertJsonPath('upload_given_up', true);
 
-    expect(Media::count())->toBe(0)->and(Upload::whereKey($id)->exists())->toBeTrue();
+    expect(Media::count())->toBe(0)
+        ->and(Upload::whereKey($id)->exists())->toBeFalse()
+        ->and(Storage::disk('uploads')->allFiles())->toBe([]);
 
     $short = Tus::upload($this, VideoFiles::mp4(12), ['name' => 'short.mp4', 'type' => 'video/mp4', 'purpose' => 'media']);
     $this->postJson('/media', ['upload' => $short])->assertOk();
@@ -119,6 +125,69 @@ test("the organization's 512 MB counts the uploads still open: the one that woul
 
     expect(Upload::count())->toBe(2)
         ->and(app(OrganizationStorage::class)->used($this->organization->id))->toBe(500 * 1024 * 1024);
+});
+
+test("a finished upload holds none of the organization's room: its door decides, and one refused for the wall waits for Try Again", function () {
+    $bytes = jpegBytes();
+    $id = Tus::upload($this, $bytes, ['name' => 'menu.jpg', 'type' => 'image/jpeg', 'purpose' => 'media']);
+
+    // While its bytes were going up a colleague filled the organization to 1000 bytes short of its 512 MB.
+    Media::factory()->create(['organization_id' => $this->organization->id, 'size' => OrganizationStorage::LIMIT_BYTES - 1000, 'thumbnail_path' => null]);
+
+    // The door decides the wall under the lock: refused, and kept — room can be made, and Try Again posts it again.
+    $this->postJson('/media', ['upload' => $id])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('file')
+        ->assertJsonMissingPath('upload_given_up');
+    expect(Upload::whereKey($id)->exists())->toBeTrue();
+
+    // Meanwhile it reserves nothing: a file that fits the 1000 bytes left is opened (it counted the waiting one before, and was
+    // refused while the meter showed the room free).
+    Tus::open($this, 900, ['name' => 'logo.jpg', 'purpose' => 'media'])->assertCreated();
+
+    // Room made, Try Again: in it goes.
+    Media::where('size', OrganizationStorage::LIMIT_BYTES - 1000)->delete();
+    $this->postJson('/media', ['upload' => $id])->assertOk();
+    expect(Upload::whereKey($id)->exists())->toBeFalse();
+});
+
+test('uploads waiting on the server for an organization never take more than its storage, whoever of its people holds them', function () {
+    $big = 200 * 1024 * 1024;
+
+    /** An upload of $big opened by whoever is signed in, its bytes in (as if every chunk had come), never posted. */
+    $finished = function () use ($big): string {
+        $id = Tus::idOf(Tus::open($this, $big, ['name' => 'film.mp4', 'purpose' => 'media'])->assertCreated());
+        Upload::whereKey($id)->update(['received' => $big]);
+
+        return $id;
+    };
+
+    $first = $finished();
+    $finished();
+
+    // A finished upload holds none of the wall (its door decides that), but the server keeps its bytes: what waits for Alpha Mart,
+    // finished or not, stays inside its 512 MB — twenty a person once parked 5 GB.
+    $words = 'Files uploaded for Alpha Mart and not added yet already take its 512 MB. Add or remove them first, or try again later.';
+    Tus::open($this, $big, ['name' => 'one-more.mp4', 'purpose' => 'media'])
+        ->assertStatus(422)->assertJsonValidationErrors(['file' => $words]);
+
+    // Its colleagues share it; another organization's people do not.
+    $colleague = createOrganizationUser($this->organization, ['media-view', 'media-store'], 'Colleague');
+    $this->actingAs($colleague)->withSession(['current_organization_id' => $this->organization->id]);
+    Tus::open($this, $big, ['name' => 'theirs.mp4', 'purpose' => 'media'])->assertStatus(422)->assertJsonValidationErrors(['file' => $words]);
+
+    $bravo = Organization::factory()->create(['name' => 'Bravo Foods']);
+    $this->actingAs(createOrganizationUser($bravo, ['media-view', 'media-store']))->withSession(['current_organization_id' => $bravo->id]);
+    Tus::open($this, $big, ['name' => 'bravo.mp4', 'purpose' => 'media'])->assertCreated();
+
+    // One given up (×) makes room again.
+    $this->actingAs($this->manager)->withSession(['current_organization_id' => $this->organization->id]);
+    Tus::giveUp($this, $first)->assertNoContent();
+    Tus::open($this, $big, ['name' => 'one-more.mp4', 'purpose' => 'media'])->assertCreated();
+
+    // And with extra storage given, more may wait.
+    $this->organization->forceFill(['extra_storage_gb' => 1])->save();
+    Tus::open($this, $big, ['name' => 'and-another.mp4', 'purpose' => 'media'])->assertCreated();
 });
 
 test('nothing is opened that the door would refuse, and each refusal says why', function () {
@@ -201,6 +270,55 @@ test('an upload never finished goes after a day, and so does a part no upload na
 
     expect(Upload::count())->toBe(0)->and($disk->allFiles())->toBe(['notes.txt']);
     Tus::ask($this, $id)->assertNotFound();
+});
+
+test('a finished upload is kept two hours for its form, then it goes; one still on its way keeps its day', function () {
+    $finished = Tus::upload($this, jpegBytes(), ['name' => 'Menu.jpg', 'type' => 'image/jpeg', 'purpose' => 'media']);
+    $unfinished = Tus::idOf(Tus::open($this, 10, ['name' => 'a.jpg', 'purpose' => 'media']));
+    Tus::send($this, $unfinished, 0, '12345')->assertNoContent();
+
+    // Its bytes in, it holds none of the organization's room (its door decides that), so it is not kept a day: twenty of
+    // them were a person's 5 GB of the server's disk for that long. A form is saved, or a refusal that room can fix is
+    // tried again, in far less.
+    expect(Upload::findOrFail($finished)->expires_at->lessThanOrEqualTo(now()->addHours(ChunkedUploads::FINISHED_LIFETIME_HOURS)))->toBeTrue()
+        ->and(Upload::findOrFail($unfinished)->expires_at->greaterThan(now()->addHours(ChunkedUploads::LIFETIME_HOURS - 1)))->toBeTrue();
+
+    $this->travel(ChunkedUploads::FINISHED_LIFETIME_HOURS * 60 + 1)->minutes();
+
+    $this->artisan('uploads:prune')->expectsOutputToContain('1 upload(s) removed.')->assertSuccessful();
+    expect(Upload::pluck('id')->all())->toBe([$unfinished]);
+
+    $this->postJson('/media', ['upload' => $finished])->assertStatus(422)->assertJsonPath('upload_given_up', true)
+        ->assertJsonValidationErrors(['file' => 'That upload is not finished, or it has expired. Choose the file again.']);
+    expect(Media::count())->toBe(0);
+});
+
+test('an upload finished late in its day keeps the end it had: finishing never lengthens it', function () {
+    $id = Tus::idOf(Tus::open($this, 10, ['name' => 'a.jpg', 'purpose' => 'media']));
+    Tus::send($this, $id, 0, '12345')->assertNoContent();
+    $end = Upload::findOrFail($id)->expires_at;
+
+    $this->travel(ChunkedUploads::LIFETIME_HOURS * 60 - 30)->minutes();
+    Tus::send($this, $id, 5, '12345')->assertNoContent();
+
+    expect(Upload::findOrFail($id)->expires_at->equalTo($end))->toBeTrue();
+});
+
+test("a TV app file a request left under its incoming name goes after an hour; the versions' own files stay", function () {
+    $public = Storage::disk('public');
+    $left = PlayerAppRelease::FOLDER.'/'.ChunkedUploads::INCOMING_PREFIX.'left-behind.apk';
+    $moving = PlayerAppRelease::FOLDER.'/'.ChunkedUploads::INCOMING_PREFIX.'being-moved-now.apk';
+    $version = PlayerAppRelease::FOLDER.'/'.PlayerAppRelease::fileNameFor('1.2', 3);
+
+    foreach ([$left, $moving, $version] as $file) {
+        $public->put($file, 'apk');
+    }
+    touch($public->path($left), now()->subHours(2)->getTimestamp());
+    touch($public->path($version), now()->subHours(2)->getTimestamp());
+
+    $this->artisan('uploads:prune')->expectsOutputToContain('1 upload(s) removed.')->assertSuccessful();
+
+    expect($public->allFiles())->toEqualCanonicalizing([$moving, $version]);
 });
 
 test('a deleted organization takes the uploads still on their way into it', function () {

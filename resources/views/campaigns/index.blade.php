@@ -127,16 +127,22 @@
                          video, and a browser will not autoplay an unmuted one anyway. --}}
                     {{-- It goes up in chunks the moment it is chosen (docs/UPLOADS-SPEC.md), and Save waits until it has
                          arrived. The page listens here, not on the box: an expression on the box runs with the box's
-                         own `this`. --}}
-                    <div x-ref="advertUpload"
+                         own `this`. However the dialog shuts (`show` is x-modal's own) — Escape and Discard Changes too —
+                         the box lets its file go, and a file nobody saved is given up. --}}
+                    <div x-init="$watch('show', (open) => open || clearFile())"
                          x-on:upload-picked="onPicked($event.detail)"
                          x-on:upload-ready="onUploadReady($event.detail)"
                          x-on:upload-cleared="onUploadCleared()"
                          x-on:upload-busy="uploading = $event.detail.busy">
                         <x-crud.form-field label="Advert" field="file" requiredWhen="!editingItem">
-                            <x-upload-dropzone purpose="campaign" mode="form" dusk="campaign"
-                                :max-video-seconds="\App\Models\Campaign::MAX_AD_SECONDS" video-noun="An advert"
-                                hint="JPG, PNG, GIF, WEBP, MP4 or WEBM — up to 250 MB, 60 seconds at most." />
+                            {{-- Held while the save carrying its advert is on its way: its × or a new file would give that
+                                 upload up under the save. Bound here, in the page's scope, not on the box (see above). --}}
+                            <div x-bind:inert="holdsTheSavedUpload()" x-bind:data-held="holdsTheSavedUpload() ? 'true' : 'false'"
+                                 class="data-[held=true]:pointer-events-none data-[held=true]:opacity-50">
+                                <x-upload-dropzone purpose="campaign" mode="form" dusk="campaign"
+                                    :max-video-seconds="\App\Models\Campaign::MAX_AD_SECONDS" video-noun="An advert"
+                                    hint="JPG, PNG, GIF, WEBP, MP4 or WEBM — up to 250 MB, 60 seconds at most." />
+                            </div>
                         </x-crud.form-field>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Adverts play muted.</p>
 
@@ -221,13 +227,14 @@
                             <template x-for="group in screensByOrganization()" :key="group.id">
                                 <div class="rounded-md border border-gray-200 dark:border-gray-700 p-3">
                                     {{-- One press chooses every screen of the organization that can carry adverts, and the same
-                                         press, once they all are, clears them — the words say which it will do. --}}
+                                         press, once they all are, clears them — the words say which it will do. A double
+                                         click is one press. --}}
                                     <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
                                         <p class="text-sm font-medium text-gray-800 dark:text-white" x-text="group.name"></p>
-                                        <button type="button" data-a-change @click="toggleOrganization(group)"
+                                        <button type="button" data-a-change @click="toggleOrganization(group, $event)"
                                                 x-bind:dusk="'campaign-organization-all-' + group.id"
                                                 x-show="group.screens.some(s => s.carries_ads)"
-                                                x-bind:aria-label="(organizationAllChosen(group) ? 'Clear every screen of ' : 'Choose every screen of ') + group.name"
+                                                x-bind:aria-label="(organizationAllChosen(group) ? 'Clear All screens of ' : 'Select All screens of ') + group.name"
                                                 class="btn-row-neutral" x-text="organizationAllChosen(group) ? 'Clear All' : 'Select All'"></button>
                                     </div>
 

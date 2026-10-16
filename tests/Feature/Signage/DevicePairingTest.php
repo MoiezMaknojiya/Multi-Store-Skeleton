@@ -26,16 +26,40 @@ test('the code avoids characters that are misread on a TV', function () {
     }
 });
 
-test('re-registering the same device keeps the code already on screen', function () {
+test('re-registering the same device keeps the code already on screen — for the device that holds its secret', function () {
     $first = $this->postJson('/device/register')->assertOk()->json();
 
-    $second = $this->postJson('/device/register', ['device_uuid' => $first['device_uuid']])->assertOk()->json();
+    $second = $this->postJson('/device/register', [
+        'device_uuid' => $first['device_uuid'],
+        'poll_secret' => $first['poll_secret'],
+    ])->assertOk()->json();
 
-    expect($second['code'])->toBe($first['code']);
+    // Its own code and its own secret, unchanged: the number on the television stays put.
+    expect($second['code'])->toBe($first['code'])
+        ->and($second['poll_secret'])->toBe($first['poll_secret'])
+        ->and($second['device_uuid'])->toBe($first['device_uuid']);
     $this->assertDatabaseCount('pairing_requests', 1);
+});
 
-    // A fresh poll secret is issued, so an old one cannot keep watching.
-    expect($second['poll_secret'])->not->toBe($first['poll_secret']);
+test('the uuid alone is no way to a waiting code: whoever sends it without the secret gets a code of their own', function () {
+    // A uuid is on the Screens page for every screen-view holder (the review of 2026-10-15): handed the same code with a
+    // secret of their own, they collected the token the moment the owner typed the code from the television.
+    $first = $this->postJson('/device/register')->assertOk()->json();
+
+    $other = $this->postJson('/device/register', ['device_uuid' => $first['device_uuid']])->assertOk()->json();
+    $guessed = $this->postJson('/device/register', ['device_uuid' => $first['device_uuid'], 'poll_secret' => str_repeat('x', 40)])->assertOk()->json();
+
+    expect($other['code'])->not->toBe($first['code'])
+        ->and($other['device_uuid'])->not->toBe($first['device_uuid'])
+        ->and($guessed['code'])->not->toBeIn([$first['code'], $other['code']])
+        ->and($guessed['device_uuid'])->not->toBe($first['device_uuid']);
+
+    // The waiting one is untouched: its code still answers to its own secret.
+    $request = PairingRequest::where('device_uuid', $first['device_uuid'])->firstOrFail();
+    expect($request->code)->toBe($first['code'])
+        ->and($request->poll_secret_hash)->toBe(hash('sha256', $first['poll_secret']));
+    $this->getJson('/device/pair-status?'.http_build_query(['device_uuid' => $first['device_uuid'], 'poll_secret' => $first['poll_secret']]))
+        ->assertOk()->assertJson(['status' => 'pending']);
 });
 
 test('a device whose code expired can simply ask for another one', function () {
@@ -60,18 +84,36 @@ test('a device whose code expired can simply ask for another one', function () {
     ]))->assertOk()->assertJson(['status' => 'pending']);
 });
 
-test('a device that lost its token starts over instead of colliding', function () {
+test('a claimed code waits for its device: a register never throws its token away', function () {
     $organization = Organization::factory()->create();
     $device = $this->postJson('/device/register')->assertOk()->json();
     $screen = Screen::factory()->unpaired()->create(['organization_id' => $organization->id]);
     app(DevicePairing::class)->claim($device['code'], $screen);
 
-    // The TV never collected the token (browsing data cleared, say) and asks again.
-    $fresh = $this->postJson('/device/register', ['device_uuid' => $device['device_uuid']])
-        ->assertOk()->json();
+    // Asked again with the uuid alone (browsing data cleared but for the uuid, say, or somebody else with it): a code of
+    // its own, and the claimed one stays on file for the device that holds its secret.
+    $fresh = $this->postJson('/device/register', ['device_uuid' => $device['device_uuid']])->assertOk()->json();
 
-    expect($fresh['code'])->not->toBe($device['code']);
-    $this->assertDatabaseCount('pairing_requests', 1);
+    expect($fresh['code'])->not->toBe($device['code'])
+        ->and($fresh['device_uuid'])->not->toBe($device['device_uuid'])
+        // Still the screen it was: the television says Replace Device, never Add Screen.
+        ->and($fresh['known_device'])->toBeTrue();
+    $this->assertDatabaseCount('pairing_requests', 2);
+
+    // The set switched off before its next poll comes back twenty minutes on and asks with its secret: its own code, and
+    // the token is still there to collect.
+    $this->travel(20)->minutes();
+    $again = $this->postJson('/device/register', ['device_uuid' => $device['device_uuid'], 'poll_secret' => $device['poll_secret']])->assertOk()->json();
+    expect($again['code'])->toBe($device['code']);
+
+    $poll = $this->getJson('/device/pair-status?'.http_build_query([
+        'device_uuid' => $device['device_uuid'],
+        'poll_secret' => $device['poll_secret'],
+    ]))->assertOk()->json();
+
+    expect($poll['status'])->toBe('paired')
+        ->and($poll['screen_id'])->toBe($screen->id)
+        ->and(app(DevicePairing::class)->screenForToken($poll['token'])?->id)->toBe($screen->id);
 });
 
 test('expired codes are swept up, but a claimed token waits for its device', function () {

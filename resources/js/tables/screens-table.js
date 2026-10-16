@@ -58,6 +58,9 @@ export function registerScreensTable(Alpine) {
             orientations: config.orientations ?? {},
             browserTimezone: browserTimezone(),
             pairForm: blankPairForm(config),
+            /* Which opening of the pairing dialog is the one on screen: a slow answer acts on the dialog it was asked
+             * from, never on one opened after it (pairScreen). */
+            pairAsked: 0,
             refreshTimer: null,
             /* The default-media picker's options, fetched when the modal opens: the
              * library can be long and most edits never touch it. */
@@ -152,12 +155,14 @@ export function registerScreensTable(Alpine) {
 
             /* ── Pair / replace ────────────────────────────────────────── */
             openPairModal() {
+                this.pairAsked++;
                 this.pairForm = blankPairForm(config);
                 this.formErrors = {};
                 this.$dispatch('open-modal', 'screen-pair-modal');
             },
 
             openReplaceModal(screen) {
+                this.pairAsked++;
                 this.pairForm = {
                     code: '',
                     mode: 'replace',
@@ -205,6 +210,13 @@ export function registerScreensTable(Alpine) {
 
                 this.formErrors = {};
                 this.saving = true;
+
+                /* By the time the answer comes the dialog may be shut, or shut and another opened — Replace Device on
+                 * another row, a fresh Add Screen: that one is left as it is, and this answer is said in a toast. */
+                const asked = this.pairAsked;
+                const stillAsked = () => this.pairAsked === asked
+                    && (document.querySelector('[dusk="screen-pair-form"]')?.getClientRects().length ?? 0) > 0;
+
                 try {
                     await axios.post('/screens/pair', {
                         code: this.pairForm.code,
@@ -215,7 +227,7 @@ export function registerScreensTable(Alpine) {
                         organization_id: forAnOrganization ? this.pairForm.organization_id : null,
                         screen_id: isNew ? null : this.pairForm.screen_id,
                     });
-                    this.closePairModal();
+                    if (stillAsked()) this.closePairModal();
                     // The television notices within half a minute, and the next step is its playlist.
                     window.toast(isNew
                         ? 'Screen paired. The TV starts within 30 seconds: open its Playlist to choose what it shows.'
@@ -223,8 +235,12 @@ export function registerScreensTable(Alpine) {
                     this.currentPage = 1;
                     this.refreshInPlace();  // not awaited: the button is free again the moment the request is over
                 } catch (error) {
-                    if (error.response?.status === 422 && error.response.data.errors) {
-                        this.formErrors = error.response.data.errors;
+                    const errors = error.response?.status === 422 ? error.response.data.errors : null;
+
+                    if (errors && stillAsked()) {
+                        this.formErrors = errors;
+                    } else if (errors) {
+                        window.toast(Object.values(errors)[0][0]);
                     } else {
                         window.toast(error.response?.data?.message ?? 'Pairing failed. Please try again.');
                     }
@@ -295,22 +311,30 @@ export function registerScreensTable(Alpine) {
 
             /** One television, or all of them — the same call either way, so the bulk
              *  switch is not a second endpoint with its own rules to keep in step. */
-            async setScreenAds(ids, accepts) {
-                if (this.savingAds || ids.length === 0) return;
+            setScreenAds(ids, accepts) {
+                if (ids.length > 0) this.sendScreenAds({ screen_ids: ids, accepts });
+            },
+
+            /** Every screen of the organization, which the server reads for itself: the list shows a page of them,
+             *  narrowed by its search and its filter. */
+            allScreenAds(accepts) {
+                this.sendScreenAds({ all: true, accepts });
+            },
+
+            async sendScreenAds(body) {
+                if (this.savingAds) return;
 
                 this.savingAds = true;
                 try {
-                    await axios.put('/network-ads/screens', { screen_ids: ids, accepts });
+                    const { data } = await axios.put('/network-ads/screens', body);
+                    // Every screen at once is said: most of them may be on no page in sight.
+                    if (body.all) window.toast(data.message, 'success');
                     this.refreshInPlace();  // not awaited: the button is free again the moment the request is over
                 } catch (error) {
                     window.toast(error.response?.data?.message ?? 'Could not change that.');
                 } finally {
                     this.savingAds = false;
                 }
-            },
-
-            allScreenAds(accepts) {
-                this.setScreenAds(this.items.map((item) => item.id), accepts);
             },
 
             adsLabel(screen) {

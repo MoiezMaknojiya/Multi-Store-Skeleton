@@ -649,7 +649,7 @@
                          class="rounded-md border border-gray-200 dark:border-gray-700 p-4 space-y-3">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                             <p class="text-sm text-gray-600 dark:text-gray-300">OK gives this schedule to the lines you tick, in place of theirs.</p>
-                            <button type="button" data-a-change @click="toggleEveryCopyLine()" dusk="schedule-copy-all" class="btn-row-neutral"
+                            <button type="button" data-a-change @click="toggleEveryCopyLine($event)" dusk="schedule-copy-all" class="btn-row-neutral"
                                     x-text="copyToKeys.length === otherLines().length ? 'Clear All' : 'Select All'"></button>
                         </div>
                         <div class="max-h-48 space-y-2 overflow-y-auto">

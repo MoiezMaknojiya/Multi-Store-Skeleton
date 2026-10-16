@@ -18,14 +18,18 @@
 
                 <form @submit.prevent="publish($event)" novalidate class="mt-5 space-y-4" dusk="tv-app-form">
                     {{-- The box's events are heard here, on the page's own element around it (never on the box). --}}
-                    <div x-ref="appUpload"
-                         x-on:upload-picked="onPicked($event.detail)"
+                    <div x-on:upload-picked="onPicked($event.detail)"
                          x-on:upload-ready="onReady($event.detail)"
-                         x-on:upload-cleared="clearFile()"
+                         x-on:upload-cleared="clearFile($event.detail)"
                          x-on:upload-busy="uploading = $event.detail.busy">
                         <x-crud.form-field label="App file" field="file" :required="true">
-                            <x-upload-dropzone purpose="app-release" mode="form" kind="apk" :max-bytes="\App\Models\PlayerAppRelease::MAX_BYTES"
-                                               dusk="tv-app" hint="The app's .apk file, up to {{ intdiv(\App\Models\PlayerAppRelease::MAX_BYTES, 1024 * 1024) }} MB." />
+                            {{-- Held while the publish carrying its file is on its way: its × or a new file would give that upload
+                                 up under the publish. Bound here, in the page's scope, not on the box. --}}
+                            <div x-bind:inert="holdsTheSavedUpload()" x-bind:data-held="holdsTheSavedUpload() ? 'true' : 'false'"
+                                 class="data-[held=true]:pointer-events-none data-[held=true]:opacity-50" dusk="tv-app-box-hold">
+                                <x-upload-dropzone purpose="app-release" mode="form" kind="apk" :max-bytes="\App\Models\PlayerAppRelease::MAX_BYTES"
+                                                   dusk="tv-app" hint="The app's .apk file, up to {{ intdiv(\App\Models\PlayerAppRelease::MAX_BYTES, 1024 * 1024) }} MB." />
+                            </div>
                         </x-crud.form-field>
                     </div>
 

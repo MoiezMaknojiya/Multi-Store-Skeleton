@@ -67,6 +67,12 @@ ln -sfn "$RELEASE" "$APP/current.next"
 mv -Tf "$APP/current.next" "$APP/current"
 sudo -n systemctl reload php$PHP-fpm
 
+# What the release before wrote into an Ad Builder folder named by an ad's id while this one migrated goes to the ad's own
+# folder, nobody's to guess — before any page is written again. Reported, never failing the deploy: the site is up.
+echo "   moving Ad Builder files out of folders named by an id"
+php artisan builder:move-ad-folders < /dev/null \
+    || echo "   WARNING: builder:move-ad-folders failed; run it by hand: cd $APP/current && php artisan builder:move-ad-folders" >&2
+
 # Ad Builder pages an older compiler wrote are written again from the version on the screens (never a draft),
 # so every published page carries what the compiler writes now — its security policy among it. After the
 # switch, never before: a page names the runtime by its version, and the site must already serve that version.

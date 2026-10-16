@@ -45,10 +45,12 @@ class AdPublisher
         $path = $ad->storageDirectory().'/index.html';
         $media = $ad->media ?? new Media;
 
-        $copy = $ad->storageDirectory().'/published.jpg';
         $poster = $ad->thumbnail_path && $disk->exists($ad->thumbnail_path) ? (int) $disk->size($ad->thumbnail_path) : 0;
+        // The version before: its page, and its poster's own copy — wherever the code of its day wrote it, it is replaced or taken
+        // away (write) — never the design's poster, which stays.
+        $oldCopy = $media->thumbnail_path;
         $before = $media->exists
-            ? (int) $media->size + ($media->thumbnail_path === $copy && $disk->exists($copy) ? (int) $disk->size($copy) : 0)
+            ? (int) $media->size + ($oldCopy !== null && $oldCopy !== $ad->thumbnail_path && $ad->ownsFile($oldCopy) && $disk->exists($oldCopy) ? (int) $disk->size($oldCopy) : 0)
             : 0;
 
         return $this->quota->withRoom($ad->organization_id, strlen($html) + $poster - $before, fn () => $this->write($ad, $media, $path, $html, $actorId), 'publish');
@@ -58,9 +60,12 @@ class AdPublisher
     private function write(BuilderAd $ad, Media $media, string $path, string $html, ?int $actorId): Media
     {
         $disk = Storage::disk('public');
+        $previous = [$media->path, $media->thumbnail_path];
 
         $disk->put($path, $html);
 
+        // A poster the code of before the key saved by the ad's id goes home first, so the page's copy is made from it there.
+        $ad->bringItsPosterHome();
         $poster = $this->posterFor($ad, $media);
 
         // Published and last changed at the very same moment: two separate clocks could straddle a
@@ -101,6 +106,12 @@ class AdPublisher
             'published_name' => $ad->name,
             'updated_at' => $now,
         ])->save();
+
+        // A page or a poster's copy of before, in a folder this version no longer uses — the folder named by the ad's id, which
+        // the code of before the key wrote into while a deploy switched over — is nobody's now (BuilderAd::forgetFile).
+        foreach ($previous as $file) {
+            $ad->forgetFile($file);
+        }
 
         return $media;
     }
@@ -148,15 +159,15 @@ class AdPublisher
     public function discardChanges(BuilderAd $ad, ?int $actorId = null): void
     {
         $disk = Storage::disk('public');
-        $published = $ad->storageDirectory().'/published.jpg';
-        $poster = $ad->storageDirectory().'/poster.jpg';
-        $publishedHadPoster = $ad->media?->thumbnail_path === $published && $disk->exists($published);
+        // The page's own copy of its poster (`published.jpg`, wherever the code of its day wrote it), never the design's own file.
+        $published = $ad->media?->thumbnail_path;
+        $publishedHadPoster = $published !== null && $published !== $ad->thumbnail_path && $disk->exists($published);
+        // The draft's poster keeps a name of its own beside the published copy (BuilderAd::posterPath).
+        $poster = $ad->posterPath();
+        $previous = $ad->thumbnail_path;
 
         if ($publishedHadPoster) {
             $disk->put($poster, (string) $disk->get($published));
-        } elseif ($ad->thumbnail_path !== null) {
-            // The published version had no picture: the draft's would only show what was thrown away.
-            $disk->delete($ad->thumbnail_path);
         }
 
         $ad->forceFill([
@@ -165,6 +176,10 @@ class AdPublisher
             'thumbnail_path' => $publishedHadPoster ? $poster : null,
             'updated_by' => $actorId,
         ])->save();
+
+        // The draft's picture goes — or, when the published version had none, the poster altogether: it would only show what
+        // was thrown away. Never a file another row still names.
+        $ad->forgetFile($previous);
     }
 
     /** How many screens have the published copy on their playlist. */

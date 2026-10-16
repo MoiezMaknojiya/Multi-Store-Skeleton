@@ -123,6 +123,58 @@ test('a pairing code cannot be collected by a device that does not own it', func
     expect($this->getJson('/device/pair-status?device_uuid=device-mine&poll_secret='.$mine['poll_secret'])->assertOk()->json('status'))->toBe('paired');
 });
 
+test('a stranger who knows a waiting television’s uuid cannot take its code, its secret or its token', function () {
+    // The uuid of every screen is on the Screens page (/screens/data) for anybody with screen-view, so it is no secret
+    // (the review of 2026-10-15): re-registering it handed back the code on the television with a secret of the
+    // stranger's own, and the newest secret collected the token once the owner typed the code into Replace Device.
+    $uuid = $this->screen->device_uuid;
+    $tv = $this->postJson('/device/register', ['device_uuid' => $uuid])->assertOk()->json();
+
+    $stranger = $this->postJson('/device/register', ['device_uuid' => $uuid])->assertOk()->json();
+    $guesser = $this->postJson('/device/register', ['device_uuid' => $uuid, 'poll_secret' => 'not-the-secret'])->assertOk()->json();
+
+    expect($stranger['code'])->not->toBe($tv['code'])
+        ->and($guesser['code'])->not->toBe($tv['code'])
+        ->and($stranger['device_uuid'])->not->toBe($uuid)
+        ->and($guesser['device_uuid'])->not->toBe($uuid);
+
+    $owner = createOrganizationMember($this->organization, Role::OWNER);
+    $this->actingAs($owner)->withSession(['current_organization_id' => $this->organization->id])
+        ->postJson('/screens/pair', ['code' => $tv['code'], 'mode' => 'replace', 'screen_id' => $this->screen->id])
+        ->assertOk();
+
+    // Neither the stranger's secret under the television's uuid nor their own uuid reaches the token.
+    foreach ([[$uuid, $stranger['poll_secret']], [$uuid, $guesser['poll_secret']], [$stranger['device_uuid'], $stranger['poll_secret']]] as [$asUuid, $secret]) {
+        $poll = $this->getJson('/device/pair-status?'.http_build_query(['device_uuid' => $asUuid, 'poll_secret' => $secret]))->assertOk()->json();
+        expect($poll['status'])->not->toBe('paired')->and($poll)->not->toHaveKey('token');
+    }
+
+    $poll = $this->getJson('/device/pair-status?'.http_build_query(['device_uuid' => $uuid, 'poll_secret' => $tv['poll_secret']]))->assertOk()->json();
+    expect($poll['status'])->toBe('paired')
+        ->and(Screen::where('token_hash', hash('sha256', $poll['token']))->value('id'))->toBe($this->screen->id);
+});
+
+test('a claimed code whose token is not collected yet is never wiped by a register, the television’s own or anybody’s', function () {
+    $tv = $this->postJson('/device/register', ['device_uuid' => 'device-slow'])->assertOk()->json();
+    $owner = createOrganizationMember($this->organization, Role::OWNER);
+    $this->actingAs($owner)->withSession(['current_organization_id' => $this->organization->id])
+        ->postJson('/screens/pair', ['code' => $tv['code'], 'mode' => 'replace', 'screen_id' => $this->screen->id])
+        ->assertOk();
+
+    // Past the code's fifteen minutes, every shape of register for that uuid: none of them touches the claimed row.
+    $this->travel(20)->minutes();
+    foreach ([[], ['poll_secret' => 'wrong'], ['poll_secret' => ['x']], ['poll_secret' => $tv['poll_secret']]] as $extra) {
+        $status = $this->postJson('/device/register', ['device_uuid' => 'device-slow', ...$extra])->status();
+        expect($status)->toBeIn([200, 422]);
+    }
+
+    $claimed = PairingRequest::where('device_uuid', 'device-slow')->firstOrFail();
+    expect($claimed->claimed_screen_id)->toBe($this->screen->id)->and($claimed->code)->toBe($tv['code']);
+
+    expect($this->getJson('/device/pair-status?'.http_build_query(['device_uuid' => 'device-slow', 'poll_secret' => $tv['poll_secret']]))
+        ->assertOk()->json('status'))->toBe('paired');
+});
+
 test('a pairing code belongs to one screen only: whoever claims it second is refused', function () {
     // Two claims one after the other. Two at the SAME moment are held apart by the row lock in
     // DevicePairing::claim, which one PHP process cannot race against itself to show.

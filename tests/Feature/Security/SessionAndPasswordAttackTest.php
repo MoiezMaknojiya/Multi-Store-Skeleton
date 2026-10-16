@@ -255,3 +255,42 @@ test('the forgotten-password form never says whether an address has an account',
     // A malformed address is still a plain validation error: that gives nothing away.
     $this->post('/forgot-password', ['email' => 'not-an-email'])->assertSessionHasErrors('email');
 });
+
+test('changing your password signs out every other device, remembered ones too, and keeps this browser signed in', function () {
+    config(['session.driver' => 'database']);
+    $guard = auth()->guard('web');
+    $recaller = $guard->getRecallerName();
+    $user = $this->staff;
+    $oldToken = $user->remember_token;
+    $rememberedBefore = $user->id.'|'.$oldToken.'|'.$guard->hashPasswordForCookie($user->password);
+
+    // This browser, the person's phone (whoever has it now) and a colleague's sign-in.
+    $here = Str::random(40);
+    DB::table('sessions')->insert([
+        ['id' => $here, 'user_id' => $user->id, 'payload' => '', 'last_activity' => now()->timestamp],
+        ['id' => 'their-phone', 'user_id' => $user->id, 'payload' => '', 'last_activity' => now()->timestamp],
+        ['id' => 'a-colleague', 'user_id' => $this->owner->id, 'payload' => '', 'last_activity' => now()->timestamp],
+    ]);
+
+    $response = $this->actingAs($user)
+        ->withCookie(config('session.cookie'), $here)->withCookie($recaller, $rememberedBefore)
+        ->from('/profile')->put('/password', [
+            'current_password' => 'password', 'password' => 'A-New-Password-1', 'password_confirmation' => 'A-New-Password-1',
+        ]);
+
+    $response->assertRedirect('/profile')->assertSessionHasNoErrors();
+    expect(Hash::check('A-New-Password-1', $user->fresh()->password))->toBeTrue()
+        ->and(DB::table('sessions')->where('id', 'their-phone')->exists())->toBeFalse()
+        ->and(DB::table('sessions')->where('id', 'a-colleague')->exists())->toBeTrue()
+        ->and(DB::table('sessions')->where('id', $here)->value('user_id'))->toBe($user->id)
+        ->and($user->fresh()->remember_token)->not->toBe($oldToken);
+
+    // This browser's "remember me" is written again with the new token …
+    expect($response->getCookie($recaller)?->getValue())->toStartWith($user->id.'|'.$user->fresh()->remember_token.'|');
+
+    // … and the one another device kept opens nothing now.
+    $this->defaultCookies = [];
+    $this->app['auth']->forgetGuards();
+    $this->withCookie($recaller, $rememberedBefore)->get('/profile')->assertRedirect(route('login'));
+    $this->assertGuest();
+});

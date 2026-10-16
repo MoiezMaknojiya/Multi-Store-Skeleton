@@ -6,6 +6,7 @@
  */
 import axios from 'axios';
 import { createCrudTable } from '../core/crud-table-base.js';
+import { emptyTheBox } from '../core/form-asked.js';
 import { maxLen, maxNumber, minNumber, requiredMessage, unreadableFields, validate, wholeNumber } from '../core/validate.js';
 
 const CODE_WORDS = 'The version code is a whole number, such as 2.';
@@ -30,6 +31,8 @@ export function registerDeveloperPage(Alpine) {
             checking: false,
             read: null,
             checksAsked: 0,
+            /* The upload a publish on its way carries: the box is held meanwhile (holdsTheSavedUpload). */
+            uploadBeingSaved: null,
         },
 
         extraMethods: {
@@ -46,12 +49,20 @@ export function registerDeveloperPage(Alpine) {
                 this.check();
             },
 
-            clearFile() {
+            /** The box let go of the file — or the server gave its upload up (`givenUp`, upload-dropzone.js noteGivenUp): then
+             *  the answer that said why is still the one asked, and its words stay under the file. */
+            clearFile(detail = {}) {
                 this.picked = null;
                 this.uploaded = null;
                 this.read = null;
                 this.checking = false;
-                this.checksAsked++;
+                if (! detail?.givenUp) this.checksAsked++;
+            },
+
+            /** Is the box showing the file a publish on its way carries? Then it is held (developer/index.blade.php): its ×
+             *  or a new file would give that upload up under the publish. */
+            holdsTheSavedUpload() {
+                return this.uploadBeingSaved !== null && this.uploaded?.upload === this.uploadBeingSaved;
             },
 
             /** Ask the server what the uploaded file is: the TV app or not, and its version. The newest question wins. */
@@ -115,6 +126,7 @@ export function registerDeveloperPage(Alpine) {
 
                 this.saving = true;
                 this.formErrors = {};
+                this.uploadBeingSaved = this.uploaded.upload;
 
                 try {
                     const payload = { upload: this.uploaded.upload, notes: this.form.notes };
@@ -123,7 +135,7 @@ export function registerDeveloperPage(Alpine) {
 
                     const { data } = await axios.post('/developer/app/releases', payload);
                     window.toast(data.message, 'success');
-                    this.startAgain();
+                    this.startAgain(payload.upload);
                     this.refreshInPlace();  // not awaited: the button is free again the moment the request is over
                 } catch (error) {
                     if (error.response?.status === 422) {
@@ -133,15 +145,16 @@ export function registerDeveloperPage(Alpine) {
                     }
                 } finally {
                     this.saving = false;
+                    this.uploadBeingSaved = null;
                 }
             },
 
-            /** The form as it opened: no file, no version, no notes. */
-            startAgain() {
+            /** The form as it opened: no file, no version, no notes. `published` is the upload the version was made from: the
+             *  server has used it and forgotten it, so the box lets its row go without giving it up (a DELETE answered 404). */
+            startAgain(published = null) {
                 this.form = blankForm();
                 this.clearFile();
-                const box = this.$refs.appUpload?.querySelector('[dusk="tv-app-dropzone"]');
-                if (box) window.Alpine.$data(box).clear();
+                emptyTheBox('[dusk="tv-app-dropzone"]', published);
             },
         },
     })());
