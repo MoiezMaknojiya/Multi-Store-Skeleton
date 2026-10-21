@@ -42,6 +42,10 @@ Route::get('/', function () {
 // -----------------------------------------------------------------------
 Route::view('/player', 'player.index')->name('player');
 
+// The privacy policy (owner, 2026-10-21, for the Amazon Appstore, which asks for one on the app's page and inside the
+// app): open to everybody, signed in or not, and linked from the doors before the panel and the TV app's menu.
+Route::view('/privacy', 'legal.privacy')->name('privacy');
+
 // The icons every manifest names, drawn from the owner's logo by scripts/make-brand-icons.php: as they are, and one whose
 // drawing stays inside the central circle a launcher's mask keeps.
 $appIcons = [

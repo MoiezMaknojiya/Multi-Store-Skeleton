@@ -83,6 +83,7 @@ test('the pages a guest sees say how much each field takes', function () {
         '/login',
         '/register',
         '/forgot-password',
+        '/privacy',
         '/reset-password/a-token?email=someone@example.com',
         '/invitations/'.$token,
     ]);

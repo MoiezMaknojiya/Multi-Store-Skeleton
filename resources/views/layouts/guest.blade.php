@@ -34,6 +34,10 @@
                 @endif
 
                 {{ $slot }}
+
+                <p class="mt-10 text-center text-xs text-gray-500">
+                    <a href="{{ route('privacy') }}" class="touch-target inline-flex items-center underline underline-offset-2 hover:text-gray-700" dusk="privacy-link">Privacy Policy</a>
+                </p>
             </div>
         </main>
 

@@ -161,6 +161,7 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
                 '/login' => [],
                 '/register' => [],
                 '/forgot-password' => [],
+                '/privacy' => [],
                 '/reset-password/'.str_repeat('r', 64).'?email=someone%40example.com' => [],
                 '/invitations/'.$token => [],
             ]);

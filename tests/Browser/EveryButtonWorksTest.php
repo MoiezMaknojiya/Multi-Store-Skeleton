@@ -131,6 +131,7 @@ class EveryButtonWorksTest extends DuskTestCase
                 '/settings/organization',
                 '/settings/billing',
                 '/profile',
+                '/privacy',
             ]);
         });
     }

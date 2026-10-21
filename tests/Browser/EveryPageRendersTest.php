@@ -96,6 +96,7 @@ class EveryPageRendersTest extends DuskTestCase
                 '/settings/organization',
                 '/settings/billing',         // Settings → Billing (docs/BILLING-SPEC.md §3)
                 '/profile',
+                '/privacy',                  // the privacy policy, which a signed-in person may read too
             ]);
         });
     }

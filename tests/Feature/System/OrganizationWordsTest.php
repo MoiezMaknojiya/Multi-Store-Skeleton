@@ -85,7 +85,7 @@ test('the pages a guest sees say organization', function () {
     $owner = createOrganizationMember($organization);
     [, $token] = Invitation::open($organization, 'new.person@example.com', Role::owner(), $owner);
 
-    assertEveryPageSaysOrganization($this, ['/login', '/register', '/forgot-password', '/invitations/'.$token]);
+    assertEveryPageSaysOrganization($this, ['/login', '/register', '/forgot-password', '/privacy', '/invitations/'.$token]);
 });
 
 test('the pages above the organizations say organization', function () {

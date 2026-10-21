@@ -21,6 +21,7 @@ test('the doors in say where they are in the tab and name themselves with one h1
     'sign up' => ['/register', 'Create your account'],
     'forgot password' => ['/forgot-password', 'Forgot password'],
     'new password' => ['/reset-password/some-token?email=someone%40example.com', 'Choose a new password'],
+    'privacy policy' => ['/privacy', 'Privacy Policy'],
 ]);
 
 test('an account waiting for its email is told so in the tab too', function () {

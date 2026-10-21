@@ -88,4 +88,11 @@ return [
     'billing_contact_email' => env('SIGNAGE_BILLING_EMAIL', ''),
     'billing_contact_phone' => env('SIGNAGE_BILLING_PHONE', ''),
 
+    /**
+     * Where a person writes about their data, named by the privacy policy (/privacy; owner 2026-10-21, for the Amazon
+     * Appstore: the support address its listing gives customers). Set empty, the policy names the billing contact; with
+     * neither, its Contact section is left out.
+     */
+    'privacy_contact_email' => env('SIGNAGE_PRIVACY_EMAIL', 'thedisplaysolutions@gmail.com'),
+
 ];
