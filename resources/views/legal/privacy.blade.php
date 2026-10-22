@@ -149,7 +149,7 @@
     @if (filled($contact = config('signage.privacy_contact_email') ?: config('signage.billing_contact_email')))
         <x-legal.section id="contact" title="Contact us">
             <p>For a question about this policy or a request about your information, write to
-                <a href="mailto:{{ $contact }}" class="break-all text-blue-600 underline underline-offset-2 hover:decoration-2 dark:text-blue-400" dusk="privacy-contact">{{ $contact }}</a>.</p>
+                <a href="mailto:{{ $contact }}" class="break-words text-blue-600 underline underline-offset-2 hover:decoration-2 dark:text-blue-400" dusk="privacy-contact">{{ $contact }}</a>.</p>
         </x-legal.section>
     @endif
 </x-document-layout>
