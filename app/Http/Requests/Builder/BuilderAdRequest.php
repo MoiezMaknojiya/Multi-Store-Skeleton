@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Builder;
 
+use App\Models\AdCategory;
 use App\Models\BuilderAd;
 use App\Rules\VideoLength;
 use App\Services\AdAnimations;
@@ -244,6 +245,12 @@ class BuilderAdRequest extends FormRequest
             'organization_id' => $this->user()?->globalRole() !== null && ! $this->route('ad') instanceof BuilderAd
                 ? ['nullable', 'integer', 'min:1']
                 : ['exclude'],
+
+            // The categories the ad is in (Ad Builder → Categories, owner 2026-10-22): ids from the platform's one list. Left out,
+            // a save keeps the ad's as they are; an empty list takes it out of every one. One deleted while the editor was open
+            // is simply not kept (BuilderController::syncCategories), so it never stops a design from saving.
+            'categories' => ['bail', 'sometimes', 'array', 'list', 'max:'.AdCategory::MAX_PER_AD],
+            'categories.*' => ['bail', 'integer', 'min:1', 'distinct'],
         ];
     }
 
@@ -269,6 +276,12 @@ class BuilderAdRequest extends FormRequest
             // Create Ad's For list, as a request made by hand might bend it: a list, a word, or nought.
             'organization_id.integer' => 'Choose Platform or one organization from the For list.',
             'organization_id.min' => 'Choose Platform or one organization from the For list.',
+            'categories.array' => 'Choose the categories from the list.',
+            'categories.list' => 'Choose the categories from the list.',
+            'categories.max' => 'An ad may be in at most '.AdCategory::MAX_PER_AD.' categories.',
+            'categories.*.integer' => 'Choose the categories from the list.',
+            'categories.*.min' => 'Choose the categories from the list.',
+            'categories.*.distinct' => 'Choose each category once.',
         ];
     }
 

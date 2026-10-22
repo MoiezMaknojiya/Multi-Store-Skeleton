@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AdCategory;
 use App\Models\BuilderAd;
 use App\Models\Channel;
 use App\Models\Organization;
@@ -126,10 +127,12 @@ function wordsNotTitleCased(array $pages, callable $open): array
 test('every button above the organizations says its words in Title Case', function () {
     $admin = createSuperAdmin();
     Organization::factory()->create(['name' => 'Alpha Mart']);
+    // A category on the list, so Create Ad's and the editor's Categories are drawn too.
+    AdCategory::factory()->create(['name' => 'Menu']);
     $channel = Channel::factory()->create();
 
     $pages = ['/dashboard', '/users', '/organizations', '/permissions', '/roles', '/activity', '/developer', '/channels', "/channels/{$channel->id}",
-        '/campaigns', '/builder', '/builder/assets', '/builder/create?orientation=landscape', '/media', '/screens', '/profile'];
+        '/campaigns', '/builder', '/builder/categories', '/builder/assets', '/builder/create?orientation=landscape', '/media', '/screens', '/profile'];
 
     $wrong = wordsNotTitleCased($pages, fn (string $page) => $this->actingAs($admin)->get($page)->assertOk()->getContent());
 
@@ -138,6 +141,8 @@ test('every button above the organizations says its words in Title Case', functi
 
 test('every button inside an organization says its words in Title Case', function () {
     $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    // A category on the list, so Create Ad's and the editor's Categories are drawn too.
+    AdCategory::factory()->create(['name' => 'Menu']);
     $owner = createOrganizationUser($organization, [...Permission::ORGANIZATION, 'organization-view', 'organization-store', 'organization-destroy', 'organization-update',
         'channel-view', 'channel-store', 'channel-update', 'channel-destroy', 'activity-view'], 'Everything');
     $screen = Screen::factory()->create(['organization_id' => $organization->id]);

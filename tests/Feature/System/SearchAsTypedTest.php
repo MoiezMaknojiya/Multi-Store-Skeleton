@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\ActivityLog;
+use App\Models\AdCategory;
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\Campaign;
@@ -230,6 +231,13 @@ test('every search above the organizations finds what was typed', function (Clos
         }
 
         return foundBy($test, '/builder/assets/data?organization_id=platform', 'assets', 'title');
+    }],
+    'the Ad Builder’s Categories' => [function (TestCase $test): Closure {
+        foreach (namesToSearch() as $name) {
+            AdCategory::factory()->create(['name' => $name]);
+        }
+
+        return foundBy($test, '/builder/categories/data', 'categories', 'name');
     }],
     'Campaigns' => [function (TestCase $test): Closure {
         foreach (namesToSearch() as $name) {

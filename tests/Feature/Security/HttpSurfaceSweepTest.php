@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AdCategory;
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\Campaign;
@@ -72,6 +73,9 @@ function sweepFixtures(): array
     $channelAd = ChannelAd::factory()->create(['channel_id' => $channel->id]);
     $design = BuilderAd::factory()->withText()->create(['organization_id' => $organization->id]);
     $asset = BuilderAsset::factory()->create(['organization_id' => $organization->id]);
+    // One of the Ad Builder's categories (the platform's list), the design in it.
+    $category = AdCategory::factory()->create();
+    $design->categories()->attach($category->id);
     $campaign = Campaign::factory()->create();
     // A version of the TV app (Developer → TV App), its file never written: the sweep only asks nothing answers 500.
     $release = PlayerAppRelease::create([
@@ -111,6 +115,7 @@ function sweepFixtures(): array
             // An ad inside a channel, and a design in the Ad Builder.
             'ad' => ['channels' => $channelAd->id, 'builder' => $design->id],
             'asset' => $asset->id,
+            'category' => $category->id,
             'campaign' => $campaign->id,
             'release' => $release->id,
             'upload' => $upload->id,
@@ -211,7 +216,7 @@ function sweepCounts(): array
     return collect([
         'organizations', 'users', 'organization_user', 'roles', 'role_has_permissions', 'permissions', 'invitations',
         'screens', 'playlist_items', 'schedule_rules', 'media', 'channels', 'channel_ads', 'campaigns',
-        'builder_ads', 'builder_assets', 'builder_fonts', 'uploads',
+        'builder_ads', 'builder_assets', 'builder_fonts', 'uploads', 'ad_categories', 'ad_category_builder_ad',
     ])->mapWithKeys(fn (string $table) => [$table => DB::table($table)->count()])->all();
 }
 

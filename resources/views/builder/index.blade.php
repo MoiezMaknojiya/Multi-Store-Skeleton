@@ -4,7 +4,7 @@
     </x-slot>
 
     {{-- Above the organizations the page opens on the platform's own ads (owner, 2026-10-08). --}}
-    <div x-data="adsTable({{ Js::from(['owner' => $aboveTheOrganizations ? 'platform' : '', 'ownerIds' => array_map(fn (array $organization) => (string) $organization['id'], $organizations)]) }})" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <div x-data="adsTable({{ Js::from(['owner' => $aboveTheOrganizations ? 'platform' : '', 'ownerIds' => array_map(fn (array $organization) => (string) $organization['id'], $organizations), 'categoryIds' => array_map(fn (array $category) => (string) $category['id'], $categories)]) }})" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
         {{-- Create Ad, then the organization list (above the organizations; an organization sees its own only), the Status list and the
              search, on one line: the button first, as on every page (owner, 2026-09-30). --}}
@@ -42,6 +42,17 @@
                     <option value="draft">Drafts</option>
                 </select>
 
+                {{-- And by category (owner, 2026-10-22), the platform's one list: there only once it has one. --}}
+                @if ($categories !== [])
+                    <select x-model="filterCategory" @change="applyFilters()" class="form-select sm:w-44"
+                            dusk="ads-filter-category" aria-label="Category">
+                        <option value="">All Categories</option>
+                        @foreach ($categories as $category)
+                            <option value="{{ $category['id'] }}">{{ $category['name'] }}</option>
+                        @endforeach
+                    </select>
+                @endif
+
                 <x-crud.search-input placeholder="Search ads..." />
             </div>
         </div>
@@ -64,7 +75,7 @@
                     </div>
                 </template>
 
-                <template x-if="!loading && items.length === 0 && !loadFailed && (search || filterOrganization || filterStatus)">
+                <template x-if="!loading && items.length === 0 && !loadFailed && (search || filterOrganization || filterStatus || filterCategory)">
                     <div class="mx-auto max-w-md space-y-3 py-12 text-center" dusk="table-no-match">
                         {{-- Whose list is empty, in its own name: the platform is no organization. --}}
                         <p class="text-sm text-gray-700 dark:text-gray-200">
@@ -73,13 +84,14 @@
                         </p>
                         <div class="flex flex-wrap justify-center gap-2">
                             <button type="button" x-show="search" class="btn-row-neutral" @click="search = ''" dusk="table-clear-search">Clear Search</button>
-                            <button type="button" x-show="!search && filterStatus" class="btn-row-neutral" @click="filterStatus = ''; applyFilters()" dusk="table-clear-status">Show All Statuses</button>
-                            <button type="button" x-show="!search && !filterStatus" class="btn-row-neutral" @click="filterOrganization = ''; applyFilters()" dusk="table-clear-filters">Show All</button>
+                            <button type="button" x-show="!search && filterCategory" class="btn-row-neutral" @click="filterCategory = ''; applyFilters()" dusk="table-clear-category">Show All Categories</button>
+                            <button type="button" x-show="!search && !filterCategory && filterStatus" class="btn-row-neutral" @click="filterStatus = ''; applyFilters()" dusk="table-clear-status">Show All Statuses</button>
+                            <button type="button" x-show="!search && !filterCategory && !filterStatus" class="btn-row-neutral" @click="filterOrganization = ''; applyFilters()" dusk="table-clear-filters">Show All</button>
                         </div>
                     </div>
                 </template>
 
-                <template x-if="!loading && items.length === 0 && !loadFailed && !search && !filterOrganization && !filterStatus">
+                <template x-if="!loading && items.length === 0 && !loadFailed && !search && !filterOrganization && !filterStatus && !filterCategory">
                     <div class="mx-auto max-w-md py-12 text-center" dusk="ads-empty">
                         <p class="text-sm font-medium text-gray-700 dark:text-gray-200">No ads yet.</p>
                     </div>
@@ -166,6 +178,11 @@
                                                   changed: 'On the screens as last published — the newer changes are not published yet',
                                               }[item.status] ?? 'Not on any screen'"
                                               x-text="{ published: 'Published', changed: 'Changes not published' }[item.status] ?? 'Draft'"></span>
+
+                                        {{-- The categories it is in (owner, 2026-10-22). --}}
+                                        <template x-for="category in item.categories ?? []" :key="category.id">
+                                            <span class="badge-neutral" x-text="category.name" x-bind:dusk="'ad-category-' + item.id + '-' + category.id"></span>
+                                        </template>
                                     </div>
                                 </div>
 
@@ -241,6 +258,14 @@
                             </div>
                         @endif
 
+                        {{-- Which categories the new ad is in (owner, 2026-10-22: "For ki field k nechai aye aur portrait k uper aye aur
+                             multiple select ho sakte ho"): carried to the editor, or onto a Premium Template's copy. --}}
+                        @if ($categories !== [])
+                            <div class="mt-5">
+                                <x-builder.category-picker :categories="$categories" model="newAdCategories" id="new-ad-categories" />
+                            </div>
+                        @endif
+
                         <div class="mt-5">
                             @include('builder.partials.orientation-choice', ['asksHowToStart' => ! $aboveTheOrganizations])
                         </div>
@@ -252,7 +277,7 @@
                                x-text="newAdOrientation === 'portrait' ? 'Portrait · 1080 × 1920' : 'Landscape · 1920 × 1080'"></p>
 
                             <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                <a x-bind:href="'{{ route('builder.create') }}?orientation=' + newAdOrientation" @click="ignoreRepeatPress($event)" id="new-ad-own" dusk="new-ad-own"
+                                <a x-bind:href="'{{ route('builder.create') }}?orientation=' + newAdOrientation + newAdQuery()" @click="ignoreRepeatPress($event)" id="new-ad-own" dusk="new-ad-own"
                                    class="group rounded-lg border-2 border-gray-200 p-4 text-center transition hover:border-blue-500 hover:bg-blue-50 focus:outline-none focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-gray-700 dark:hover:border-blue-400 dark:hover:bg-gray-700/50">
                                     <x-icon name="plus" class="mx-auto h-8 w-8 text-gray-500 group-hover:text-blue-600 dark:text-gray-400" />
                                     <span class="mt-3 block font-semibold text-gray-900 dark:text-gray-100">Create Your Own</span>
@@ -291,13 +316,25 @@
                                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400"
                                    x-text="(newAdOrientation === 'portrait' ? 'Portrait' : 'Landscape') + ': the one you use becomes your own ad, with its pictures.'"></p>
                             </div>
-                            {{-- A search under way shows its spinner in the box: the tiles of the last answer stay until the new one. --}}
-                            <div class="relative w-full sm:w-64">
-                                <input type="search" x-model="templateSearch" @input.debounce.300ms="loadTemplates()" @keydown.enter.prevent="loadTemplates()"
-                                       placeholder="Search templates..." aria-label="Search templates" maxlength="255" autocomplete="off"
-                                       class="form-input pr-10" dusk="templates-search" />
-                                <x-spinner x-show="templatesState === 'loading' && templates.length > 0" x-cloak
-                                           class="absolute right-3 top-3 h-4 w-4 text-blue-600 dark:text-blue-400" />
+                            {{-- A search under way shows its spinner in the box: the tiles of the last answer stay until the new one. The
+                                 Category list beside it (owner, 2026-10-22) narrows the gallery to one category of the platform's list. --}}
+                            <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                                @if ($categories !== [])
+                                    <select x-model="templateCategory" @change="loadTemplates()" class="form-select sm:w-44"
+                                            aria-label="Template category" dusk="templates-category">
+                                        <option value="">All Categories</option>
+                                        @foreach ($categories as $category)
+                                            <option value="{{ $category['id'] }}">{{ $category['name'] }}</option>
+                                        @endforeach
+                                    </select>
+                                @endif
+                                <div class="relative w-full sm:w-64">
+                                    <input type="search" x-model="templateSearch" @input.debounce.300ms="loadTemplates()" @keydown.enter.prevent="loadTemplates()"
+                                           placeholder="Search templates..." aria-label="Search templates" maxlength="255" autocomplete="off"
+                                           class="form-input pr-10" dusk="templates-search" />
+                                    <x-spinner x-show="templatesState === 'loading' && templates.length > 0" x-cloak
+                                               class="absolute right-3 top-3 h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                </div>
                             </div>
                         </div>
 
@@ -344,7 +381,11 @@
                                     </p>
                                     <button type="button" x-show="templateSearch" class="btn-row-neutral" @click="templateSearch = ''; loadTemplates()">Clear Search</button>
                                     <p class="text-sm text-gray-700 dark:text-gray-200" x-show="!templateSearch"
-                                       x-text="'No premium templates for ' + newAdOrientation + ' screens yet.'"></p>
+                                       x-text="templateCategory
+                                           ? 'No premium templates in ' + templateCategoryName() + ' for ' + newAdOrientation + ' screens yet.'
+                                           : 'No premium templates for ' + newAdOrientation + ' screens yet.'"></p>
+                                    <button type="button" x-show="!templateSearch && templateCategory" class="btn-row-neutral"
+                                            @click="templateCategory = ''; loadTemplates()" dusk="templates-clear-category">Show All Categories</button>
                                 </div>
                             </template>
 
@@ -376,6 +417,11 @@
                                         </div>
                                         <div class="space-y-2 p-3">
                                             <p class="line-clamp-2 break-words text-sm font-medium text-gray-800 dark:text-white" x-text="template.name"></p>
+                                            <div x-show="template.categories?.length" class="flex flex-wrap gap-1">
+                                                <template x-for="name in template.categories ?? []" :key="name">
+                                                    <span class="badge-neutral" x-text="name"></span>
+                                                </template>
+                                            </div>
                                             <button type="button" class="btn-primary w-full justify-center" @click="useTemplate(template, $event)"
                                                     x-show="!templatesLocked"
                                                     x-bind:disabled="usingTemplateId !== null"

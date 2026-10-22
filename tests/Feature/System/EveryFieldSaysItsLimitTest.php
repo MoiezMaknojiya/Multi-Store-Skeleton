@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AdCategory;
 use App\Models\Channel;
 use App\Models\Invitation;
 use App\Models\Organization;
@@ -91,18 +92,22 @@ test('the pages a guest sees say how much each field takes', function () {
 
 test('the pages above the organizations say how much each field takes', function () {
     Organization::factory()->create(['name' => 'Alpha Mart']);
+    // A category on the list, so Create Ad's and the editor's Categories are drawn too.
+    AdCategory::factory()->create(['name' => 'Menu']);
     $channel = Channel::factory()->create(['name' => 'GAMA Wholesale']);
 
     $this->actingAs(createSuperAdmin());
 
     assertEveryFieldSaysItsLimit($this, [
         '/dashboard', '/users', '/organizations', '/permissions', '/roles', '/activity', '/developer', '/channels', '/channels/'.$channel->id,
-        '/campaigns', '/media', '/builder', '/builder/assets', '/builder/create?orientation=portrait', '/profile',
+        '/campaigns', '/media', '/builder', '/builder/categories', '/builder/assets', '/builder/create?orientation=portrait', '/profile',
     ]);
 });
 
 test('the pages inside an organization say how much each field takes', function () {
     $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
+    // A category on the list, so Create Ad's and the editor's Categories are drawn too.
+    AdCategory::factory()->create(['name' => 'Menu']);
     // A role of this organization holding everything an organization's role may hold, so no page or form is hidden for want of one.
     $owner = createOrganizationUser($organization, [...Permission::ORGANIZATION, ...Permission::ORGANIZATION_SCOPED], 'Everything');
     $screen = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Deli TV']);

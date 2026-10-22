@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AdCategory;
 use App\Models\Channel;
 use App\Models\Invitation;
 use App\Models\Organization;
@@ -90,18 +91,22 @@ test('the pages a guest sees say organization', function () {
 
 test('the pages above the organizations say organization', function () {
     Organization::factory()->create(['name' => 'Alpha Clinic']);
+    // A category on the list, so Create Ad's and the editor's Categories are drawn too.
+    AdCategory::factory()->create(['name' => 'Menu']);
     $channel = Channel::factory()->create(['name' => 'GAMA Wholesale']);
 
     $this->actingAs(createSuperAdmin());
 
     assertEveryPageSaysOrganization($this, [
         '/dashboard', '/users', '/organizations', '/permissions', '/roles', '/activity', '/developer', '/channels', '/channels/'.$channel->id,
-        '/campaigns', '/media', '/builder', '/builder/assets', '/builder/create?orientation=portrait', '/profile',
+        '/campaigns', '/media', '/builder', '/builder/categories', '/builder/assets', '/builder/create?orientation=portrait', '/profile',
     ]);
 });
 
 test('the pages inside an organization say organization', function () {
     $organization = Organization::factory()->create(['name' => 'Alpha Clinic']);
+    // A category on the list, so Create Ad's and the editor's Categories are drawn too.
+    AdCategory::factory()->create(['name' => 'Menu']);
     // A role holding everything an organization's role may hold, so no page, card or button is hidden for want of one.
     $member = createOrganizationUser($organization, [...Permission::ORGANIZATION, ...Permission::ORGANIZATION_SCOPED], 'Everything');
     $screen = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Lobby TV']);

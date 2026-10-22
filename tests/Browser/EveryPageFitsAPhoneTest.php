@@ -3,6 +3,7 @@
 namespace Tests\Browser;
 
 use App\Models\ActivityLog;
+use App\Models\AdCategory;
 use App\Models\BuilderAd;
 use App\Models\Campaign;
 use App\Models\Channel;
@@ -57,6 +58,9 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
             'role_id' => Role::superAdminId(),
         ]);
         Campaign::factory()->create(['name' => 'Summer Cola Refresh Campaign', 'advertiser_name' => 'Coca-Cola Bottling Company of Texas']);
+        // Categories with long names, so the list, Create Ad's picker and its chips are measured at their widest.
+        AdCategory::factory()->create(['name' => 'Breakfast Lunch and Dinner Menus']);
+        AdCategory::factory()->create(['name' => 'Higher Education and Admissions']);
 
         $this->browse(function (Browser $browser) use ($admin, $screen, $platformChannel) {
             $this->freshSession($browser);
@@ -74,6 +78,7 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
                 '/channels/'.$platformChannel->id => ['channel-ad-modal'],
                 '/campaigns' => ['campaign-form-modal'],
                 '/builder' => ['new-ad-orientation', 'confirm-ad-deletion'],
+                '/builder/categories' => ['category-form-modal', 'confirm-category-deletion'],
                 '/builder/assets' => ['confirm-asset-deletion'],
                 '/media' => ['media-form-modal'],
                 '/screens' => ['screen-pair-modal', 'screen-form-modal'],
@@ -94,6 +99,8 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
             'channel-view', 'channel-store', 'channel-update', 'channel-destroy', 'activity-view',
         ], 'rukhsana.siddiqui.manager@example.com', 'Organization Manager with every permission');
         $ownChannel = Channel::factory()->create(['organization_id' => $alpha->id, 'name' => 'Alpha Weekend Deals and Offers']);
+        AdCategory::factory()->create(['name' => 'Breakfast Lunch and Dinner Menus']);
+        AdCategory::factory()->create(['name' => 'Higher Education and Admissions']);
         // An invitation from another organization with a long name waits above the dashboard, with its Decline question.
         $invitation = $this->aLongInvitationFor($member);
 

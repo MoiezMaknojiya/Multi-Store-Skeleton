@@ -35,6 +35,8 @@ class Permission extends Model
         'activity-view', 'activity-destroy',
         // The Premium Templates and Platform Channels switches (docs/BILLING-SPEC.md): never an organization's own to turn.
         'billing-update',
+        // The Ad Builder's categories (owner, 2026-10-22): one list, the platform's, which every ad may be put in.
+        'ad-category-view', 'ad-category-store', 'ad-category-update', 'ad-category-destroy',
     ];
 
     /**
@@ -97,6 +99,10 @@ class Permission extends Model
         'ad-destroy' => 'Delete Ads',
         'billing-view' => 'View Billing',
         'billing-update' => 'Change Billing',
+        'ad-category-view' => 'View Ad Categories',
+        'ad-category-store' => 'Create Ad Categories',
+        'ad-category-update' => 'Update Ad Categories',
+        'ad-category-destroy' => 'Delete Ad Categories',
         'user-view' => 'View Accounts',
         'user-destroy' => 'Delete Accounts',
         'organization-view' => 'View Organizations',

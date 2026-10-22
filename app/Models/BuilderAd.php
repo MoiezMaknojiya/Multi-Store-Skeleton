@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Encryption\MissingAppKeyException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -201,6 +202,15 @@ class BuilderAd extends Model
     public function updater(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    /**
+     * The categories the ad is in (owner, 2026-10-22), the platform's one list. They describe the ad and are no part of its design:
+     * putting it in one is never an unpublished change, and a Copy or a Premium Template's copy keeps them.
+     */
+    public function categories(): BelongsToMany
+    {
+        return $this->belongsToMany(AdCategory::class, 'ad_category_builder_ad')->orderBy('name');
     }
 
     /**

@@ -95,6 +95,9 @@ export function registerAdEditor(Alpine) {
             choosesOrganization: config.choosesOrganization ?? false,
             /* Made for every organization: its shelf is the files shared with every organization alone. */
             shared: config.shared ?? false,
+            /* The categories the ad is in (owner, 2026-10-22): ids of the platform's one list, saved with the design but no part of
+             * it — the screens and Publish never hear of them (BuilderController::syncCategories). */
+            categoryIds: config.categoryIds ?? [],
 
             /* What this person may do here, as the routes decide it: a saved ad is changed and published
              * with Update Ads, and a font is fetched by whoever may create or change an ad. The page asks
@@ -458,6 +461,12 @@ export function registerAdEditor(Alpine) {
                 this.dirty = true;
                 this.revision += 1;
                 this.posterStale = true;
+            },
+
+            /** A category ticked or taken off: saved with the next save, the poster and the history untouched. */
+            categoriesChanged() {
+                this.dirty = true;
+                this.revision += 1;
             },
 
             /* ── Selection ─────────────────────────────────────────────── */
@@ -1435,7 +1444,7 @@ export function registerAdEditor(Alpine) {
 
                 try {
                     const sentRevision = this.revision;
-                    const payload = { name: this.name, document: clone(this.doc) };
+                    const payload = { name: this.name, document: clone(this.doc), categories: [...this.categoryIds] };
 
                     if (this.organizationId) payload.organization_id = this.organizationId;
                     // Said once, with the first save: a saved ad's orientation is its own (§12).

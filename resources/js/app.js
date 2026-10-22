@@ -39,9 +39,10 @@ import { registerCampaignsTable }    from './tables/campaigns-table.js';
 import { registerChannelsTable }     from './tables/channels-table.js';
 import { registerChannelAds }        from './pages/channel-ads.js';
 
-/* The Ad Builder's two listings. The editor itself is loaded on its own page only (below). */
+/* The Ad Builder's three listings. The editor itself is loaded on its own page only (below). */
 import { registerAdsTable }           from './tables/ads-table.js';
 import { registerBuilderAssetsTable } from './tables/builder-assets-table.js';
+import { registerAdCategoriesTable }  from './tables/ad-categories-table.js';
 
 window.Alpine = Alpine;
 
@@ -140,6 +141,7 @@ registerChannelAds(Alpine);
 /* Register the Ad Builder's listings */
 registerAdsTable(Alpine);
 registerBuilderAssetsTable(Alpine);
+registerAdCategoriesTable(Alpine);
 
 /**
  * The Ad Builder's editor is some two fifths of the panel's script, and only its own page uses it (owner, 2026-09-30:

@@ -119,6 +119,8 @@
              'organizationId' => $platformUser ? ($ad !== null ? $ad->organization_id : $newAdOrganizationId) : null,
              'choosesOrganization' => $platformUser && ! $ad,
              'shared' => $sharedAd,
+             // The categories the ad is in, as ids of the platform's one list (the Stage panel's Categories).
+             'categoryIds' => $categoryIds,
              // Where the ad stands with the screens (docs/AD-BUILDER-SPEC.md §9): on them or not, whether they
              // show its latest changes, and whether there is a published version to go back to.
              'published' => (bool) $ad?->isPublished(),

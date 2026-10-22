@@ -29,8 +29,8 @@ test('above the organizations Create Ad asks For with the shape: Platform first,
         ->and($html)->toContain('<option value="'.$this->alpha->id.'">Alpha Mart</option>')
         ->and($html)->toContain('<option value="'.$this->beta->id.'">Beta Deli</option>')
         // The two shapes carry the choice into the editor's address.
-        ->and($html)->toContain("x-bind:href=\"'".route('builder.create', ['orientation' => 'landscape'])."' + newAdOwnerQuery()\"")
-        ->and($html)->toContain("x-bind:href=\"'".route('builder.create', ['orientation' => 'portrait'])."' + newAdOwnerQuery()\"");
+        ->and($html)->toContain("x-bind:href=\"'".route('builder.create', ['orientation' => 'landscape'])."' + newAdQuery()\"")
+        ->and($html)->toContain("x-bind:href=\"'".route('builder.create', ['orientation' => 'portrait'])."' + newAdQuery()\"");
 });
 
 test('inside an organization Create Ad never asks whose: the ad is the organization\'s own', function () {

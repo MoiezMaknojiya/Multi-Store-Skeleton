@@ -82,14 +82,18 @@
 
         {{-- The Ad Builder: design a 1920×1080 advert, publish it, and it joins the media a playlist plays. Its row
              opens the ads; Assets — the pictures and videos the ads are made of — is its sub-link, as Roles is under
-             Users (owner, 2026-09-30: no tabs inside the pages). Both pages ask for View Ads, as their routes do. --}}
+             Users (owner, 2026-09-30: no tabs inside the pages). Both pages ask for View Ads, as their routes do.
+             Categories, above Assets, is the platform's one list (owner, 2026-10-22): its routes' lock and permission. --}}
         @can('ad-view')
         <x-sidebar.nav-group
             href="{{ route('builder.index') }}"
             routeMatch="builder.index"
-            :expand="['builder.assets']"
+            :expand="['builder.assets', 'builder.categories']"
             label="Ad Builder"
             icon="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z">
+            @if ($__onPlatform && auth()->user()->can('ad-category-view'))
+            <x-sidebar.nav-subitem href="{{ route('builder.categories') }}" routeMatch="builder.categories" label="Categories" />
+            @endif
             <x-sidebar.nav-subitem href="{{ route('builder.assets') }}" routeMatch="builder.assets" label="Assets" />
         </x-sidebar.nav-group>
         @endcan

@@ -1301,3 +1301,35 @@ The owner, 2026-10-22: "Ad builder mein jese Platform aur organization ka select
   says so in the words of both lists ("Alpha Mart has no drafts.", "No published ads.") with **Show All Statuses**.
 - **Tests.** `AdStatusFilterTest` (both tiers, both scopes, a changed and an unpublished ad, bent values) and
   `AdStatusFilterFlowTest` (a real double press on the list, the address, a reload, the empty list's words and button).
+
+## Addendum 2026-10-22, later — categories
+
+The owner, 2026-10-22: "ad builder k ander assets ha ushi k uper ek category ya tag ka tab ho aur us mein mai tags ya category
+banao jese menu, education, beer ... create ad karte ha toh For ki field k nechai aye aur portrait k uper aye aur multiple select
+ho sakte ho. aur uski filter bhi uper bana dena jaha search ha." Asked from a mockup: one list, the super admin's; chosen in Create
+Ad and in the editor; filtered on the Ads page and in the Premium Templates.
+
+- **One list, the platform's** (`ad_categories`: a name of at most `AdCategory::MAX_NAME` = 40, unique). Ad Builder → **Categories**,
+  above Assets in the sidebar (`builder.categories`, `AdCategoryController`): made, renamed and deleted above the organizations
+  alone — `can:global-tier` on the routes and four platform permissions, View, Create, Update and Delete Ad Categories
+  (`ad-category-*`, in `Permission::PLATFORM` and never `ORGANIZATION_SCOPED`, granted to Super-Admin by migration
+  `2026_10_22_100200`). A name is new to the list with accents, case, spacing and punctuation folded away
+  (`AdCategory::folded`: "menu ", "MENU" and "Mênu" are Menu), and one with no letter or number is refused. Deleting one takes it
+  off every ad and nothing else, so it is one confirmation away. Each is logged (`ad_category.created/updated/deleted`).
+- **Which categories an ad is in** (`ad_category_builder_ad`, both keys cascading): at most `AdCategory::MAX_PER_AD` = 10, the
+  platform's ads and every organization's alike. They describe an ad and are no part of its design: never in its document, never
+  an unpublished change, never in the undo history, and the screens never hear of them. Whoever may save the ad chooses them.
+- **Create Ad** asks them under For and above the shapes (`<x-builder.category-picker>`: a button with the count, the list of
+  tick boxes drawn over what is below it, the chosen ones as chips a press takes off; Escape shuts the list onto its button and
+  goes no further). The editor's address carries them (`categories=1,4`, `BuilderController::categoriesAsked`: the ones still on
+  the list, ten at most), a Premium Template's copy takes the template's and the ones ticked (`PremiumTemplateController::use`),
+  and a Copy keeps the original's.
+- **The editor** shows them in the Stage panel under Length. A change marks the design unsaved without making its poster stale,
+  and every save sends `categories` (`BuilderAdRequest`: a list of ids; left out, the ad's stay as they are; one deleted while the
+  editor was open is simply not kept, `BuilderController::syncCategories`), logged `ad.categorized` when they changed.
+- **The filters.** The Ads page's **Category** list after Status (`?category=`, kept in the address while the list has it; a card
+  names its categories), and the Premium Templates gallery's beside its search (each tile names its categories). Neither is shown
+  while the list is empty, nor is Create Ad's or the editor's picker.
+- **Tests.** `AdCategoriesTest`, `AdCategoryAttackTest` and `AdCategoriesFlowTest` (a real double press on the picker's button —
+  in the flow it once made the dialog taller and the second press shut it —, Escape inside a dialog and in the editor, the
+  address, the filters), and the page lists of the shared suites.

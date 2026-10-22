@@ -3,6 +3,7 @@
 namespace Tests\Browser;
 
 use App\Models\ActivityLog;
+use App\Models\AdCategory;
 use App\Models\BuilderAd;
 use App\Models\Campaign;
 use App\Models\Channel;
@@ -67,6 +68,9 @@ class EveryButtonWorksTest extends DuskTestCase
         PlayerAppRelease::create(['version_code' => 1, 'version_name' => '1.0', 'path' => 'player-app/TheDisplaySolution-1.0-1.apk', 'size' => 9_000_000, 'sha256' => str_repeat('a', 64), 'notes' => 'The first release.']);
         [$alpha, $screen, $platformChannel] = $this->aOrganization();
         Organization::factory()->create(['name' => 'Orphan Organization']);
+        // The Ad Builder's categories (owner, 2026-10-22), so Categories lists rows and Create Ad and the editor draw their pickers.
+        AdCategory::factory()->create(['name' => 'Menu']);
+        AdCategory::factory()->create(['name' => 'Beer']);
         Campaign::factory()->create(['name' => 'Summer Cola Campaign']);
         Invitation::factory()->forPlatform()->create(['email' => 'new.colleague@example.com', 'role_id' => Role::superAdminId()]);
         $this->giveEveryRowItsPictures();
@@ -88,6 +92,7 @@ class EveryButtonWorksTest extends DuskTestCase
                 '/campaigns',
                 '/media',
                 '/builder',
+                '/builder/categories',
                 '/builder/assets',
                 '/screens',
                 '/screens/'.$screen->id,
@@ -102,6 +107,9 @@ class EveryButtonWorksTest extends DuskTestCase
         [$alpha, $screen] = $this->aOrganization();
         $ownChannel = Channel::factory()->create(['organization_id' => $alpha->id, 'name' => 'Alpha Weekend Deals']);
         $ad = BuilderAd::where('organization_id', $alpha->id)->firstOrFail();
+        // The Ad Builder's categories (owner, 2026-10-22), so Categories lists rows and Create Ad and the editor draw their pickers.
+        AdCategory::factory()->create(['name' => 'Menu']);
+        AdCategory::factory()->create(['name' => 'Beer']);
 
         // Everything an organization's role may hold, so no button is missing for want of a permission.
         $member = $this->organizationMember($alpha, [

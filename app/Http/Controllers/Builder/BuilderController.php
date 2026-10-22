@@ -7,6 +7,7 @@ use App\Http\Controllers\Concerns\HandlesCrudData;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Builder\BuilderAdRequest;
 use App\Models\ActivityLog;
+use App\Models\AdCategory;
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\Media;
@@ -56,6 +57,8 @@ class BuilderController extends Controller
         return view('builder.index', [
             'organizations' => $this->organizationsToFilterBy(),
             'aboveTheOrganizations' => $this->aboveTheOrganizations(),
+            // The platform's one list (Ad Builder → Categories): Create Ad's Categories and the Category filter.
+            'categories' => AdCategory::forPickers(),
             // Said in the Premium Templates' lock and its unlock dialog (docs/BILLING-SPEC.md §6).
             'organizationName' => $this->aboveTheOrganizations() ? null : Organization::whereKey($this->standingOrganizationId())->value('name'),
         ]);
@@ -81,7 +84,12 @@ class BuilderController extends Controller
                 'draft' => $query->drafts(),
                 default => $query,
             })
-            ->with(['organization:id,name', 'updater:id,first_name,last_name', 'media:id,thumbnail_path'])
+            // And the Category list (owner, 2026-10-22): the ads in one category, none for an id that is no category, and every
+            // ad for anything that is no id at all, as the Status list does.
+            ->when(self::plainValue($request->input('category')), fn (Builder $query, string $category) => ctype_digit($category) && strlen($category) <= 18
+                ? $query->whereHas('categories', fn (Builder $query) => $query->whereKey((int) $category))
+                : $query)
+            ->with(['organization:id,name', 'updater:id,first_name,last_name', 'media:id,thumbnail_path', 'categories:id,name'])
             ->latest('updated_at');
 
         return $this->paginatedResponse(
@@ -150,6 +158,9 @@ class BuilderController extends Controller
             'assets' => $this->assetsForEditor(newFor: $organization?->id),
             'newAdOrganizationId' => $organization?->id,
             'ownerLabel' => $this->aboveTheOrganizations() ? ($organization?->name ?? 'Platform') : null,
+            'categories' => AdCategory::forPickers(),
+            // Those ticked in Create Ad beside the shape (`categories=1,4`): the ones still on the list, the first ten.
+            'categoryIds' => $this->categoriesAsked(self::plainValue($request->query('categories'))),
         ]);
     }
 
@@ -167,6 +178,8 @@ class BuilderController extends Controller
             'document' => $ad->document,
             'assets' => $this->assetsForEditor($ad),
             'ownerLabel' => $this->ownerLabel($ad),
+            'categories' => AdCategory::forPickers(),
+            'categoryIds' => $ad->categories()->pluck('ad_categories.id')->all(),
         ]);
     }
 
@@ -186,6 +199,7 @@ class BuilderController extends Controller
             'updated_by' => auth()->id(),
         ]);
 
+        $this->syncCategories($ad, $validated);
         $this->savePoster($ad, $request->input('thumbnail'));
 
         ActivityLog::record('ad.created', $ad, $ad->isShared()
@@ -223,6 +237,11 @@ class BuilderController extends Controller
             ActivityLog::record('ad.updated', $ad, "Updated ad {$ad->name}", organizationId: $this->logOrganizationOf($ad));
         }
 
+        // Which categories it is in is no change to the design: the screens and the Publish button never hear of it.
+        if ($this->syncCategories($ad, $validated)) {
+            ActivityLog::record('ad.categorized', $ad, $this->categoriesInWords($ad), organizationId: $this->logOrganizationOf($ad));
+        }
+
         $this->savePoster($ad, $request->input('thumbnail'));
 
         return response()->json([
@@ -254,6 +273,7 @@ class BuilderController extends Controller
             'created_by' => auth()->id(),
             'updated_by' => auth()->id(),
         ]);
+        $copy->categories()->sync($ad->categories()->pluck('ad_categories.id')->all());
 
         // The poster is the design's picture, so the copy starts with it — as a file of its own. Sharing the
         // original's file would let deleting the original take the copy's picture with it. An organization with no room
@@ -616,8 +636,52 @@ class BuilderController extends Controller
             'has_published_version' => $ad->hasPublishedVersion(),
             // Made for every organization, by the platform (owner, 2026-10-01)?
             'shared' => $ad->isShared(),
+            'category_ids' => $ad->categories()->pluck('ad_categories.id')->all(),
             'updated_at' => $ad->updated_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * Puts the ad in the categories a save names — those still on the list: one deleted while the editor was open is simply
+     * not kept, never a reason to refuse the design — and says whether that changed anything. A save that names none (no
+     * `categories` key) leaves the ad's as they are.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function syncCategories(BuilderAd $ad, array $validated): bool
+    {
+        if (! array_key_exists('categories', $validated)) {
+            return false;
+        }
+
+        $changes = $ad->categories()->sync(AdCategory::whereKey($validated['categories'])->pluck('id')->all());
+
+        return $changes['attached'] !== [] || $changes['detached'] !== [];
+    }
+
+    /** "Put ad Lunch in the categories Beer and Menu", or "Took ad Lunch out of every category". */
+    private function categoriesInWords(BuilderAd $ad): string
+    {
+        $names = $ad->categories()->pluck('name');
+
+        return match ($names->count()) {
+            0 => "Took ad {$ad->name} out of every category",
+            1 => "Put ad {$ad->name} in the category {$names->first()}",
+            default => "Put ad {$ad->name} in the categories {$names->join(', ', ' and ')}",
+        };
+    }
+
+    /**
+     * The categories an address asks for (`1,4`): ids still on the list, each once, the first ten. Anything else is nothing.
+     *
+     * @return array<int, int>
+     */
+    private function categoriesAsked(string $asked): array
+    {
+        $ids = collect(explode(',', $asked))->filter(fn (string $id) => ctype_digit($id) && strlen($id) <= 18)
+            ->map(fn (string $id) => (int) $id)->unique()->take(AdCategory::MAX_PER_AD)->values()->all();
+
+        return $ids === [] ? [] : AdCategory::whereKey($ids)->orderBy('name')->pluck('id')->all();
     }
 
     /** "2 screens and 1 channel", "1 screen", or nothing at all. */

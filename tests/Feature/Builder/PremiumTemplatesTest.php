@@ -117,7 +117,7 @@ test('the gallery lists the platform\'s published templates of the shape chosen,
     $row = collect($this->getJson('/builder/templates?orientation=landscape')->json('templates'))->firstWhere('id', $newer->id);
     expect($row)->toMatchArray(['orientation' => 'landscape', 'preview_url' => route('builder.preview', $newer)])
         ->and($row['thumbnail_url'])->toContain("builder/platform/ads/{$newer->storage_key}/published.jpg")
-        ->and(array_keys($row))->toBe(['id', 'name', 'orientation', 'thumbnail_url', 'preview_url']);
+        ->and(array_keys($row))->toBe(['id', 'name', 'orientation', 'thumbnail_url', 'categories', 'preview_url']);
 
     // Searched by the name it was published under.
     expect(templatesListed($this, 'orientation=landscape&search=burger'))->toBe([$older->id => 'Burger menu'])

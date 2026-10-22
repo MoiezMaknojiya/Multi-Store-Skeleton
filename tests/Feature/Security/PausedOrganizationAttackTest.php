@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureOrganizationIsActive;
+use App\Models\AdCategory;
 use App\Models\BuilderAd;
 use App\Models\BuilderAsset;
 use App\Models\Campaign;
@@ -49,6 +50,8 @@ function pausedOrganizationRows(Organization $organization, $owner): array
         'channel-ad' => ChannelAd::factory()->create(['channel_id' => $channel->id])->id,
         'builder-ad' => BuilderAd::factory()->create(['organization_id' => $organization->id])->id,
         'asset' => BuilderAsset::factory()->create(['organization_id' => $organization->id])->id,
+        // One of the Ad Builder's categories: the platform's list, which an organization's person never reaches anyway.
+        'category' => AdCategory::factory()->create()->id,
         'role' => Role::create(['name' => 'Cashier', 'organization_id' => $organization->id])->id,
         'user' => $owner->id,
         'invitation' => Invitation::factory()->create(['organization_id' => $organization->id])->id,

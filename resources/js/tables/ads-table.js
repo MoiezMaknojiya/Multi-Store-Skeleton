@@ -18,11 +18,12 @@ export function registerAdsTable(Alpine) {
         dataKey: 'ads',
         entityLabel: 'ad',
         // Above the organizations the Owner list is kept in the address, so the editor's way back lands on it (?owner=).
-        // Only an Owner the list offers: an organization since deleted (an old link) is the list as it opens. The Status list
-        // is kept there for everybody (?status=).
+        // Only an Owner the list offers: an organization since deleted (an old link) is the list as it opens. The Status and
+        // Category lists are kept there for everybody (?status=, ?category=), a category only while the list has it.
         addressKeys: {
             ...(config.owner ? { owner: ['filterOrganization', ['platform', '', ...(config.ownerIds ?? [])]] } : {}),
             status: ['filterStatus', ['', 'published', 'draft']],
+            category: ['filterCategory', ['', ...(config.categoryIds ?? [])]],
         },
         deleteModalName: 'confirm-ad-deletion',
         deleteNeedsPassword: true,
@@ -35,6 +36,8 @@ export function registerAdsTable(Alpine) {
             filterOrganization: config.owner ?? '',
             /* The Status list (owner, 2026-10-22): every ad (empty), the ones on the screens ('published') or the drafts ('draft'). */
             filterStatus: '',
+            /* The Category list (owner, 2026-10-22): every ad (empty), or the ads in one category (its id). */
+            filterCategory: '',
 
             /* ── Create Ad ──────────────────────────────────────────────── */
             /* 'orientation', then inside an organization 'start' (Create Your Own or Premium Template). */
@@ -42,12 +45,16 @@ export function registerAdsTable(Alpine) {
             newAdOrientation: null,
             /* Above the organizations whose new ad it is (owner, 2026-10-09): 'platform', or an organization's id. */
             newAdOwner: 'platform',
+            /* The categories the new ad goes in (owner, 2026-10-22), ticked under For: ids of the platform's one list. */
+            newAdCategories: [],
             /* The Premium Templates of the shape chosen, and where their list stands: idle | loading | ready | failed. */
             templates: [],
             templatesState: 'idle',
             /* Premium Templates locked for the organization (docs/BILLING-SPEC.md §6): every template shown, Contact Us to Unlock on each. */
             templatesLocked: false,
             templateSearch: '',
+            /* The gallery's Category list: every template (empty), or the ones in one category (its id). */
+            templateCategory: '',
             templatesAsked: 0,
             /* The template being copied: every Use This Template waits for it, and the page leaves for the editor. */
             usingTemplateId: null,
@@ -74,6 +81,7 @@ export function registerAdsTable(Alpine) {
                 return {
                     ...(this.filterOrganization ? { organization_id: this.filterOrganization } : {}),
                     ...(this.filterStatus ? { status: this.filterStatus } : {}),
+                    ...(this.filterCategory ? { category: this.filterCategory } : {}),
                 };
             },
 
@@ -87,12 +95,26 @@ export function registerAdsTable(Alpine) {
                 return this.$root.querySelector('select[aria-label="Owner"]')?.selectedOptions?.[0]?.text?.trim() ?? '';
             },
 
-            /** Why the filtered list is empty, in the words of its two lists: "Alpha Mart has no drafts.", "No published ads." */
-            noMatchWords() {
-                const what = { published: 'published ads', draft: 'drafts' }[this.filterStatus] ?? 'ads yet';
-                const whose = this.filterOrganization === 'platform' ? 'The platform' : (this.filterOrganization ? this.ownerName() : '');
+            /** The category the Category list shows, by its name. */
+            categoryName() {
+                return this.$root.querySelector('[dusk="ads-filter-category"]')?.selectedOptions?.[0]?.text?.trim() ?? '';
+            },
 
-                return whose ? `${whose} has no ${what}.` : `No ${what}.`;
+            /** The category the gallery's Category list shows, by its name. */
+            templateCategoryName() {
+                return this.$root.querySelector('[dusk="templates-category"]')?.selectedOptions?.[0]?.text?.trim() ?? '';
+            },
+
+            /**
+             * Why the filtered list is empty, in the words of its lists: "Alpha Mart has no drafts.", "No published ads.",
+             * "The platform has no drafts in Menu."
+             */
+            noMatchWords() {
+                const what = { published: 'published ads', draft: 'drafts' }[this.filterStatus] ?? (this.filterCategory ? 'ads' : 'ads yet');
+                const whose = this.filterOrganization === 'platform' ? 'The platform' : (this.filterOrganization ? this.ownerName() : '');
+                const where = this.filterCategory ? ` in ${this.categoryName()}` : '';
+
+                return whose ? `${whose} has no ${what}${where}.` : `No ${what}${where}.`;
             },
 
             /** "Copied from a Premium Template · by Ali Raza": where the ad came from, and who changed it last. */
@@ -136,12 +158,14 @@ export function registerAdsTable(Alpine) {
                 this.newAdStep = 'orientation';
                 this.newAdOrientation = null;
                 this.newAdOwner = /^[1-9][0-9]*$/.test(String(this.filterOrganization)) ? String(this.filterOrganization) : 'platform';
+                this.newAdCategories = [];
                 this.$dispatch('open-modal', 'new-ad-orientation');
             },
 
-            /** The editor's address names the organization chosen; the platform's ad names none. */
-            newAdOwnerQuery() {
-                return this.newAdOwner !== 'platform' ? `&organization_id=${encodeURIComponent(this.newAdOwner)}` : '';
+            /** The editor's address names the organization chosen (the platform's ad names none) and the categories ticked. */
+            newAdQuery() {
+                return (this.newAdOwner !== 'platform' ? `&organization_id=${encodeURIComponent(this.newAdOwner)}` : '')
+                    + (this.newAdCategories.length > 0 ? `&categories=${this.newAdCategories.join(',')}` : '');
             },
 
             /** Inside an organization the shape leads to the second question: how to start — where the keyboard goes too. */
@@ -171,6 +195,7 @@ export function registerAdsTable(Alpine) {
                 this.galleryTicket++;
                 this.templates = [];
                 this.templateSearch = '';
+                this.templateCategory = '';
                 this.$dispatch('close-modal', 'new-ad-orientation');
                 this.$dispatch('open-modal', 'premium-templates');
                 this.loadTemplates();
@@ -192,7 +217,7 @@ export function registerAdsTable(Alpine) {
 
                 try {
                     const { data } = await axios.get('/builder/templates', {
-                        params: { orientation: this.newAdOrientation, search: this.templateSearch || undefined },
+                        params: { orientation: this.newAdOrientation, search: this.templateSearch || undefined, category: this.templateCategory || undefined },
                     });
                     if (asked !== this.templatesAsked) return;
                     this.templates = data.templates;
@@ -216,7 +241,7 @@ export function registerAdsTable(Alpine) {
                 const asked = formStillAsked(() => this.galleryTicket, event?.currentTarget?.closest?.('[dusk="premium-templates"]') ?? null);
 
                 try {
-                    const { data } = await axios.post(`/builder/templates/${template.id}`);
+                    const { data } = await axios.post(`/builder/templates/${template.id}`, { categories: this.newAdCategories });
                     if (asked()) {
                         window.location.assign(data.redirect);
 

@@ -3,6 +3,7 @@
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\Advertising\CampaignController;
 use App\Http\Controllers\Advertising\NetworkAdsController;
+use App\Http\Controllers\Builder\AdCategoryController;
 use App\Http\Controllers\Builder\BuilderAssetController;
 use App\Http\Controllers\Builder\BuilderController;
 use App\Http\Controllers\Builder\BuilderFontController;
@@ -384,6 +385,16 @@ Route::middleware(['auth', 'verified', 'organization.active', 'throttle:admin'])
         Route::post('/assets', [BuilderAssetController::class, 'store'])->middleware('can:ad-store')->name('builder.assets.store');
         // An organization's own file with Delete Ads; one shared with every organization only above the organizations (the controller asks)
         Route::delete('/assets/{asset}', [BuilderAssetController::class, 'destroy'])->whereNumber('asset')->middleware('can:ad-destroy')->name('builder.assets.destroy');
+
+        // Categories (owner, 2026-10-22): the platform's one list, which every ad may be put in — made, renamed and deleted above
+        // the organizations alone. Declared before /{ad} so the word is never read as an id
+        Route::prefix('categories')->middleware('can:global-tier')->group(function () {
+            Route::get('/', [AdCategoryController::class, 'index'])->middleware('can:ad-category-view')->name('builder.categories');
+            Route::get('/data', [AdCategoryController::class, 'data'])->middleware('can:ad-category-view')->name('builder.categories.data');
+            Route::post('/', [AdCategoryController::class, 'store'])->middleware('can:ad-category-store')->name('builder.categories.store');
+            Route::put('/{category}', [AdCategoryController::class, 'update'])->whereNumber('category')->middleware('can:ad-category-update')->name('builder.categories.update');
+            Route::delete('/{category}', [AdCategoryController::class, 'destroy'])->whereNumber('category')->middleware('can:ad-category-destroy')->name('builder.categories.destroy');
+        });
 
         // The fonts the editor may set text in. Installing one fetches it from Google ONCE and
         // keeps it here, so a television with no internet still shows the right typeface.

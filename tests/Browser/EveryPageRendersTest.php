@@ -2,6 +2,7 @@
 
 namespace Tests\Browser;
 
+use App\Models\AdCategory;
 use App\Models\Channel;
 use App\Models\Organization;
 use App\Models\Permission;
@@ -33,6 +34,9 @@ class EveryPageRendersTest extends DuskTestCase
         // A version of the TV app, so Developer draws its row (the file is never fetched here).
         PlayerAppRelease::create(['version_code' => 1, 'version_name' => '1.0', 'path' => 'player-app/TheDisplaySolution-1.0-1.apk', 'size' => 9_000_000, 'sha256' => str_repeat('a', 64), 'notes' => 'The first release.']);
         Organization::factory()->create(['name' => 'Alpha Mart']);
+        // The Ad Builder's categories (owner, 2026-10-22), so Categories lists rows and Create Ad and the editor draw their pickers.
+        AdCategory::factory()->create(['name' => 'Menu']);
+        AdCategory::factory()->create(['name' => 'Beer']);
         // One of the platform's own channels, so the page of the ads it carries has one to open.
         $channel = Channel::factory()->create(['name' => 'GAMA Wholesale']);
 
@@ -51,7 +55,8 @@ class EveryPageRendersTest extends DuskTestCase
                 '/channels',
                 '/channels/'.$channel->id,   // one channel's ads
                 '/campaigns',
-                '/builder',                  // the Ad Builder's two pages: the ads, whose New ad asks the shape…
+                '/builder',                  // the Ad Builder's pages: the ads, whose New ad asks the shape…
+                '/builder/categories',       // …the platform's categories…
                 '/builder/assets',           // …and the shelf…
                 '/builder/create?orientation=portrait',   // …then the editor, on an empty stage of that shape
                 '/profile',
@@ -72,6 +77,9 @@ class EveryPageRendersTest extends DuskTestCase
         ], 'owner@example.com', 'Everything');
 
         $screen = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Deli TV']);
+        // The Ad Builder's categories (owner, 2026-10-22), so Categories lists rows and Create Ad and the editor draw their pickers.
+        AdCategory::factory()->create(['name' => 'Menu']);
+        AdCategory::factory()->create(['name' => 'Beer']);
         // The organization's own channel: inside an organization only those are within reach.
         $channel = Channel::factory()->create(['organization_id' => $organization->id, 'name' => 'Alpha Promos']);
 

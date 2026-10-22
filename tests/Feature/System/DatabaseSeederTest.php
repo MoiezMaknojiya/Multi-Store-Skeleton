@@ -17,9 +17,13 @@ test('the catalogue lists cover every labelled permission exactly once', functio
 
     // What an organization's role may carry beyond its own permissions is a part of the platform list — all of it but
     // the accounts (an organization's people are its Members page), the yearly maintenance that drops every organization's
-    // history at once, and the billing switches (an organization never unlocks itself, docs/BILLING-SPEC.md).
+    // history at once, the billing switches (an organization never unlocks itself, docs/BILLING-SPEC.md) and the Ad Builder's
+    // categories (one list, the platform's: owner, 2026-10-22).
     expect(collect(Permission::ORGANIZATION_SCOPED)->diff(Permission::PLATFORM))->toBeEmpty()
-        ->and(collect(Permission::PLATFORM)->diff(Permission::ORGANIZATION_SCOPED)->values()->all())->toBe(['user-view', 'user-destroy', 'activity-destroy', 'billing-update']);
+        ->and(collect(Permission::PLATFORM)->diff(Permission::ORGANIZATION_SCOPED)->values()->all())->toBe([
+            'user-view', 'user-destroy', 'activity-destroy', 'billing-update',
+            'ad-category-view', 'ad-category-store', 'ad-category-update', 'ad-category-destroy',
+        ]);
 });
 
 test('the seeder adds the Super-Admin role, holding the whole catalogue, and its account — over what the migrations installed', function () {

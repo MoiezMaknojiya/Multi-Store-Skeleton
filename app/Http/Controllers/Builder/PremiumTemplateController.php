@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Builder;
 use App\Http\Controllers\Concerns\ResolvesCurrentOrganization;
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
+use App\Models\AdCategory;
 use App\Models\BuilderAd;
 use App\Models\Organization;
 use App\Services\TemplateCopier;
@@ -34,9 +35,13 @@ class PremiumTemplateController extends Controller
         $filters = $request->validate([
             'orientation' => ['bail', 'required', 'string', 'in:'.BuilderAd::LANDSCAPE.','.BuilderAd::PORTRAIT],
             'search' => ['nullable', 'string', 'max:255'],
+            // The gallery's Category list (owner, 2026-10-22): the templates in one category of the platform's list.
+            'category' => ['nullable', 'integer', 'min:1'],
         ], [
             'orientation.required' => 'Choose which way the screen is first.',
             'orientation.in' => 'Choose which way the screen is first.',
+            'category.integer' => 'Choose a category from the list.',
+            'category.min' => 'Choose a category from the list.',
         ]);
         $search = trim((string) ($filters['search'] ?? ''));
 
@@ -45,10 +50,11 @@ class PremiumTemplateController extends Controller
             ->when($search !== '', fn (Builder $query) => $query->where(fn (Builder $query) => $query
                 ->whereContains('published_name', $search)
                 ->orWhere(fn (Builder $query) => $query->whereNull('published_name')->whereContains('name', $search))))
+            ->when(isset($filters['category']), fn (Builder $query) => $query->whereHas('categories', fn (Builder $query) => $query->whereKey((int) $filters['category'])))
             // Everything the poster's address is made of: a published page's poster is drawn again in place on every publish,
             // so its address carries the page's version (`type`, `updated_at`) — without it a browser kept the old poster for
             // as long as the server lets it cache one, a week.
-            ->with('media:id,type,disk,thumbnail_path,updated_at')
+            ->with(['media:id,type,disk,thumbnail_path,updated_at', 'categories:id,name'])
             ->latest('published_at')
             ->limit(self::LISTED)
             ->get(['id', 'name', 'published_name', 'orientation', 'media_id', 'published_at']);
@@ -63,13 +69,17 @@ class PremiumTemplateController extends Controller
                 'name' => $template->published_name ?? $template->name,
                 'orientation' => $template->orientation,
                 'thumbnail_url' => $template->media?->thumbnail_url,
+                'categories' => $template->categories->pluck('name')->all(),
                 'preview_url' => route('builder.preview', $template),
             ])->all(),
         ]);
     }
 
-    /** Use This Template: the organization's own ad, opened in the editor. */
-    public function use(BuilderAd $ad, TemplateCopier $copier): JsonResponse
+    /**
+     * Use This Template: the organization's own ad, opened in the editor — in the template's categories and those ticked in
+     * Create Ad beside its shape (the ones still on the list, ten at most).
+     */
+    public function use(Request $request, BuilderAd $ad, TemplateCopier $copier): JsonResponse
     {
         $organization = $this->organization();
         $organizationId = $organization->id;
@@ -77,9 +87,22 @@ class PremiumTemplateController extends Controller
 
         abort_unless($organization->premium_templates_unlocked, 403,
             "Premium Templates are locked for {$organization->name}. Contact us to unlock them.");
+        $asked = $request->validate([
+            'categories' => ['bail', 'nullable', 'array', 'list', 'max:'.AdCategory::MAX_PER_AD],
+            'categories.*' => ['bail', 'integer', 'min:1', 'distinct'],
+        ], [
+            'categories.array' => 'Choose the categories from the list.',
+            'categories.list' => 'Choose the categories from the list.',
+            'categories.max' => 'An ad may be in at most '.AdCategory::MAX_PER_AD.' categories.',
+            'categories.*.integer' => 'Choose the categories from the list.',
+            'categories.*.min' => 'Choose the categories from the list.',
+            'categories.*.distinct' => 'Choose each category once.',
+        ])['categories'] ?? [];
         $name = $template->published_name ?? $template->name;
 
         $copy = $copier->copy($template, $organizationId, BuilderAd::nameForCopy($name, $organizationId, keepItIfFree: true), auth()->id());
+        $copy->categories()->sync(AdCategory::whereKey([...$template->categories()->pluck('ad_categories.id')->all(), ...$asked])
+            ->orderBy('name')->limit(AdCategory::MAX_PER_AD)->pluck('id')->all());
 
         ActivityLog::record('ad.copied', $copy, "Made ad {$copy->name} from the premium template {$name}");
 
