@@ -22,12 +22,6 @@
         </p>
     </div>
 
-    {{-- The categories it is in (owner, 2026-10-22), the platform's one list: no part of the design, so a change to them is saved
-         and never waits for Publish. --}}
-    @if ($categories !== [])
-        <x-builder.category-picker :categories="$categories" model="categoryIds" changed="categoriesChanged()" id="ad-categories" panel />
-    @endif
-
     <div>
         <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Background</h2>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">

@@ -79,26 +79,87 @@ class AdCategoriesFlowTest extends DuskTestCase
             $browser->waitUntilMissing('@new-ad-categories-list')->assertVisible('@new-ad-dialog');
             $browser->screenshot('categories-create-ad');
 
-            /* ── 3. Landscape opens the editor with them, and the Stage panel shows them ── */
+            /* ── 3. Landscape opens the editor with them, said by name on the box beside the ad's name ── */
             $browser->click('@new-ad-landscape')->waitFor('@ad-stage', 15);
             $this->waitForAlpine($browser);
             parse_str((string) parse_url($browser->driver->getCurrentURL(), PHP_URL_QUERY), $query);
             $asked = array_map('intval', explode(',', $query['categories'] ?? ''));
             sort($asked);
             $this->assertSame([$beer->id, $menu->id], $asked);
-            $browser->waitFor('@ad-categories-chip-'.$menu->id)->assertVisible('@ad-categories-chip-'.$beer->id)
-                ->assertMissing('@ad-categories-chip-'.$school->id);
+            $browser->waitForTextIn('@ad-categories', 'Beer, Menu');
+            $beside = $browser->script('const name = document.querySelector(`[dusk="ad-name"]`).getBoundingClientRect();'
+                .'const box = document.querySelector(`[dusk="ad-categories"]`).getBoundingClientRect();'
+                .'return [Math.round(box.left - name.right), Math.round(Math.abs(box.top - name.top))];')[0];
+            $this->assertTrue($beside[0] >= 0 && $beside[0] <= 16 && $beside[1] <= 2, 'The box stands right of the name: '.json_encode($beside));
 
-            // Changed in the editor: Education on, Beer off. Saved with the design.
-            $browser->click('@ad-categories')->waitFor('@ad-categories-list')->click('@ad-categories-option-'.$school->id);
-            // Escape shuts the list and nothing else of the editor.
+            // A double press opens it once, and its list stays open.
+            $this->presses($browser, $this->centreOf($browser, '[dusk="ad-categories"]'), 2);
+            $browser->pause(400)->assertVisible('@ad-categories-list')
+                ->assertChecked('@ad-categories-option-'.$beer->id)->assertNotChecked('@ad-categories-option-'.$school->id);
+
+            // Changed in the editor: Education on, Beer off. Escape shuts the list and nothing else of the editor.
+            $browser->click('@ad-categories-option-'.$school->id)->click('@ad-categories-option-'.$beer->id)
+                ->assertSeeIn('@ad-categories', 'Education, Menu');
             $this->key($browser, 'Escape');
-            $browser->waitUntilMissing('@ad-categories-list')->assertVisible('@stage-panel')
-                ->click('@ad-categories-chip-'.$beer->id)->waitUntilMissing('@ad-categories-chip-'.$beer->id)
-                ->click('@ad-save')->waitForText('Ad saved', 15);
+            $browser->waitUntilMissing('@ad-categories-list')->assertVisible('@ad-stage');
+            $this->assertSame('ad-categories', $browser->script('return document.activeElement?.getAttribute("dusk");')[0]);
+
+            // A press on the stage shuts it too.
+            $browser->click('@ad-categories')->waitFor('@ad-categories-list');
+            $this->presses($browser, $this->centreOf($browser, '[dusk="ad-stage"]'), 1);
+            $browser->waitUntilMissing('@ad-categories-list')->screenshot('categories-editor');
+
+            // Saved with the design.
+            $browser->click('@ad-save')->waitForText('Ad saved', 15);
+
+            // The bar holds everything at every laptop width the editor opens on: nothing of its left half under its buttons, the
+            // name never squeezed, the box whole from 1536 px and a tag button below that (which opens the same list).
+            $frame = (int) $browser->script('return window.outerWidth - window.innerWidth;')[0];
+            try {
+                foreach ([1024, 1280, 1366, 1440, 1536, 1920] as $width) {
+                    // The window's own frame added, so the page itself is that wide (the editor opens from 1024 px).
+                    $browser->resize($width + $frame, 800)->pause(300);
+                    $this->assertSame($width, (int) $browser->script('return window.innerWidth;')[0]);
+                    $bar = $browser->script(<<<'JS'
+                        const header = document.querySelector('[dusk="ad-name"]').closest('header');
+                        const [left, right] = [...header.children].filter((child) => child.tagName === 'DIV');
+                        const width = (dusk) => Math.round(document.querySelector(`[dusk="${dusk}"]`).getBoundingClientRect().width);
+                        return {
+                            overlap: Math.round(Math.max(...[...left.children].map((child) => child.getBoundingClientRect().right)) - right.getBoundingClientRect().left),
+                            publishInSight: document.querySelector('[dusk="ad-publish-menu"]').getBoundingClientRect().right <= window.innerWidth,
+                            name: width('ad-name'), box: width('ad-categories'), compact: width('ad-categories-compact'),
+                            orientation: width('ad-orientation'), owner: width('ad-owner'),
+                        };
+                    JS)[0];
+                    $this->assertLessThanOrEqual(0, $bar['overlap'], "The bar's left half runs under its buttons at {$width}px: ".json_encode($bar));
+                    $this->assertTrue($bar['publishInSight'], "Publish is pushed out at {$width}px.");
+                    $this->assertGreaterThanOrEqual(124, $bar['name'], "The name is squeezed at {$width}px: ".json_encode($bar));
+                    // Whose ad it is keeps a word at least (it had 25 px at 1024 before the box came; 46 now).
+                    $this->assertGreaterThanOrEqual(40, $bar['owner'], "Whose it is is squeezed at {$width}px: ".json_encode($bar));
+                    $this->assertGreaterThanOrEqual(60, $bar['orientation'], "The shape is squeezed at {$width}px: ".json_encode($bar));
+                    if ($width >= 1536) {
+                        $this->assertGreaterThanOrEqual(140, $bar['box'], "The box is squeezed at {$width}px: ".json_encode($bar));
+                        $this->assertSame(0, $bar['compact']);
+                    } else {
+                        $this->assertSame(0, $bar['box']);
+                        $this->assertGreaterThanOrEqual(36, $bar['compact']);
+                        $browser->assertAttribute('@ad-categories-compact', 'aria-label', 'Categories (2): Education, Menu')
+                            ->assertSeeIn('@ad-categories-compact', '2');
+                    }
+                    $browser->screenshot("categories-editor-{$width}");
+                }
+
+                // The tag button opens the same list, and Escape puts the keyboard back on it.
+                $browser->resize(1024 + $frame, 800)->pause(300)->click('@ad-categories-compact')->waitFor('@ad-categories-list')
+                    ->assertChecked('@ad-categories-option-'.$school->id);
+                $this->key($browser, 'Escape');
+                $browser->waitUntilMissing('@ad-categories-list');
+                $this->assertSame('ad-categories-compact', $browser->script('return document.activeElement?.getAttribute("dusk");')[0]);
+            } finally {
+                $browser->resize(1920, 1080);
+            }
             $ad = BuilderAd::where('name', 'Untitled ad')->sole();
             $this->assertSame([$school->id, $menu->id], $ad->categories()->pluck('ad_categories.id')->all());
-            $browser->screenshot('categories-editor');
             $this->assertNoConsoleErrors($browser);
 
             /* ── 4. The Ads page's Category list: Education holds the new ad alone, Beer none ── */
@@ -156,7 +217,7 @@ class AdCategoriesFlowTest extends DuskTestCase
             $this->waitForAlpine($browser);
             $copy = BuilderAd::where('organization_id', $alpha->id)->sole();
             $this->assertSame([$beer->id, $menu->id], $copy->categories()->pluck('ad_categories.id')->all());
-            $browser->waitFor('@ad-categories-chip-'.$menu->id)->assertVisible('@ad-categories-chip-'.$beer->id);
+            $browser->waitForTextIn('@ad-categories', 'Beer, Menu');
             $this->assertNoConsoleErrors($browser);
         });
     }

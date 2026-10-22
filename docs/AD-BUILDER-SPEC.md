@@ -1324,7 +1324,12 @@ Ad and in the editor; filtered on the Ads page and in the Premium Templates.
   goes no further). The editor's address carries them (`categories=1,4`, `BuilderController::categoriesAsked`: the ones still on
   the list, ten at most), a Premium Template's copy takes the template's and the ones ticked (`PremiumTemplateController::use`),
   and a Copy keeps the original's.
-- **The editor** shows them in the Stage panel under Length. A change marks the design unsaved without making its poster stale,
+- **The editor** shows them in its top bar beside the name (owner, the same evening: "jaha Ads ka naam dete ha wahi barabar mein
+  category ka box do"; they were in the Stage panel under Length before): from 1536 px a box with the ones chosen said by name on
+  it and whole in its tooltip; on a laptop, where the bar has to hold everything (measured: at 1280 px a box had 59 px left), a tag
+  button with how many, their names in its name and tooltip — the same list of tick boxes opening under either. To make room the
+  bar's left half stands closer together below 1280 px, the name is 128 px there, and the save status gives its width up first,
+  so whose the ad is keeps a word (46 px at 1024, where it had 25 before). A change marks the design unsaved without making its poster stale,
   and every save sends `categories` (`BuilderAdRequest`: a list of ids; left out, the ad's stay as they are; one deleted while the
   editor was open is simply not kept, `BuilderController::syncCategories`), logged `ad.categorized` when they changed.
 - **The filters.** The Ads page's **Category** list after Status (`?category=`, kept in the address while the list has it; a card

@@ -119,7 +119,7 @@
              'organizationId' => $platformUser ? ($ad !== null ? $ad->organization_id : $newAdOrganizationId) : null,
              'choosesOrganization' => $platformUser && ! $ad,
              'shared' => $sharedAd,
-             // The categories the ad is in, as ids of the platform's one list (the Stage panel's Categories).
+             // The categories the ad is in, as ids of the platform's one list (the Categories beside the name).
              'categoryIds' => $categoryIds,
              // Where the ad stands with the screens (docs/AD-BUILDER-SPEC.md §9): on them or not, whether they
              // show its latest changes, and whether there is a published version to go back to.
@@ -153,7 +153,9 @@
         <header class="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 dark:border-gray-700 dark:bg-gray-800">
             {{-- The page's one heading, for a screen reader: the bar shows the ad's name in its field. --}}
             <h1 class="sr-only" x-text="'Ad Builder: ' + name">Ad Builder</h1>
-            <div class="flex min-w-0 items-center gap-3">
+            {{-- Closer together below 1280 px, where the bar has to hold everything (measured 2026-10-22: the owner's badge
+                 had 25 px left at 1024). --}}
+            <div class="flex min-w-0 items-center gap-2 xl:gap-3">
                 {{-- The editor opens with Create Ads or Update Ads, the gallery with View Ads — so the way
                      out goes to the gallery only for somebody who may see it. --}}
                 @can('ad-view')
@@ -163,11 +165,19 @@
                 @endcan
 
                 {{-- The name is not part of the design, so renaming is not a step undo could take back: it
-                     only marks the ad unsaved. Narrower on a laptop, where the bar has to hold everything. --}}
+                     only marks the ad unsaved. Narrower on a laptop, where the bar has to hold everything — the
+                     categories beside it too (wider from 1536 px). --}}
                 <input type="text" x-model="name" @change="markChanged()" @input="nameError = ''" maxlength="120"
-                       class="form-input h-9 w-36 font-medium xl:w-52" dusk="ad-name" aria-label="Ad name"
+                       class="form-input h-9 w-32 font-medium xl:w-36 2xl:w-52" dusk="ad-name" aria-label="Ad name"
                        x-bind:class="nameError ? '!border-red-500' : ''" x-bind:title="nameError"
                        x-bind:aria-invalid="nameError ? 'true' : null" />
+
+                {{-- The categories it is in, beside its name (owner, 2026-10-22: "jaha Ads ka naam dete ha wahi barabar mein category ka
+                     box do"): the platform's one list, no part of the design, so a change to them is saved and never waits for
+                     Publish. --}}
+                @if ($categories !== [])
+                    <x-builder.category-picker :categories="$categories" model="categoryIds" changed="categoriesChanged()" id="ad-categories" variant="bar" />
+                @endif
 
                 {{-- The shape this ad is for, fixed when it was made (§12): said beside the name so nobody
                      designs a menu board for the wrong wall. --}}
@@ -185,9 +195,10 @@
                           dusk="ad-owner"><span class="truncate">{{ $ownerLabel }}</span></span>
                 @endif
 
-                {{-- Shrinks before anything else does: on a narrow bar each line is cut short, never drawn over
-                     the buttons, and the whole sentence is its tooltip. --}}
-                <div class="flex min-w-0 flex-col leading-tight">
+                {{-- Shrinks before anything else does (`shrink-[8]`: the owner's badge keeps its name while this has room to
+                     give): on a narrow bar each line is cut short, never drawn over the buttons, and the whole sentence is its
+                     tooltip. --}}
+                <div class="flex min-w-0 shrink-[8] flex-col leading-tight">
                     <span class="truncate text-xs" x-bind:class="dirty ? 'text-amber-700 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'"
                           x-text="saveStatus()" dusk="save-status"></span>
                     {{-- Where the ad stands with the screens — the industry's draft/publish model (docs/AD-BUILDER-SPEC.md
