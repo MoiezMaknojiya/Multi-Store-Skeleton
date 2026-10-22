@@ -1286,3 +1286,18 @@ name the folders by something random, the owner: "#1 han".
 - **Tests.** `AdFoldersNobodyCanGuessTest`, `AdFoldersMigrationTest` (both ways), `AdFolderGuessingAttackTest` (counting through
   the ids, a television looking beside its page, a key posted by hand, what the release before wrote during a deploy) and
   `AdDeleteUnderLockTest`.
+
+## Addendum 2026-10-22 — the Ads page's Status list
+
+The owner, 2026-10-22: "Ad builder mein jese Platform aur organization ka selectbox ha wasia hi draft publish ka bhi bana do."
+
+- **The Status list** stands beside the Owner list (after it, before the search), for everybody who sees the Ads page, inside an
+  organization too: All Statuses, Published, Drafts (`dusk="ads-filter-status"`, `aria-label="Status"`).
+- **Published** is every ad on the screens, its changes published or not (`BuilderAd::scopePublished`: a page and `published_at`),
+  so "Changes not published" is Published; **Drafts** is every ad on none, an unpublished one included (`BuilderAd::scopeDrafts`).
+- `/builder/data` reads `status` through `plainValue`: anything else, in any shape, is every ad, as the Screens page's Status is.
+  It only narrows what `visibleTo` and the Owner list already allow.
+- The list is kept in the address (`?status=draft`), so a reload and the editor's way back land on it. A list it leaves empty
+  says so in the words of both lists ("Alpha Mart has no drafts.", "No published ads.") with **Show All Statuses**.
+- **Tests.** `AdStatusFilterTest` (both tiers, both scopes, a changed and an unpublished ad, bent values) and
+  `AdStatusFilterFlowTest` (a real double press on the list, the address, a reload, the empty list's words and button).

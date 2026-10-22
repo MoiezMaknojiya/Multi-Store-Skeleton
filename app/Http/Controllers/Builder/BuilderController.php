@@ -74,6 +74,13 @@ class BuilderController extends Controller
         $query = BuilderAd::visibleTo(auth()->user())
             ->when($owner === 'platform', fn (Builder $query) => $query->whereNull('organization_id'))
             ->when($owner !== null && $owner !== 'platform', fn (Builder $query) => $query->where('organization_id', (int) $owner))
+            // The Status list beside it (owner, 2026-10-22: "Platform aur organization ka selectbox ha wasia hi draft publish ka
+            // bhi"): the ads on the screens, or the drafts. Anything else asked for is every ad, as the Screens page's is.
+            ->when(self::plainValue($request->input('status')), fn (Builder $query, string $status) => match ($status) {
+                'published' => $query->published(),
+                'draft' => $query->drafts(),
+                default => $query,
+            })
             ->with(['organization:id,name', 'updater:id,first_name,last_name', 'media:id,thumbnail_path'])
             ->latest('updated_at');
 

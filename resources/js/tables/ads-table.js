@@ -18,8 +18,12 @@ export function registerAdsTable(Alpine) {
         dataKey: 'ads',
         entityLabel: 'ad',
         // Above the organizations the Owner list is kept in the address, so the editor's way back lands on it (?owner=).
-        // Only an Owner the list offers: an organization since deleted (an old link) is the list as it opens.
-        addressKeys: config.owner ? { owner: ['filterOrganization', ['platform', '', ...(config.ownerIds ?? [])]] } : {},
+        // Only an Owner the list offers: an organization since deleted (an old link) is the list as it opens. The Status list
+        // is kept there for everybody (?status=).
+        addressKeys: {
+            ...(config.owner ? { owner: ['filterOrganization', ['platform', '', ...(config.ownerIds ?? [])]] } : {}),
+            status: ['filterStatus', ['', 'published', 'draft']],
+        },
         deleteModalName: 'confirm-ad-deletion',
         deleteNeedsPassword: true,
 
@@ -29,6 +33,8 @@ export function registerAdsTable(Alpine) {
             /* Above the organizations the Owner list: the platform's ('platform', where the page opens), one organization (its id), or
              * all of them (empty). */
             filterOrganization: config.owner ?? '',
+            /* The Status list (owner, 2026-10-22): every ad (empty), the ones on the screens ('published') or the drafts ('draft'). */
+            filterStatus: '',
 
             /* ── Create Ad ──────────────────────────────────────────────── */
             /* 'orientation', then inside an organization 'start' (Create Your Own or Premium Template). */
@@ -65,7 +71,10 @@ export function registerAdsTable(Alpine) {
 
             /* ── Listing filters ───────────────────────────────────────── */
             extraParams() {
-                return this.filterOrganization ? { organization_id: this.filterOrganization } : {};
+                return {
+                    ...(this.filterOrganization ? { organization_id: this.filterOrganization } : {}),
+                    ...(this.filterStatus ? { status: this.filterStatus } : {}),
+                };
             },
 
             applyFilters() {
@@ -76,6 +85,14 @@ export function registerAdsTable(Alpine) {
             /** The organization the Owner list shows, by the name it lists it under: whose list is empty, said in its name. */
             ownerName() {
                 return this.$root.querySelector('select[aria-label="Owner"]')?.selectedOptions?.[0]?.text?.trim() ?? '';
+            },
+
+            /** Why the filtered list is empty, in the words of its two lists: "Alpha Mart has no drafts.", "No published ads." */
+            noMatchWords() {
+                const what = { published: 'published ads', draft: 'drafts' }[this.filterStatus] ?? 'ads yet';
+                const whose = this.filterOrganization === 'platform' ? 'The platform' : (this.filterOrganization ? this.ownerName() : '');
+
+                return whose ? `${whose} has no ${what}.` : `No ${what}.`;
             },
 
             /** "Copied from a Premium Template · by Ali Raza": where the ad came from, and who changed it last. */

@@ -169,6 +169,18 @@ class BuilderAd extends Model
         return $query->whereNull('organization_id')->whereNotNull('media_id')->whereNotNull('published_at')->whereNotNull('published_document');
     }
 
+    /** The ads on the screens: isPublished() as a query, its unpublished changes or not ("Changes not published" is published). */
+    public function scopePublished(Builder $query): Builder
+    {
+        return $query->whereNotNull('media_id')->whereNotNull('published_at');
+    }
+
+    /** The drafts: on no screen, never published or unpublished since — everything scopePublished() leaves out. */
+    public function scopeDrafts(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $query) => $query->whereNull('media_id')->orWhereNull('published_at'));
+    }
+
     /** The platform's, made for every organization — no organization's own. */
     public function isShared(): bool
     {

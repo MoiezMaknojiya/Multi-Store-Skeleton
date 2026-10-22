@@ -6,8 +6,8 @@
     {{-- Above the organizations the page opens on the platform's own ads (owner, 2026-10-08). --}}
     <div x-data="adsTable({{ Js::from(['owner' => $aboveTheOrganizations ? 'platform' : '', 'ownerIds' => array_map(fn (array $organization) => (string) $organization['id'], $organizations)]) }})" class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        {{-- Create Ad, then the organization list (above the organizations; an organization sees its own only) and the search, on one line:
-             the button first, as on every page (owner, 2026-09-30). --}}
+        {{-- Create Ad, then the organization list (above the organizations; an organization sees its own only), the Status list and the
+             search, on one line: the button first, as on every page (owner, 2026-09-30). --}}
         <div class="flex flex-wrap items-center justify-end gap-3">
             <div class="flex w-full flex-wrap items-center gap-3 sm:w-auto">
                 @can('ad-store')
@@ -33,6 +33,15 @@
                     </select>
                 @endif
 
+                {{-- Draft or Published (owner, 2026-10-22: "Platform aur organization ka selectbox ha wasia hi draft publish ka bhi"):
+                     the ads on the screens, changes waiting or not, or the ones on none. --}}
+                <select x-model="filterStatus" @change="applyFilters()" class="form-select sm:w-36"
+                        dusk="ads-filter-status" aria-label="Status">
+                    <option value="">All Statuses</option>
+                    <option value="published">Published</option>
+                    <option value="draft">Drafts</option>
+                </select>
+
                 <x-crud.search-input placeholder="Search ads..." />
             </div>
         </div>
@@ -55,21 +64,22 @@
                     </div>
                 </template>
 
-                <template x-if="!loading && items.length === 0 && !loadFailed && (search || filterOrganization)">
+                <template x-if="!loading && items.length === 0 && !loadFailed && (search || filterOrganization || filterStatus)">
                     <div class="mx-auto max-w-md space-y-3 py-12 text-center" dusk="table-no-match">
                         {{-- Whose list is empty, in its own name: the platform is no organization. --}}
                         <p class="text-sm text-gray-700 dark:text-gray-200">
                             <span x-show="search">No ad matches &ldquo;<span class="font-medium" x-text="search"></span>&rdquo;.</span>
-                            <span x-show="!search" x-text="filterOrganization === 'platform' ? 'The platform has no ads yet.' : ownerName() + ' has no ads yet.'"></span>
+                            <span x-show="!search" x-text="noMatchWords()"></span>
                         </p>
                         <div class="flex flex-wrap justify-center gap-2">
                             <button type="button" x-show="search" class="btn-row-neutral" @click="search = ''" dusk="table-clear-search">Clear Search</button>
-                            <button type="button" x-show="!search" class="btn-row-neutral" @click="filterOrganization = ''; applyFilters()" dusk="table-clear-filters">Show All</button>
+                            <button type="button" x-show="!search && filterStatus" class="btn-row-neutral" @click="filterStatus = ''; applyFilters()" dusk="table-clear-status">Show All Statuses</button>
+                            <button type="button" x-show="!search && !filterStatus" class="btn-row-neutral" @click="filterOrganization = ''; applyFilters()" dusk="table-clear-filters">Show All</button>
                         </div>
                     </div>
                 </template>
 
-                <template x-if="!loading && items.length === 0 && !loadFailed && !search && !filterOrganization">
+                <template x-if="!loading && items.length === 0 && !loadFailed && !search && !filterOrganization && !filterStatus">
                     <div class="mx-auto max-w-md py-12 text-center" dusk="ads-empty">
                         <p class="text-sm font-medium text-gray-700 dark:text-gray-200">No ads yet.</p>
                     </div>
