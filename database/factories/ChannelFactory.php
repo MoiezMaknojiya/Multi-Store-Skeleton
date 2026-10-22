@@ -21,9 +21,16 @@ class ChannelFactory extends Factory
     {
         return [
             'name' => 'Channel '.fake()->unique()->numberBetween(1, 999999),
+            'orientation' => 'landscape',
             'ads_per_pass' => null,
             'is_active' => true,
         ];
+    }
+
+    /** For screens mounted upright: it takes portrait files alone, and portrait screens are offered it. */
+    public function portrait(): static
+    {
+        return $this->state(fn () => ['orientation' => 'portrait']);
     }
 
     /** Off the air, whatever its ads' dates say. */

@@ -88,7 +88,7 @@ test('a media row keeps its organization and its file whatever the payload says'
 
 test('a channel made inside an organization belongs to that organization, never to the one posted', function () {
     $this->postJson('/channels', [
-        'name' => 'Our Deals', 'organization_id' => $this->other->id, 'is_active' => true,
+        'orientation' => 'landscape', 'name' => 'Our Deals', 'organization_id' => $this->other->id, 'is_active' => true,
     ])->assertOk();
 
     expect(Channel::firstWhere('name', 'Our Deals')->organization_id)->toBe($this->organization->id);
@@ -407,7 +407,7 @@ test('pagination cannot be used to dump a table or to break the page', function 
 test('a name the length of a book, or full of control characters, is refused rather than stored', function () {
     $long = str_repeat('a', 5000);
 
-    $this->postJson('/channels', ['name' => $long])->assertStatus(422);
+    $this->postJson('/channels', ['orientation' => 'landscape', 'name' => $long])->assertStatus(422);
     $this->put('/settings/organization', [
         'name' => $long, 'street' => '1 Main St', 'city' => 'Dallas', 'state' => 'TX',
         'zip_code' => '75001', 'country' => 'USA',
@@ -501,7 +501,7 @@ test('the device API is behind the same door: a screen cannot register with a uu
 });
 
 test('every language is welcome: Urdu, accents and emoji are UTF-8 and pass', function () {
-    $this->postJson('/channels', ['name' => 'آج کی پیشکش · Café ☕'])->assertSuccessful();
+    $this->postJson('/channels', ['orientation' => 'landscape', 'name' => 'آج کی پیشکش · Café ☕'])->assertSuccessful();
 
     expect(Channel::sole()->name)->toBe('آج کی پیشکش · Café ☕');
 });

@@ -85,9 +85,14 @@ class ChannelAdController extends Controller implements HasMiddleware
             'search' => ['nullable', 'string', 'max:255'],
         ]);
 
-        // Never an Ad Builder page taken off the screens (unpublished): nobody picks one until it is published again.
+        // Never an Ad Builder page taken off the screens (unpublished): nobody picks one until it is published again. And files of
+        // the channel's own shape alone (owner, 2026-10-22): a landscape channel's, a landscape one or one nobody measured (read as
+        // landscape, Channel::takes).
         $files = fn () => Media::query()
             ->withoutDrafts()
+            ->where(fn (Builder $query) => $channel->orientation === 'landscape'
+                ? $query->where('orientation', 'landscape')->orWhereNull('orientation')
+                : $query->where('orientation', $channel->orientation))
             ->when($channel->isPlatformChannel(),
                 fn (Builder $query) => ($filters['library'] ?? 'platform') === 'platform'
                     ? $query->platformOwned()
@@ -294,6 +299,16 @@ class ChannelAdController extends Controller implements HasMiddleware
             $request->validated('title'),
             auth()->id(),
         );
+
+        // A file of the other shape is refused (owner, 2026-10-22), measured as it was stored — a phone's photo the way the camera
+        // was held (PictureOptimizer) — and goes again at once, nothing kept: nobody chose it for the library.
+        if (! $channel->takes($media->orientation)) {
+            $words = ChannelAdRequest::wrongShapeMessage($media->title, $channel);
+            $this->storage->delete($media);
+            $media->delete();
+
+            $request->refuseTheFileForGood($words);
+        }
 
         ActivityLog::record('media.uploaded', $media, "Uploaded {$media->type} {$media->title} for channel {$channel->name}"
             .($media->isPlatformOwned() ? " to the platform's library" : ''));

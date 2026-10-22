@@ -62,6 +62,16 @@ class ChannelAdRequest extends FormRequest
                     if ((int) $media->id !== (int) $this->route('ad')?->media_id
                         && ($keptOut = $media->keptOutOfChannelsMessage()) !== null) {
                         $fail($keptOut);
+
+                        return;
+                    }
+
+                    // A channel takes files of its own shape alone (owner, 2026-10-22): the pickers offer no other, and this is
+                    // the wall behind them. The file an ad already shows is its own, and saving the ad keeps it.
+                    $channel = $this->route('channel');
+
+                    if ((int) $media->id !== (int) $this->route('ad')?->media_id && $channel instanceof Channel && ! $channel->takes($media->orientation)) {
+                        $fail(self::wrongShapeMessage($media->title, $channel));
                     }
                 },
             ],
@@ -162,6 +172,15 @@ class ChannelAdRequest extends FormRequest
         }
 
         return $this->route('ad')?->type === Media::TYPE_VIDEO;
+    }
+
+    /** "Lunch menu is portrait, and this is a landscape channel. Choose a landscape file, or add it to a portrait channel." */
+    public static function wrongShapeMessage(string $title, Channel $channel): string
+    {
+        $shape = strtolower(Channel::ORIENTATIONS[$channel->orientation]);
+        $other = $shape === 'landscape' ? 'portrait' : 'landscape';
+
+        return "{$title} is {$other}, and this is a {$shape} channel. Choose a {$shape} file, or add it to a {$other} channel.";
     }
 
     /**

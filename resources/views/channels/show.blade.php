@@ -9,6 +9,8 @@
                 </svg>
             </a>
             <h1 class="page-title min-w-0 truncate" title="{{ $channel->name }}">{{ $channel->name }}</h1>
+            {{-- Which way its screens are (owner, 2026-10-22), fixed when it was made. --}}
+            <span class="badge-neutral flex-shrink-0" dusk="channel-orientation">{{ \App\Models\Channel::ORIENTATIONS[$channel->orientation] }}</span>
             @unless ($channel->is_active)
                 <span class="badge-neutral flex-shrink-0">Paused</span>
             @endunless
@@ -151,8 +153,12 @@
             <form @submit.prevent="saveAd" novalidate dusk="channel-ad-form"
                   x-bind:data-picking="source === 'library' || source === 'ads' ? 'true' : 'false'"
                   class="flex flex-col lg:max-h-[calc(100dvh-2rem)] lg:data-[picking=true]:h-[min(calc(100dvh-2rem),60rem)]">
-                <h2 class="px-6 pt-6 text-lg font-medium text-gray-900 dark:text-gray-100"
-                    x-text="editingAd ? 'Edit Ad' : 'Add Ad'"></h2>
+                {{-- Files of the channel's own shape alone (owner, 2026-10-22): said beside the title, where it costs the tiles no height
+                     (a line above them left a short laptop four tiles in sight instead of eight). --}}
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 px-6 pt-6">
+                    <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100" x-text="editingAd ? 'Edit Ad' : 'Add Ad'"></h2>
+                    <span class="badge-neutral" dusk="channel-ad-shape-note">{{ $channel->orientation === 'portrait' ? 'Portrait channel: portrait files alone' : 'Landscape channel: landscape files alone' }}</span>
+                </div>
 
                 <div class="mt-4 flex flex-col gap-6 px-6 lg:min-h-0 lg:flex-1 lg:flex-row">
                     {{-- Which file. The four pixels at its left keep a focus ring whole: a column that may scroll
@@ -298,6 +304,7 @@
                                 </div>
                             </x-crud.form-field>
                             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" dusk="channel-ad-upload-note">
+                                {{ $channel->orientation === 'portrait' ? 'A portrait picture or video.' : 'A landscape picture or video.' }}
                                 Plays muted. It joins <span x-text="uploadsJoin"></span>.
                             </p>
                         </div>

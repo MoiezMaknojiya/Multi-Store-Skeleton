@@ -104,7 +104,7 @@ class OrganizationScopedAccessFlowTest extends DuskTestCase
             $browser->visit('/activity');
             $this->waitForAlpine($browser);
             $browser->waitForText('Activity in Alpha Mart')
-                ->waitForText('Created channel Alpha Lunch Deals')
+                ->waitForText('Created landscape channel Alpha Lunch Deals')
                 ->assertSee('from Staff to Area Manager')
                 ->assertDontSee('Run Yearly Maintenance');
 

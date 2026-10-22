@@ -48,8 +48,9 @@ class ChannelRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // A screen's Channels tab lists the platform's channels and the organization's own, so a name has to
-            // tell the channel apart from every other one in that list.
+            // A screen's Channels tab lists the platform's channels and the organization's own of the screen's shape, so a name has
+            // to tell the channel apart from every other one of its shape in that list: a vendor's landscape and portrait channels
+            // may share one.
             // `bail` because the closure below assumes the rules before it held: a name posted as an
             // array (name[]=x) would otherwise reach the query and bind an array as a string.
             'name' => ['bail', 'required', 'string', 'max:120', function (string $attribute, mixed $value, \Closure $fail) {
@@ -57,6 +58,7 @@ class ChannelRequest extends FormRequest
 
                 $taken = Channel::query()
                     ->where('name', $value)
+                    ->shaped($this->channelOrientation())
                     ->when($this->route('channel'), fn (Builder $query, Channel $channel) => $query->whereKeyNot($channel->id))
                     ->where(fn (Builder $query) => $organizationId === null
                         ? $query->whereNull('organization_id')
@@ -64,11 +66,18 @@ class ChannelRequest extends FormRequest
                     ->exists();
 
                 if ($taken) {
+                    $shape = strtolower(Channel::ORIENTATIONS[$this->channelOrientation()]);
+
                     $fail($organizationId === null
-                        ? 'There is already a channel with this name. Every organization sees the name, so it has to be different.'
-                        : 'There is already a channel with this name in this organization\'s list. Choose a different name.');
+                        ? "There is already a {$shape} channel with this name. Every organization sees the name, so it has to be different."
+                        : "There is already a {$shape} channel with this name in this organization's list. Choose a different name.");
                 }
             }],
+            // Which way its screens are (owner, 2026-10-22): said once, when the channel is made, and fixed after — its ads are
+            // files of that shape. On an edit it is no field of the form, and is dropped unread.
+            'orientation' => $this->route('channel') === null
+                ? ['bail', 'required', 'string', Rule::in(array_keys(Channel::ORIENTATIONS))]
+                : ['exclude'],
             'ads_per_pass' => ['nullable', 'integer', 'min:1', 'max:'.Channel::MAX_ADS_PER_PASS],
             'is_active' => ['sometimes', 'boolean'],
             // Read on a new channel made above the organizations alone (channelOrganizationId); none is All organizations.
@@ -102,6 +111,24 @@ class ChannelRequest extends FormRequest
     }
 
     /**
+     * The shape the channel is for: an edited channel's own, whatever is posted (it is fixed once made); a new one's as posted —
+     * anything that is not a shape reads as landscape here, so the name is still compared, and the orientation rule says what
+     * is wrong with it.
+     */
+    public function channelOrientation(): string
+    {
+        $channel = $this->route('channel');
+
+        if ($channel instanceof Channel) {
+            return $channel->orientation;
+        }
+
+        $posted = $this->input('orientation');
+
+        return is_string($posted) && array_key_exists($posted, Channel::ORIENTATIONS) ? $posted : 'landscape';
+    }
+
+    /**
      * @return array<string, string>
      */
     public function messages(): array
@@ -113,6 +140,9 @@ class ChannelRequest extends FormRequest
             'ads_per_pass.max' => 'Enter a number from 1 to '.Channel::MAX_ADS_PER_PASS.', or leave it blank to play every ad.',
             'name.required' => 'Channel name is required.',
             'name.max' => 'Channel name may not be longer than 120 characters.',
+            'orientation.required' => 'Choose Landscape or Portrait.',
+            'orientation.string' => 'Choose Landscape or Portrait.',
+            'orientation.in' => 'Choose Landscape or Portrait.',
             'organization_id.integer' => 'Choose All organizations or one organization from the list.',
             'organization_id.min' => 'Choose All organizations or one organization from the list.',
             'organization_id.exists' => 'That organization no longer exists. Reload the page and choose again.',

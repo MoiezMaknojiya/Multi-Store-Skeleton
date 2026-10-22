@@ -44,7 +44,7 @@ function asKeeper($test)
 }
 
 test('a channel made inside an organization belongs to that organization', function () {
-    asKeeper($this)->postJson('/channels', ['name' => 'Lunch Deals', 'ads_per_pass' => 2])->assertOk();
+    asKeeper($this)->postJson('/channels', ['orientation' => 'landscape', 'name' => 'Lunch Deals', 'ads_per_pass' => 2])->assertOk();
 
     $channel = Channel::firstWhere('name', 'Lunch Deals');
     expect($channel->organization_id)->toBe($this->alpha->id)
@@ -115,7 +115,7 @@ test('above the organizations every channel is listed, each saying whose screens
         ->and($rows['Alpha Specials']['organization_name'])->toBe('Alpha Mart');
 
     // A channel made above the organizations is the platform's.
-    $this->actingAs($this->superAdmin)->postJson('/channels', ['name' => 'Thanksgiving'])->assertOk();
+    $this->actingAs($this->superAdmin)->postJson('/channels', ['orientation' => 'landscape', 'name' => 'Thanksgiving'])->assertOk();
     expect(Channel::firstWhere('name', 'Thanksgiving')->organization_id)->toBeNull();
 });
 
@@ -144,17 +144,17 @@ test("a playlist refuses another organization's channel, and carries its own", f
 });
 
 test("a name must stand apart within one organization's list — the platform's channels and the organization's own", function () {
-    asKeeper($this)->postJson('/channels', ['name' => 'GAMA'])
-        ->assertStatus(422)->assertJsonValidationErrors(['name' => "There is already a channel with this name in this organization's list. Choose a different name."]);
-    asKeeper($this)->postJson('/channels', ['name' => 'Alpha Specials'])->assertStatus(422)->assertJsonValidationErrors('name');
+    asKeeper($this)->postJson('/channels', ['orientation' => 'landscape', 'name' => 'GAMA'])
+        ->assertStatus(422)->assertJsonValidationErrors(['name' => "There is already a landscape channel with this name in this organization's list. Choose a different name."]);
+    asKeeper($this)->postJson('/channels', ['orientation' => 'landscape', 'name' => 'Alpha Specials'])->assertStatus(422)->assertJsonValidationErrors('name');
 
     // Another organization's list is its own business.
-    asKeeper($this)->postJson('/channels', ['name' => 'Beta Specials'])->assertOk();
+    asKeeper($this)->postJson('/channels', ['orientation' => 'landscape', 'name' => 'Beta Specials'])->assertOk();
 
     // And an organization's name never blocks the platform.
-    $this->actingAs($this->superAdmin)->postJson('/channels', ['name' => 'Alpha Specials'])->assertOk();
-    $this->actingAs($this->superAdmin)->postJson('/channels', ['name' => 'GAMA'])
-        ->assertStatus(422)->assertJsonValidationErrors(['name' => 'There is already a channel with this name. Every organization sees the name, so it has to be different.']);
+    $this->actingAs($this->superAdmin)->postJson('/channels', ['orientation' => 'landscape', 'name' => 'Alpha Specials'])->assertOk();
+    $this->actingAs($this->superAdmin)->postJson('/channels', ['orientation' => 'landscape', 'name' => 'GAMA'])
+        ->assertStatus(422)->assertJsonValidationErrors(['name' => 'There is already a landscape channel with this name. Every organization sees the name, so it has to be different.']);
 });
 
 test("deleting an organization takes its own channels, their files and their playlist lines — and leaves everybody else's", function () {

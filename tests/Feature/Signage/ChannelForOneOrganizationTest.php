@@ -24,12 +24,12 @@ beforeEach(function () {
 });
 
 test('made for one organization, a channel is that organization’s own: listed, opened and changed there, and free', function () {
-    $id = $this->postJson('/channels', ['name' => 'Alpha Deals', 'organization_id' => $this->alpha->id])->assertOk()->json('channel.id');
+    $id = $this->postJson('/channels', ['orientation' => 'landscape', 'name' => 'Alpha Deals', 'organization_id' => $this->alpha->id])->assertOk()->json('channel.id');
     $channel = Channel::findOrFail($id);
 
     expect($channel->organization_id)->toBe($this->alpha->id)
         ->and(ActivityLog::where('action', 'channel.created')->sole())
-        ->description->toBe('Created channel Alpha Deals for Alpha Mart')
+        ->description->toBe('Created landscape channel Alpha Deals for Alpha Mart')
         ->organization_id->toBe($this->alpha->id);
 
     // Above the organizations its row says whose screens it reaches.
@@ -58,12 +58,12 @@ test('made for one organization, a channel is that organization’s own: listed,
 });
 
 test('with no organization chosen it is the platform’s, for every organization', function () {
-    $id = $this->postJson('/channels', ['name' => 'GAMA', 'organization_id' => ''])->assertOk()->json('channel.id');
+    $id = $this->postJson('/channels', ['orientation' => 'landscape', 'name' => 'GAMA', 'organization_id' => ''])->assertOk()->json('channel.id');
 
     expect(Channel::find($id)->organization_id)->toBeNull()
-        ->and(ActivityLog::where('action', 'channel.created')->sole()->description)->toBe('Created channel GAMA');
+        ->and(ActivityLog::where('action', 'channel.created')->sole()->description)->toBe('Created landscape channel GAMA');
 
-    $this->postJson('/channels', ['name' => 'GAMA 2'])->assertOk();
+    $this->postJson('/channels', ['orientation' => 'landscape', 'name' => 'GAMA 2'])->assertOk();
     expect(Channel::whereNull('organization_id')->count())->toBe(2);
 });
 
@@ -71,22 +71,22 @@ test('a name stands apart within what that organization’s Channels tab lists: 
     Channel::factory()->create(['name' => 'GAMA']);
     Channel::factory()->create(['organization_id' => $this->beta->id, 'name' => 'Deals']);
 
-    $this->postJson('/channels', ['name' => 'GAMA', 'organization_id' => $this->alpha->id])->assertStatus(422)
-        ->assertJsonValidationErrors(['name' => "There is already a channel with this name in this organization's list. Choose a different name."]);
+    $this->postJson('/channels', ['orientation' => 'landscape', 'name' => 'GAMA', 'organization_id' => $this->alpha->id])->assertStatus(422)
+        ->assertJsonValidationErrors(['name' => "There is already a landscape channel with this name in this organization's list. Choose a different name."]);
 
     // Another organization's channel of that name is nothing to Alpha Mart's list.
-    $this->postJson('/channels', ['name' => 'Deals', 'organization_id' => $this->alpha->id])->assertOk();
+    $this->postJson('/channels', ['orientation' => 'landscape', 'name' => 'Deals', 'organization_id' => $this->alpha->id])->assertOk();
 });
 
 test('an organization that does not exist, or a choice that is no organization, is refused in words', function () {
     foreach ([999999 => 'That organization no longer exists. Reload the page and choose again.',
         0 => 'Choose All organizations or one organization from the list.',
         'abc' => 'Choose All organizations or one organization from the list.'] as $choice => $message) {
-        $this->postJson('/channels', ['name' => 'Try '.$choice, 'organization_id' => $choice])->assertStatus(422)
+        $this->postJson('/channels', ['orientation' => 'landscape', 'name' => 'Try '.$choice, 'organization_id' => $choice])->assertStatus(422)
             ->assertJsonValidationErrors(['organization_id' => $message]);
     }
 
-    $this->postJson('/channels', ['name' => 'Arrays', 'organization_id' => [$this->alpha->id]])->assertStatus(422)->assertJsonValidationErrors('organization_id');
+    $this->postJson('/channels', ['orientation' => 'landscape', 'name' => 'Arrays', 'organization_id' => [$this->alpha->id]])->assertStatus(422)->assertJsonValidationErrors('organization_id');
 
     expect(Channel::count())->toBe(0);
 });
@@ -109,7 +109,7 @@ test('inside an organization the list is not there, and a posted organization is
     $this->get('/channels')->assertOk()->assertDontSee('dusk="channel-organization"', false);
 
     foreach ([$this->beta->id, 999999, 'x'] as $choice) {
-        $this->postJson('/channels', ['name' => "Ours {$choice}", 'organization_id' => $choice])->assertOk();
+        $this->postJson('/channels', ['orientation' => 'landscape', 'name' => "Ours {$choice}", 'organization_id' => $choice])->assertOk();
     }
 
     expect(Channel::pluck('organization_id')->unique()->values()->all())->toBe([$this->alpha->id]);

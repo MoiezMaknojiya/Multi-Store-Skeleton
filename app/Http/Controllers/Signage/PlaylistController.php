@@ -129,7 +129,9 @@ class PlaylistController extends Controller
         $screen = Screen::visibleTo(auth()->user())->findOrFail($screen->id);
         $today = $screen->localTime();
 
-        $channels = Channel::availableTo($screen)->with('ads')->orderBy('name')->get();
+        // Of the screen's shape alone (owner, 2026-10-22): a landscape screen's are landscape channels, flipped or not — the
+        // player turns the picture the right way up — and a portrait screen's portrait ones.
+        $channels = Channel::availableTo($screen)->shaped($screen->shape())->with('ads')->orderBy('name')->get();
         // Platform Channels locked for the organization (docs/BILLING-SPEC.md §6): its platform channels are shown with Unlock in
         // place of Add — Show Ads still works — and its own channels stay free.
         $locked = $screen->organization !== null && ! $screen->organization->platform_channels_unlocked;
@@ -137,6 +139,7 @@ class PlaylistController extends Controller
         return response()->json([
             'platform_channels_locked' => $locked,
             'organization_name' => $screen->organization?->name,
+            'shape_note' => $this->shapeNote($screen),
             'channels' => $channels->map(fn (Channel $channel) => [
                 'id' => $channel->id,
                 // The organization's own channel, told apart in the box from the platform's.
@@ -205,6 +208,7 @@ class PlaylistController extends Controller
         $this->assertPicturesKeepTheirSeconds($items);
         $this->assertChannelsAreAvailable($screen, $items);
         $this->assertPlatformChannelsMayBeAdded($screen, $items);
+        $this->assertChannelsFitTheScreen($screen, $items);
 
         // A save replaces the WHOLE list, so a client working from a stale copy
         // would quietly wipe out whatever changed in the meantime — a colleague
@@ -337,6 +341,7 @@ class PlaylistController extends Controller
 
                 foreach ($within as $target) {
                     $this->assertPlatformChannelsMayBeAdded($target, $items);
+                    $this->assertChannelsFitTheScreen($target, $items);
                 }
 
                 foreach ($within as $target) {
@@ -514,6 +519,45 @@ class PlaylistController extends Controller
                 'items' => "{$added} is a platform channel, and Platform Channels are locked for {$organization->name}. Contact us to unlock them.",
             ]);
         }
+    }
+
+    /**
+     * A channel of the other shape goes onto no screen that does not carry it yet (owner, 2026-10-22): the screen's Channels tab
+     * offers its own shape alone, and this is the wall behind it, for a save and for a copy onto another screen alike. A line
+     * already there keeps its place and plays on, said on the page (`orientation` on the line), as a file of the other shape is.
+     */
+    private function assertChannelsFitTheScreen(Screen $screen, array $items): void
+    {
+        $ids = collect($items)->pluck('channel_id')->reject(fn (int|string|null $id) => $id === null)->map(fn (int|string $id) => (int) $id)->unique();
+
+        if ($ids->isEmpty()) {
+            return;
+        }
+
+        $carried = $screen->playlistItems()->whereNotNull('channel_id')->pluck('channel_id')->map(fn (int|string $id) => (int) $id);
+        $added = Channel::whereIn('id', $ids->diff($carried))->where('orientation', '!=', $screen->shape())->orderBy('name')->first(['name', 'orientation']);
+
+        if ($added !== null) {
+            $shape = strtolower(Channel::ORIENTATIONS[$added->orientation]);
+
+            throw ValidationException::withMessages([
+                'items' => "{$added->name} is a {$shape} channel, and {$screen->name} is a {$screen->shape()} screen. Add its {$screen->shape()} channel instead.",
+            ]);
+        }
+    }
+
+    /**
+     * What the Channels tab says of its list: the screen's shape, and that a screen mounted the other way round has its channels
+     * turned the right way up by the player.
+     */
+    private function shapeNote(Screen $screen): string
+    {
+        return match ($screen->orientation) {
+            'landscape_flipped' => 'Landscape channels: this screen is mounted upside down, and the player turns them the right way up.',
+            'portrait_flipped' => 'Portrait channels: this screen is turned the other way, and the player turns them the right way up.',
+            'portrait' => 'Portrait channels, for this portrait screen.',
+            default => 'Landscape channels, for this landscape screen.',
+        };
     }
 
     /**
@@ -998,6 +1042,9 @@ class PlaylistController extends Controller
                 'runs_own_length' => $item->media?->ownLength() !== null,
                 ...($item->channel !== null ? [
                     ...$this->channelSummary($item->channel, $today),
+                    // Which way the channel is: a line of the other shape, from before channels had one or put there before the
+                    // screen was turned, plays with bars, and the page says so as it does for a file (orientationNote).
+                    'orientation' => $item->channel->orientation,
                     // A platform channel while Platform Channels are locked (docs/BILLING-SPEC.md §6): kept here, played nowhere.
                     'locked' => $platformChannelsLocked && $item->channel->isPlatformChannel(),
                 ] : [

@@ -353,6 +353,8 @@
                 <div x-show="openPickerTab() === 'channels'" x-cloak id="picker-panel-channels" role="tabpanel" aria-labelledby="picker-tab-channels"
                      class="p-4 space-y-2" dusk="channel-picker">
                     <p class="text-xs text-muted-soft">Add one once &mdash; its new ads arrive on their own.</p>
+                    {{-- The screen's shape alone (owner, 2026-10-22), and that one mounted the other way round is turned the right way up. --}}
+                    <p x-show="channelsShapeNote" x-cloak class="text-xs text-muted-soft" dusk="channels-shape-note" x-text="channelsShapeNote"></p>
 
                     {{-- Locked (docs/BILLING-SPEC.md §6): the platform's channels are shown, with Unlock in place of Add. --}}
                     <div x-show="channelsLocked && channels.some((channel) => channel.locked)" x-cloak class="alert-warning flex items-start gap-3" dusk="channels-locked">

@@ -93,7 +93,7 @@ test('every platform page is shut to an organization Owner — and the channel a
     $ad = ChannelAd::factory()->create(['channel_id' => $channel->id]);
 
     $this->getJson('/channels/data')->assertForbidden();
-    $this->postJson('/channels', ['name' => 'Mine'])->assertForbidden();
+    $this->postJson('/channels', ['orientation' => 'landscape', 'name' => 'Mine'])->assertForbidden();
     $this->deleteJson("/channels/{$channel->id}/ads/{$ad->id}")->assertForbidden();
     $this->getJson('/campaigns/data')->assertForbidden();
     $this->getJson('/activity/data')->assertForbidden();

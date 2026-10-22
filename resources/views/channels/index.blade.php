@@ -32,8 +32,13 @@
                 <template x-for="item in items" :key="item.id">
                     <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                         <td class="px-5 py-4">
-                            <a x-bind:href="'/channels/' + item.id" x-bind:dusk="'channel-name-' + item.id"
-                               class="font-medium text-gray-800 dark:text-white hover:underline" x-text="item.name"></a>
+                            {{-- Which way its screens are (owner, 2026-10-22), beside the name: a vendor's two channels may share one. --}}
+                            <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <a x-bind:href="'/channels/' + item.id" x-bind:dusk="'channel-name-' + item.id"
+                                   class="font-medium text-gray-800 dark:text-white hover:underline" x-text="item.name"></a>
+                                <span class="badge-neutral" x-bind:dusk="'channel-orientation-' + item.id"
+                                      x-text="item.orientation === 'portrait' ? 'Portrait' : 'Landscape'"></span>
+                            </div>
                             @unless ($organization)
                             {{-- Above the organizations, whose screens a channel reaches: every organization's, or one organization's own. --}}
                             <div class="mt-1">
@@ -149,6 +154,37 @@
                             Whom a channel is for stays as it was made.
                         </p>
                     @endif
+
+                    {{-- Which way its screens are (owner, 2026-10-22 — a vendor gets a landscape channel and a portrait one): asked once,
+                         as an Ad Builder ad's shape is, and fixed after. It takes files of that shape alone, and screens of that shape
+                         are offered it — one mounted upside down too, since the player turns the picture the right way up. --}}
+                    <fieldset x-show="!editingItem" class="min-w-0" dusk="channel-orientation">
+                        <legend class="form-label">Orientation <span class="text-red-600 dark:text-red-400" aria-hidden="true">*</span></legend>
+                        <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <label class="role-choice">
+                                <input type="radio" name="channel-orientation" value="landscape" class="mt-0.5 accent-blue-600" x-model="form.orientation" dusk="channel-orientation-landscape">
+                                <span>
+                                    <span class="block text-sm font-medium text-gray-800 dark:text-gray-100">Landscape</span>
+                                    <span class="block text-xs text-gray-500 dark:text-gray-400">For screens the usual way round, flipped or not.</span>
+                                </span>
+                            </label>
+                            <label class="role-choice">
+                                <input type="radio" name="channel-orientation" value="portrait" class="mt-0.5 accent-blue-600" x-model="form.orientation" dusk="channel-orientation-portrait">
+                                <span>
+                                    <span class="block text-sm font-medium text-gray-800 dark:text-gray-100">Portrait</span>
+                                    <span class="block text-xs text-gray-500 dark:text-gray-400">For screens mounted upright, either way.</span>
+                                </span>
+                            </label>
+                        </div>
+                        <template x-if="formErrors.orientation">
+                            <p class="form-error" role="alert" x-text="formErrors.orientation[0]"></p>
+                        </template>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Chosen once: it takes files of this shape alone.</p>
+                    </fieldset>
+                    <p x-show="editingItem" x-cloak class="text-sm text-gray-600 dark:text-gray-400" dusk="channel-orientation-fixed">
+                        <span class="font-medium text-gray-900 dark:text-gray-100" x-text="editingItem?.orientation === 'portrait' ? 'Portrait' : 'Landscape'"></span>
+                        channel. Its shape stays as it was made.
+                    </p>
 
                     <x-crud.form-field label="Channel name" field="name" :required="true">
                         <x-text-input x-model="form.name" dusk="channel-name"

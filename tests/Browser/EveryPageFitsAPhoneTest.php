@@ -238,7 +238,8 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
         $channel = Channel::factory()->create(['organization_id' => $alpha->id, 'name' => 'Alpha Weekend Deals and Offers']);
 
         // Thirty files no playlist holds — more than one page of the picker — named as long as real ones, each with a
-        // picture of its own; and one already in the channel, to change.
+        // picture of its own (every seventh upright, which this landscape channel leaves out); and one already in the channel,
+        // to change.
         foreach (range(1, 30) as $number) {
             $file = Media::factory()->create([
                 'organization_id' => $alpha->id,
@@ -279,7 +280,8 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
                 $this->assertSame('No file chosen yet.', $found['chosenBefore'], "On {$where} the card says nothing is chosen yet.");
                 $this->assertSame($found['picked'].' Image · chosen', $found['chosenAfter'], "On {$where} the card names the tile picked.");
                 $this->assertLessThan(1, $found['fieldsMoved'], "On {$where} picking a tile moved the fields.");
-                $this->assertSame([24, 31], $found['tilesBeforeAndAfterMore'], "On {$where} Load More, under the last tile, brings the rest.");
+                // The rest: the 27 landscape files of the 31 (every seventh is upright, and this is a landscape channel).
+                $this->assertSame([24, 27], $found['tilesBeforeAndAfterMore'], "On {$where} Load More, under the last tile, brings the rest.");
                 $this->assertSame($found['chosenAfter'], $found['chosenAfterSearch'], "On {$where} the card still names the tile picked once a search has left it out.");
                 $this->assertSame(['kept' => true, 'chosen' => false, 'name' => 'Minute Maid Mango Summer Promotion'], $found['keeping'],
                     "On {$where} an ad being changed shows the file it has, and no card for a tile.");
@@ -546,9 +548,9 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
                 found.tilesBeforeAndAfterMore = [before, tiles().length];
 
                 /* A search that leaves one file, and not the one picked: the card still names the pick, and the
-                   dialog keeps its height. */
+                   dialog keeps its height. A landscape one: this landscape channel lists no other (2026-10-22). */
                 const search = at('channel-ad-picker-search');
-                search.value = '07 Breakfast';
+                search.value = '08 Breakfast';
                 search.dispatchEvent(new win.Event('input', { bubbles: true }));
                 if (!await until(() => tiles().length === 1)) throw 'the search never left one file';
                 await wait(200);

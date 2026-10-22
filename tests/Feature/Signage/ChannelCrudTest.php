@@ -49,7 +49,7 @@ test('guests cannot reach any channel endpoint', function () {
 
 test('a super admin creates a channel', function () {
     $this->actingAs($this->admin)
-        ->postJson('/channels', ['name' => 'GAMA Wholesale', 'ads_per_pass' => 2, 'is_active' => true])
+        ->postJson('/channels', ['orientation' => 'landscape', 'name' => 'GAMA Wholesale', 'ads_per_pass' => 2, 'is_active' => true])
         ->assertOk();
 
     $channel = Channel::firstWhere('name', 'GAMA Wholesale');
@@ -63,7 +63,7 @@ test('a super admin creates a channel', function () {
 test('a global user given the permission creates one too', function () {
     $staff = createPlatformUser(['channel-view', 'channel-store'], 'Content Manager');
 
-    $this->actingAs($staff)->postJson('/channels', ['name' => 'Thanksgiving'])->assertOk();
+    $this->actingAs($staff)->postJson('/channels', ['orientation' => 'landscape', 'name' => 'Thanksgiving'])->assertOk();
 
     expect(Channel::firstWhere('name', 'Thanksgiving')->created_by)->toBe($staff->id);
 });
@@ -71,7 +71,7 @@ test('a global user given the permission creates one too', function () {
 test('a global user without the permission is refused', function () {
     $staff = createPlatformUser(['channel-view'], 'Content Manager');
 
-    $this->actingAs($staff)->postJson('/channels', ['name' => 'Thanksgiving'])->assertForbidden();
+    $this->actingAs($staff)->postJson('/channels', ['orientation' => 'landscape', 'name' => 'Thanksgiving'])->assertForbidden();
 
     expect(Channel::count())->toBe(0);
 });
@@ -135,7 +135,7 @@ test('the channels page opens for the super admin', function () {
 */
 
 test('blank "ads each time" means every ad, every time', function () {
-    $this->actingAs($this->admin)->postJson('/channels', ['name' => 'GAMA', 'ads_per_pass' => ''])->assertOk();
+    $this->actingAs($this->admin)->postJson('/channels', ['orientation' => 'landscape', 'name' => 'GAMA', 'ads_per_pass' => ''])->assertOk();
 
     expect(Channel::firstWhere('name', 'GAMA')->ads_per_pass)->toBeNull();
 });
@@ -150,7 +150,7 @@ test('keeping its own name on an edit is not a clash', function () {
 });
 
 test('ads each time must be a sensible number', function (mixed $value) {
-    $this->actingAs($this->admin)->postJson('/channels', ['name' => 'GAMA', 'ads_per_pass' => $value])
+    $this->actingAs($this->admin)->postJson('/channels', ['orientation' => 'landscape', 'name' => 'GAMA', 'ads_per_pass' => $value])
         ->assertStatus(422)->assertJsonValidationErrors('ads_per_pass');
 })->with([0, Channel::MAX_ADS_PER_PASS + 1, 'two']);
 
@@ -310,7 +310,7 @@ test('deleting the person who made a channel leaves the channel on the air', fun
     $admin = createSuperAdmin(['user-destroy']);
     $staff = createPlatformUser(['channel-view', 'channel-store', 'channel-update'], 'Content Manager');
 
-    $this->actingAs($staff)->postJson('/channels', ['name' => 'Thanksgiving'])->assertOk();
+    $this->actingAs($staff)->postJson('/channels', ['orientation' => 'landscape', 'name' => 'Thanksgiving'])->assertOk();
     $channel = Channel::firstWhere('name', 'Thanksgiving');
     ChannelAd::factory()->create(['channel_id' => $channel->id, 'created_by' => $staff->id]);
 

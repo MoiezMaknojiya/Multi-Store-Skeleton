@@ -123,6 +123,8 @@ export function registerScreenPlaylist(Alpine) {
         pickerTab: 'library',
         /* Platform Channels locked for the organization (docs/BILLING-SPEC.md §6): its platform channels offer Unlock, not Add. */
         channelsLocked: false,
+        /* Which shape of channel the tab lists, said by the server (owner, 2026-10-22). */
+        channelsShapeNote: '',
         search: '',
         availableToken: 0,
         loading: true,
@@ -238,6 +240,7 @@ export function registerScreenPlaylist(Alpine) {
                 const { data } = await axios.get(`/screens/${this.screenId}/available-channels`);
                 this.channels = data.channels;
                 this.channelsLocked = data.platform_channels_locked === true;
+                this.channelsShapeNote = data.shape_note ?? '';
             } catch (error) {
                 // Someone who may only look at a playlist is not given the list, and has
                 // no use for it.

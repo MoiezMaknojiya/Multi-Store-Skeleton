@@ -168,6 +168,15 @@ class Screen extends Model
     }
 
     /** True once a device has collected its token. */
+    /**
+     * The shape of what the screen shows, whichever way the set is mounted: landscape for Landscape and Landscape (flipped 180°),
+     * portrait for both Portrait rotations — the player turns the picture, so a flipped screen plays what its shape plays.
+     */
+    public function shape(): string
+    {
+        return str_starts_with((string) $this->orientation, 'portrait') ? 'portrait' : 'landscape';
+    }
+
     public function isPaired(): bool
     {
         return $this->token_hash !== null;

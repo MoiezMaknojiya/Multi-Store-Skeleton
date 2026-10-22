@@ -274,6 +274,34 @@ channel mein use ho rae toh nahi ayegi."
 - Tests: `tests/Feature/Signage/PlatformFilesOnPlaylistsTest.php`, the wall in `OrganizationWallAttackTest` and
   `PlaylistFlowTest::test_the_picker_offers_the_platform_s_files_too_but_none_a_channel_holds`.
 
+## 8e. A channel is landscape or portrait (owner, 2026-10-22)
+
+The owner: "mujhe channels ke liye bhi yahi orientation wala feature implement karna hai, kyunki main har vendor ya wholesaler ke
+liye do channels banaunga: ek landscape orientation ke liye aur ek portrait orientation ke liye", and the screen made right by
+itself when it is mounted flipped. Asked, they chose: fixed once made; Add Ad offers its own shape alone; a screen is offered its
+own shape alone.
+
+- **`channels.orientation`**, `landscape` or `portrait` (`Channel::ORIENTATIONS`), asked in Add Channel beside the name (two
+  choices, Landscape first) and fixed after, as an Ad Builder ad's is: Edit says it and `ChannelRequest` drops it unread there.
+  The listing and the channel's page show it as a badge; the log says it ("Created portrait channel GAMA"). A name need only stand
+  apart from the channels of its own shape, so a vendor's two channels may share one.
+- **A channel takes files of its own shape alone** (`Channel::takes`): the Add-ad pickers list no other
+  (`ChannelAdController::library`; a file nobody measured, or a square one, reads as landscape, as `MediaStorage::orientation`
+  says), `ChannelAdRequest` refuses one posted by hand ("Upright menu is portrait, and this is a landscape channel. Choose a
+  landscape file, or add it to a portrait channel."), and an upload of the other shape is refused in the same words, measured as
+  it was stored — a phone's photo the way the camera was held — and taken away again at once, its upload given up for good
+  (`TakesAFinishedUpload::refuseTheFileForGood`). An ad that already shows a file keeps it when it is saved.
+- **A screen is offered the channels of its shape** (`Screen::shape`): Landscape and Landscape (flipped 180°) the landscape ones,
+  Portrait (rotated 90°) and Portrait (rotated 270°) the portrait ones, because the player turns the whole stage the right way up
+  (`#stage[data-orientation]` in the player's page). The Channels tab says which, and for a screen mounted the other way round that
+  the player turns them (`shape_note`). A save or Copy to Other Screens that would put a channel of the other shape on a screen not
+  carrying it yet is refused ("GAMA is a portrait channel, and Counter TV is a landscape screen. Add its landscape channel
+  instead.", `PlaylistController::assertChannelsFitTheScreen`); a line already there keeps its place and plays on, and the playlist
+  says it plays with bars, as it does for a file of the other shape.
+- **Channels made before** (migration `2026_10_22_200000`): portrait when every ad they hold is portrait, else landscape.
+- **Tests.** `ChannelOrientationTest`, `ChannelOrientationAttackTest`, `ChannelOrientationFlowTest` (a real double press on the
+  choice, Edit, a flipped screen's tab and the television's stage turned half round).
+
 ---
 
 ## 9. Questions already answered, so nobody asks again

@@ -33,7 +33,20 @@ class Channel extends Model
     /** The most "ads each time" a channel may ask for — a guard, not a use case. */
     public const MAX_ADS_PER_PASS = 50;
 
-    protected $fillable = ['name', 'ads_per_pass', 'is_active', 'created_by', 'organization_id'];
+    /**
+     * Which way the screens it is for are (owner, 2026-10-22: a vendor gets a landscape channel and a portrait one), chosen when
+     * it is made and fixed after, as an Ad Builder ad's is: it takes files of its own shape alone, and is offered to screens of
+     * that shape — a flipped one counted as its shape, since the player turns it (Screen::shape).
+     */
+    public const ORIENTATIONS = [
+        'landscape' => 'Landscape',
+        'portrait' => 'Portrait',
+    ];
+
+    protected $fillable = ['name', 'orientation', 'ads_per_pass', 'is_active', 'created_by', 'organization_id'];
+
+    /** As the column's own default: a channel made in code without saying is landscape. */
+    protected $attributes = ['orientation' => 'landscape'];
 
     protected function casts(): array
     {
@@ -82,6 +95,21 @@ class Channel extends Model
     public function scopeAvailableTo(Builder $query, Screen $screen): Builder
     {
         return $query->where(fn (Builder $q) => $q->whereNull('organization_id')->orWhere('organization_id', $screen->organization_id));
+    }
+
+    /** The channels of one shape: the landscape ones or the portrait ones. */
+    public function scopeShaped(Builder $query, string $shape): Builder
+    {
+        return $query->where('orientation', $shape);
+    }
+
+    /**
+     * Whether a file of this shape belongs in the channel. A file whose shape nobody measured (a video whose browser said no
+     * size) reads as landscape, the way a square one does (MediaStorage::orientation).
+     */
+    public function takes(?string $fileOrientation): bool
+    {
+        return ($fileOrientation ?? 'landscape') === $this->orientation;
     }
 
     /** The platform's channel, offered to every organization — as opposed to one organization's own. */

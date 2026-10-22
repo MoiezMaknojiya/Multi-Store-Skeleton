@@ -108,9 +108,11 @@ class ChannelController extends Controller
             'created_by' => auth()->id(),
         ]);
 
+        $shape = strtolower(Channel::ORIENTATIONS[$channel->orientation]);
+
         ActivityLog::record('channel.created', $channel, $request->user()->globalRole() !== null && $channel->organization !== null
-            ? "Created channel {$channel->name} for {$channel->organization->name}"
-            : "Created channel {$channel->name}");
+            ? "Created {$shape} channel {$channel->name} for {$channel->organization->name}"
+            : "Created {$shape} channel {$channel->name}");
 
         return response()->json(['message' => 'Channel created', 'channel' => $channel->fresh()]);
     }

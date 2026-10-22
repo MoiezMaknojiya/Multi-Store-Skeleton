@@ -24,7 +24,8 @@ export function registerChannelsTable(Alpine) {
             deleteModalName: 'confirm-channel-deletion',
             deleteNeedsPassword: true,
             // organization_id: above the organizations, whom a new channel is for — '' for All organizations (ChannelRequest).
-            defaultForm: { name: '', ads_per_pass: '', is_active: true, organization_id: '' },
+            // orientation: which way its screens are, chosen once (owner, 2026-10-22); landscape, as most screens are, until changed.
+            defaultForm: { name: '', orientation: 'landscape', ads_per_pass: '', is_active: true, organization_id: '' },
 
             extraState: { maxAdsPerPass },
 
@@ -33,6 +34,10 @@ export function registerChannelsTable(Alpine) {
                 const errors = validate(form, {
                     name: [required('Channel name'), maxLen('Channel name', 120)],
                 });
+
+                if (! ['landscape', 'portrait'].includes(form.orientation)) {
+                    errors.orientation = ['Choose Landscape or Portrait.'];
+                }
 
                 const perPass = String(form.ads_per_pass ?? '').trim();
                 if (perPass !== '' && (! /^\d+$/.test(perPass) || Number(perPass) < 1 || Number(perPass) > maxAdsPerPass)) {
@@ -44,6 +49,8 @@ export function registerChannelsTable(Alpine) {
 
             mapItemToForm: (channel) => ({
                 name: channel.name,
+                // Fixed once made: the form says it, and the server never reads it on an edit.
+                orientation: channel.orientation,
                 ads_per_pass: channel.ads_per_pass ?? '',
                 is_active: !! channel.is_active,
             }),

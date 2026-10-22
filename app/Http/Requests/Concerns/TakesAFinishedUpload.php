@@ -101,6 +101,18 @@ trait TakesAFinishedUpload
         }
     }
 
+    /**
+     * A file the door itself refuses for what it is, once it has read it — a channel's picture of the other shape — refused for
+     * good as the rules' refusals are (failedValidation): its upload goes, and the box says why with nothing to try again.
+     */
+    public function refuseTheFileForGood(string $message): never
+    {
+        $upload = $this->finishedUpload;
+        $this->finishedUpload = null;
+
+        app(ChunkedUploads::class)->refuseForGood(ValidationException::withMessages(['file' => $message]), $upload);
+    }
+
     /** Once the row is made, the upload's bytes are needed no more. */
     public function forgetFinishedUpload(): void
     {

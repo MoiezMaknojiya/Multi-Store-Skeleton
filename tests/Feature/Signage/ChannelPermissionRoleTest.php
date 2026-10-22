@@ -75,7 +75,7 @@ test('the super admin needs no channel rows on the Super-Admin role to make, cha
     $superAdminRole->permissions()->detach(Permission::where('name', 'like', 'channel-%')->pluck('id'));
     expect($superAdminRole->permissions()->where('name', 'like', 'channel-%')->exists())->toBeFalse();
 
-    $this->actingAs($this->admin)->postJson('/channels', ['name' => 'GAMA'])->assertOk();
+    $this->actingAs($this->admin)->postJson('/channels', ['orientation' => 'landscape', 'name' => 'GAMA'])->assertOk();
     $channel = Channel::firstWhere('name', 'GAMA');
 
     $this->putJson("/channels/{$channel->id}", ['name' => 'GAMA Wholesale'])->assertOk();

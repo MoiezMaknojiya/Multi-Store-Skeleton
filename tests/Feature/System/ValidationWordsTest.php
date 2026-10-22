@@ -82,11 +82,11 @@ test("a channel ad's seconds are refused in the form's words", function (mixed $
 ]);
 
 test("a channel's own fields are refused in the form's words", function () {
-    $this->postJson('/channels', ['name' => '', 'is_active' => true])
+    $this->postJson('/channels', ['orientation' => 'landscape', 'name' => '', 'is_active' => true])
         ->assertStatus(422)->assertJsonValidationErrors(['name' => 'Channel name is required.']);
 
     foreach (['abc', 0, 99] as $perPass) {
-        $this->postJson('/channels', ['name' => 'Deals', 'is_active' => true, 'ads_per_pass' => $perPass])
+        $this->postJson('/channels', ['orientation' => 'landscape', 'name' => 'Deals', 'is_active' => true, 'ads_per_pass' => $perPass])
             ->assertStatus(422)
             ->assertJsonValidationErrors(['ads_per_pass' => 'Enter a number from 1 to '.Channel::MAX_ADS_PER_PASS.', or leave it blank to play every ad.']);
     }

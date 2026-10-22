@@ -224,8 +224,9 @@ test('every picker and playlist line says which way a portrait page is', functio
     expect($option['orientation'])->toBe('portrait');
 
     // …a channel's library — asked first: once the page is on a playlist, a channel's pickers leave it out
-    // (a file plays from playlists or from channels, never both — 2026-09-26)…
-    $channel = Channel::factory()->create(['organization_id' => $this->organization->id]);
+    // (a file plays from playlists or from channels, never both — 2026-09-26), a portrait channel's, which takes portrait files
+    // alone (2026-10-22)…
+    $channel = Channel::factory()->portrait()->create(['organization_id' => $this->organization->id]);
     $inLibrary = collect($this->getJson("/channels/{$channel->id}/library?type=html")->assertOk()->json('media'))->firstWhere('id', $media->id);
     expect($inLibrary['orientation'])->toBe('portrait');
 
