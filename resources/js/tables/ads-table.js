@@ -18,11 +18,13 @@ export function registerAdsTable(Alpine) {
         dataKey: 'ads',
         entityLabel: 'ad',
         // Above the organizations the Owner list is kept in the address, so the editor's way back lands on it (?owner=).
-        // Only an Owner the list offers: an organization since deleted (an old link) is the list as it opens. The Status and
-        // Category lists are kept there for everybody (?status=, ?category=), a category only while the list has it.
+        // Only an Owner the list offers: an organization since deleted (an old link) is the list as it opens. The Status,
+        // Orientation and Category lists are kept there for everybody (?status=, ?orientation=, ?category=), a category only
+        // while the list has it.
         addressKeys: {
             ...(config.owner ? { owner: ['filterOrganization', ['platform', '', ...(config.ownerIds ?? [])]] } : {}),
             status: ['filterStatus', ['', 'published', 'draft']],
+            orientation: ['filterOrientation', ['', 'landscape', 'portrait']],
             category: ['filterCategory', ['', ...(config.categoryIds ?? [])]],
         },
         deleteModalName: 'confirm-ad-deletion',
@@ -36,6 +38,8 @@ export function registerAdsTable(Alpine) {
             filterOrganization: config.owner ?? '',
             /* The Status list (owner, 2026-10-22): every ad (empty), the ones on the screens ('published') or the drafts ('draft'). */
             filterStatus: '',
+            /* The Orientation list (owner, 2026-10-23): every ad (empty), the landscape ones or the portrait ones. */
+            filterOrientation: '',
             /* The Category list (owner, 2026-10-22): every ad (empty), or the ads in one category (its id). */
             filterCategory: '',
 
@@ -81,6 +85,7 @@ export function registerAdsTable(Alpine) {
                 return {
                     ...(this.filterOrganization ? { organization_id: this.filterOrganization } : {}),
                     ...(this.filterStatus ? { status: this.filterStatus } : {}),
+                    ...(this.filterOrientation ? { orientation: this.filterOrientation } : {}),
                     ...(this.filterCategory ? { category: this.filterCategory } : {}),
                 };
             },
@@ -107,14 +112,16 @@ export function registerAdsTable(Alpine) {
 
             /**
              * Why the filtered list is empty, in the words of its lists: "Alpha Mart has no drafts.", "No published ads.",
-             * "The platform has no drafts in Menu."
+             * "The platform has no portrait drafts in Menu."
              */
             noMatchWords() {
-                const what = { published: 'published ads', draft: 'drafts' }[this.filterStatus] ?? (this.filterCategory ? 'ads' : 'ads yet');
+                const what = { published: 'published ads', draft: 'drafts' }[this.filterStatus]
+                    ?? (this.filterCategory || this.filterOrientation ? 'ads' : 'ads yet');
+                const shape = this.filterOrientation ? `${this.filterOrientation} ` : '';
                 const whose = this.filterOrganization === 'platform' ? 'The platform' : (this.filterOrganization ? this.ownerName() : '');
                 const where = this.filterCategory ? ` in ${this.categoryName()}` : '';
 
-                return whose ? `${whose} has no ${what}${where}.` : `No ${what}${where}.`;
+                return whose ? `${whose} has no ${shape}${what}${where}.` : `No ${shape}${what}${where}.`;
             },
 
             /** "Copied from a Premium Template · by Ali Raza": where the ad came from, and who changed it last. */

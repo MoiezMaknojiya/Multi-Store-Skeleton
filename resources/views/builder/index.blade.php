@@ -42,6 +42,15 @@
                     <option value="draft">Drafts</option>
                 </select>
 
+                {{-- Which way the screen is (owner, 2026-10-23: "landscape aur portrait wala bhi filter laga do jese baki lagaya ha"):
+                     the words of the Media page's list. --}}
+                <select x-model="filterOrientation" @change="applyFilters()" class="form-select sm:w-40"
+                        dusk="ads-filter-orientation" aria-label="Orientation">
+                    <option value="">Any orientation</option>
+                    <option value="landscape">Landscape</option>
+                    <option value="portrait">Portrait</option>
+                </select>
+
                 {{-- And by category (owner, 2026-10-22), the platform's one list: there only once it has one. --}}
                 @if ($categories !== [])
                     <select x-model="filterCategory" @change="applyFilters()" class="form-select sm:w-44"
@@ -75,7 +84,7 @@
                     </div>
                 </template>
 
-                <template x-if="!loading && items.length === 0 && !loadFailed && (search || filterOrganization || filterStatus || filterCategory)">
+                <template x-if="!loading && items.length === 0 && !loadFailed && (search || filterOrganization || filterStatus || filterOrientation || filterCategory)">
                     <div class="mx-auto max-w-md space-y-3 py-12 text-center" dusk="table-no-match">
                         {{-- Whose list is empty, in its own name: the platform is no organization. --}}
                         <p class="text-sm text-gray-700 dark:text-gray-200">
@@ -86,12 +95,13 @@
                             <button type="button" x-show="search" class="btn-row-neutral" @click="search = ''" dusk="table-clear-search">Clear Search</button>
                             <button type="button" x-show="!search && filterCategory" class="btn-row-neutral" @click="filterCategory = ''; applyFilters()" dusk="table-clear-category">Show All Categories</button>
                             <button type="button" x-show="!search && !filterCategory && filterStatus" class="btn-row-neutral" @click="filterStatus = ''; applyFilters()" dusk="table-clear-status">Show All Statuses</button>
-                            <button type="button" x-show="!search && !filterCategory && !filterStatus" class="btn-row-neutral" @click="filterOrganization = ''; applyFilters()" dusk="table-clear-filters">Show All</button>
+                            <button type="button" x-show="!search && !filterCategory && !filterStatus && filterOrientation" class="btn-row-neutral" @click="filterOrientation = ''; applyFilters()" dusk="table-clear-orientation">Show Any Orientation</button>
+                            <button type="button" x-show="!search && !filterCategory && !filterStatus && !filterOrientation" class="btn-row-neutral" @click="filterOrganization = ''; applyFilters()" dusk="table-clear-filters">Show All</button>
                         </div>
                     </div>
                 </template>
 
-                <template x-if="!loading && items.length === 0 && !loadFailed && !search && !filterOrganization && !filterStatus && !filterCategory">
+                <template x-if="!loading && items.length === 0 && !loadFailed && !search && !filterOrganization && !filterStatus && !filterOrientation && !filterCategory">
                     <div class="mx-auto max-w-md py-12 text-center" dusk="ads-empty">
                         <p class="text-sm font-medium text-gray-700 dark:text-gray-200">No ads yet.</p>
                     </div>

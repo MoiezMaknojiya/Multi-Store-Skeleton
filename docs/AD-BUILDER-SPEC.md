@@ -1338,3 +1338,16 @@ Ad and in the editor; filtered on the Ads page and in the Premium Templates.
 - **Tests.** `AdCategoriesTest`, `AdCategoryAttackTest` and `AdCategoriesFlowTest` (a real double press on the picker's button —
   in the flow it once made the dialog taller and the second press shut it —, Escape inside a dialog and in the editor, the
   address, the filters), and the page lists of the shared suites.
+
+## Addendum 2026-10-23 — the Ads page's Orientation list
+
+The owner, 2026-10-23: "ad builder k ander landscape aur portrait wala bhi filter laga do jese baki lagaya ha."
+
+- **The Orientation list** stands after the Status list, for everybody who sees the Ads page: Any orientation, Landscape,
+  Portrait (`dusk="ads-filter-orientation"`, `aria-label="Orientation"`, the words of the Media page's list).
+- `/builder/data` reads `orientation` through `plainValue`: `landscape` or `portrait` narrows to `builder_ads.orientation`, and
+  anything else, in any shape, is every ad, as the Status list's is. It only narrows what `visibleTo` and the other lists allow.
+- It is kept in the address (`?orientation=portrait`). A list it leaves empty says so in the words of every list ("The platform
+  has no portrait drafts.", "No landscape ads.") with **Show Any Orientation** once the Category and Status lists are let go.
+- **Tests.** `AdOrientationFilterTest` (both tiers, with the Owner and Status lists, bent values) and the orientation test in
+  `AdStatusFilterFlowTest` (a real double press, the address, a reload, the empty list's words and button), seen failing first.

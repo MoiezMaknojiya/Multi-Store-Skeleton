@@ -69,6 +69,59 @@ class AdStatusFilterFlowTest extends DuskTestCase
         });
     }
 
+    /**
+     * The Orientation list beside it (owner, 2026-10-23: "landscape aur portrait wala bhi filter laga do jese baki lagaya ha"): the
+     * landscape ads or the portrait ones, opened with a double press, kept in the address through a reload, said in the words of
+     * every list when nothing matches, and let go with Show Any Orientation.
+     */
+    public function test_the_orientation_list_narrows_the_ads_and_is_kept_in_the_address(): void
+    {
+        $admin = $this->seedSuperAdmin();
+        $wide = BuilderAd::factory()->create(['organization_id' => null, 'name' => 'Wide draft', 'orientation' => BuilderAd::LANDSCAPE]);
+        $upright = BuilderAd::factory()->published()->create(['organization_id' => null, 'name' => 'Upright template', 'orientation' => BuilderAd::PORTRAIT]);
+
+        $this->browse(function (Browser $browser) use ($admin, $wide, $upright) {
+            $this->freshSession($browser);
+            $browser->loginAs($admin)->visit('/builder');
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@ad-card-'.$wide->id)->assertVisible('@ad-card-'.$upright->id)
+                ->assertSelected('@ads-filter-orientation', '');
+
+            /* ── 1. A double press opens the list and leaves it open; Portrait narrows the ads to the upright one ── */
+            $select = '[dusk="ads-filter-orientation"]';
+            $this->presses($browser, $this->centreOf($browser, $select), 2);
+            $browser->pause(500);
+            $this->assertTrue((bool) $browser->script('return document.querySelector('.json_encode($select).').matches(":open");')[0]);
+            $this->key($browser, 'Escape');
+
+            $browser->select('@ads-filter-orientation', 'portrait')
+                ->waitUntilMissing('@ad-card-'.$wide->id)->waitFor('@ad-card-'.$upright->id);
+            $this->assertStringContainsString('orientation=portrait', $browser->driver->getCurrentURL());
+
+            /* ── 2. A reload opens on the same list ── */
+            $browser->refresh();
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@ad-card-'.$upright->id)->assertSelected('@ads-filter-orientation', 'portrait')
+                ->assertMissing('@ad-card-'.$wide->id);
+
+            /* ── 3. The platform's portrait drafts: none, said in every list's words; Show Any Orientation lets the shape go ── */
+            $browser->select('@ads-filter-status', 'draft')
+                ->waitFor('@table-no-match')->assertSeeIn('@table-no-match', 'The platform has no portrait drafts.')
+                ->assertVisible('@table-clear-status')->assertMissing('@table-clear-orientation');
+            $browser->select('@ads-filter-status', '')->waitFor('@ad-card-'.$upright->id);
+
+            // With nothing else narrowing it, the way back names the orientation: no portrait ad left.
+            $upright->update(['orientation' => BuilderAd::LANDSCAPE]);
+            $browser->refresh();
+            $this->waitForAlpine($browser);
+            $browser->waitFor('@table-no-match')->assertSeeIn('@table-no-match', 'The platform has no portrait ads.')
+                ->assertVisible('@table-clear-orientation');
+            $browser->click('@table-clear-orientation')->waitFor('@ad-card-'.$wide->id)->assertVisible('@ad-card-'.$upright->id)
+                ->assertSelected('@ads-filter-orientation', '');
+            $this->assertStringNotContainsString('orientation=', $browser->driver->getCurrentURL());
+        });
+    }
+
     /** Presses sent to Chrome itself, with the click count a person's double or triple press carries. */
     private function presses(Browser $browser, array $at, int $times, int $gap = 120): void
     {

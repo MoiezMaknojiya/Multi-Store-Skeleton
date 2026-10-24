@@ -84,6 +84,11 @@ class BuilderController extends Controller
                 'draft' => $query->drafts(),
                 default => $query,
             })
+            // The Orientation list (owner, 2026-10-23: "landscape aur portrait wala bhi filter laga do"): the landscape ads or
+            // the portrait ones, and every ad for anything else asked for, as the Status list does.
+            ->when(self::plainValue($request->input('orientation')), fn (Builder $query, string $orientation) => in_array($orientation, [BuilderAd::LANDSCAPE, BuilderAd::PORTRAIT], true)
+                ? $query->where('orientation', $orientation)
+                : $query)
             // And the Category list (owner, 2026-10-22): the ads in one category, none for an id that is no category, and every
             // ad for anything that is no id at all, as the Status list does.
             ->when(self::plainValue($request->input('category')), fn (Builder $query, string $category) => ctype_digit($category) && strlen($category) <= 18
