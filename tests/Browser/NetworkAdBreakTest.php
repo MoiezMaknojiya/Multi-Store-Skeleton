@@ -20,8 +20,9 @@ use Tests\DuskTestCase;
  * This is the part that has to behave on an organization's wall for weeks without anybody
  * watching it, so it is tested for more than "the advert appeared":
  *
- *   · the organization's content PAUSES rather than restarting, and carries on from exactly
- *     where it stopped — a two-hour video resumes at 1:00:00
+ *   · a break comes BETWEEN two items, never in the middle of one (owner, 2026-10-23: "jese hi ad
+ *     khatam ho toh hamari network ads chale"): a picture, a video or an Ad Builder page on screen
+ *     when it comes due plays to its end, and the next item comes on after the adverts
  *   · only one video decodes at a time, so a cheap box is never asked to play two
  *   · the advert's element is DESTROYED when the break ends. A hidden <video> keeps
  *     its decoder and its buffer, and a set left running would collect one an hour
@@ -55,42 +56,40 @@ class NetworkAdBreakTest extends DuskTestCase
     }
 
     /**
-     * An image on screen is interrupted by the advert, which sits over it rather than
-     * replacing it, and the picture is back when the break ends.
-     *
-     * The advert's element is gone afterwards, not merely hidden — and the break comes
-     * round again.
+     * A break that comes due while a picture is on screen waits for it to end, and the adverts play between it and
+     * the next picture: the one under them had its whole ten seconds, and the next comes on after them. The advert
+     * sits over the content rather than replacing it, its element is gone afterwards, not merely hidden — and the
+     * break comes round again.
      */
-    public function test_an_advert_interrupts_the_organizations_content_and_leaves_nothing_behind(): void
+    public function test_a_break_waits_for_the_picture_on_screen_and_plays_before_the_next_one(): void
     {
         [$organization, $screen] = $this->setUpScreen('ad-token');
 
-        $poster = Media::factory()->create([
-            'organization_id' => $organization->id, 'title' => 'Menu',
-            'type' => Media::TYPE_IMAGE, 'mime_type' => 'image/png',
-            'path' => $this->putImage("media/{$organization->id}/menu.png", 20, 90, 200),
-            'thumbnail_path' => null,
-        ]);
-
-        PlaylistItem::create([
-            'screen_id' => $screen->id, 'media_id' => $poster->id,
-            // Long enough that the break is certain to land in the middle of it.
-            'position' => 0, 'duration_seconds' => 120,
-        ]);
+        foreach (['Menu' => [20, 90, 200], 'Specials' => [200, 140, 20]] as $title => [$r, $g, $b]) {
+            $picture = Media::factory()->create([
+                'organization_id' => $organization->id, 'title' => $title,
+                'type' => Media::TYPE_IMAGE, 'mime_type' => 'image/png',
+                'path' => $this->putImage("media/{$organization->id}/".strtolower($title).'.png', $r, $g, $b),
+                'thumbnail_path' => null,
+            ]);
+            // Ten seconds each, longer than the dusk environment's six between breaks: every break comes due mid-picture.
+            PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $picture->id, 'position' => $picture->id, 'duration_seconds' => 10]);
+        }
 
         $this->browse(function (Browser $tv) {
             $tv->visit('/login');
             $tv->script("localStorage.clear(); localStorage.setItem('signage.device.token', 'ad-token');");
             $tv->visit('/player');
+            $this->watchTheWall($tv);
 
             // -- The organization's own content ----------------------------------------
             $tv->waitUsing(30, 200, fn () => $tv->script(
                 'return !!document.querySelector("#layer-a:not([hidden]) img, #layer-b:not([hidden]) img");'
             )[0]);
 
-            // -- The break ------------------------------------------------------
-            $tv->waitUsing(30, 200, fn () => $tv->script(
-                'return !document.getElementById("layer-ad").hidden;'
+            // -- The break: the first over a picture the watch saw come on --------
+            $tv->waitUsing(60, 100, fn () => $tv->script(
+                'return window.__wall.breaks.length > 0 && !document.getElementById("layer-ad").hidden;'
             )[0]);
 
             // The advert really is on screen, and the content is still underneath it
@@ -99,6 +98,12 @@ class NetworkAdBreakTest extends DuskTestCase
             $this->assertTrue($tv->script(
                 'return !!document.querySelector("#layer-a:not([hidden]) img, #layer-b:not([hidden]) img");'
             )[0], 'the organization content should still be in the DOM, merely covered');
+
+            // The picture under it had its whole ten seconds: the break waited for it to end. They count from when the
+            // player asked for it and the watch sees it from when it had loaded, half a second later; a break that cut
+            // it, as the player before 2026-10-23 did, came two to six seconds in.
+            $break = $tv->script('return window.__wall.breaks[0];')[0];
+            $this->assertGreaterThanOrEqual(8500, $break['shownFor'], "the break cut the picture after {$break['shownFor']} ms of its 10 s");
 
             // -- And afterwards --------------------------------------------------
             $tv->waitUsing(30, 200, fn () => $tv->script(
@@ -110,10 +115,11 @@ class NetworkAdBreakTest extends DuskTestCase
             $this->assertSame(0, $tv->script('return document.getElementById("layer-ad").children.length;')[0],
                 'the advert element should be destroyed when the break ends');
 
-            // The organization's content is back on screen.
-            $this->assertTrue($tv->script(
-                'return !!document.querySelector("#layer-a:not([hidden]) img, #layer-b:not([hidden]) img");'
-            )[0]);
+            // The organization's content is back on screen — the NEXT picture, from its start, not the one before.
+            $tv->waitUsing(5, 100, fn () => $tv->script(
+                'const img = document.querySelector("#layer-a:not([hidden]) img, #layer-b:not([hidden]) img"); '
+                .'return !!img && img.getAttribute("src") !== window.__wall.breaks[0].under;'
+            )[0], 'the picture before the break came back instead of the next one');
 
             // -- And it happens AGAIN ---------------------------------------------
             // The countdown has to restart when a break ends. A break that fires once
@@ -131,13 +137,11 @@ class NetworkAdBreakTest extends DuskTestCase
     }
 
     /**
-     * A video is PAUSED and resumed from its own position — never restarted.
-     *
-     * The one that matters most: pause() keeps the element, its buffer and its
-     * position, so resuming a long video costs nothing. Seeking back to a remembered
-     * time would re-buffer, and on a cheap television that stutters or fails.
+     * A video on screen when a break comes due plays to its own end first — never paused or cut in the middle — and
+     * the adverts come after it; the video starts again from its beginning once they are over, and never two
+     * videos decode at once.
      */
-    public function test_a_video_is_paused_and_carries_on_from_where_it_stopped(): void
+    public function test_a_video_plays_to_its_end_before_the_break(): void
     {
         [$organization, $screen] = $this->setUpScreen('video-ad-token');
 
@@ -204,53 +208,37 @@ class NetworkAdBreakTest extends DuskTestCase
 
             $tv->waitUsing(30, 200, fn () => $tv->script("return !!document.querySelector('{$onScreen}');")[0]);
 
-            // -- Interrupted, with the clip properly under way ---------------------
-            // Which break catches the clip mid-play is luck: the break is armed when the
-            // manifest lands, and the clip (16 s) starts again every time it ends, so a
-            // break can arrive in the moment it has just restarted — and "resumed at 0.11
-            // rather than 0.00" would prove nothing. So take the first break that finds
-            // the clip past its opening fraction, rather than the first break there is.
-            $tv->waitUsing(90, 200, function () use ($tv, $onScreen) {
-                if (! $tv->script('return !document.getElementById("layer-ad").hidden;')[0]) {
-                    return false;
-                }
+            // Every pause of a video before its end is written down: a break that cut the clip would show here.
+            $tv->script(<<<'JS'
+                window.__cut = [];
+                document.addEventListener('pause', (event) => {
+                    const video = event.target;
+                    if (video.closest('#layer-a, #layer-b') && ! video.ended && video.currentTime < video.duration - 0.3) {
+                        window.__cut.push(video.currentTime);
+                    }
+                }, true);
+            JS);
 
-                return (float) $tv->script("return document.querySelector('{$onScreen}')?.currentTime ?? 0;")[0] > 0.2;
-            });
+            // -- The break: due six seconds in, it waits for the clip's end -------
+            $tv->waitUsing(60, 100, fn () => $tv->script('return !document.getElementById("layer-ad").hidden;')[0]);
 
-            $paused = $tv->script("return document.querySelector('{$onScreen}')?.paused;")[0];
-            $pausedAt = (float) $tv->script("return document.querySelector('{$onScreen}')?.currentTime ?? 0;")[0];
+            $under = $tv->script("const v = document.querySelector('{$onScreen}'); return v ? [v.ended, v.currentTime, v.duration] : null;")[0];
+            $this->assertNotNull($under, 'the clip should still be under the advert');
+            $this->assertTrue($under[0] || $under[1] >= $under[2] - 0.3, "the break came before the clip's end ({$under[1]} of {$under[2]} s)");
+            $this->assertSame([], $tv->script('return window.__cut;')[0], 'the clip was paused in the middle');
 
-            $this->assertTrue($paused, 'the organization video must be paused while the advert plays');
-            $this->assertGreaterThan(0.2, $pausedAt, 'the video should have been playing when it was interrupted');
-
-            // Mark the element itself. Whether the clip happens to be one second or
-            // ten seconds in when the break lands is luck; whether it is the SAME
-            // element afterwards is the actual question — a restart builds a new one.
-            $tv->script("document.querySelector('{$onScreen}').dataset.survived = 'yes';");
-
-            // Nothing is decoding two videos at once: the advert here is an image, so
-            // with the content paused there is nothing playing at all.
+            // Nothing is decoding two videos at once: the advert here is an image, and the clip has ended.
             $this->assertSame(0, $tv->script(
                 'return [...document.querySelectorAll("video")].filter((v) => !v.paused).length;'
             )[0]);
 
-            // -- And back --------------------------------------------------------
+            // -- And after: the clip again, from its start, in an element of its own --
+            $tv->script("document.querySelector('{$onScreen}').dataset.before = 'yes';");
             $tv->waitUsing(30, 200, fn () => $tv->script('return document.getElementById("layer-ad").hidden;')[0]);
-
-            $tv->waitUsing(10, 200, fn () => $tv->script("return document.querySelector('{$onScreen}')?.paused === false;")[0]);
-
-            $resumedAt = (float) $tv->script("return document.querySelector('{$onScreen}')?.currentTime ?? 0;")[0];
-
-            // The very same element is still there and still playing — it was paused,
-            // not torn down and built again. This is what pause() buys: no seek, no
-            // re-buffer, and a two-hour video that carries on at 1:00:00.
-            $this->assertSame('yes', $tv->script("return document.querySelector('{$onScreen}')?.dataset.survived;")[0],
-                'the video element was replaced — the content restarted instead of resuming');
-
-            // And it carried on from where it stopped rather than rewinding.
-            $this->assertGreaterThanOrEqual($pausedAt - 0.2, $resumedAt,
-                "the video went backwards (paused at {$pausedAt}, came back at {$resumedAt})");
+            $tv->waitUsing(10, 200, fn () => $tv->script(
+                "const v = document.querySelector('{$onScreen}'); return !!v && v.dataset.before !== 'yes' && v.paused === false;"
+            )[0], 'the next item did not come on after the break');
+            $this->assertLessThan(3, (float) $tv->script("return document.querySelector('{$onScreen}').currentTime;")[0]);
 
             // Nothing accumulates. Two content layers means at most two video elements
             // ever exist; the advert's own is destroyed with the break, so a set left
@@ -274,7 +262,7 @@ class NetworkAdBreakTest extends DuskTestCase
         [$organization, $screen] = $this->setUpScreen('page-break-token');
 
         $document = BuilderAd::blankDocument();
-        $document['duration'] = 120;    // long enough that the break lands in it
+        $document['duration'] = 10;    // past the dusk environment's six seconds between breaks: the break comes due in it
         $document['elements'] = [[
             'id' => 'el_text', 'type' => 'text', 'name' => 'Headline', 'text' => 'Back from the break',
             'x' => 160, 'y' => 400, 'w' => 1600, 'h' => 240, 'rotation' => 0, 'opacity' => 1, 'z' => 0, 'locked' => false, 'visible' => true,
@@ -297,10 +285,11 @@ class NetworkAdBreakTest extends DuskTestCase
 
             // The page comes on, and its frame is noted.
             $tv->waitUsing(30, 200, fn () => (bool) $tv->script("return {$isThePage};")[0]);
-            $tv->script("window.__first = {$frame};");
+            $tv->script("window.__first = {$frame}; window.__firstAt = Date.now();");
 
-            // The break: the page is let go under the advert, hidden.
-            $tv->waitUsing(30, 200, fn () => $tv->script('return !document.getElementById("layer-ad").hidden;')[0]);
+            // The break comes after the page's ten seconds, never in them — and the page is let go under it, hidden.
+            $tv->waitUsing(30, 100, fn () => $tv->script('return !document.getElementById("layer-ad").hidden;')[0]);
+            $this->assertGreaterThanOrEqual(9000, $tv->script('return Date.now() - window.__firstAt;')[0], 'the break cut the page short');
             $tv->waitUsing(5, 100, fn () => $tv->script('return window.__first.getAttribute("src") === "about:blank";')[0]);
             $this->assertSame('hidden', $tv->script('return window.__first.style.visibility;')[0]);
 
@@ -313,6 +302,30 @@ class NetworkAdBreakTest extends DuskTestCase
             $tv->visit('/login');
             $tv->script('localStorage.clear();');
         });
+    }
+
+    /** Notes, from now on, when each picture came on and when each break began: over which picture, shown how long. */
+    private function watchTheWall(Browser $tv): void
+    {
+        $tv->script(<<<'JS'
+            window.__wall = { shown: null, breaks: [] };
+            const picture = () => document.querySelector('#layer-a:not([hidden]) img, #layer-b:not([hidden]) img');
+            // A picture already up when the watch began has no known start: a break over it is not measured.
+            const note = (first) => {
+                const img = picture();
+                const src = img ? img.getAttribute('src') : null;
+                if (src && (! window.__wall.shown || window.__wall.shown.src !== src)) window.__wall.shown = { src, at: first === true ? null : Date.now() };
+            };
+            ['layer-a', 'layer-b'].forEach((id) => new MutationObserver(note)
+                .observe(document.getElementById(id), { attributes: true, attributeFilter: ['hidden'], childList: true }));
+            const ad = document.getElementById('layer-ad');
+            new MutationObserver(() => {
+                if (! ad.hidden && window.__wall.shown && window.__wall.shown.at !== null && window.__wall.breaks.length === 0) {
+                    window.__wall.breaks.push({ under: window.__wall.shown.src, shownFor: Date.now() - window.__wall.shown.at });
+                }
+            }).observe(ad, { attributes: true, attributeFilter: ['hidden'] });
+            note(true);
+        JS);
     }
 
     /**

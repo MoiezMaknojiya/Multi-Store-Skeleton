@@ -144,26 +144,29 @@ const state = {
     clockOffset: Number(store.get(CLOCK_KEY)) || 0,
     lastLive: null,
 
-    // Network advertising. The organization's content pauses, the advert plays over it, and
-    // the organization's content carries on from where it stopped.
+    // Network advertising. A break comes between two items, never in the middle of one (owner,
+    // 2026-10-23: "jese hi ad khatam ho toh hamari network ads chale"); only an item that never ends is
+    // paused under it, and carries on from where it stopped.
     ad: {
         items: [],
         everyMs: 0,
         nextAt: 0,        // when the next break is due — NOT reset by a poll
-        timer: null,
+        timer: null,      // the countdown to the next break, or — while one waits — its backstop
         active: false,
         index: 0,
         playTimer: null,  // backstop for one advert that stalls or never ends
-        deferred: false,  // this break already waited out an item's last seconds, once
+        due: false,       // a break is waiting for the item on screen to end
+        dueFor: 0,        // which item it waits for (when that item started)
+        between: false,   // this break came between two items: the next one plays after it
         resumeMs: 0,      // what was left of the interrupted item
         contentPaused: false, // an advert has appeared and the organization's content is paused under it
         pendingData: null, // a manifest that arrived mid-break, applied afterwards
     },
 };
 
-/** How close to the end of an item is too close to interrupt it. Cutting the last
- *  three seconds off a video looks like a fault; waiting them out costs nothing. */
-const AD_GRACE_MS = 3500;
+/** How long past its own end a break waits for the item on screen before it interrupts it after all: a
+ *  video whose length reads wrong, or that stalls without ending, must not keep a brand off the wall. */
+const BREAK_WAIT_SLACK_MS = 15000;
 
 /* ── Screens ───────────────────────────────────────────────────────────── */
 
@@ -953,6 +956,14 @@ function advance() {
         buildPass();
     }
 
+    // A break that came due while the item before was on screen starts now, between the two; the next item
+    // plays after it, from its start.
+    if (state.ad.due) {
+        breakBetweenItems();
+
+        return;
+    }
+
     playCurrent();
 }
 
@@ -968,9 +979,11 @@ function skipBroken() {
 
 /* ── Network advertising ───────────────────────────────────────────────────
  *
- * Every so often the organization's content PAUSES, the brand's advert plays over it, and
- * the organization's content carries on from exactly where it stopped — a two-hour video
- * resumes at 1:00:00, not at the beginning.
+ * Every so often the brand's adverts play between two of the organization's items: a break that comes due
+ * while an ad, a picture or a video is on screen waits for it to end (owner, 2026-10-23), so nothing is cut
+ * in the middle — at most it waits one item, five minutes. Only an item that never ends — a video whose
+ * length reads wrong, one that stalls — is paused under the break once its time is well past, and carries
+ * on from exactly where it stopped.
  *
  * The clock is kept here rather than on the server because the server has no way to
  * reach a television between polls. It still decides everything that matters: which
@@ -998,14 +1011,20 @@ function armAdBreak(config) {
         state.ad.nextAt = 0;
     }
 
-    if (state.ad.timer) clearTimeout(state.ad.timer);
-    state.ad.timer = null;
-
     if (items.length === 0 || everyMs === 0) {
+        if (state.ad.timer) clearTimeout(state.ad.timer);
+        state.ad.timer = null;
+        state.ad.due = false;
         state.ad.nextAt = 0;
 
         return;
     }
+
+    // A break waiting for the item on screen to end keeps its backstop: the poll changes nothing of it.
+    if (state.ad.due) return;
+
+    if (state.ad.timer) clearTimeout(state.ad.timer);
+    state.ad.timer = null;
 
     // Warm the still adverts NOW rather than when the break starts. An advert that
     // has not arrived by its moment lets the whole break pass in silence — the
@@ -1036,40 +1055,75 @@ function remainingOnScreen() {
     return Math.max(0, state.itemDurationMs - (Date.now() - state.itemStartedAt));
 }
 
-function startAdBreak() {
-    state.ad.timer = null;
-
-    // Nothing to interrupt: a dark screen, an empty playlist, or a set still pairing.
-    // Skip this break rather than advertising to nobody, and wait for the next one.
-    const playable = ! el('view-content').hidden
+/** Is the organization's content on the wall? Not a dark screen, an empty playlist, or a set still pairing. */
+function contentOnTheWall() {
+    return ! el('view-content').hidden
         && ! document.body.classList.contains('closed')
         && state.items.length > 0
         && frontNode() !== null;
+}
 
-    if (state.ad.active || state.ad.items.length === 0 || ! playable) {
+function startAdBreak() {
+    state.ad.timer = null;
+
+    // Nothing to interrupt: skip this break rather than advertising to nobody, and wait for the next one.
+    if (state.ad.active || state.ad.items.length === 0 || ! contentOnTheWall()) {
         scheduleNextBreak();
 
         return;
     }
 
-    // Do not cut the last few seconds off something — it looks like a fault. Wait
-    // for it to finish, then break.
-    //
-    // But wait ONCE, and only once. A video's reported duration is not always the
-    // truth: a streamed file can report a length that grows as it downloads, so it
-    // looks permanently about to end. Deferring every time it did would mean the
-    // break never happened at all — a brand paying for nothing, on a television that
-    // looked perfectly healthy.
-    const left = remainingOnScreen();
+    // Nothing is cut in the middle: the break waits for the item on screen to end, and starts between it
+    // and the next one (advance).
+    state.ad.due = true;
+    waitForTheItemOnScreen();
+}
 
-    if (! state.ad.deferred && left > 0 && left < AD_GRACE_MS) {
-        state.ad.deferred = true;
-        state.ad.timer = setTimeout(startAdBreak, left + 150);
+/**
+ * The backstop of a break waiting for the item on screen: once that item is well past its own end, it is
+ * interrupted after all. A video's reported length is not always the truth — a streamed file can report one
+ * that grows as it downloads, and a stalled one never ends — and a break that waited for ever would be a brand
+ * paying for nothing, on a television that looked perfectly healthy. An item that came on meanwhile (a new
+ * manifest started the loop again) is waited for in its turn.
+ */
+function waitForTheItemOnScreen() {
+    if (state.ad.timer) clearTimeout(state.ad.timer);
 
-        return;
-    }
+    state.ad.dueFor = state.itemStartedAt;
+    state.ad.timer = setTimeout(() => {
+        state.ad.timer = null;
+        if (! state.ad.due) return;
 
-    state.ad.deferred = false;
+        if (state.itemStartedAt !== state.ad.dueFor) {
+            waitForTheItemOnScreen();
+
+            return;
+        }
+
+        state.ad.due = false;
+
+        // The screen went dark or empty while the break waited: it waits for the next one.
+        if (! contentOnTheWall()) {
+            scheduleNextBreak();
+
+            return;
+        }
+
+        state.ad.active = true;
+        state.ad.index = 0;
+        playAd();
+    }, remainingOnScreen() + BREAK_WAIT_SLACK_MS);
+}
+
+/** The break that waited: the item before it has ended, and the next one plays once it is over (endAdBreak). */
+function breakBetweenItems() {
+    if (state.ad.timer) clearTimeout(state.ad.timer);
+    state.ad.timer = null;
+    // The item before has ended: its own backstop (a video's) must not move the loop on under the break.
+    if (state.itemTimer) clearTimeout(state.itemTimer);
+    state.itemTimer = null;
+    state.ad.due = false;
+    state.ad.between = true;
     state.ad.active = true;
     state.ad.index = 0;
     playAd();
@@ -1198,6 +1252,9 @@ function endAdBreak({ resume }) {
     // measurement — cutting off a video that had been playing all along.
     const contentWasPaused = state.ad.contentPaused;
     state.ad.contentPaused = false;
+    // A break between two items has no item to put back: the next one comes on, from its start.
+    const between = state.ad.between;
+    state.ad.between = false;
 
     const stage = el('layer-ad');
 
@@ -1225,14 +1282,19 @@ function endAdBreak({ resume }) {
         return;
     }
 
+    if (between && resume) {
+        playCurrent();
+
+        return;
+    }
+
     if (resume && contentWasPaused) resumeContent();
 }
 
 function scheduleNextBreak() {
     if (state.ad.timer) clearTimeout(state.ad.timer);
     state.ad.timer = null;
-    // A fresh break gets its own one chance to wait out an item's last seconds.
-    state.ad.deferred = false;
+    state.ad.due = false;
 
     if (state.ad.everyMs === 0 || state.ad.items.length === 0) return;
 
