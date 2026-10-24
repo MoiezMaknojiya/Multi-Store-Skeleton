@@ -12,6 +12,7 @@ use App\Models\Organization;
 use App\Models\Screen;
 use App\Services\MediaStorage;
 use App\Services\OrganizationStorage;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -63,11 +64,15 @@ class MediaController extends Controller
             'library' => ['nullable', 'string', 'regex:/^(platform|[1-9][0-9]{0,9})$/'],
         ]);
 
-        // Photographs and videos alone (owner, 2026-10-05: "media library mein show mat karo list lambi ho jayegi"): an
-        // Ad Builder page, published or a draft, is looked after in the Ad Builder and chosen where it plays.
-        $query = Media::visibleTo(auth()->user())->withoutAdPages()->with('organization:id,name');
+        $aboveTheOrganizations = auth()->user()->globalRole() !== null;
 
-        if (auth()->user()->globalRole() !== null && filled($filters['library'] ?? null)) {
+        // Photographs and videos alone (owner, 2026-10-05: "media library mein show mat karo list lambi ho jayegi"): an
+        // Ad Builder page, published or a draft, is looked after in the Ad Builder and chosen where it plays. Above the
+        // organizations each row also says who uploaded it (owner, 2026-10-23), read with the page in one query.
+        $query = Media::visibleTo(auth()->user())->withoutAdPages()->with('organization:id,name')
+            ->when($aboveTheOrganizations, fn (Builder $query) => $query->with('uploader:id,first_name,last_name'));
+
+        if ($aboveTheOrganizations && filled($filters['library'] ?? null)) {
             $filters['library'] === 'platform'
                 ? $query->platformOwned()
                 : $query->where('organization_id', (int) $filters['library']);
@@ -85,11 +90,20 @@ class MediaController extends Controller
         $query->orderBy($column, $direction);
 
         $listing = $this->paginatedResponse($request, $query, ['title'], 'media', ['*'],
-            // Why a file may not be deleted yet, so the panel says it before anybody confirms (spec §5).
-            function (Collection $files) {
+            // Why a file may not be deleted yet, so the panel says it before anybody confirms (spec §5). Above the organizations,
+            // whose library each file is in and who uploaded it, by name alone: All Libraries lists everybody's.
+            function (Collection $files) use ($aboveTheOrganizations) {
                 $refusals = Media::stillInChannelsMessages($files->pluck('id')->all());
 
-                $files->each(fn (Media $media) => $media->setAttribute('in_channels_message', $refusals[$media->id] ?? null));
+                $files->each(function (Media $media) use ($refusals, $aboveTheOrganizations) {
+                    $media->setAttribute('in_channels_message', $refusals[$media->id] ?? null);
+
+                    if ($aboveTheOrganizations) {
+                        $media->setAttribute('owner_label', $media->isPlatformOwned() ? 'Platform' : $media->organization?->name);
+                        $media->setAttribute('uploaded_by', $media->uploader?->name);
+                        $media->makeHidden('uploader');
+                    }
+                });
             });
 
         // How full the library on the page is — the organization's own, or above the organizations the organization chosen; the

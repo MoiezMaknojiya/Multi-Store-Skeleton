@@ -5,8 +5,10 @@
 
     {{-- Js::from, not @json: @json leaves its quotes raw and the first organization's name would close this
          attribute (see .claude/rules/02-project-conventions.md). $libraries is null inside an organization. --}}
+    {{-- Above the organizations the list has two columns more (whose library, who uploaded it): it takes the page's whole
+         width (owner, 2026-10-23: "full page use karna ha karo"). --}}
     <div x-data="mediaTable({{ Js::from(['libraries' => $libraries, 'storage' => $storage]) }})"
-         class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+         class="{{ $libraries !== null ? '' : 'max-w-7xl mx-auto' }} sm:px-6 lg:px-8 space-y-6">
 
         {{-- As on the Ad Builder's Assets page (owner, 2026-09-30): the organization's storage, and the list's filters and its
              search on one line beside it; then the drop box, on the page itself; then the list. Above the organizations the
@@ -19,13 +21,20 @@
             <x-storage-meter class="w-full sm:w-60" :initial="$storage" />
 
             <div class="ml-auto flex w-full flex-wrap items-center gap-3 sm:w-auto" dusk="media-filters">
+                {{-- The platform's own library (where the page opens), every library at once with each row saying whose
+                     (owner, 2026-10-23: "all ka option bhi dalo"), or one organization's — as the Assets page's Owner list. --}}
                 @if ($libraries !== null)
                     <select x-model="library" @change="applyFilters()" dusk="media-filter-library" aria-label="Library"
                             class="form-select sm:w-44">
                         <option value="platform">Platform library</option>
-                        @foreach ($libraries as $organization)
-                            <option value="{{ $organization['id'] }}">{{ $organization['name'] }}</option>
-                        @endforeach
+                        <option value="">All libraries</option>
+                        @if ($libraries !== [])
+                            <optgroup label="Organizations">
+                                @foreach ($libraries as $organization)
+                                    <option value="{{ $organization['id'] }}">{{ $organization['name'] }}</option>
+                                @endforeach
+                            </optgroup>
+                        @endif
                     </select>
                 @endif
                 <select x-model="filterType" @change="applyFilters()" dusk="media-filter-type" aria-label="Type"
@@ -54,26 +63,37 @@
         @can('media-store')
             {{-- The shared uploader (docs/UPLOADS-SPEC.md): files dropped or chosen go up in chunks and join the library
                  chosen above as each arrives, titled by their names (Edit renames them). The page listens here, not on
-                 the box: an expression on the box runs with the box's own `this`. --}}
-            <div x-on:upload-added="onUploaded($event.detail)" dusk="media-upload">
+                 the box: an expression on the box runs with the box's own `this`. Under All Libraries a file joins the
+                 platform's own, which the page says, as it lists everybody's. --}}
+            <div x-on:upload-added="onUploaded($event.detail)" dusk="media-upload" class="space-y-2">
+                @if ($libraries !== null)
+                    <p x-show="library === ''" x-cloak class="text-sm text-gray-600 dark:text-gray-400" dusk="media-upload-target">
+                        New files go to the Platform library.
+                    </p>
+                @endif
                 <x-upload-dropzone purpose="media" mode="add" :multiple="true" add-url="/media" dusk="media"
-                    context="{ library: libraries !== null ? String(library) : null, fields: libraries !== null && library !== 'platform' ? { organization_id: library } : {}, storage: storage }"
+                    context="{ library: libraries !== null ? (library === '' ? 'platform' : String(library)) : null, fields: libraries !== null && ! ['', 'platform'].includes(library) ? { organization_id: library } : {}, storage: storage }"
                     hint="JPG, PNG, GIF, WEBP, MP4 or WEBM, up to 250 MB each. Videos up to 5 minutes." />
             </div>
         @endcan
 
         {{-- No header of its own: its filters and its search are above. --}}
-        <x-crud.table-wrapper :search="false" :columns="5">
+        {{-- Above the organizations two columns more: whose library the file is in, and who uploaded it and when. --}}
+        <x-crud.table-wrapper :search="false" :columns="$libraries !== null ? 7 : 5">
             <x-slot name="head">
                 <th class="px-5 py-3 text-left font-semibold">Preview</th>
                 <th class="px-5 py-3 text-left font-semibold">Title</th>
                 <th class="px-5 py-3 text-left font-semibold">Type</th>
                 <th class="px-5 py-3 text-left font-semibold">Size</th>
+                @if ($libraries !== null)
+                    <th class="px-5 py-3 text-left font-semibold">Library</th>
+                    <th class="px-5 py-3 text-left font-semibold">Uploaded by</th>
+                @endif
                 <th class="px-5 py-3 text-right font-semibold">Actions</th>
             </x-slot>
 
             <x-slot name="body">
-                <x-crud.table-empty :columns="5" itemsVar="items" message="No files yet."
+                <x-crud.table-empty :columns="$libraries !== null ? 7 : 5" itemsVar="items" message="No files yet."
                     filtered="filterType !== '' || filterOrientation !== ''"
                     clearFilters="filterType = ''; filterOrientation = ''; applyFilters()" />
 
@@ -104,6 +124,16 @@
                             <span class="block text-xs text-gray-500 dark:text-gray-400" x-text="item.orientation ?? '-'"></span>
                         </td>
                         <td class="px-5 py-4 text-gray-600 dark:text-gray-300 whitespace-nowrap" dusk="media-size" x-text="formatSize(item.size)"></td>
+                        @if ($libraries !== null)
+                            <td class="px-5 py-4 text-gray-600 whitespace-nowrap dark:text-gray-300" x-bind:dusk="'media-owner-' + item.id" x-text="item.owner_label ?? '-'"></td>
+                            {{-- A name, and the day in the reader's own calendar, each on one line, as a name in the log is; an account
+                                 deleted since leaves no name. --}}
+                            <td class="px-5 py-4" x-bind:dusk="'media-uploader-' + item.id">
+                                <span class="block whitespace-nowrap" x-text="item.uploaded_by ?? 'Not recorded'"
+                                      x-bind:class="item.uploaded_by ? 'text-gray-700 dark:text-gray-200' : 'text-gray-500 dark:text-gray-400'"></span>
+                                <span class="block whitespace-nowrap text-xs text-gray-500 dark:text-gray-400" x-text="uploadedOn(item)"></span>
+                            </td>
+                        @endif
                         <td class="px-5 py-4">
                             {{-- askToDelete: a file a channel shows is refused at once, before any confirmation. --}}
                             {{-- A file keeps its name alone (owner, 2026-10-01): when it plays is said on its playlist line. --}}

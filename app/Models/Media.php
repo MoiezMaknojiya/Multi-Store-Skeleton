@@ -220,6 +220,12 @@ class Media extends Model
         return $this->belongsTo(Organization::class);
     }
 
+    /** Who uploaded the file; null once that account is deleted (the foreign key empties `created_by`). */
+    public function uploader(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
     /** The channel ads that show this file. */
     public function channelAds(): HasMany
     {

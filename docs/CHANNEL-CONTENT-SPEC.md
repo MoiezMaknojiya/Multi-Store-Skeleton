@@ -97,6 +97,14 @@ channel_ads
 - The platform's Media page gets the chooser the Ad Builder's Assets page has: **Platform** (the default) or
   one organization. It decides both what the listing shows and where an upload lands. An organization's Media page has no
   chooser and no way to reach the platform's rows.
+- **All libraries** (owner, 2026-10-23: "us mein all ka option bhi dalo aur listing mein kis organization ya user name upload
+  kiya ha woo bhi dalo") sits between Platform library and the organizations, which are grouped under "Organizations". It
+  lists every file, and a file dropped under it joins the platform's own library, which the page says ("New files go to the
+  Platform library."). Above the organizations every row also says whose library it is in (`owner_label`: "Platform" or the
+  organization's name) and who uploaded it (`uploaded_by`, the name alone, read through `Media::uploader` with the page in
+  one query; "Not recorded" once that account is deleted), with the day, and the page takes its whole width for the two
+  columns. Inside an organization nothing changes: every file there is its own. Tests: `MediaOwnerAndUploaderTest`,
+  `MediaAllLibrariesFlowTest`.
 
 ---
 

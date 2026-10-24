@@ -7,7 +7,9 @@
  *    video in the browser and adds each to the library as it arrives — this page only
  *    refreshes its list and its storage meter when one has (onUploaded);
  *  - above the organizations the page reads one library at a time — the platform's own
- *    or an organization's — and an upload joins the one chosen (docs/CHANNEL-CONTENT-SPEC.md);
+ *    or an organization's — or all of them, each row saying whose it is and who uploaded it
+ *    (owner, 2026-10-23); an upload joins the one chosen, the platform's under All
+ *    (docs/CHANNEL-CONTENT-SPEC.md);
  *  - a file a channel shows is refused before the delete is confirmed: the row
  *    carries the server's own words for it;
  *  - a file keeps its name alone (owner, 2026-10-01): Rename is the shared save of
@@ -22,9 +24,10 @@ export function registerMediaTable(Alpine) {
         fetchUrl: '/media/data',
         dataKey: 'media',
         entityLabel: 'file',
-        // Which library, what kind, which way and in what order: kept in the address, the library above the organizations alone.
+        // Which library, what kind, which way and in what order: kept in the address, the library above the organizations alone
+        // ('' is All Libraries).
         addressKeys: {
-            ...(config.libraries ? { library: ['library', ['platform', ...config.libraries.map((library) => String(library.id))]] } : {}),
+            ...(config.libraries ? { library: ['library', ['platform', '', ...config.libraries.map((library) => String(library.id))]] } : {}),
             type: ['filterType', ['', 'image', 'video']],
             orientation: ['filterOrientation', ['', 'landscape', 'portrait']],
             sort: ['sort', ['newest', 'oldest', 'title_asc', 'title_desc']],
@@ -33,7 +36,8 @@ export function registerMediaTable(Alpine) {
         deleteModalName: 'confirm-media-deletion',
 
         extraState: {
-            // Above the organizations, every organization [{id, name}] and the library shown: 'platform' or an organization's id.
+            // Above the organizations, every organization [{id, name}] and the library shown: 'platform', '' for all of them or an
+            // organization's id.
             // Inside an organization there is only the organization's own, and no choosing (null).
             libraries: config.libraries ?? null,
             library: 'platform',
@@ -114,6 +118,13 @@ export function registerMediaTable(Alpine) {
             /** In the words the storage meter and the uploader use, so a file reads the same size everywhere. */
             formatSize(bytes) {
                 return bytes ? bytesInWords(bytes) : '-';
+            },
+
+            /** "Oct 22, 2026": the day the file was uploaded, in the reader's own calendar (the server keeps UTC). */
+            uploadedOn(item) {
+                const at = new Date(item.created_at ?? '');
+
+                return Number.isNaN(at.getTime()) ? '' : at.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
             },
 
             formatDuration(seconds) {
