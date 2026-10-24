@@ -44,6 +44,13 @@ class BuilderAsset extends Model
      */
     public const MAX_VIDEO_SECONDS = 30;
 
+    /**
+     * How many of a shelf's newest files the editor is handed for its picker — beside every file the design itself names,
+     * however old (BuilderController::assetsForEditor). Two hundred left the platform's older designs with holes once its
+     * shelf held 263 (live, 2026-10-23).
+     */
+    public const EDITOR_SHELF = 500;
+
     protected $fillable = [
         'organization_id', 'copied_from_id', 'title', 'kind', 'mime_type', 'disk', 'path', 'thumbnail_path',
         'size', 'width', 'height', 'duration_seconds', 'created_by',

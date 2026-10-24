@@ -1351,3 +1351,15 @@ The owner, 2026-10-23: "ad builder k ander landscape aur portrait wala bhi filte
   has no portrait drafts.", "No landscape ads.") with **Show Any Orientation** once the Category and Status lists are let go.
 - **Tests.** `AdOrientationFilterTest` (both tiers, with the Owner and Status lists, bent values) and the orientation test in
   `AdStatusFilterFlowTest` (a real double press, the address, a reload, the empty list's words and button), seen failing first.
+
+## Addendum 2026-10-23, later — the editor is handed every file its design names
+
+Found on live while publishing Grub Plates (#23): the editor took the newest 200 files of its shelf and nothing else, and once the
+platform's shelf held 263 (the GAMA promos), an older design opened with holes where its pictures were — and its poster, drawn from
+the stage as it is shown, would have been saved with them. The screens never showed it: the compiler reads its files itself.
+
+- `BuilderController::assetsForEditor` hands the newest `BuilderAsset::EDITOR_SHELF` (500) files of the ad's shelf for the
+  picker and, beside them, every file of that same shelf the design names, its draft and its published version
+  (`BuilderAd::assetIdsIn`), however old. A file of another shelf a design names is never handed over.
+- **Tests.** `EditorShelfTest` (an older design's draft and published files beside the newest 500, never another shelf's; a new
+  ad the newest alone), seen failing on the editor before.

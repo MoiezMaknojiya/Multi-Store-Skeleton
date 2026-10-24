@@ -542,16 +542,24 @@ class BuilderController extends Controller
     /**
      * The pictures and videos the editor may put on the stage: the ad's organization's own alone (owner, 2026-10-07), and for an
      * ad for every organization the platform's alone (BuilderAsset::onShelfOf). A new ad's are its organization's own inside one,
-     * and above the organizations the shelf of whom Create Ad chose for it ($newFor; the platform's when none).
+     * and above the organizations the shelf of whom Create Ad chose for it ($newFor; the platform's when none). The newest
+     * BuilderAsset::EDITOR_SHELF for the picker, and beside them every file of that shelf the design names, its draft and its
+     * published version, however old: the stage is drawn with them, and so is the poster a save writes.
      */
     private function assetsForEditor(?BuilderAd $ad = null, ?int $newFor = null): array
     {
-        return BuilderAsset::visibleTo(auth()->user())
-            ->when($ad !== null || $this->aboveTheOrganizations(), fn (Builder $query) => $query->onShelfOf($ad !== null ? $ad->organization_id : $newFor))
-            ->latest()
-            ->limit(200)
-            ->get(['id', 'organization_id', 'title', 'kind', 'disk', 'path', 'thumbnail_path', 'width', 'height', 'duration_seconds'])
-            ->toArray();
+        $columns = ['id', 'organization_id', 'title', 'kind', 'disk', 'path', 'thumbnail_path', 'width', 'height', 'duration_seconds'];
+        $shelf = fn (): Builder => BuilderAsset::visibleTo(auth()->user())
+            ->when($ad !== null || $this->aboveTheOrganizations(), fn (Builder $query) => $query->onShelfOf($ad !== null ? $ad->organization_id : $newFor));
+
+        $newest = $shelf()->latest()->limit(BuilderAsset::EDITOR_SHELF)->get($columns);
+
+        $named = $ad === null ? [] : array_diff(
+            array_unique([...BuilderAd::assetIdsIn($ad->document), ...BuilderAd::assetIdsIn($ad->published_document)]),
+            $newest->pluck('id')->all(),
+        );
+
+        return $newest->concat($named === [] ? [] : $shelf()->whereKey($named)->get($columns))->toArray();
     }
 
     /** Update Ads — and, for an ad for every organization, standing above the organizations (an organization never sees one). */
