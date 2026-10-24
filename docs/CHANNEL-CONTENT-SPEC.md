@@ -302,6 +302,28 @@ own shape alone.
 - **Tests.** `ChannelOrientationTest`, `ChannelOrientationAttackTest`, `ChannelOrientationFlowTest` (a real double press on the
   choice, Edit, a flipped screen's tab and the television's stage turned half round).
 
+## 8f. A channel's ads are filtered by status, month and name (owner, 2026-10-23)
+
+The owner, with 36 GAMA ads of two months in one channel: "sub se phele channel k ander 'Starts later' aur 'Running' ka filter ya
+sorting dalo. ya month ka filter dalo jo tumhe theek lagay dalo. bhohot mushkil ho rae ha".
+
+- **Filters, not a sort.** The list's order is the order the channel plays its ads in, so it is never re-sorted. Beside Add Ad
+  stand **Status** (All Statuses · Running · Starts later · Ended · Draft), **Month** (All Months, then every month the ads'
+  dates name, as "November 2026"; there once two months are named) and a search of the titles. Each choice says how many ads
+  it would show under the other two ("Starts later (17)"). An ad runs in a month when its dates touch it; one with no start
+  or no end runs in every month on that side. They work in the browser (`channel-ads.js`): the list already holds every ad.
+- **Every row keeps its place in the channel** (the number), whatever the filters leave out, and **an arrow moves an ad past
+  the next one shown**: with nothing filtered it is the swap it always was, and under a filter the ads it hides keep their
+  places. The first one shown has no ↑, the last no ↓.
+- **The address keeps them** (`status`, `month`, `search`), so a reload or a link opens on the same list. A value it does not
+  allow is left out, and a month no ad runs in any more is forgotten once the ads are in.
+- **Said, not guessed.** A list the filters empty says "Nothing matches these filters." (or the search's words), with Clear
+  Search and Clear Filters. An ad saved where the filters hide it says so in its toast ("Ad added. The filters hide it."). A
+  screen reader hears how many are shown ("17 of 36 ads shown."). A channel with no ads shows no filters.
+- **Tests.** `ChannelAdFiltersScriptTest` (the counts, the months, an arrow under a filter, the address, the toast, under
+  Node), `ChannelAdFiltersFlowTest` (a real double press on Status, a reload, an arrow under Starts later, the month and the
+  search, the way back), and the page's channel in `EveryPageFitsAPhoneTest` holds ads of two months.
+
 ---
 
 ## 9. Questions already answered, so nobody asks again

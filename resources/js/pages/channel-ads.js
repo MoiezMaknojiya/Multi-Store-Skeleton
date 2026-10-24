@@ -1,5 +1,5 @@
 /**
- * One channel's ads: add, edit, reorder and remove them.
+ * One channel's ads: add, edit, reorder and remove them — and find them, by status, month and name.
  *
  * Every action is its own request, and each answer brings the whole list back — so the
  * page never has to guess what the server did. An upload, a reorder and a removal all
@@ -21,7 +21,7 @@ import { emptyTheBox, formStillAsked, giveUpUpload, notSavedWords } from '../cor
 import { lengthInWords } from '../core/media-file.js';
 import { PlaylistItemDefaults } from '../core/playlist-defaults.js';
 import { showFirstError, unreadableFields } from '../core/validate.js';
-import { dayLabel } from '../core/clock.js';
+import { dayLabel, monthLabel } from '../core/clock.js';
 
 const blankForm = () => ({ title: '', seconds: PlaylistItemDefaults.imageSeconds, starts_on: '', ends_on: '' });
 
@@ -37,6 +37,44 @@ const AD_BOX = '[dusk="channel-ad-dropzone"]';
 /** The two ways that choose a row of the library, rather than upload one. */
 const PICKING = ['library', 'ads'];
 
+/* ── The list's filters (owner, 2026-10-23: "Starts later aur Running ka filter … ya month ka filter") ──────────
+ * They choose which ads the list shows, never the order the channel plays them in: every row keeps its own place
+ * number, and an arrow moves an ad past the next one shown. */
+
+/** What ChannelAd::statusOn says, in the order the Status list offers them. */
+const STATUSES = ['running', 'scheduled', 'ended', 'draft'];
+
+const A_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** The Month list holds three years at most, whatever far-off end an ad was given. */
+const MOST_MONTHS = 36;
+
+/** Does the ad run on any day of the month ("2026-11")? With no start it has run all along, with no end it runs on. */
+function runsInMonth(ad, month) {
+    return (! ad.starts_on || ad.starts_on <= `${month}-31`) && (! ad.ends_on || ad.ends_on >= `${month}-01`);
+}
+
+/** Every month from the first to the last that any ad's dates name ("2026-10", "2026-11" …); none when no ad has a date. */
+function monthsNamed(ads) {
+    const named = ads.flatMap((ad) => [ad.starts_on, ad.ends_on]).filter(Boolean).map((day) => day.slice(0, 7)).sort();
+    if (named.length === 0) return [];
+
+    const last = named[named.length - 1];
+    let [year, month] = named[0].split('-').map(Number);
+    const months = [];
+
+    while (months.length < MOST_MONTHS) {
+        const key = `${year}-${String(month).padStart(2, '0')}`;
+        months.push(key);
+        if (key >= last) break;
+
+        month = month === 12 ? 1 : month + 1;
+        if (month === 1) year += 1;
+    }
+
+    return months;
+}
+
 export function registerChannelAds(Alpine) {
     Alpine.data('channelAds', (config = {}) => ({
         channelId: config.channelId,
@@ -51,6 +89,12 @@ export function registerChannelAds(Alpine) {
         loading: true,
         // The ads could not be loaded at all: said where they would be, with Try Again.
         loadFailed: false,
+        // Which ads the list shows: a status of STATUSES, a month ("2026-11") and words of the title; '' is every one.
+        // Kept in the page's address (status, month, search), so a reload or a link keeps them.
+        filterStatus: '',
+        filterMonth: '',
+        search: '',
+        searchTimer: null,
         saving: false,
         reordering: false,
         removing: false,
@@ -84,6 +128,13 @@ export function registerChannelAds(Alpine) {
         storage: null,
 
         init() {
+            this.readFilters();
+            this.$watch('filterStatus', () => this.filtersChanged());
+            this.$watch('filterMonth', () => this.filtersChanged());
+            this.$watch('search', () => {
+                clearTimeout(this.searchTimer);
+                this.searchTimer = setTimeout(() => this.filtersChanged(), 300);
+            });
             this.load();
         },
 
@@ -99,6 +150,8 @@ export function registerChannelAds(Alpine) {
                 this.ads = data.ads;
                 this.storage = data.storage ?? null;
                 this.loadFailed = false;
+                // A month the address named that no ad runs in any more is not offered: the list shows every month.
+                if (this.filterMonth !== '' && ! this.months().some((month) => month.key === this.filterMonth)) this.filterMonth = '';
             } catch (error) {
                 // The first load says so where the ads would be, with Try Again; a refresh after a change keeps the
                 // rows it has and says it in a toast.
@@ -404,6 +457,8 @@ export function registerChannelAds(Alpine) {
             const asked = formStillAsked(() => this.formTicket, event?.target);
             const sent = this.source === 'upload' ? this.uploaded.upload : null;
             this.uploadBeingSaved = sent;
+            const editedId = this.editingAd?.id ?? null;
+            const listed = new Set(this.ads.map((ad) => ad.id));
             try {
                 const payload = new FormData();
                 if (sent) payload.append('upload', sent);
@@ -438,7 +493,10 @@ export function registerChannelAds(Alpine) {
                 this.storage = data.storage ?? this.storage;
                 // Its upload is the ad's now: the box lets go of it, and nothing gives it up (uploadBeingSaved).
                 if (asked()) this.closeAdModal();
-                window.toast(data.message, 'success');
+                // An ad the filters leave out would seem to have gone nowhere: the toast says where it is.
+                const savedId = editedId ?? this.ads.find((ad) => ! listed.has(ad.id))?.id;
+                const hidden = savedId !== undefined && ! this.shownAds().some((ad) => ad.id === savedId);
+                window.toast(hidden ? `${data.message}. The filters hide it.` : data.message, 'success');
             } catch (error) {
                 const errors = error.response?.status === 422 ? (error.response.data?.errors ?? null) : null;
 
@@ -466,15 +524,23 @@ export function registerChannelAds(Alpine) {
 
         /* ── Order ───────────────────────────────────────────────────────── */
 
-        /** Swap one ad with its neighbour, and send the whole order. The arrows stay pressable while it goes — a
-         *  disabled button lets go of the keyboard — and a press meanwhile is simply not taken. */
-        async move(index, step) {
-            const target = index + step;
-            if (this.reordering || target < 0 || target >= this.ads.length) return;
+        /** The ad shown just above (`step` -1) or below (1) this one, or null at the end of what is shown. */
+        neighbourOf(ad, step) {
+            const shown = this.shownAds();
 
-            const order = this.ads.map((ad) => ad.id);
-            [order[index], order[target]] = [order[target], order[index]];
-            const moved = this.ads[index];
+            return shown[shown.findIndex((other) => other.id === ad.id) + step] ?? null;
+        },
+
+        /** Move one ad past the next one shown, and send the whole order: with no filter on, a swap with its neighbour;
+         *  under a filter, the ads it hides keep their places. The arrows stay pressable while it goes — a disabled
+         *  button lets go of the keyboard — and a press meanwhile is simply not taken. */
+        async move(moved, step) {
+            const neighbour = this.neighbourOf(moved, step);
+            if (this.reordering || neighbour === null) return;
+
+            const order = this.ads.map((ad) => ad.id).filter((id) => id !== moved.id);
+            const beside = order.indexOf(neighbour.id);
+            order.splice(step < 0 ? beside : beside + 1, 0, moved.id);
 
             this.reordering = true;
             try {
@@ -490,6 +556,7 @@ export function registerChannelAds(Alpine) {
                     const other = document.querySelector(`[dusk="channel-ad-${direction === 'up' ? 'down' : 'up'}-${moved.id}"]`);
                     (same && !same.disabled ? same : other)?.focus();
                 });
+                // Its place in the channel, which is what plays, whatever the filters show.
                 if (at !== -1) announce(`${moved.title} moved to position ${at + 1} of ${this.ads.length}.`);
             } catch (error) {
                 const errors = error.response?.data?.errors;
@@ -526,6 +593,90 @@ export function registerChannelAds(Alpine) {
             } finally {
                 this.removing = false;
             }
+        },
+
+        /* ── Filters ─────────────────────────────────────────────────────── */
+
+        /** What the address says the list shows, read before the first load; anything it does not allow is left out. */
+        readFilters() {
+            const query = new URLSearchParams(window.location?.search ?? '');
+
+            if (STATUSES.includes(query.get('status'))) this.filterStatus = query.get('status');
+            if (A_MONTH.test(query.get('month') ?? '')) this.filterMonth = query.get('month');
+            if (query.has('search')) this.search = query.get('search').slice(0, 255);
+        },
+
+        /** The filters written into the address in place (no new history entry), only those that are on. */
+        writeFilters() {
+            if (! window.location || ! window.history) return;
+
+            const query = new URLSearchParams(window.location.search);
+            const put = (param, value) => (value === '' ? query.delete(param) : query.set(param, value));
+            put('status', this.filterStatus);
+            put('month', this.filterMonth);
+            put('search', this.search.trim());
+
+            const next = query.toString();
+            const address = window.location.pathname + (next ? `?${next}` : '') + window.location.hash;
+            if (address !== window.location.pathname + window.location.search + window.location.hash) {
+                window.history.replaceState(window.history.state, '', address);
+            }
+        },
+
+        /** A filter changed: the address keeps it, and a screen reader hears how many ads are shown now. */
+        filtersChanged() {
+            this.writeFilters();
+            if (this.ads.length > 0) announce(`${this.shownAds().length} of ${this.ads.length} ads shown.`);
+        },
+
+        /** Does the ad pass the filters? `except` leaves one out: a filter's own counts are read under the others. */
+        passes(ad, except = null) {
+            if (except !== 'status' && this.filterStatus !== '' && ad.status !== this.filterStatus) return false;
+            if (except !== 'month' && this.filterMonth !== '' && ! runsInMonth(ad, this.filterMonth)) return false;
+
+            const words = this.search.trim().toLowerCase();
+
+            return words === '' || String(ad.title ?? '').toLowerCase().includes(words);
+        },
+
+        /** The ads the list shows, in the channel's own order. */
+        shownAds() {
+            return this.ads.filter((ad) => this.passes(ad));
+        },
+
+        isFiltered() {
+            return this.filterStatus !== '' || this.filterMonth !== '';
+        },
+
+        /** How many ads of this status the other filters leave: the number beside it in the Status list. */
+        statusCount(status) {
+            return this.ads.filter((ad) => ad.status === status && this.passes(ad, 'status')).length;
+        },
+
+        /** The months any ad runs in ({key: "2026-11", label: "November 2026", count}), for the Month list. */
+        months() {
+            return monthsNamed(this.ads)
+                .filter((key) => this.ads.some((ad) => runsInMonth(ad, key)))
+                .map((key) => ({
+                    key,
+                    label: monthLabel(key),
+                    count: this.ads.filter((ad) => runsInMonth(ad, key) && this.passes(ad, 'month')).length,
+                }));
+        },
+
+        /** The Month list is there once there are two months to choose between (or the address chose one). */
+        offersMonths() {
+            return this.filterMonth !== '' || this.months().length > 1;
+        },
+
+        clearFilters() {
+            this.filterStatus = '';
+            this.filterMonth = '';
+        },
+
+        /** Where the ad plays in the channel, 1 first: shown on its row whatever the filters leave out. */
+        placeOf(ad) {
+            return this.ads.findIndex((other) => other.id === ad.id) + 1;
         },
 
         /* ── Display ─────────────────────────────────────────────────────── */

@@ -38,16 +38,41 @@
         @endif
 
         <div class="card">
-            <div class="card-header">
-                <div>
+            <div class="card-header sm:flex-wrap">
+                <div class="min-w-0">
                     <h2 class="text-subheading">Ads</h2>
                     <p class="text-xs text-gray-500 mt-0.5 dark:text-gray-400" dusk="channel-ads-summary" x-text="summary()"></p>
                 </div>
-                @if (! $readOnly)
-                    @can('channel-update')
-                    <x-crud.add-button label="Add Ad" @click="openAdModal()" dusk="add-channel-ad" />
-                    @endcan
-                @endif
+                {{-- The list's button, then its filters and its search (owner, 2026-10-23: "Starts later aur Running ka filter …
+                     ya month ka filter"). They choose which ads are shown, never the order the channel plays them in; each
+                     number beside a status or a month is how many ads it would show. They take a line of their own, and
+                     wrap there, when they no longer fit beside the title. --}}
+                <div class="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto sm:justify-end">
+                    @if (! $readOnly)
+                        @can('channel-update')
+                        <x-crud.add-button label="Add Ad" @click="openAdModal()" dusk="add-channel-ad" />
+                        @endcan
+                    @endif
+                    {{-- Nothing to filter in a channel with no ads, unless the address asked for a filter. --}}
+                    <div x-show="loading || ads.length > 0 || isFiltered() || search.trim() !== ''" class="contents">
+                        <select x-model="filterStatus" class="form-select sm:w-44" dusk="channel-ads-filter-status" aria-label="Status">
+                            <option value="">All Statuses</option>
+                            <option value="running" x-text="'Running (' + statusCount('running') + ')'">Running</option>
+                            <option value="scheduled" x-text="'Starts later (' + statusCount('scheduled') + ')'">Starts later</option>
+                            <option value="ended" x-text="'Ended (' + statusCount('ended') + ')'">Ended</option>
+                            <option value="draft" x-text="'Draft (' + statusCount('draft') + ')'">Draft</option>
+                        </select>
+                        {{-- Once the ads' dates name two months or more. Each option says it is chosen itself: the months
+                             arrive with the ads, after the list took its value from the address. --}}
+                        <select x-show="offersMonths()" x-cloak x-model="filterMonth" class="form-select sm:w-48" dusk="channel-ads-filter-month" aria-label="Month">
+                            <option value="">All Months</option>
+                            <template x-for="month in months()" :key="month.key">
+                                <option :value="month.key" :selected="month.key === filterMonth" x-text="month.label + ' (' + month.count + ')'"></option>
+                            </template>
+                        </select>
+                        <x-crud.search-input placeholder="Search ads..." />
+                    </div>
+                </div>
             </div>
 
             {{-- A container, so a row's controls move under its title when the card is too narrow for
@@ -68,12 +93,28 @@
                     </p>
                 </template>
 
-                <template x-for="(ad, index) in ads" :key="ad.id">
+                {{-- Ads there, but none the search or the filters leave: said, with the way back (as x-crud.table-empty). --}}
+                <template x-if="!loading && !loadFailed && ads.length > 0 && shownAds().length === 0">
+                    <div class="mx-auto max-w-md space-y-3 py-10 text-center" dusk="channel-ads-no-match">
+                        <p class="text-sm text-gray-700 dark:text-gray-200">
+                            <span x-show="search.trim() !== ''">Nothing matches &ldquo;<span class="font-medium" x-text="search.trim()"></span>&rdquo;<span x-show="isFiltered()"> under these filters</span>.</span>
+                            <span x-show="search.trim() === ''">Nothing matches these filters.</span>
+                        </p>
+                        <div class="flex flex-wrap justify-center gap-2">
+                            <button type="button" x-show="search.trim() !== ''" class="btn-row-neutral" @click="search = ''" dusk="channel-ads-clear-search">Clear Search</button>
+                            <button type="button" x-show="isFiltered()" class="btn-row-neutral" @click="clearFilters()" dusk="channel-ads-clear-filters">Clear Filters</button>
+                        </div>
+                    </div>
+                </template>
+
+                {{-- Each row keeps its place in the channel (the number), whatever the filters leave out, and its arrows move
+                     it past the next ad shown. --}}
+                <template x-for="ad in shownAds()" :key="ad.id">
                     {{-- An ad outside its dates is on no screen: its picture is drawn faded and its badge says why —
                          the row's buttons stay as they are, since they still work. --}}
                     <div class="flex flex-wrap items-center gap-x-3 gap-y-2 p-2 rounded-md border border-gray-200 dark:border-gray-700"
                          x-bind:dusk="'channel-ad-row-' + ad.id">
-                        <span class="w-6 text-xs text-gray-500 text-center dark:text-gray-400" x-text="index + 1"></span>
+                        <span class="w-6 text-xs text-gray-500 text-center dark:text-gray-400" x-bind:dusk="'channel-ad-place-' + ad.id" x-text="placeOf(ad)"></span>
 
                         <div class="w-20 h-12 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0"
                              x-bind:class="ad.status !== 'running' ? 'opacity-50' : ''">
@@ -118,11 +159,11 @@
                                 <div class="flex items-center gap-2">
                                     <button @click="openAdModal(ad)" x-bind:dusk="'edit-channel-ad-' + ad.id"
                                         class="btn-row-neutral" x-bind:aria-label="'Edit ' + ad.title">Edit</button>
-                                    <button @click="move(index, -1)" x-bind:disabled="index === 0" x-bind:aria-busy="reordering ? 'true' : 'false'"
+                                    <button @click="move(ad, -1)" x-bind:disabled="neighbourOf(ad, -1) === null" x-bind:aria-busy="reordering ? 'true' : 'false'"
                                         x-bind:dusk="'channel-ad-up-' + ad.id"
                                         class="btn-row-neutral" title="Move up"
                                         x-bind:aria-label="'Move ' + ad.title + ' up'"><span aria-hidden="true">&uarr;</span></button>
-                                    <button @click="move(index, 1)" x-bind:disabled="index === ads.length - 1" x-bind:aria-busy="reordering ? 'true' : 'false'"
+                                    <button @click="move(ad, 1)" x-bind:disabled="neighbourOf(ad, 1) === null" x-bind:aria-busy="reordering ? 'true' : 'false'"
                                         x-bind:dusk="'channel-ad-down-' + ad.id"
                                         class="btn-row-neutral" title="Move down"
                                         x-bind:aria-label="'Move ' + ad.title + ' down'"><span aria-hidden="true">&darr;</span></button>

@@ -384,6 +384,11 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
         $platformChannel = Channel::factory()->create(['name' => 'GAMA Wholesale Promotions Channel']);
         $promo = Media::factory()->create(['organization_id' => null, 'title' => 'Minute Maid Mango Summer Promotion']);
         ChannelAd::factory()->create(['channel_id' => $platformChannel->id, 'media_id' => $promo->id]);
+        // Ads of two months, so the list's Month filter is drawn beside its Status filter and its search.
+        ChannelAd::factory()->create(['channel_id' => $platformChannel->id, 'position' => 1, 'title' => 'Coca-Cola 20oz Bottles Two for Four Seventy-Five',
+            'starts_on' => now()->startOfMonth(), 'ends_on' => now()->endOfMonth()]);
+        ChannelAd::factory()->create(['channel_id' => $platformChannel->id, 'position' => 2, 'title' => 'Red Bull Winter Edition Two for Five Fifty',
+            'starts_on' => now()->addMonthNoOverflow()->startOfMonth(), 'ends_on' => now()->addMonthNoOverflow()->endOfMonth()]);
 
         ActivityLog::record('media.uploaded', $menu, 'Uploaded Breakfast, Lunch and Dinner Specials Menu Board to the library', $owner);
         ActivityLog::record('member.invited', $alpha, 'Invited pending.new.team.member@example.com as Weekend Cashier', $owner);
