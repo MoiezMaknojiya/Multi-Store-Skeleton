@@ -385,6 +385,8 @@ Route::middleware(['auth', 'verified', 'organization.active', 'throttle:admin'])
         Route::post('/assets', [BuilderAssetController::class, 'store'])->middleware('can:ad-store')->name('builder.assets.store');
         // An organization's own file with Delete Ads; one shared with every organization only above the organizations (the controller asks)
         Route::delete('/assets/{asset}', [BuilderAssetController::class, 'destroy'])->whereNumber('asset')->middleware('can:ad-destroy')->name('builder.assets.destroy');
+        // Renamed with Update Ads, under the same walls (owner, 2026-10-24: "har image ke liye uska proper product name use karo")
+        Route::put('/assets/{asset}', [BuilderAssetController::class, 'update'])->whereNumber('asset')->middleware('can:ad-update')->name('builder.assets.update');
 
         // Categories (owner, 2026-10-22): the platform's one list, which every ad may be put in — made, renamed and deleted above
         // the organizations alone. Declared before /{ad} so the word is never read as an id

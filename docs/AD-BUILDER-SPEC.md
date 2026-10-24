@@ -1363,3 +1363,16 @@ the stage as it is shown, would have been saved with them. The screens never sho
   (`BuilderAd::assetIdsIn`), however old. A file of another shelf a design names is never handed over.
 - **Tests.** `EditorShelfTest` (an older design's draft and published files beside the newest 500, never another shelf's; a new
   ad the newest alone), seen failing on the editor before.
+
+## Addendum 2026-10-24 — a shelf file is renamed
+
+The owner, 2026-10-24: "assets folder mein products ki images hain. Har image ke liye uska proper product name use karo, jaise
+'Alani-12oz', aur sabhi products ke names ka format consistent rakho." The shelf had no way to rename a file, as the Media page has.
+
+- **Rename** is the pencil over a tile's picture, top right, shown the way its Delete is (under the mouse, while the keyboard is in
+  the card, always on a touch screen), opening **Rename File** with its one field. `PUT /builder/assets/{asset}`
+  (`builder.assets.update`, `can:ad-update`, `BuilderAssetController::update`): the walls of its delete — an organization's own file
+  inside its organization, the platform's above the organizations alone, another's 404 — each row carrying `can_rename`. Its name
+  alone changes: every design names a file by its id. Required, at most 255, in the form's words; logged as `ad_asset.renamed`.
+- **Tests.** `AssetRenameTest` (both tiers, the walls, the permission, bent titles) and `AssetRenameFlowTest` (the pencil, an empty
+  name said before anything is sent, a double press on Save renaming once, the search finding the new name), seen failing first.

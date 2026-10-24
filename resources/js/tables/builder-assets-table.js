@@ -7,6 +7,7 @@
  */
 import { createCrudTable } from '../core/crud-table-base.js';
 import { bytesInWords, storageUsedText, storagePercent } from '../core/media-file.js';
+import { validate, required, maxLen } from '../core/validate.js';
 
 export function registerBuilderAssetsTable(Alpine) {
     Alpine.data('builderAssetsTable', (config = {}) => createCrudTable({
@@ -16,6 +17,11 @@ export function registerBuilderAssetsTable(Alpine) {
         // Only an Owner the list offers: an organization since deleted (an old link) is the list as it opens.
         addressKeys: config.owner ? { owner: ['filterOrganization', ['platform', '', ...(config.ownerIds ?? [])]] } : {},
         deleteModalName: 'confirm-asset-deletion',
+        // Rename (owner, 2026-10-24): the shared save of one field, as the Media page's.
+        formModalName: 'asset-form-modal',
+        defaultForm: { title: '' },
+        mapItemToForm: (asset) => ({ title: asset.title }),
+        validateForm: (form) => validate(form, { title: [required('Title'), maxLen('Title', 255)] }),
 
         extraState: {
             // Several files arriving together refresh the list once.

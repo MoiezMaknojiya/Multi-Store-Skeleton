@@ -119,6 +119,18 @@
                                         <x-icon name="trash" />
                                     </button>
                                 @endcan
+
+                                {{-- Rename in the top-right corner, shown the way Delete is (owner, 2026-10-24: "har image ke liye uska
+                                     proper product name use karo"): with Update Ads, the platform's file only above the organizations
+                                     (can_rename), and the controller asks again. --}}
+                                @can('ad-update')
+                                    <button type="button" x-show="item.can_rename" x-cloak @click="openFormModal(item)"
+                                            x-bind:aria-label="'Rename ' + item.title" title="Rename"
+                                            x-bind:dusk="'rename-asset-' + item.id"
+                                            class="touch-target absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-gray-700 shadow-sm opacity-0 transition-opacity hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100 dark:bg-gray-800/95 dark:text-gray-200 dark:hover:bg-gray-800">
+                                        <x-icon name="pencil" />
+                                    </button>
+                                @endcan
                             </div>
 
                             <div class="space-y-2 p-3">
@@ -149,6 +161,23 @@
 
             <x-crud.pagination itemsVar="items" />
         </div>
+
+        {{-- Rename: a file's name is all that changes; every design names it by its id. --}}
+        @can('ad-update')
+            <x-modal name="asset-form-modal" :show="false" maxWidth="md" focusable>
+                <div class="p-6">
+                    <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Rename File</h2>
+
+                    <form @submit.prevent="saveItem" novalidate dusk="asset-form" class="mt-4 space-y-4">
+                        <x-crud.form-field label="Title" field="title" :required="true">
+                            <x-text-input x-model="form.title" dusk="asset-edit-title" maxlength="255" autocomplete="off" />
+                        </x-crud.form-field>
+
+                        <x-crud.form-actions savingVar="saving" dusk="asset-save" />
+                    </form>
+                </div>
+            </x-modal>
+        @endcan
 
         <x-modal name="confirm-asset-deletion" :show="false" maxWidth="md" focusable>
             <form @submit.prevent="deleteItem()" class="p-6">

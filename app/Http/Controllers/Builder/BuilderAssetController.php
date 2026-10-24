@@ -99,6 +99,7 @@ class BuilderAssetController extends Controller
                     $asset->setAttribute('shared', $asset->isShared());
                     $asset->setAttribute('owner_label', $this->ownerLabel($asset));
                     $asset->setAttribute('can_delete', $this->mayDelete($asset));
+                    $asset->setAttribute('can_rename', $this->mayRename($asset));
                 });
             },
         );
@@ -141,6 +142,31 @@ class BuilderAssetController extends Controller
             // How much lighter the picture was made, for the uploader to say.
             'lighter' => $asset->size < $uploaded ? ['from' => $uploaded, 'to' => $asset->size] : null,
         ]);
+    }
+
+    /**
+     * Give a file a name of its own (owner, 2026-10-24: "har image ke liye uska proper product name use karo"): its name alone —
+     * the designs name it by its id, so nothing they show changes. The walls are the delete's: an organization's own file inside
+     * its organization, the platform's above the organizations alone, another's not found.
+     */
+    public function update(Request $request, BuilderAsset $asset): JsonResponse
+    {
+        $asset = BuilderAsset::visibleTo(auth()->user())->findOrFail($asset->id);
+
+        abort_unless($this->mayRename($asset), 403, 'Renaming a file needs the Update Ads permission.');
+
+        $validated = $request->validate(['title' => ['required', 'string', 'max:255']], [
+            'title.required' => 'Title is required.',
+            'title.string' => 'Title is required.',
+            'title.max' => 'Title may not be longer than 255 characters.',
+        ]);
+
+        $before = $asset->title;
+        $asset->update(['title' => $validated['title']]);
+
+        ActivityLog::record('ad_asset.renamed', $asset, "Renamed ad asset {$before} to {$asset->title}", organizationId: $asset->organization_id);
+
+        return response()->json(['message' => 'File renamed.', 'asset' => $asset]);
     }
 
     /**
@@ -244,6 +270,12 @@ class BuilderAssetController extends Controller
     private function mayDelete(BuilderAsset $asset): bool
     {
         return Gate::allows('ad-destroy') && (! $asset->isShared() || $this->aboveTheOrganizations());
+    }
+
+    /** Update Ads — and, for the platform's file, standing above the organizations, as its delete. */
+    private function mayRename(BuilderAsset $asset): bool
+    {
+        return Gate::allows('ad-update') && (! $asset->isShared() || $this->aboveTheOrganizations());
     }
 
     /** Whose file this is, above the organizations: its organization, or "Every organization" for the platform's own. */

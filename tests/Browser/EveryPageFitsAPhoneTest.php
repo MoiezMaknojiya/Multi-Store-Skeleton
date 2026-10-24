@@ -79,7 +79,7 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
                 '/campaigns' => ['campaign-form-modal'],
                 '/builder' => ['new-ad-orientation', 'confirm-ad-deletion'],
                 '/builder/categories' => ['category-form-modal', 'confirm-category-deletion'],
-                '/builder/assets' => ['confirm-asset-deletion'],
+                '/builder/assets' => ['confirm-asset-deletion', 'asset-form-modal'],
                 '/media' => ['media-form-modal'],
                 '/screens' => ['screen-pair-modal', 'screen-form-modal'],
                 '/screens/'.$screen->id => ['playlist-copy-modal', 'playlist-schedule-modal'],
@@ -118,7 +118,7 @@ class EveryPageFitsAPhoneTest extends DuskTestCase
                 '/channels/'.$ownChannel->id => ['channel-ad-modal'],
                 // Inside an organization Create Ad also has the Premium Templates (owner, 2026-10-07), and their unlock dialog.
                 '/builder' => ['new-ad-orientation', 'premium-templates', 'unlock-premium-templates', 'confirm-ad-deletion'],
-                '/builder/assets' => ['confirm-asset-deletion'],
+                '/builder/assets' => ['confirm-asset-deletion', 'asset-form-modal'],
                 '/members' => ['invite-member', 'change-member-role', 'remove-member', 'leave-organization', 'revoke-invitation'],
                 '/roles' => ['role-form', 'confirm-role-deletion'],
                 '/activity' => [],
