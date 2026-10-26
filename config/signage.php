@@ -82,10 +82,11 @@ return [
 
     /**
      * Where an organization asks to unlock Premium Templates or Platform Channels, or about billing (docs/BILLING-SPEC.md §3):
-     * shown on Settings → Billing and in the unlock dialog. Empty until the owner gives them, and then the pages say
-     * "Contact us" alone (BillingSummary::contact).
+     * shown on Settings → Billing, in the unlock dialog and on a paused organization's dashboard. The email is the support
+     * address (owner, 2026-10-26: "contact email mein thedisplaysolutions@gmail.com yeh dal do"), the phone empty until the
+     * owner gives one; with neither, the pages say "Contact us" alone (BillingSummary::contact).
      */
-    'billing_contact_email' => env('SIGNAGE_BILLING_EMAIL', ''),
+    'billing_contact_email' => env('SIGNAGE_BILLING_EMAIL', 'thedisplaysolutions@gmail.com'),
     'billing_contact_phone' => env('SIGNAGE_BILLING_PHONE', ''),
 
     /**

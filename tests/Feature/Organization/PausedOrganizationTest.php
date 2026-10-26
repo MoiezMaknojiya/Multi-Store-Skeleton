@@ -42,8 +42,11 @@ test('a paused organization\'s people land on a page that says so, and the menu 
         ->assertDontSee('href="'.route('media.view').'"', false)
         ->assertDontSee('href="'.route('members.view').'"', false);
 
-    // Whom to ask is on the page itself: the same contact billing gives, or "Contact us" until the owner gives one.
-    $page->assertSee('dusk="billing-contact-us"', false);
+    // Whom to ask is on the page itself: the same contact billing gives, the support address by default (owner, 2026-10-26),
+    // "Contact us" alone with no contact at all, and the owner's own once given.
+    $page->assertSee('mailto:thedisplaysolutions@gmail.com', false);
+    config(['signage.billing_contact_email' => '']);
+    workingIn($this->owner, $this->organization)->get('/dashboard')->assertOk()->assertSee('dusk="billing-contact-us"', false);
     config(['signage.billing_contact_email' => 'help@example.com', 'signage.billing_contact_phone' => '555 0100']);
     workingIn($this->owner, $this->organization)->get('/dashboard')->assertOk()
         ->assertSee('mailto:help@example.com', false)->assertSee('href="tel:5550100"', false)

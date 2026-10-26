@@ -106,7 +106,9 @@ test('the Owner reads Settings → Billing: the month, the features, every scree
         ->assertSeeInOrder(['Tv1', 'Oct 6, 2026', 'Free', 'Tv2', 'Oct 6, 2026', '$5', 'Screens total', '$5'])
         ->assertDontSee('Unlocked once')
         ->assertSee('No invoices yet')
-        ->assertSee('Contact us, and we unlock it for you.')
+        // Whom to ask, by default: the support address (owner, 2026-10-26), the phone not given yet.
+        ->assertSee('mailto:thedisplaysolutions@gmail.com', false)
+        ->assertDontSee('href="tel:', false)
         ->assertSee("Tell us your organization's name, Smart Stop.", false);
 
     $month = str($page->getContent())->after('dusk="billing-month-lines"')->before('</dl>');
@@ -130,6 +132,16 @@ test('the notice above says what is true however the platform switched the featu
     $this->get('/settings/billing')
         ->assertSeeInOrder(['Premium Templates', 'Locked', 'Platform Channels', 'Locked'])
         ->assertDontSee('every feature is open');
+});
+
+test('with no email and no phone, the page says Contact us alone', function () {
+    config(['signage.billing_contact_email' => '', 'signage.billing_contact_phone' => '']);
+    $owner = createOrganizationMember($this->organization, Role::OWNER);
+
+    $this->actingAs($owner)->withSession(['current_organization_id' => $this->organization->id])
+        ->get('/settings/billing')->assertOk()
+        ->assertSee('Contact us, and we unlock it for you.')
+        ->assertDontSee('mailto:', false);
 });
 
 test('the contact lines are the owner’s once given', function () {

@@ -1,5 +1,5 @@
-{{-- Where an organization asks to unlock or about billing (docs/BILLING-SPEC.md §3, BillingSummary::contact): the email and phone the
-     owner gives in SIGNAGE_BILLING_EMAIL and SIGNAGE_BILLING_PHONE, or "Contact us" alone until then. `lead` says what the
+{{-- Where an organization asks to unlock or about billing (docs/BILLING-SPEC.md §3, BillingSummary::contact): the email (the support
+     address unless SIGNAGE_BILLING_EMAIL says otherwise) and the phone of SIGNAGE_BILLING_PHONE, or "Contact us" alone with neither. `lead` says what the
      contact is for there (unlocking, a paused organization); `alwaysLead` says it above the email and phone too. --}}
 @props(['contact', 'organization', 'lead' => 'Contact us, and we unlock it for you.', 'alwaysLead' => false])
 

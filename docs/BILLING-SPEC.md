@@ -45,7 +45,8 @@ there holds View Billing (`User::hasBillingTab()`). A page, like every Settings 
 - **Screens** — every screen, when it was paired, and what it costs a month (the first Free), with the total;
 - **Invoices** — none yet;
 - **Questions or unlocking** — the contact email and phone from `config('signage.billing_contact_email' / '…_phone')`
-  (`SIGNAGE_BILLING_EMAIL`, `SIGNAGE_BILLING_PHONE` in `.env.example`, empty until the owner gives them: then "Contact us").
+  (`SIGNAGE_BILLING_EMAIL`, `SIGNAGE_BILLING_PHONE` in `.env.example`). The email is thedisplaysolutions@gmail.com unless
+  set otherwise (owner, 2026-10-26), the phone empty until the owner gives one; with neither, "Contact us".
 
 ## 4. Above the organizations: Billing on each organization's row
 

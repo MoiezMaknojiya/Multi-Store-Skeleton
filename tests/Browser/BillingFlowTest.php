@@ -51,7 +51,8 @@ class BillingFlowTest extends DuskTestCase
                 ->assertSeeIn('@billing-feature-platform_channels', 'Unlocked')
                 ->assertSeeIn('@billing-screens', 'Tv1')
                 ->assertSeeIn('@billing-screens', 'Screens total')
-                ->assertSeeIn('@billing-contact', 'Contact us')
+                // Whom to ask: the support address by default (owner, 2026-10-26).
+                ->assertSeeIn('@billing-contact', 'thedisplaysolutions@gmail.com')
                 ->screenshot('billing-tab');
             $this->assertSame('Settings · Laravel', $browser->driver->getTitle());
             $this->assertCalm($browser);
@@ -275,7 +276,8 @@ class BillingFlowTest extends DuskTestCase
             $browser->waitFor('@unlock-premium-templates')->pause(400)
                 ->assertSeeIn('@unlock-premium-templates', 'Unlock Premium Templates')
                 ->assertSeeIn('@unlock-premium-templates', '$10')
-                ->assertSeeIn('@unlock-premium-templates', 'Contact us')
+                ->assertSeeIn('@unlock-premium-templates', 'Contact us, and we unlock it for you.')
+                ->assertSeeIn('@unlock-premium-templates', 'thedisplaysolutions@gmail.com')
                 ->screenshot('billing-unlock-dialog');
             $this->key($browser, 'Escape');
             $browser->waitUntilMissing('@unlock-premium-templates')->assertVisible('@premium-templates');

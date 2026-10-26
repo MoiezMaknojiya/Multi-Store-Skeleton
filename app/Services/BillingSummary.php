@@ -88,8 +88,8 @@ class BillingSummary
     }
 
     /**
-     * Where an organization asks to unlock or pay (SIGNAGE_BILLING_EMAIL, SIGNAGE_BILLING_PHONE): empty until the owner gives them,
-     * and then the pages say "Contact us" alone.
+     * Where an organization asks to unlock or pay (SIGNAGE_BILLING_EMAIL, SIGNAGE_BILLING_PHONE): the support address by default,
+     * the phone once the owner gives one; with neither, the pages say "Contact us" alone.
      *
      * @return array{email: ?string, phone: ?string}
      */

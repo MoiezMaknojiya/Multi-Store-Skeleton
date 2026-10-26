@@ -9,7 +9,7 @@
         <p class="mx-auto mt-2 max-w-md text-sm text-gray-500 dark:text-gray-400">
             Its pages are closed for now, and its screens keep playing.
         </p>
-        {{-- Whom to ask: the same contact billing gives (BillingSummary::contact), or "Contact us" until the owner gives one. --}}
+        {{-- Whom to ask: the same contact billing gives (BillingSummary::contact), the support address by default, or "Contact us" alone with no contact at all. --}}
         <x-billing.contact :contact="\App\Services\BillingSummary::contact()" :organization="$organization->name"
                            lead="Contact us, and we turn it back on." :always-lead="true" class="mx-auto mt-4 max-w-md" />
         @if ($hasOtherOrganizations)

@@ -25,7 +25,7 @@
         <p class="mt-3 text-sm text-gray-600 dark:text-gray-400">{{ $words[1] }}</p>
 
         <div class="mt-4 rounded-lg border border-gray-200 p-4 dark:border-gray-700">
-            <x-billing.contact :contact="\App\Services\BillingSummary::contact()" :organization="$organization" />
+            <x-billing.contact :contact="\App\Services\BillingSummary::contact()" :organization="$organization" :always-lead="true" />
         </div>
 
         <div class="mt-6 flex justify-end">
