@@ -101,11 +101,19 @@
         .media-layer-ad { z-index: 10; background: #000; }
 
         .media-layer img,
-        .media-layer video {
+        .media-layer video,
+        .media-layer canvas {
             width: 100%; height: 100%;
             object-fit: contain;
             display: block;
             background: #000;
+        }
+
+        /* A video drawn on a canvas (a turned screen, player.js drawnOnACanvas): the element itself is
+           kept out of sight and out of the flow, so the canvas beside it takes its place. It still plays. */
+        .media-layer video[data-drawn] {
+            position: absolute; top: 0; left: 0;
+            visibility: hidden;
         }
 
         /* An ad from the Ad Builder is a page of its own: it fills the screen and scales its own
