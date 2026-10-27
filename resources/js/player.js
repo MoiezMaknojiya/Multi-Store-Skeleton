@@ -813,6 +813,9 @@ function playCurrent() {
     if (state.itemTimer) clearTimeout(state.itemTimer);
 
     const item = state.items[state.index % state.items.length];
+
+    if (playAgainInPlace(item)) return;
+
     const target = state.front === 'a' ? 'b' : 'a';
     const incoming = layer(target);
 
@@ -876,6 +879,28 @@ function playCurrent() {
         node.addEventListener('error', broken, { once: true });
         startItemTimer(Math.max(1, item.duration) * 1000);
     }
+}
+
+/**
+ * The video on screen, played again from its start when it is the very file due next: a playlist of one video,
+ * or one video twice in a row. A new element for it would start the set's decoder afresh, and on a Fire TV the
+ * first moment of every start is shown unturned on a portrait screen (Roadstar 4, 2026-10-27: landscape, then
+ * portrait, every ten seconds), behind a swap of layers that shows nothing new.
+ */
+function playAgainInPlace(item) {
+    const node = frontNode();
+
+    if (item.type !== 'video' || !node || node.tagName !== 'VIDEO' || layer(state.front).hidden) return false;
+    if (node.dataset.item !== assetUrl(item) || node.error) return false;
+
+    // The same listener is never added twice, so a round that ended by its backstop instead of `ended` still
+    // moves the loop on once. The element keeps the `error` listener it was built with.
+    node.addEventListener('ended', advance, { once: true });
+    node.currentTime = 0;
+    node.play().catch(() => {});
+    startItemTimer((item.duration + 5) * 1000);
+
+    return true;
 }
 
 /** Start the countdown for the current item, remembering when and for how long —
