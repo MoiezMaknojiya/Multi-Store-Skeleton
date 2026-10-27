@@ -438,7 +438,8 @@ rewrite what is already there and are not asked.
 ```html
 <!doctype html><html><head><meta charset="utf-8">
   <style>@font-face{…src:url(data:font/woff2;base64,…)…}</style>        <!-- embedded, §7a -->
-  <style>/* reset + stage; .ad-pending hides an element until its entrance takes it over */</style>
+  <style>/* reset + stage; .ad-pending hides an element until its entrance takes it over;
+            every video a touch short of opaque — off a Fire TV's plane, which never turns (§15) */</style>
 </head><body>
   <div class="ad-stage" id="ad-stage">
     <div class="ad-bg" style="background-color:…">…one .ad-layer per visible layer…</div>
@@ -1016,7 +1017,11 @@ anywhere else the player is exactly what it was — online only — because ever
    release — before it, a page would name a runtime version the old release does not serve, and a set that
    fetched it then would keep the old file under the new address): only the pages an older compiler wrote are
    written again, the rest stay untouched and no screen fetches them anew. `VERSION` moves — to the day it
-   changes — whenever what the compiler writes changes in a way the published pages should get too.
+   changes — whenever what the compiler writes changes in a way the published pages should get too (2026-10-27:
+   every video on a page drawn a touch short of opaque, `AdCompiler::VIDEO_OPACITY` — the `.999` the player gives
+   its own video on a turned screen, since a Fire TV's hardware plane never turns with the stage and Chromium
+   uses that plane only for a video that is fully opaque; a page cannot know which way its screen is turned, and
+   the player's CSS cannot reach inside the page's frame, so every page carries it).
 
 **Text that is not UTF-8** is refused at the door for every route, the device API's included
 (`RejectMalformedText`, a 400): a browser never sends it, and it passed every `string` rule and then broke

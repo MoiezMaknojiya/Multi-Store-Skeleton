@@ -2,10 +2,13 @@
 
 namespace Tests\Browser;
 
+use App\Models\BuilderAd;
+use App\Models\BuilderAsset;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
+use App\Services\AdPublisher;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Dusk\Browser;
@@ -19,7 +22,9 @@ use Tests\DuskTestCase;
  * Roadstar's portrait televisions showed their video sideways whenever that plane was in use, and the right
  * way up whenever the compositor drew it. So the player's own CSS gives a video on a turned screen an opacity
  * of .999 — invisible to the eye, and enough to keep it off that plane — while a landscape screen keeps it.
- * Only a Fire TV can show the picture turning; this holds the rule, on every orientation.
+ * An Ad Builder page plays in a frame of its own, where that CSS does not reach, so the compiler writes the
+ * same rule into every page, on every screen (AdCompiler::VIDEO_OPACITY). Only a Fire TV can show the picture
+ * turning; this holds the rule, on every orientation, and inside a page's frame.
  */
 class TurnedScreenVideoTest extends DuskTestCase
 {
@@ -67,6 +72,86 @@ class TurnedScreenVideoTest extends DuskTestCase
                 $this->assertSame($opacity, $shown['opacity'], "{$orientation}: the video's opacity");
                 $this->assertSame('visible', $shown['visibility']);
                 $this->assertTrue($shown['playing']);
+            }
+
+            $tv->visit('/login');
+            $tv->script('localStorage.clear();');
+        });
+    }
+
+    /**
+     * An Ad Builder page's videos — its background's and an element's — read inside the television's frame, on a
+     * landscape screen as on a portrait one: a page cannot know which way its screen is turned.
+     */
+    public function test_an_ad_builder_page_draws_its_videos_a_touch_short_of_opaque_on_every_screen(): void
+    {
+        $organization = Organization::factory()->create(['name' => 'Roadstar']);
+        $screens = [];
+
+        foreach (['landscape', 'portrait'] as $orientation) {
+            $screens[$orientation] = Screen::factory()->withToken("{$orientation}-ad-token")->create([
+                'organization_id' => $organization->id, 'name' => ucfirst($orientation).' TV', 'orientation' => $orientation,
+            ]);
+        }
+
+        $this->browse(function (Browser $tv) use ($organization, $screens) {
+            $tv->visit('/login');
+            $clip = BuilderAsset::factory()->video()->create([
+                'organization_id' => $organization->id, 'title' => 'Burger',
+                'path' => $this->recordClip($tv, "builder/{$organization->id}/assets/burger.mp4"),
+                'duration_seconds' => 3, 'width' => 180, 'height' => 320,
+            ]);
+
+            // The clip as the stage's background and as an element on it, published as a page of the library.
+            $document = BuilderAd::blankDocument();
+            $document['duration'] = 30;
+            $document['stage']['background']['layers'] = [
+                ['id' => 'bg_clip', 'type' => 'video', 'assetId' => $clip->id, 'fit' => 'cover', 'visible' => true, 'opacity' => 1],
+            ];
+            $document['elements'] = [[
+                'id' => 'el_clip', 'type' => 'video', 'name' => 'Clip', 'x' => 120, 'y' => 120, 'w' => 360, 'h' => 640,
+                'rotation' => 0, 'opacity' => 1, 'z' => 0, 'locked' => false, 'visible' => true, 'assetId' => $clip->id,
+                'style' => [], 'animations' => [],
+            ]];
+            $ad = BuilderAd::factory()->create(['organization_id' => $organization->id, 'name' => 'Burger clip', 'document' => $document]);
+            $page = app(AdPublisher::class)->publish($ad);
+
+            foreach ($screens as $screen) {
+                PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->id, 'position' => 0, 'duration_seconds' => 30]);
+            }
+
+            foreach (array_keys($screens) as $orientation) {
+                $tv->visit('/login');
+                $tv->script("localStorage.clear(); localStorage.setItem('signage.device.token', '{$orientation}-ad-token');");
+                $tv->visit('/player');
+
+                // The page's frame in front…
+                $layer = null;
+                $tv->waitUsing(30, 250, function () use ($tv, $ad, &$layer) {
+                    $layer = $tv->script(
+                        'const frame = [...document.querySelectorAll("#layer-a iframe, #layer-b iframe")]'
+                        .'.find((f) => !f.closest("[id^=layer]").hidden && (f.dataset.src || "").includes("/ads/'.$ad->storage_key.'/"));'
+                        .'return frame ? frame.closest("[id^=layer]").id : null;'
+                    )[0];
+
+                    return $layer !== null;
+                }, "the page did not come on, {$orientation}");
+                $this->assertSame($orientation, $tv->script('return document.getElementById("stage").dataset.orientation;')[0]);
+
+                // …and inside it both videos playing, each a touch short of opaque.
+                $tv->withinFrame("#{$layer} iframe", function (Browser $frame) use ($orientation) {
+                    $frame->waitUsing(15, 200, fn () => $frame->script(
+                        'const v = document.querySelectorAll("video.ad-layer, video.ad-content"); return v.length === 2 && ![...v].some((e) => e.paused);'
+                    )[0], "the page's videos did not come on, {$orientation}");
+
+                    $shown = $frame->script(<<<'JS'
+                        const layer = document.querySelector('video.ad-layer'), element = document.querySelector('video.ad-content');
+                        return { layer: getComputedStyle(layer).opacity, element: getComputedStyle(element).opacity };
+                    JS)[0];
+
+                    $this->assertSame('0.999', $shown['layer'], "{$orientation}: the background video's opacity");
+                    $this->assertSame('0.999', $shown['element'], "{$orientation}: the video element's opacity");
+                });
             }
 
             $tv->visit('/login');

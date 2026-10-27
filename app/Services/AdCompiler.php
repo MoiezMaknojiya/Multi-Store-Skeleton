@@ -85,6 +85,19 @@ class AdCompiler
     public const VIDEO_FITS = ['cover', 'contain'];
 
     /**
+     * How solid a video on the page is drawn: a touch short of opaque, on every page. Chromium puts a video on a
+     * hardware plane of its own only while its quad is fully opaque (viz, OverlayCandidateFactory::FromDrawQuad:
+     * kFailOpacity, before any platform's own rules), and a Fire TV's plane never turns with the stage the player
+     * rotates for a portrait screen (Roadstar 4, 2026-10-27: the video sideways, the rest of the page the right
+     * way up). Drawn by the compositor instead it turns like any picture, and .999 is invisible to the eye. A page
+     * cannot know which way its screen is turned, so every page pays the plane — a landscape screen loses nothing
+     * else — as the player's own CSS does for a plain video on a turned screen (resources/views/player/index.blade.php).
+     * Written as a rule for every video on the page, and on a background layer's own video as well, where the
+     * layer's inline opacity would otherwise beat the rule.
+     */
+    public const VIDEO_OPACITY = 0.999;
+
+    /**
      * What an advert that moves loads, in order: Anime.js (MIT) and the runtime — the same two files the
      * editor's preview runs.
      */
@@ -96,7 +109,7 @@ class AdCompiler
      * too: every deploy then writes those pages again from the version on the screens
      * (`builder:recompile --outdated`, run by deploy/server/release.sh), and leaves the rest alone.
      */
-    public const VERSION = '2026-09-24';
+    public const VERSION = '2026-10-27';
 
     /**
      * The boot script of an advert that moves (motionScripts()). A constant, because the page's policy names
@@ -250,6 +263,7 @@ class AdCompiler
             ? $this->contentSecurityPolicy([$fit], false)
             : $this->contentSecurityPolicy([$fit, self::BOOT_SCRIPT], true);
         $stamp = self::VERSION;
+        $videoOpacity = $this->number(self::VIDEO_OPACITY, 0, 1);
 
         return <<<HTML
         <!doctype html>
@@ -268,6 +282,9 @@ class AdCompiler
         .ad-bg, .ad-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         .ad-bg { z-index: 0; overflow: hidden; }
         video.ad-layer { object-fit: cover; }
+        /* Every video a touch short of opaque (VIDEO_OPACITY): off a Fire TV's hardware plane, which never
+           turns with the player's stage, and drawn by the compositor like any picture. */
+        video { opacity: {$videoOpacity}; }
         .ad-el { position: absolute; margin: 0; }
         .ad-anim { width: 100%; height: 100%; }
         .ad-content { width: 100%; height: 100%; box-sizing: border-box; display: block; }
@@ -323,11 +340,8 @@ class AdCompiler
     /** One background layer: a colour, a gradient, a picture or a video. */
     private function layer(array $layer, Collection $assets): string
     {
-        $common = sprintf(
-            'opacity:%s;mix-blend-mode:%s;',
-            $this->limited('layer.opacity', $layer['opacity'] ?? 1),
-            $this->oneOf($layer['blend'] ?? null, self::BLENDS, 'normal'),
-        );
+        $blend = $this->oneOf($layer['blend'] ?? null, self::BLENDS, 'normal');
+        $common = sprintf('opacity:%s;mix-blend-mode:%s;', $this->limited('layer.opacity', $layer['opacity'] ?? 1), $blend);
 
         $asset = $assets->get((int) ($layer['assetId'] ?? 0));
 
@@ -347,10 +361,13 @@ class AdCompiler
                 $this->oneOf($layer['repeat'] ?? null, self::REPEATS, 'no-repeat'),
             ),
 
+            // The layer's opacity is written on the video itself, so it is held under VIDEO_OPACITY rather than
+            // beating the page's rule: a layer at 1 is written a touch short of it, a faded one as it is.
             'video' => $asset === null || ! $asset->isVideo() ? '' : sprintf(
-                '<video class="ad-layer" src="%s" autoplay muted loop playsinline style="%sobject-fit:%s;"></video>',
+                '<video class="ad-layer" src="%s" autoplay muted loop playsinline style="opacity:%s;mix-blend-mode:%s;object-fit:%s;"></video>',
                 $this->url($asset->url),
-                $common,
+                $this->number($layer['opacity'] ?? 1, 0, self::VIDEO_OPACITY),
+                $blend,
                 $this->oneOf($layer['fit'] ?? null, self::VIDEO_FITS, 'cover'),
             ),
 
