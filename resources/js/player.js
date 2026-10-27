@@ -425,7 +425,7 @@ async function fetchPlaylist() {
  */
 function applyManifest(data, fromCache) {
     state.offline = fromCache;
-    document.body.dataset.source = fromCache ? 'cache' : 'live';
+    noteOn(document.body, 'source', fromCache ? 'cache' : 'live');
 
     if (!fromCache) {
         const serverTime = Date.parse(data.server_time);
@@ -443,7 +443,7 @@ function applyManifest(data, fromCache) {
 
     // Which entry of the timeline a cached manifest is playing — nothing on the glass says so (the owner's
     // rule); it is on the page for whoever checks a set.
-    if (fromCache) document.body.dataset.entry = String(shown.entry);
+    if (fromCache) noteOn(document.body, 'entry', String(shown.entry));
 
     // Nothing changed: leave whatever is on screen alone rather than
     // re-rendering and making the TV flicker every poll. What is compared is
@@ -521,11 +521,16 @@ function registerWorker() {
     });
 
     // The worker says when a warm-up is done, and how many files it could not fetch. Kept on the
-    // page for whoever checks a set (nothing on the glass says so — the owner's rule).
+    // page for whoever checks a set (nothing on the glass says so — the owner's rule): when the first
+    // one was done, and again only when what is missing changes — every poll asks for one (noteOn).
     navigator.serviceWorker.addEventListener('message', (event) => {
-        if (event.data?.type === 'warmed') {
+        if (event.data?.type !== 'warmed') return;
+
+        const missing = String(event.data.missing ?? 0);
+
+        if (!document.body.dataset.warmed || document.body.dataset.warmMissing !== missing) {
             document.body.dataset.warmed = String(Date.now());
-            document.body.dataset.warmMissing = String(event.data.missing ?? 0);
+            document.body.dataset.warmMissing = missing;
         }
     });
 }
@@ -647,8 +652,17 @@ async function sendHeartbeat() {
 
 /** The panel is always landscape; a portrait screen is the content turned. */
 function applyOrientation(orientation) {
-    const stage = el('stage');
-    stage.dataset.orientation = orientation ?? 'landscape';
+    noteOn(el('stage'), 'orientation', orientation ?? 'landscape');
+}
+
+/**
+ * A data attribute written only when its value changes. Every poll used to write the stage's orientation and
+ * the page's notes again, the same values, and a portrait Fire TV showed one ten-second round in three turned
+ * back to landscape — one per thirty-second poll (Roadstar 4, 2026-10-27): the page is left alone when nothing
+ * has changed.
+ */
+function noteOn(node, key, value) {
+    if (node.dataset[key] !== value) node.dataset[key] = value;
 }
 
 function render(data) {

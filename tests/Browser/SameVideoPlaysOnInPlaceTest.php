@@ -14,10 +14,11 @@ use Tests\DuskTestCase;
 /**
  * A video that comes round again plays again in the element already on screen, from its start (2026-10-27).
  *
- * Roadstar 4's two portrait televisions each played one ten-second video, and on their Fire TV Sticks every start
- * of it showed its first moment unturned, landscape, before the portrait screen's rotation caught up: the player
- * built a new <video> for every round and swapped the layers to show it, so the set's decoder started afresh
- * every ten seconds. Played again in place, nothing on the wall is rebuilt or swapped.
+ * Roadstar 4's portrait televisions each played one ten-second video, and on their Fire TV Sticks one round in
+ * three was shown sideways, small, then two the right way up — again and again, a cycle of thirty seconds, the
+ * player's poll. The player built a new <video> for every round and swapped the layers to show it, and every poll
+ * wrote the stage's orientation and the page's notes again, unchanged. Now the same clip plays again in place,
+ * and a poll that changes nothing writes nothing on the page.
  */
 class SameVideoPlaysOnInPlaceTest extends DuskTestCase
 {
@@ -88,30 +89,45 @@ class SameVideoPlaysOnInPlaceTest extends DuskTestCase
             $tv->waitUsing(30, 200, fn () => $tv->script("const v = document.querySelector('{$onScreen}'); return !!v && !v.paused;")[0]);
             $this->assertSame('portrait', $tv->script('return document.getElementById("stage").dataset.orientation;')[0]);
 
-            // From here on, every layer shown, hidden, emptied or filled is counted, and every start of the clip.
+            // The first warm-up's note is written once; what follows must be the polls alone.
+            $tv->waitUntil('!!document.body.dataset.warmed', 30, 'the worker never said the cache was warmed');
+
+            // From here on, every layer shown, hidden, emptied or filled is counted, every start of the clip, and
+            // every attribute written on the stage or the page. The polls are counted by their requests.
             $tv->script(<<<'JS'
+                const polls = () => performance.getEntriesByType('resource').filter((entry) => entry.name.includes('/device/playlist')).length;
                 window.__loop = {
                     first: document.querySelector('#layer-a:not([hidden]) video, #layer-b:not([hidden]) video'),
                     changes: 0,
+                    writes: [],
                     starts: 0,
+                    pollsAtStart: polls(),
+                    polls,
                 };
                 ['layer-a', 'layer-b'].forEach((id) => new MutationObserver((records) => { window.__loop.changes += records.length; })
                     .observe(document.getElementById(id), { attributes: true, attributeFilter: ['hidden'], childList: true }));
+                [document.getElementById('stage'), document.body].forEach((node) => new MutationObserver((records) => {
+                    records.forEach((record) => window.__loop.writes.push(record.attributeName));
+                }).observe(node, { attributes: true }));
                 document.addEventListener('play', (event) => {
                     if (event.target.closest('#layer-a, #layer-b')) window.__loop.starts += 1;
                 }, true);
             JS);
 
-            // Two more rounds of the three-second clip.
+            // Two more rounds of the three-second clip, and a poll — every thirty seconds — with the worker's answer
+            // to the warm-up it asks for.
             $tv->waitUsing(20, 200, fn () => $tv->script('return window.__loop.starts >= 2;')[0], 'the clip did not come round again');
+            $tv->waitUsing(40, 500, fn () => $tv->script('return window.__loop.polls() > window.__loop.pollsAtStart;')[0], 'no poll came');
+            $tv->pause(3000);
 
             $loop = $tv->script(<<<JS
                 const v = document.querySelector('{$onScreen}');
-                return { same: v === window.__loop.first, changes: window.__loop.changes, videos: document.querySelectorAll('video').length, playing: !!v && !v.paused };
+                return { same: v === window.__loop.first, changes: window.__loop.changes, writes: window.__loop.writes, videos: document.querySelectorAll('video').length, playing: !!v && !v.paused };
             JS)[0];
 
             $this->assertTrue($loop['same'], 'the clip was played again in a new element, so the set starts its decoder afresh every round');
             $this->assertSame(0, $loop['changes'], 'the layers were swapped for the same clip');
+            $this->assertSame([], $loop['writes'], 'a poll that changed nothing wrote on the page: '.implode(', ', $loop['writes']));
             $this->assertSame(1, $loop['videos']);
             $this->assertTrue($loop['playing'], 'the clip stopped after coming round');
 

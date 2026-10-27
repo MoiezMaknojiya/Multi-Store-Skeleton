@@ -953,7 +953,9 @@ anywhere else the player is exactly what it was — online only — because ever
      Chrome ends a worker whose event is still open after five, and the downloads carry on meanwhile; the
      player's next message holds it again. Only files and the runtime are ever fetched — nothing else a page
      might name, a panel's address included — and never with cookies. The worker answers `warmed` with how
-     many it could not have; the page keeps that on `<body data-warmed data-warm-missing>`.
+     many it could not have; the page keeps that on `<body data-warmed data-warm-missing>`, written when the
+     first warm-up is done and again only when the number missing changes (2026-10-27: a portrait Fire TV
+     showed one round in three of a video sideways, one per poll; a poll now writes nothing that has not changed).
    - **Pruning, after the warm-up.** What the player no longer names goes — except a file's older version,
      kept until the version named is in (with no line, it is what plays in its place) — and so do the pieces
      of a file no longer named.
