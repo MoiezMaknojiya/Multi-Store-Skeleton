@@ -836,7 +836,6 @@ function playCurrent() {
     incoming.innerHTML = '';
     const node = buildElement(item);
     incoming.appendChild(node);
-    drawnOnACanvas(node);
 
     const reveal = () => {
         // A node no longer on the page — replaced by the next item before it finished
@@ -898,9 +897,8 @@ function playCurrent() {
 
 /**
  * The video on screen, played again from its start when it is the very file due next: a playlist of one video,
- * or one video twice in a row. A new element for it would start the set's decoder afresh, and on a Fire TV the
- * first moment of every start is shown unturned on a portrait screen (Roadstar 4, 2026-10-27: landscape, then
- * portrait, every ten seconds), behind a swap of layers that shows nothing new.
+ * or one video twice in a row. A new element for it would start the set's decoder afresh, behind a swap of
+ * layers that shows nothing new (Roadstar 4, 2026-10-27).
  */
 function playAgainInPlace(item) {
     const node = frontNode();
@@ -916,103 +914,6 @@ function playAgainInPlace(item) {
     startItemTimer((item.duration + 5) * 1000);
 
     return true;
-}
-
-/* ── A video on a turned screen ────────────────────────────────────────── */
-
-/** How often the canvas is asked whether it is getting a picture, and how many black answers in a row give up. */
-const DRAWN_PROBE_MS = 2000;
-const DRAWN_BLACK_PROBES = 3;
-/** The canvas is never bigger than the panel: a 4K video is drawn at the size it is shown. */
-const DRAWN_MAX_EDGE = 1920;
-
-/**
- * On a turned screen a video is shown through a canvas (Roadstar 4, 2026-10-27). A Fire TV's WebView plays a
- * video on a layer of its own that the stage's rotation never reaches — Amazon's own answer on its developer
- * forum: a CSS transform does nothing to a video there, rotate or scale — and the set showed one round in
- * three sideways as that layer came and went. A canvas is drawn like any picture, turned with the stage, so the
- * video's frames are copied onto one beside it and the element itself is kept out of sight (the player's own
- * CSS). Everything else is still the video's: the events the loop plays by, the pause under a break, the
- * replay in place. Should a WebView hand the canvas no picture at all — black for six seconds while the video
- * plays — the canvas goes and the video is shown as before.
- */
-function drawnOnACanvas(video) {
-    if (video.tagName !== 'VIDEO' || el('stage').dataset.orientation === 'landscape') return;
-
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    const probe = document.createElement('canvas');
-    probe.width = probe.height = 4;
-    const probeContext = probe.getContext('2d');
-
-    if (!context || !probeContext) return;
-
-    video.dataset.drawn = 'canvas';
-    video.after(canvas);
-
-    let drawnAt = -1;    // the video's time of the frame on the canvas: a frame is drawn once
-    let probedAt = 0;
-    let black = 0;
-    let probing = true;
-
-    const showTheVideoInstead = () => {
-        canvas.remove();
-        delete video.dataset.drawn;
-    };
-
-    // A black answer three times running, while the video plays past its first half second, is no picture: the
-    // frames are not this WebView's to copy. A canvas whose pixels may not be read back (a security error) is
-    // drawing all the same, and is simply not asked again.
-    const probeTheCanvas = () => {
-        try {
-            probeContext.drawImage(video, 0, 0, 4, 4);
-            const pixels = probeContext.getImageData(0, 0, 4, 4).data;
-            let lit = false;
-
-            // Lit is more than the dark a black frame decodes to (a few units of each channel, never none).
-            for (let i = 0; i < pixels.length && !lit; i += 4) lit = pixels[i] + pixels[i + 1] + pixels[i + 2] > 24;
-
-            black = lit ? 0 : black + 1;
-
-            if (black >= DRAWN_BLACK_PROBES) showTheVideoInstead();
-        } catch (error) {
-            if (error && error.name === 'SecurityError') probing = false;
-            else showTheVideoInstead();
-        }
-    };
-
-    const draw = (now) => {
-        // The layer was emptied, or the video shown instead: done.
-        if (!canvas.isConnected || !video.isConnected) return;
-
-        if (video.readyState >= 2 && video.videoWidth > 0 && video.currentTime !== drawnAt) {
-            drawnAt = video.currentTime;
-
-            const scale = Math.min(1, DRAWN_MAX_EDGE / Math.max(video.videoWidth, video.videoHeight));
-            const width = Math.round(video.videoWidth * scale);
-            const height = Math.round(video.videoHeight * scale);
-
-            if (canvas.width !== width || canvas.height !== height) {
-                canvas.width = width;
-                canvas.height = height;
-            }
-
-            try {
-                context.drawImage(video, 0, 0, width, height);
-            } catch {
-                return showTheVideoInstead();
-            }
-
-            if (probing && !video.paused && drawnAt > 0.5 && now - probedAt >= DRAWN_PROBE_MS) {
-                probedAt = now;
-                probeTheCanvas();
-            }
-        }
-
-        requestAnimationFrame(draw);
-    };
-
-    requestAnimationFrame(draw);
 }
 
 /** Start the countdown for the current item, remembering when and for how long —
@@ -1286,7 +1187,6 @@ function playAd() {
 
     const node = buildElement(item);
     stage.appendChild(node);
-    drawnOnACanvas(node);
 
     let done = false;
     const finish = () => {

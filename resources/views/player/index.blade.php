@@ -101,20 +101,19 @@
         .media-layer-ad { z-index: 10; background: #000; }
 
         .media-layer img,
-        .media-layer video,
-        .media-layer canvas {
+        .media-layer video {
             width: 100%; height: 100%;
             object-fit: contain;
             display: block;
             background: #000;
         }
 
-        /* A video drawn on a canvas (a turned screen, player.js drawnOnACanvas): the element itself is
-           kept out of sight and out of the flow, so the canvas beside it takes its place. It still plays. */
-        .media-layer video[data-drawn] {
-            position: absolute; top: 0; left: 0;
-            visibility: hidden;
-        }
+        /* On a turned screen a video is drawn a touch short of opaque. Chromium puts a video on a hardware
+           plane of its own only while its quad is fully opaque (viz, OverlayCandidateFactory::FromDrawQuad:
+           kFailOpacity), and a Fire TV's plane never turns with the stage — Roadstar 4, 2026-10-27: the
+           video sideways, small, a black bar on one side, whenever that plane was in use. Drawn by the
+           compositor instead, it turns like any picture. A landscape screen keeps the plane. */
+        #stage:not([data-orientation="landscape"]) .media-layer video { opacity: .999; }
 
         /* An ad from the Ad Builder is a page of its own: it fills the screen and scales its own
            1920x1080 stage inside, so there is nothing to fit here. */
