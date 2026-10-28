@@ -42,6 +42,18 @@ it('turns a portrait stage only while the display lies flat', function () {
     expect($outside)
         ->not->toContain('rotate(90deg)')
         ->not->toContain('rotate(270deg)')
-        // A set mounted upside down is still turned by the page: that half is the app's to make.
+        // A set mounted upside down is still turned by the page while nothing says the display was turned.
         ->toContain('#stage[data-orientation="landscape_flipped"] { transform: rotate(180deg); }');
+
+    // Told by the app that the display is turned, the page turns nothing, whichever way the set is
+    // mounted: the rule comes after every turn, so it wins at equal specificity.
+    expect(substr($css, $close))->toContain('#stage[data-display-turned="true"] { width: 100%; height: 100%; transform: none; }');
+});
+
+it('tells the Android player app which way the set is mounted, and turns nothing once the app has turned the display', function () {
+    $script = file_get_contents(resource_path('js/player.js'));
+
+    expect($script)
+        ->toContain('shell.turnDisplay(mounted) === true')
+        ->toContain("stage.dataset.displayTurned = turned ? 'true' : 'false'");
 });

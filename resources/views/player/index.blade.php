@@ -80,6 +80,11 @@
             #stage[data-orientation="portrait"] { transform: rotate(90deg); }
             #stage[data-orientation="portrait_flipped"] { transform: rotate(270deg); }
         }
+        /* Told by the app that it has turned the display (data-display-turned, applyOrientation in
+           player.js), the page turns nothing itself, whichever of the four ways the set is mounted:
+           the stage is the viewport. A set mounted upside down needs this, since no viewport shape
+           can tell a display turned half way round. */
+        #stage[data-display-turned="true"] { width: 100%; height: 100%; transform: none; }
 
         .pairing-code {
             font-family: ui-monospace, "SF Mono", Menlo, monospace;

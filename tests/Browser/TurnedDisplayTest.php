@@ -6,6 +6,7 @@ use App\Models\Media;
 use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
+use Facebook\WebDriver\Chrome\ChromeDevToolsDriver;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
@@ -89,7 +90,48 @@ class TurnedDisplayTest extends DuskTestCase
             $this->assertSame(-90, $drawn['turn'], 'on a flat display the page still turns it three quarters');
             $this->assertEqualsWithDelta(1920, $drawn['picture'][0], 2);
             $this->assertEqualsWithDelta(1080, $drawn['picture'][1], 2);
+
+            /* ── 4. The Android player app as the shell: told which way the set is mounted, it turns the
+                    display, and the page turns nothing — whichever of the four ways ── */
+            $this->shellThatTurnsTheDisplay($tv, true);
+
+            foreach (['landscape', 'landscape_flipped', 'portrait', 'portrait_flipped'] as $mounted) {
+                $screen->update(['orientation' => $mounted]);
+                $tv->refresh();
+                $this->waitForTheMenu($tv, $mounted);
+
+                $this->assertSame($mounted, $tv->script('return window.toldTheApp;')[0], "the page told the app the set is mounted {$mounted}");
+                $drawn = $this->drawn($tv);
+                $this->assertSame(0, $drawn['turn'], "with the app turning the display, the page turns nothing for {$mounted}");
+                $this->assertSame([1920, 1080], $drawn['stage'], 'the stage is the viewport');
+            }
+            $tv->screenshot('turned-display-by-the-app');
+
+            /* ── 5. A shell that cannot turn the display (an older app) leaves the page turning the stage itself ── */
+            $this->shellThatTurnsTheDisplay($tv, false);
+            $screen->update(['orientation' => 'portrait']);
+            $tv->refresh();
+            $this->waitForTheMenu($tv, 'portrait');
+
+            $this->assertSame('portrait', $tv->script('return window.toldTheApp;')[0]);
+            $this->assertSame(90, $this->drawn($tv)['turn'], 'an app that answers no leaves the page to turn the stage');
         });
+    }
+
+    /**
+     * The Android player app's half of the contract, played by a script that runs before every page
+     * from now on: window.SignagePlayer.turnDisplay(orientation) is told which way the set is mounted
+     * and answers true once it has turned the display, false when it cannot.
+     */
+    private function shellThatTurnsTheDisplay(Browser $tv, bool $turns): void
+    {
+        $answer = $turns ? 'true' : 'false';
+
+        $tools = new ChromeDevToolsDriver($tv->driver);
+        $tools->execute('Page.enable');
+        $tools->execute('Page.addScriptToEvaluateOnNewDocument', [
+            'source' => "window.SignagePlayer = { turnDisplay: function (orientation) { window.toldTheApp = orientation; return {$answer}; } };",
+        ]);
     }
 
     /**
