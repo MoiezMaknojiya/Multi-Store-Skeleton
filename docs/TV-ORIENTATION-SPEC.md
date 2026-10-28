@@ -222,3 +222,33 @@ No photo was taken: a photo was asked for a candidate that held, and none did. T
 
 Per the plan above, this goes back to the owner: §5 b) and d) are rejected, and a) has nothing left in this
 list.
+
+### 8.2 One more page-only try, 2026-10-28: a tiny video feeding a canvas (does not hold either)
+
+The canvas of `2fb9efa` (2026-10-27) kept the video element full size and only `visibility: hidden`, so the
+WebView still took it to its plane at that size and the canvas got no frames. Tried here: every video on the
+stage shrunk to **2 × 2 px** (`position: absolute; width: 2px; height: 2px`), its frames drawn with
+`drawImage` on every animation frame onto a canvas beside it that takes the video's place and turns with the
+stage. Installed through DevTools on the same stick, same conditions as §8.1 (bridge off in the page, rotation
+0 throughout, Portrait (rotated 270°)), with a sampler in the page every 250 ms beside a screencap every
+~1 s and the HWC table every ~3 s.
+
+- **The canvas does get frames, some of the time.** For some video elements it is lit for their whole ten
+  seconds, drawn at 30 to 44 frames a second, the menu right way up and full screen on the panel.
+- **For others it is black for their whole ten seconds, while the video plays** (its `currentTime` running,
+  no dropped frames). Exactly then the HWC table holds the overlay again, now at the shrunken element's box,
+  `SurfaceView … Client 0 0 4 8`: the WebView took even a 2 × 2 px video to its plane, and a video on the plane
+  gives the page nothing to copy. The panel is pure black for those seconds. First run: 3 screencaps of 9
+  black. Second run: two elements in a row black, 20 s of black screen.
+- **Releasing the finished videos' decoders** (`removeAttribute('src')` and `load()` on every paused video as a
+  new one starts) changed nothing: black still came, two elements in a row.
+- **Cost:** the player's process at 83 to 93 % of a core while drawing, and about 200 MB.
+- During the first run the test's own script held every canvas in a list after the player had dropped them
+  (1080 × 1920, ~8 MB each), the stick ran out of memory, and the player's process died once
+  (`has died: fore TOP`, 01:30:12); its WatchdogService started it again 16 s later. That was the test's leak,
+  fixed for the second run, not the approach; the second run did not crash.
+
+So whether a video goes to the plane does not depend on its size either; the WebView decides per element, and a
+canvas can only show the elements it leaves alone. A page-only fix would have to choose between seconds of
+black and seconds of sideways, which is not a fix. Back to the owner, with what is left outside the page:
+a turned copy of each video made on the server, videos turned before upload, or other hardware.
