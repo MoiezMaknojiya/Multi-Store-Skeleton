@@ -6,6 +6,7 @@ use App\Models\Media;
 use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
+use Facebook\WebDriver\Chrome\ChromeDevToolsDriver;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Dusk\Browser;
@@ -18,7 +19,9 @@ use Tests\DuskTestCase;
  * the player plays its videos through <decoded-video> (resources/js/player/decoded-video.js): mp4box.js reads the
  * file, WebCodecs decodes it, and each frame is drawn on a canvas that turns with the stage like a picture. Chrome has
  * WebCodecs too, so the path is tried here with the set's own override (signage.decode_turned_video = '1'); on a real
- * Fire TV it is the server's switch. The fixtures are real H.264 files made with ffmpeg: red over blue, 360 x 640.
+ * Fire TV it is the server's switch. The fixtures are real H.264 files made with ffmpeg: red over blue, 360 x 640 —
+ * but for the fragmented one (ftyp, moov, moof, mdat, moof, mdat, mfra), recorded by Chrome's own MediaRecorder as a
+ * browser or OBS records: its index says it lasts 0 seconds.
  */
 class DecodedVideoTest extends DuskTestCase
 {
@@ -65,10 +68,35 @@ class DecodedVideoTest extends DuskTestCase
         });
     }
 
+    public function test_a_fire_tv_decodes_its_first_video_after_a_start_with_the_servers_switch_alone(): void
+    {
+        // Roadstar 4, 2026-10-28: a menu video alone on a turned screen. The decoder's chunk was asked for once the
+        // playlist had come, and the first video was made before it was in: a <video>, sideways for a whole loop
+        // after every start.
+        [$screen] = $this->screenPlaying('portrait', ['portrait-red-top.mp4']);
+
+        $this->browse(function (Browser $tv) use ($screen) {
+            $tools = new ChromeDevToolsDriver($tv->driver);
+            $agent = $tv->script('return navigator.userAgent;')[0];
+            $tools->execute('Emulation.setUserAgentOverride', ['userAgent' => preg_replace('/\(([^;)]+)/', '($1; AFTKA', $agent, 1)]);
+
+            try {
+                $this->startTheSet($tv, $screen, null);
+                $this->assertTrue($tv->script('return /\bAFT/.test(navigator.userAgent);')[0], 'the set reads as a Fire TV');
+
+                $tv->waitUntil("!!document.querySelector('.media-layer > video, .media-layer > decoded-video')", 20, 'no video was ever put on the stage');
+                $this->assertSame(0, $tv->script("return document.querySelectorAll('.media-layer video').length;")[0], 'its first video is no <video>');
+                $this->waitForDecodedFrames($tv, 10);
+            } finally {
+                $tools->execute('Emulation.setUserAgentOverride', ['userAgent' => $agent]);
+            }
+        });
+    }
+
     public function test_the_decoder_reads_a_file_in_pieces_wherever_its_index_is_and_shows_a_turn_written_in_the_file(): void
     {
         [$screen, $urls] = $this->screenPlaying('portrait', [
-            'portrait-red-top.mp4', 'portrait-red-top-index-at-end.mp4', 'lying-with-a-turn-flag.mp4',
+            'portrait-red-top.mp4', 'portrait-red-top-index-at-end.mp4', 'lying-with-a-turn-flag.mp4', 'portrait-red-top-fragmented.mp4',
         ]);
         $broken = 'media/'.$screen->organization_id.'/broken.mp4';
         Storage::disk('public')->put($broken, str_repeat('not a video ', 400));
@@ -120,7 +148,7 @@ class DecodedVideoTest extends DuskTestCase
                             bottom = read(Math.round(c.height * 0.9));
                         });
                         // Never a key called "error": WebDriver takes an answer holding one for its own failure.
-                        const done = (what) => () => { seen.push(what); resolve({ seen, shape, top, bottom, reads: v.reads, drawn: v.drawnFrames, why: v.error && v.error.message }); box.remove(); };
+                        const done = (what) => () => { seen.push(what); resolve({ seen, shape, top, bottom, reads: v.reads, drawn: v.drawnFrames, length: v.duration, at: v.currentTime, why: v.error && v.error.message }); box.remove(); };
                         v.addEventListener('ended', done('ended'));
                         v.addEventListener('error', done('error'));
                         box.appendChild(v);
@@ -129,7 +157,15 @@ class DecodedVideoTest extends DuskTestCase
                 JS)[0];
             };
 
-            foreach (['portrait-red-top.mp4' => 'its index first', 'portrait-red-top-index-at-end.mp4' => 'its index last', 'lying-with-a-turn-flag.mp4' => 'lying, with a turn in its header'] as $file => $what) {
+            $files = [
+                'portrait-red-top.mp4' => 'its index first',
+                'portrait-red-top-index-at-end.mp4' => 'its index last',
+                'lying-with-a-turn-flag.mp4' => 'lying, with a turn in its header',
+                // Its index says 0 seconds: taken for its length, the clock never left the first frame.
+                'portrait-red-top-fragmented.mp4' => 'fragmented, its index saying no length',
+            ];
+
+            foreach ($files as $file => $what) {
                 $result = $play($urls[$file]);
 
                 $this->assertSame(['loadeddata', 'ended'], $result['seen'], "{$file} ({$what}) plays to its end: ".json_encode($result));
@@ -138,6 +174,8 @@ class DecodedVideoTest extends DuskTestCase
                 $this->assertSame('blue', $this->colourOf($result['bottom']), "{$file}: the bottom is blue");
                 $this->assertGreaterThan(3, $result['reads'], "{$file} was read in pieces");
                 $this->assertGreaterThan(60, $result['drawn'], "{$file} drew its frames");
+                $this->assertEqualsWithDelta(4, $result['length'], 0.3, "{$file} lasts its four seconds");
+                $this->assertEqualsWithDelta($result['length'], $result['at'], 0.1, "{$file} ended at its end");
             }
 
             $result = $play($urls['broken']);
@@ -218,15 +256,18 @@ class DecodedVideoTest extends DuskTestCase
         return [$screen, $urls];
     }
 
-    /** A 1920 x 1080 panel, paired as this screen, with the set's own word on decoding ('1' or '0'). */
-    private function startTheSet(Browser $tv, Screen $screen, string $decode): void
+    /** A 1920 x 1080 panel, paired as this screen, with the set's own word on decoding ('1' or '0'), or none (null). */
+    private function startTheSet(Browser $tv, Screen $screen, ?string $decode): void
     {
         $tv->resize(1920, 1080);
         [$width, $height] = $tv->script('return [window.innerWidth, window.innerHeight];')[0];
         $tv->resize(1920 + (1920 - $width), 1080 + (1080 - $height));
 
         $tv->visit('/login');
-        $tv->script("localStorage.clear(); localStorage.setItem('signage.device.token', 'decoded-token'); localStorage.setItem('signage.decode_turned_video', '{$decode}');");
+        $tv->script("localStorage.clear(); localStorage.setItem('signage.device.token', 'decoded-token');");
+        if ($decode !== null) {
+            $tv->script("localStorage.setItem('signage.decode_turned_video', '{$decode}');");
+        }
         $tv->visit('/player');
         $tv->waitUntil("document.getElementById('stage').dataset.orientation === '{$screen->fresh()->orientation}'", 15, 'the stage never took the screen\'s orientation');
     }

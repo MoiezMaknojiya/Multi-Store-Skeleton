@@ -632,3 +632,44 @@ the override back to '0'. Then the owner's photo, then the switch on.
 decodes its MP4 videos itself from its next poll after the deploy; `SIGNAGE_DECODE_TURNED_VIDEO=false` in the live
 `.env` (then `php artisan config:cache`) brings every set back to `<video>` on its next poll. The checks of §12.7 on
 the owner's stick go on meanwhile.
+
+### 12.11 The stress round on the emulator, 2026-10-28
+
+The owner: "Android Studio ko localhost ya Dusk se connect karo aur multiple files daal kar saari orientations ki
+testing karo … Kuch miss mat karna". The app's debug build (a worktree whose `PLAYER_ORIGIN` was the Dusk server)
+on the TV emulator, a Dusk screen with a mixed playlist: pictures, real and recorded MP4s, a WebM, an MP4 with its
+index last, one with a turn in its header, a 45-second video, the same video twice, a broken file, Ad Builder pages
+(one with two videos inside), a channel of video ads, and two video adverts with breaks every 6 seconds. Each
+orientation was watched for a whole loop with screenshots and the page's own state read over DevTools; the emulator
+is no Fire TV, so the set's override ('1') or a Fire TV User-Agent stood in for the switch.
+
+What held: all four orientations, pictures and pages turned with the stage, every MP4 decoded on a turned screen
+and a `<video>` on a landscape one; the same video twice; the 45-second video to its end; a break between items with
+both adverts decoded; the broken file's `error` and the loop moving on after a second; an orientation changed in
+the middle of a decoded video (the next poll plays the loop again the new way, every decoder let go); six starts in a
+row, each in another orientation; playing on with the line cut. The page's heap stayed at 10–11 MB, every decoder
+made was closed and every frame handed out was closed.
+
+Three faults, each fixed and seen failing before:
+
+1. **A fragmented MP4 stood still on its first frame.** What a browser or OBS records (`ftyp moov moof mdat …`) may
+   say 0 for its length in `mvhd`, with no `mehd`; the decoder took 0 for the length and held its clock there, so the
+   frames were never due, and the backstop moved the loop on after the line's seconds. Its length is now the index's
+   when it says one (`mvhd` or `mehd`), else its frames' own end, known once every frame is read, and the clock is
+   held at the length only once it is certain. Fixture `portrait-red-top-fragmented.mp4`, recorded in one-second
+   slices by Chrome's MediaRecorder (`mvhd` 0, two fragments).
+2. **The first video after every start was a `<video>`.** On a set told by the server alone, the decoder's chunk was
+   asked for once the first playlist answer had come, and the first video was made before it was in: sideways for a
+   whole loop after every start, which is exactly what a set "reloaded" to get the fix would show. `fetchPlaylist`
+   now waits for the decoder, `DECODER_WAIT_MS` (5 s) at most, before it plays (`DecodedVideoTest`, a Fire TV's
+   User-Agent and no override of the set's own).
+3. **A set that started with no line had no decoder.** The worker keeps the built files the page names, and the chunk
+   is imported, not named: rebooted offline, the import failed and the videos came on as `<video>`. A Fire TV's
+   player page (`AFT` in the request's User-Agent) now names the decoder and the chunks it imports as
+   `modulepreload` (`App\Services\BuiltScripts::withImports`, by the build's manifest), so the worker keeps them with
+   the page and the import is at once, online or not (`DecodeTurnedVideoSwitchTest`). Seen on the emulator with the
+   page and its worker both reading as a Fire TV: the shell kept `decoded-video` and `rolldown-runtime`, and a start
+   with the line cut decoded its videos and adverts from the cache.
+
+Still not covered: WebM (a `<video>`), and the videos inside an Ad Builder page (the page's own `<video>`, in its
+frame).
