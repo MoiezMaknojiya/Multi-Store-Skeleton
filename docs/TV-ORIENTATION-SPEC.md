@@ -669,3 +669,18 @@ handed out, so memory should not depend on the length; the ten-minute run above 
 break over a decoded video (`DecodedVideoTest` covers pause and resume in Chrome). Then the owner's photo of the TV,
 and the switch on for everyone (`SIGNAGE_DECODE_TURNED_VIDEO=true` in the live `.env`, then `php artisan optimize`;
 `false` turns it off again, every set going back to `<video>` on its next poll).
+
+### 12.12 The switch on for everyone, 2026-10-28
+
+The owner set `SIGNAGE_DECODE_TURNED_VIDEO=true` in the live `shared/.env` and ran `php artisan optimize`. The test
+stick's own override was taken away so it follows the server: its next answer said `decode_turned_video: true` and
+it went on decoding.
+
+**One gap the override had hidden:** a set with no word of its own learns to decode from its first playlist answer,
+and the player drew that answer at once while the decoder's chunk was still on its way, so the first round after
+every start (a boot, the app opened again, a reload) was a `<video>`, which the plane takes a few seconds in; from
+the second round on it decoded. With the override the chunk was loaded at start-up, so it never showed. Now
+`fetchPlaylist` waits for the decoder before drawing an answer that turns the set to it, at most `DECODER_WAIT_MS`
+(5 s): the chunk comes from the browser's cache in milliseconds, a set that cannot fetch it plays `<video>` as
+before. `DecodedVideoTest::test_a_fire_tv_told_by_the_server_decodes_its_very_first_video_too` (a Fire TV's
+User-Agent, no override, the answer saying on) failed on the player before (`VIDEO` first) and passes now.

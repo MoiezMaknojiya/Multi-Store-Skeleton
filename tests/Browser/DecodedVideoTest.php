@@ -6,6 +6,7 @@ use App\Models\Media;
 use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
+use Facebook\WebDriver\Chrome\ChromeDevToolsDriver;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Dusk\Browser;
@@ -25,6 +26,9 @@ class DecodedVideoTest extends DuskTestCase
     use DatabaseMigrations;
 
     private const FIXTURES = 'tests/Browser/fixtures/video/';
+
+    /** The owner's Fire TV Stick 4K Max, as its WebView names itself. */
+    private const FIRE_TV = 'Mozilla/5.0 (Linux; Android 9; AFTKA Build/PS7633.3445N; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/132.0.6834.163 Mobile Safari/537.36';
 
     public function test_a_turned_screen_plays_its_video_through_the_players_own_decoder_turned_with_the_stage(): void
     {
@@ -178,6 +182,47 @@ class DecodedVideoTest extends DuskTestCase
     }
 
     /**
+     * A Fire TV told by the server alone (no override of its own) loads the decoder only once the first answer says
+     * so; the player waits for it before drawing, so the first video after the set starts is decoded too, never a
+     * <video> that the plane would take for its first round. The server's own word is held by
+     * DecodeTurnedVideoSwitchTest; here the answer carries it, since the Dusk server's switch is off.
+     */
+    public function test_a_fire_tv_told_by_the_server_decodes_its_very_first_video_too(): void
+    {
+        [$screen] = $this->screenPlaying('portrait', ['portrait-red-top.mp4']);
+
+        $this->browse(function (Browser $tv) use ($screen) {
+            $tools = new ChromeDevToolsDriver($tv->driver);
+            $tools->execute('Emulation.setUserAgentOverride', ['userAgent' => self::FIRE_TV]);
+            $tools->execute('Page.addScriptToEvaluateOnNewDocument', ['source' => <<<'JS'
+                (() => {
+                    const original = window.fetch;
+                    window.fetch = function (input) {
+                        return original.apply(this, arguments).then((response) => {
+                            if (!/\/device\/playlist/.test(String((input && input.url) || input)) || !response.ok) return response;
+                            return response.clone().json().then((data) => {
+                                data.screen = Object.assign({}, data.screen, { decode_turned_video: true });
+                                return new Response(JSON.stringify(data), { status: response.status, headers: response.headers });
+                            });
+                        });
+                    };
+                    window.__videoTags = [];
+                    new MutationObserver((records) => records.forEach((record) => record.addedNodes.forEach((node) => {
+                        if (node.tagName === 'VIDEO' || node.tagName === 'DECODED-VIDEO') window.__videoTags.push(node.tagName);
+                    }))).observe(document, { childList: true, subtree: true });
+                })();
+            JS]);
+
+            $this->startTheSet($tv, $screen, null);
+            $this->assertTrue($tv->script("return /AFT/.test(navigator.userAgent) && localStorage.getItem('signage.decode_turned_video') === null;")[0]);
+
+            $this->waitForDecodedFrames($tv, 5);
+            $this->assertSame('DECODED-VIDEO', $tv->script('return window.__videoTags[0];')[0], 'the first video after the set starts is decoded');
+            $this->assertNotContains('VIDEO', $tv->script('return window.__videoTags;')[0], 'no <video> came on the stage');
+        });
+    }
+
+    /**
      * A screen of the given orientation whose playlist is these fixtures, in order, on the Dusk disk.
      *
      * @param  list<string>  $files
@@ -218,15 +263,16 @@ class DecodedVideoTest extends DuskTestCase
         return [$screen, $urls];
     }
 
-    /** A 1920 x 1080 panel, paired as this screen, with the set's own word on decoding ('1' or '0'). */
-    private function startTheSet(Browser $tv, Screen $screen, string $decode): void
+    /** A 1920 x 1080 panel, paired as this screen, with the set's own word on decoding ('1' or '0'), or none (null). */
+    private function startTheSet(Browser $tv, Screen $screen, ?string $decode): void
     {
         $tv->resize(1920, 1080);
         [$width, $height] = $tv->script('return [window.innerWidth, window.innerHeight];')[0];
         $tv->resize(1920 + (1920 - $width), 1080 + (1080 - $height));
 
         $tv->visit('/login');
-        $tv->script("localStorage.clear(); localStorage.setItem('signage.device.token', 'decoded-token'); localStorage.setItem('signage.decode_turned_video', '{$decode}');");
+        $own = $decode === null ? '' : "localStorage.setItem('signage.decode_turned_video', '{$decode}');";
+        $tv->script("localStorage.clear(); localStorage.setItem('signage.device.token', 'decoded-token'); {$own}");
         $tv->visit('/player');
         $tv->waitUntil("document.getElementById('stage').dataset.orientation === '{$screen->fresh()->orientation}'", 15, 'the stage never took the screen\'s orientation');
     }
