@@ -454,3 +454,46 @@ its plane and the page's CSS turn reaches it. Two findings say no, without a bui
    starts, but video doesn't."
 
 So the idea trades a sideways video for no video. Not worth a build.
+
+## 11. WebCodecs: the page decodes the video itself (prototype, 2026-10-28): HOLDS
+
+The owner did not want §9's second copy of every video on the server's disk. The stick's WebView (Chrome 132)
+has WebCodecs, and `VideoDecoder.isConfigSupported` says yes to hardware decoding of H.264 at 1080 × 1920 and
+at 4K, VP9 and VP8. So the page can play a video with no `<video>` element at all: open the file itself
+(mp4box.js), decode it frame by frame with `VideoDecoder`, and draw each `VideoFrame` on a `<canvas>` inside
+the stage. Nothing is a media element, so nothing goes to the Fire TV's plane, and the canvas turns with the
+stage's CSS like a picture. No second file, no server work, no new APK.
+
+**The prototype** (`scripts/tv/webcodecs-prototype.js`, numbers from `webcodecs-prototype-stats.js`) was put into
+the live player page through the debug build's DevTools, mp4box.js 0.5.3 loaded the same way: the player's own
+`<video>` elements lose their source and are hidden as they appear; their file is fetched, demuxed, decoded a few
+frames ahead, each frame drawn when its time comes, the decoder reset and the file played again at its end.
+
+**On the stick**, the test screen Portrait (rotated 90°), the original 1080 × 1920 menu video, the display at
+rotation 0, 60 s of `capture-fire-tv.ps1`:
+
+| | The player as it is | The prototype |
+|---|---|---|
+| Dumps with the `SurfaceView` overlay | 13–16 of 17–18 (§8.1, §9.9.1) | **0 of 15** |
+| Screencaps | sideways while the overlay is up | **8 of 8 full**, turned exactly as the CSS turns the stage |
+| Frames drawn | – | **27.7 a second** of the video's 30; 135 skipped as late in 65 s (about 7 %) |
+| Decoder errors | – | none, 7 loops |
+| The app's CPU (`top`, of four cores) | about 56 % | about 108 % |
+
+So this is the first fix that works inside the page on a turned Fire TV, without a copy. Before it is the
+player's way, these are open:
+
+- **Long videos:** the prototype reads the whole file into memory; a five-minute video must be streamed (mp4box
+  takes the file in pieces; the service worker's parts and range requests already exist, §15 of the Ad Builder
+  spec). The stick has 1.7 GB, about 600 MB free.
+- **WebM:** mp4box.js reads MP4 only. A WebM on a turned Fire TV needs a WebM demuxer, or keeps today's
+  `<video>`.
+- **Where to use it:** only where the `<video>` is wrong: a screen not landscape, on a Fire TV (`AFT` in the
+  User-Agent), with `VideoDecoder` present. Everything else, and every WebView older than Chrome 94 (no WebCodecs;
+  the player's floor is Chrome 80), keeps `<video>` as today.
+- **The player's loop:** a video's end, its length as the backstop, the pause under an advert break and the
+  replay all go through the `<video>` element today; a WebCodecs item has to give the same events.
+- **Smoothness and CPU:** 27.7 of 30 frames, double the CPU. Drawing on a `VideoFrame` callback schedule, or
+  through WebGL, may do better; seen on the stick first.
+- **Size:** mp4box.js is about 157 KB minified; loaded only on a Fire TV that needs it.
+- **Ad Builder pages** with a video inside: the same technique would go into the ad runtime; later.
