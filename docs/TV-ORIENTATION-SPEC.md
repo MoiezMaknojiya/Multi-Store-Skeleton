@@ -66,16 +66,17 @@ the Android player app paired to a portrait screen on the live site.
 
 ## 4. What is in the code now
 
-Two page commits on branch `bug-fixing` serve only the failed approach:
+The player is `ecc5268`'s code again. The two page commits made for the failed approach were reverted on
+2026-10-28 on the owner's word, with their tests (`PlayerStageTurnTest`, `TurnedDisplayTest`):
 
-- `e547105`: the portrait quarter turns live inside `@media (orientation: landscape)` in
-  `player/index.blade.php`, so on a viewport taller than wide nothing is turned.
-- `2a79de3`: `applyOrientation` in `player.js` calls `window.SignagePlayer.turnDisplay(orientation)`, and
-  when the app answers true, `#stage[data-display-turned="true"]` turns nothing.
+- `e547105` had put the portrait quarter turns inside `@media (orientation: landscape)` in
+  `player/index.blade.php`, so a viewport taller than wide was not turned.
+- `2a79de3` had made `applyOrientation` in `player.js` call `window.SignagePlayer.turnDisplay(orientation)`,
+  and `#stage[data-display-turned="true"]` turn nothing when the app answered true.
 
-With the release app (versionCode 1, no bridge) and in a browser they change nothing: the viewport is
-landscape and no shell answers. They are live since 2026-10-28. Whether to revert them is the owner's call;
-nothing should build on them.
+They were live from 2026-10-28 until the revert is deployed. With the release app (versionCode 1, no bridge)
+they changed nothing. With the debug build on the owner's stick, the revert stops the page asking the app to
+turn the display.
 
 ## 5. What is left to try
 

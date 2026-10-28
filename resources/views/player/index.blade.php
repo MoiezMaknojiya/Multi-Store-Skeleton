@@ -65,26 +65,12 @@
            the content rotated, so the stage swaps its own width and height. */
         #stage { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
         #stage[data-orientation="landscape_flipped"] { transform: rotate(180deg); }
-        /* ...but only while the viewport itself lies flat. A Fire TV's WebView puts a video on a
-           hardware plane that never turns with the stage (its box is the element's un-turned rect),
-           so the Android player app turns the DISPLAY the way the set is mounted instead — portrait
-           for Portrait, reverse portrait for Portrait (flipped) — and this page then sees a viewport
-           taller than wide and draws the screen as it draws a landscape one: the stage is the
-           viewport, nothing is turned, and the plane gets the whole screen the right way up
-           (seen on a Fire TV Stick 4K Max, 2026-10-27). */
-        @media (orientation: landscape) {
-            #stage[data-orientation="portrait"],
-            #stage[data-orientation="portrait_flipped"] {
-                width: 100vh; height: 100vw;
-            }
-            #stage[data-orientation="portrait"] { transform: rotate(90deg); }
-            #stage[data-orientation="portrait_flipped"] { transform: rotate(270deg); }
+        #stage[data-orientation="portrait"],
+        #stage[data-orientation="portrait_flipped"] {
+            width: 100vh; height: 100vw;
         }
-        /* Told by the app that it has turned the display (data-display-turned, applyOrientation in
-           player.js), the page turns nothing itself, whichever of the four ways the set is mounted:
-           the stage is the viewport. A set mounted upside down needs this, since no viewport shape
-           can tell a display turned half way round. */
-        #stage[data-display-turned="true"] { width: 100%; height: 100%; transform: none; }
+        #stage[data-orientation="portrait"] { transform: rotate(90deg); }
+        #stage[data-orientation="portrait_flipped"] { transform: rotate(270deg); }
 
         .pairing-code {
             font-family: ui-monospace, "SF Mono", Menlo, monospace;
