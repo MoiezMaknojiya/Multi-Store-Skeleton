@@ -498,11 +498,11 @@ player's way, these are open:
 - **Size:** mp4box.js is about 157 KB minified; loaded only on a Fire TV that needs it.
 - **Ad Builder pages** with a video inside: the same technique would go into the ad runtime; later.
 
-## 12. Plan: the player decodes a turned screen's video itself (2026-10-28, not started)
+## 12. Plan: the player decodes a turned screen's video itself (2026-10-28; built §12.10, on the stick §12.11)
 
 The owner chose §11's way after seeing it on the TV ("Haan, theek ha"). This plan replaces §9 (server copies),
-which stays on file in case §12 meets a wall. Nothing below is built yet; §12.9 says what the owner decides
-first.
+which stays on file in case §12 meets a wall. §12.1 to §12.9 are the plan as written before any of it was built;
+§12.10 says what was built and §12.11 what the stick showed.
 
 ### 12.1 What changes, in one paragraph
 
@@ -626,3 +626,46 @@ the stated exception to the Chrome 80 rule (in the rules), Fire TV only, WebM la
 (`localStorage.setItem('signage.decode_turned_video', '1')`, then reload the player), and capture each of Portrait
 (rotated 90°), Portrait (rotated 270°) and Landscape (flipped 180°), a long video for memory, a break, offline, and
 the override back to '0'. Then the owner's photo, then the switch on.
+
+### 12.11 On the stick, 2026-10-28: every turned orientation holds
+
+Deployed with the switch off (live serves `player-*.js` with its `decoded-video-*.js` chunk); the test stick (Fire TV
+Stick 4K Max, Amazon WebView 132, the debuggable `TheDisplaySolution-debug-orientation.apk`) told '1' through
+DevTools, the owner turning the test screen in the panel between runs, its playlist two portrait menu videos (MP4,
+10 s each, about 5 MB, so every round also swaps one decoded video for the next). Each run: the display at rotation 0,
+so a screencap is what the panel shows, 60 s of `capture-fire-tv.ps1` (a SurfaceFlinger dump and a screencap every
+few seconds) while the page was sampled four times a second.
+
+| Screen in the panel | `SurfaceView` (the plane) in the HWC table | Screencaps | On screen | Frames drawn | CPU (of 400%) | Errors |
+|---|---|---|---|---|---|---|
+| Portrait (rotated 90°) | 0 of 15 dumps | 8 of 8 full, upright, the logo on the right | `<decoded-video>` only | 31.7 a second | 108% | none |
+| Portrait (rotated 270°) | 0 of 14 | 7 of 7 full, upright, the logo on the left | `<decoded-video>` only | 27.2 a second | 92% | none |
+| Landscape (flipped 180°) | 0 of 19 | 10 of 10, upside down with bars at the sides, as a TV hung upside down needs | `<decoded-video>` 248 of 248 samples | 31.9 a second | 110% | none |
+
+Before the fix the same stick moved the video to the plane a few seconds into each round on a turned screen (§3.2),
+sideways or small. The decoder's reads are answered by the worker from its cache (`workerStart` set, nothing
+transferred), the same path the set takes offline.
+
+**Memory, ten minutes on the stick** (`dumpsys meminfo` and `ps` every 30 s, at 180° and then 270° after the owner
+turned the screen at minute three, which reloaded the page): the page's renderer process (`sandboxed_process0`) held
+80 to 96 MB, the app's graphics memory moved between 44 and 150 MB as one element gave way to the next with no climb,
+the set's free memory stayed between 520 and 670 MB, and the page's JavaScript heap at 10 MB while it could be read. 16
+decoded elements came and went in the first two and a half minutes (some 60 over the ten at that pace); nothing
+grew round by round.
+
+**The set's own override back to '0'** (at 270°, the page reloaded): `<video>` on screen again and the plane in 6 of 9
+dumps, today's bug, so the override decides; back to '1': `<decoded-video>`, the plane in 0 of 8 dumps, the screencap
+full and turned for 270°. The stick is left on '1'.
+
+**Offline** (at 270°): the network refused to the page and to its worker through DevTools
+(`Network.emulateNetworkConditions` on both targets, in the one DevTools session that also sampled, since this WebView
+drops a first client when a second connects; adb over the same Wi-Fi keeps working): a fetch to the server failed and
+`navigator.onLine` was false at the start and at the end of the minute, while a Range read of the video still answered
+206 from the worker's cache. All 248 samples were `<decoded-video>`, 7 rounds played at 30 frames a second, no
+errors; the network given back, the server answered again.
+
+**Not tried on the stick yet:** a five-minute video (the reads come in 2 MB pieces and mp4box drops each piece once
+handed out, so memory should not depend on the length; the ten-minute run above covers the rounds), and a network
+break over a decoded video (`DecodedVideoTest` covers pause and resume in Chrome). Then the owner's photo of the TV,
+and the switch on for everyone (`SIGNAGE_DECODE_TURNED_VIDEO=true` in the live `.env`, then `php artisan optimize`;
+`false` turns it off again, every set going back to `<video>` on its next poll).
