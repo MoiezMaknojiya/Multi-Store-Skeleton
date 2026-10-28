@@ -10,12 +10,10 @@
  * A 401 at any point means the screen was deleted or re-paired elsewhere: wipe
  * the token and fall back to the pairing code, exactly like a first boot.
  *
- * Deliberately kept as the RENDERER only. Wrapped in a native shell, the shell
- * injects window.SignagePlayer, and two places consult it: the item URLs below
- * (a shell that caches files answers with a local path) and applyOrientation
- * (the Android player app turns the display the way the set is mounted, and is
- * told which way; docs/TV-ORIENTATION-SPEC.md) — nothing else about this file
- * changes.
+ * Deliberately kept as the RENDERER only. If this page is ever wrapped in a
+ * native shell for offline caching, the shell injects window.SignagePlayer and
+ * the item URLs below are the single place that has to consult it — nothing else
+ * about this file changes.
  *
  * Offline (docs/AD-BUILDER-SPEC.md §15): where the browser has a service worker,
  * public/player-sw.js keeps the page, the last manifest and every file the
@@ -647,22 +645,10 @@ async function sendHeartbeat() {
     }
 }
 
-/**
- * The panel is always landscape; a screen mounted another way is the content turned. Where the
- * Android player app is the shell, the page tells it which way the set is mounted and the APP turns
- * the display instead (docs/TV-ORIENTATION-SPEC.md): a Fire TV draws a video on a hardware plane
- * that no CSS transform reaches, while the display's own turn reaches everything. An app that
- * answers true has turned it, and the page then turns nothing itself (data-display-turned); without
- * the app, or with an older one, the page keeps turning the stage as before.
- */
+/** The panel is always landscape; a portrait screen is the content turned. */
 function applyOrientation(orientation) {
     const stage = el('stage');
-    const mounted = orientation ?? 'landscape';
-    stage.dataset.orientation = mounted;
-
-    const shell = window.SignagePlayer;
-    const turned = !!shell && typeof shell.turnDisplay === 'function' && shell.turnDisplay(mounted) === true;
-    stage.dataset.displayTurned = turned ? 'true' : 'false';
+    stage.dataset.orientation = orientation ?? 'landscape';
 }
 
 function render(data) {
