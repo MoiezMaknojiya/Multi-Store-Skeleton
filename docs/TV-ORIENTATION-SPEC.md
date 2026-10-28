@@ -184,3 +184,47 @@ user_rotation`. That is exactly what §3.3 did.
 
 The page first (it changes nothing on today's app), the app second. A set where the app is not yet
 updated keeps today's picture, bug and all, until it is.
+
+## 8. Raasta 1: keep the video off the overlay, the page alone (owner's choice, 2026-10-28)
+
+The owner wants no ExoPlayer and no per-TV computer step (no `.bat`, no `appops`), so the first thing
+tried is a page-only fix: a CSS rule that keeps Chromium from promoting the video to the hardware
+overlay, so it stays on the compositor where the stage's CSS turn applies (§3.1, the first seconds of
+every round were upright). If one works, it reaches every set with a deploy and a "Reload player":
+no APK, no store, no permission. §5 (the app turns the display) stays the fallback.
+
+**Test as a customer's set is, not as the bridge build is.** The debug app of §5 says "turned" through
+`SignagePlayer`, and the page then turns nothing; a customer's app has no bridge. So test with
+**`TheDisplaySolution-debug-raasta1.apk`**: Android commit `138e8f7` (the release code, no bridge)
+built as a debug APK with `WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)` added, made on
+2026-10-28 and left on the owner's Desktop at the office (not committed: the line is the only change).
+`adb uninstall com.thedisplaysolution.player`, `adb install -r` it, pair it with Replace Device on the
+test screen, set that screen to **Portrait (rotated 90°)**, one 10-second video on its playlist.
+
+**The candidates**, one at a time, each pasted into DevTools (chrome://inspect → the stick → the player
+page → Console) and watched for 60 s with `capture-fire-tv.ps1` (§6): the promotion comes a few seconds
+in, so the first screenshots prove nothing. A candidate works when the HWC table has **no second row**
+(`SurfaceView - …`) for the whole minute AND every screencap is upright, full and not black.
+
+| | Rule on `#stage .media-layer video` | Why it may keep the video off the plane (viz `OverlayCandidateFactory`) | Risk |
+|---|---|---|---|
+| A | `opacity: 0.999` | `kFailOpacity`: checked first, for every quad | went black on 2026-10-27, but together with the replay in place; tried alone here |
+| B | `mix-blend-mode: screen` | `kFailBlending`: only src/src-over may be planes; over the black layer `screen` draws the video unchanged | colours if anything not black is under it |
+| C | `filter: saturate(1.0001)` | a filter puts the video in a render pass of its own, drawn by the compositor | some cost per frame |
+| D | `clip-path: inset(0 round 1px)` | a rounded mask (`kFailMaskFilterNotSupported` where planes cannot clip round) | the corners lose a pixel |
+| E | `transform: rotate(0.01deg)` | `kFailNotAxisAligned` | least likely: Amazon promoted the video although the stage is turned 90°, so its own path may not look at the transform |
+
+```js
+// Raasta 1, in the stick's DevTools console. Change RULE to the candidate; "Reload player" (or a page
+// reload) takes it away again.
+const RULE = 'opacity: 0.999';
+let style = document.getElementById('raasta1');
+if (!style) { style = document.createElement('style'); style.id = 'raasta1'; document.head.appendChild(style); }
+style.textContent = `#stage .media-layer video { ${RULE} }`;
+[document.getElementById('stage').dataset.orientation, getComputedStyle(document.querySelector('#stage .media-layer video') || document.body).opacity];
+```
+
+Write down for each: the HWC table (one row or two), the screencaps (upright / sideways / black), and
+the WebView version (`adb shell dumpsys package com.amazon.webview.chromium | findstr versionName`).
+The first candidate that holds for a full minute goes into the player's own CSS on `bug-fixing`, with a
+test, and is deployed on the owner's word; then the Roadstar sets "Reload player". If none holds, §5.
