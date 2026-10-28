@@ -80,6 +80,14 @@ turn the display.
 
 ## 5. What is left to try
 
+**The Android app's source** is its own repository, `thedisplaysolution-android`, kept beside this one (on the
+owner's PCs, `D:\Site	hedisplaysolution-android`): Kotlin, a Compose shell around one `WebView` in `MainActivity.kt`
+(`javaScriptEnabled`, `domStorageEnabled`, `mediaPlaybackRequiresUserGesture = false`, hardware acceleration left
+on), two flavours (`site` self-updating, `play` for Google Play), `versionCode 1`. Its `main` carries commit
+`bbd6a81` (2026-10-28): the `SignagePlayer` bridge whose `turnDisplay` requests the activity's orientation, and
+`setWebContentsDebuggingEnabled(BuildConfig.DEBUG)`. The bridge serves the disproved approach (§3.3) and is unreleased;
+the debugging line is worth keeping for §6. Whether to revert the bridge there is the owner's call.
+
 Every try is seen on the stick before anything goes live (§6), and with the display at rotation 0, so the
 screencap is the panel.
 
