@@ -127,6 +127,38 @@ display has to turn, and only the app can turn it.
 5. **Release:** a higher `versionCode`, uploaded through Developer → TV App for the sticks that got the
    app from the website; the Amazon Appstore copy through Amazon. The sticks keep the same key.
 
+### Android Studio checklist, in order
+
+The release APK on the owner's stick (versionCode 1, "1.0") names these classes: `MainActivity`,
+`PlayerWebView`, `PlayerWebViewClient`, `AppUpdater`, `Watchdog`/`WatchdogService`, and a Compose theme
+(`ui/theme/...`), so the WebView is most likely created inside an `AndroidView` composable. The page's
+address is a constant, `https://sign.thedisplaysolution.com/player`.
+
+1. Find where the WebView is configured (`PlayerWebView`, or the `AndroidView` factory in
+   `MainActivity`): where `settings.javaScriptEnabled = true` and `loadUrl(...)` are. Add, before
+   `loadUrl`, `addJavascriptInterface(SignagePlayerBridge(activity), "SignagePlayer")`. Imports:
+   `android.webkit.JavascriptInterface`, `android.content.pm.ActivityInfo`, `android.app.Activity`.
+   The bridge class of step 1 above can live beside `PlayerWebView`.
+2. In `AndroidManifest.xml`, on `MainActivity`: add the `android:configChanges` line of step 2, and
+   remove any `android:screenOrientation="landscape"` (a TV app often carries one; with it, the request
+   is refused).
+3. For the test build only, `WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)` once, before the
+   WebView is created (step 4 above).
+4. Build → Build APK (debug). It is signed with the debug key, so it does NOT install over the release
+   copy on the stick: `adb uninstall com.thedisplaysolution.player`, then
+   `adb install -r app\build\outputs\apk\debug\app-debug.apk`. The stick then shows a pairing code:
+   Screens → Replace Device on the test screen in the panel.
+5. Set the test screen to Portrait (rotated 90°), play a video, and watch with
+   `scripts\tv\capture-fire-tv.ps1` (§6): the display should go to 1080×1920 by itself within one poll
+   (30 s), the overlay's Disp Frame should read `0 0 3840 2160`, and the screencaps should be upright and
+   full. Then Portrait (rotated 270°), then Landscape (flipped 180°), then Landscape: each should turn the
+   display within a poll, pictures and videos alike.
+6. If the display does not turn: `adb logcat | findstr /i "orientation SignagePlayer"` — is `turnDisplay`
+   being called at all (log it), and does `requestedOrientation` change? If it is called and nothing
+   turns, Fire OS refused the request: go to plan B (step 3 above).
+7. Release: `versionCode` 2 (or the next), release key, Generate Signed Bundle / APK → APK, upload on
+   Developer → TV App. The page must already be live (§7).
+
 ## 6. Seeing it on a real stick (nothing for this goes live without it)
 
 The emulator has no Amazon WebView. The owner's stick: Settings → My Fire TV → Developer options →
