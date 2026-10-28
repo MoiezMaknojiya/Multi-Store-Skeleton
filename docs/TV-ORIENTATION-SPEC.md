@@ -390,3 +390,40 @@ xiboplayer/xiboplayer (`packages/renderer/src/renderer-lite.js`), xiboplayer/are
 community.xibo.org.uk threads 3688 (2015, 2017: VideoView, the WebView rejected), 37022 (2026: the Fire Stick
 and rotation), 26099 (2021: portrait on a Fire Stick), 24010 and 15391 (the SurfaceView option);
 docs.xibosignage.com display settings ("Android, webOS and Tizen can control rotation if the device supports it").
+
+### 10.1 How the community players launch their browser (read 2026-10-28)
+
+The owner asked how the `xiboplayer` repositories run their WebView. They run no WebView at all: each is a
+Linux desktop browser in kiosk mode pointed at a local page, and the page is the renderer of §10.
+
+- **xiboplayer-chromium** (`xiboplayer/launch-kiosk.sh`): a local Node server, then Chromium with `--kiosk`,
+  `--autoplay-policy=no-user-gesture-required`, `--ignore-gpu-blocklist --enable-gpu-rasterization
+  --enable-zero-copy --enable-features=CanvasOopRasterization`, and the usual kiosk quieting flags. It picks a
+  GPU from `/sys/class/drm` and sets the VA-API driver for video decode. Only on a virtual GPU (a VM) does it
+  fall back to `--disable-gpu --disable-gpu-compositing --disable-gpu-rasterization`, because the driver
+  crashes otherwise. Nothing about overlays, nothing about rotation.
+- **xiboplayer-electron** (`src/main.js`): the same GPU selection and kiosk window around the same page.
+  Nothing about rotation.
+- **xiboplayer-kiosk**: a Fedora/Debian image with a GNOME kiosk session that starts one of the two above as a
+  user service. No rotation of its own: the display is whatever GNOME has.
+
+### 10.2 "Hardware Accelerate Web Content" (the owner's idea of 2026-10-28): rejected on the evidence
+
+Xibo for Android's display profile has "Hardware Accelerate Web Content" (Off / Off when transparent / On).
+The idea: turn the WebView's hardware acceleration off in our app, so the Fire TV cannot put the video on
+its plane and the page's CSS turn reaches it. Two findings say no, without a build:
+
+1. In Xibo that option governs the WebView its web and embedded widgets use, and nothing else: Xibo's
+   layout video never plays in a WebView (§10, VideoView then ExoPlayer). Their staff explain the option only
+   in terms of transparent web widgets (the default, "Off when transparent", is "not the default setting for
+   good reason"; "On" can make transparent web content impossible on some hardware). It has never turned a
+   video for them.
+2. Chromium's own WebView documentation (`android_webview/docs/software_draw_deprecated.md`): software draw,
+   which is what `android:hardwareAccelerated="false"` or `setLayerType(View.LAYER_TYPE_SOFTWARE)` on the
+   WebView or any parent puts it in, "is deprecated and only maintained for backward compatibility", "is very
+   slow", "uses more memory", and "has known missing features, such as `<video>` or `<webgl>`"; "Do not call
+   `setLayerType(View.LAYER_TYPE_SOFTWARE)` on WebView or any parent of WebView." Every video the player shows
+   is a `<video>`; in software draw it would not be drawn at all. A 2013 report on the same path: "Sound
+   starts, but video doesn't."
+
+So the idea trades a sideways video for no video. Not worth a build.
