@@ -252,3 +252,108 @@ So whether a video goes to the plane does not depend on its size either; the Web
 canvas can only show the elements it leaves alone. A page-only fix would have to choose between seconds of
 black and seconds of sideways, which is not a fix. Back to the owner, with what is left outside the page:
 a turned copy of each video made on the server, videos turned before upload, or other hardware.
+
+## 9. Raasta 2: the server keeps a turned copy of each video (plan, 2026-10-28, not started)
+
+Asked for by the owner after §8.1 and §8.2. Nothing below is built yet; §9.9 says where to start and §9.10 what
+the owner still has to decide.
+
+### 9.1 The idea
+
+A Fire TV draws a video on its plane unturned, at the element's layout box (§3.2, §8.1). So give it a video whose
+PIXELS are already turned, in an element laid out flat over the whole panel: the plane then shows exactly what
+the page's CSS turn shows today. For a screen mounted another way, the server makes a copy of each video it may
+play with the pixels turned the way the page turns the stage; the manifest sends that copy marked `flat`; the
+player draws a `flat` item outside the turned stage, untransformed, filling the viewport. On every other player
+the picture is the same: turned pixels drawn flat are the original pixels drawn turned. Pictures and Ad Builder
+pages keep the CSS turn.
+
+| `screens.orientation` | The page's turn today | The copy is made with |
+|---|---|---|
+| `landscape` | none | no copy |
+| `portrait` | `rotate(90deg)`, clockwise | `transpose=1` (90° clockwise) |
+| `portrait_flipped` | `rotate(270deg)` | `transpose=2` (90° counterclockwise) |
+| `landscape_flipped` | `rotate(180deg)` | `transpose=1,transpose=1` |
+
+### 9.2 Which videos get a copy
+
+Only what a screen that is not `landscape` may play, for that screen's turn: library videos on its playlist, the
+ads of every channel its playlist carries, its holding picture, and network adverts (`campaigns`, which keep their
+own file) that reach it. **Not Ad Builder pages:** their videos play inside the page's frame, in the design's
+coordinates; a later phase at most, and until then such a page with a video keeps the bug.
+
+### 9.3 Data
+
+A new table `video_turns` (its own reversible `create_video_turns_table` migration): `media_id` and
+`campaign_id` (nullable, exactly one set, cascading foreign keys), `rotation` (90, 180, 270), `status`
+(`pending`, `working`, `ready`, `failed`), `disk`, `path` (a random name, never an id), `size`, `attempts`,
+`error`, timestamps. Unique on (`media_id`, `rotation`) and (`campaign_id`, `rotation`).
+
+### 9.4 When a copy is asked for, and how it is made
+
+**Asked for** by `VideoTurns::wantFor(Screen)` after every change that can put a video in front of such a
+screen: a playlist save and Copy to Other Screens, an orientation changed or set at pairing, a holding picture
+chosen, a channel ad added or changed, a campaign saved or given screens (`insertOrIgnore` of `pending` rows).
+A daily sweep asks again for everything and deletes copies nothing has needed for seven days.
+
+**Made** by `php artisan media:turn-videos`, scheduled every minute with `withoutOverlapping()`: the server has no
+queue worker, only the scheduler's cron. One row at a time under a row lock, ffmpeg under `nice -n 19` with a
+timeout, written to a temporary name, checked (length by `VideoDuration` within a second, width and height
+swapped for a quarter turn), then `ready`. Stops after about 50 s. A failure is retried up to three times.
+
+```
+nice -n 19 ffmpeg -nostdin -y -i IN -map 0:v:0 -an -vf transpose=1 -c:v libx264 -preset veryfast -crf 21 -pix_fmt yuv420p -movflags +faststart OUT.mp4
+```
+
+No sound (the player plays every video muted). ffmpeg applies a phone video's own rotation first by default:
+check that on a real phone video in step 2 of §9.9.
+
+### 9.5 The manifest and the player
+
+- **Manifest** (`DeviceController::manifestItem`, `campaignItem`, the ads of `channelEntry`, the holding
+  picture): a video whose copy for the screen's turn is `ready` is sent as the copy (`url`, its own `checksum`)
+  with `flat: true`; anything else as today. The offline timeline uses the same builders.
+- **Player:** a `#flat` box beside `#stage`, the whole viewport, never transformed; a `flat` item is drawn
+  there with `object-fit: contain`. The break between items, the pause under a break, the layer swap and the
+  quiet poll must all hold for it.
+
+### 9.6 Storage, disk, deletes, privacy
+
+- Counting copies to the organization's 512 MB is the owner's call (§9.10): the rule counts every file a row
+  names, but a copy exists only because of how a Fire TV draws video.
+- `DiskGuard::assertRoomFor` is asked before every copy; with no room it is `failed` and the original plays.
+- A video's or a campaign's delete, and an organization's purge, take the copies and their files after commit.
+- `/privacy` and its date change in the same commit: the server keeps turned copies of customers' videos.
+
+### 9.7 The server
+
+- ffmpeg is not installed: the owner, as root, `apt install ffmpeg` (Ubuntu 24.04: 6.1), also added to
+  `deploy/server/setup.sh`.
+- One vCPU shared with Nginx, PHP and MySQL: one copy at a time at the lowest priority. The time a copy takes is
+  an estimate until step 2 measures it: seconds to tens of seconds for a ten-second clip, a few minutes for a
+  five-minute video; the panel is slower meanwhile.
+- A copy is about the size of its original; the disk is 40 GB with the 5 GB reserve.
+
+### 9.8 Tests
+
+Pest for every trigger, the command (a Process fake, and one real-ffmpeg test skipped where it is missing), the
+manifest's `flat` item and its fallback, deletes and purge, the reserve, the migration, the attacks. Dusk for the
+`#flat` box through a break and a layer swap. And the test that decides, on the stick: `capture-fire-tv.ps1` at
+rotation 0 for 60 s on each of the three turned orientations, the overlay at `0 0 3840 2160`, every screencap
+full and right way up, and the owner's photo.
+
+### 9.9 Order of work
+
+1. **Prove it before any code:** the owner exports the test video turned by hand (90° counterclockwise for
+   Portrait (rotated 270°)), uploads it, plays it on the test screen set to **Landscape**, and 60 s of capture
+   plus a photo must show it full and right way up.
+2. Measure on the server: a ten-second and a five-minute 1080 × 1920 video through the command, timed, and one
+   phone video with a rotation of its own.
+3. Backend (migration, model, `VideoTurns`, command, triggers, manifest), 4. the player's `#flat` box,
+   5. tests, the stick, the photo, deploy on the owner's word.
+
+### 9.10 What the owner decides before step 3
+
+1. Are copies counted to the organization's 512 MB?
+2. Ad Builder pages with a video stay as they are for now?
+3. ffmpeg on the server (installed by the owner as root).
