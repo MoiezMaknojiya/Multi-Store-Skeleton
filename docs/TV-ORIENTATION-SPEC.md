@@ -626,3 +626,9 @@ the stated exception to the Chrome 80 rule (in the rules), Fire TV only, WebM la
 (`localStorage.setItem('signage.decode_turned_video', '1')`, then reload the player), and capture each of Portrait
 (rotated 90°), Portrait (rotated 270°) and Landscape (flipped 180°), a long video for memory, a break, offline, and
 the override back to '0'. Then the owner's photo, then the switch on.
+
+**On by default, 2026-10-28.** The owner, after the decoder held on the stick at home: "code mein default true kardo".
+`config('signage.decode_turned_video')` now defaults to true (`DecodeTurnedVideoSwitchTest`), so every turned Fire TV
+decodes its MP4 videos itself from its next poll after the deploy; `SIGNAGE_DECODE_TURNED_VIDEO=false` in the live
+`.env` (then `php artisan config:cache`) brings every set back to `<video>` on its next poll. The checks of §12.7 on
+the owner's stick go on meanwhile.

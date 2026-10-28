@@ -22,17 +22,18 @@ beforeEach(function () {
     ]);
 });
 
-it('tells every set whether a turned Fire TV decodes its videos itself, off unless it is turned on', function () {
-    expect(config('signage.decode_turned_video'))->toBeFalse();
+it('tells every set whether a turned Fire TV decodes its videos itself, on unless it is turned off', function () {
+    // On by default since 2026-10-28, on the owner's word; SIGNAGE_DECODE_TURNED_VIDEO=false turns it off.
+    expect(config('signage.decode_turned_video'))->toBeTrue();
 
     $this->withHeader('Authorization', 'Bearer switch-tok')->getJson('/device/playlist')
         ->assertOk()
-        ->assertJsonPath('screen.decode_turned_video', false)
+        ->assertJsonPath('screen.decode_turned_video', true)
         ->assertJsonPath('screen.orientation', 'portrait');
 
-    config(['signage.decode_turned_video' => true]);
+    config(['signage.decode_turned_video' => false]);
 
     $this->withHeader('Authorization', 'Bearer switch-tok')->getJson('/device/playlist')
         ->assertOk()
-        ->assertJsonPath('screen.decode_turned_video', true);
+        ->assertJsonPath('screen.decode_turned_video', false);
 });

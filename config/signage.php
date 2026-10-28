@@ -48,9 +48,10 @@ return [
      * decoder (resources/js/player/decoded-video.js, WebCodecs) instead of a <video>, which its WebView puts on a
      * hardware plane no CSS turn reaches (docs/TV-ORIENTATION-SPEC.md §11, §12; owner 2026-10-28). Sent to every
      * set in the manifest, so turning it off brings every set back to <video> on its next poll, with no deploy.
-     * Off until the owner has seen it hold on a real stick.
+     * On by default since 2026-10-28, on the owner's word ("code mein default true kardo"); SIGNAGE_DECODE_TURNED_VIDEO=false
+     * turns it off.
      */
-    'decode_turned_video' => (bool) env('SIGNAGE_DECODE_TURNED_VIDEO', false),
+    'decode_turned_video' => (bool) env('SIGNAGE_DECODE_TURNED_VIDEO', true),
 
     /*
     |--------------------------------------------------------------------------
