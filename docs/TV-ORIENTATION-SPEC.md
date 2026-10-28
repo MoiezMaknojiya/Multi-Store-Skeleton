@@ -497,3 +497,102 @@ player's way, these are open:
   through WebGL, may do better; seen on the stick first.
 - **Size:** mp4box.js is about 157 KB minified; loaded only on a Fire TV that needs it.
 - **Ad Builder pages** with a video inside: the same technique would go into the ad runtime; later.
+
+## 12. Plan: the player decodes a turned screen's video itself (2026-10-28, not started)
+
+The owner chose §11's way after seeing it on the TV ("Haan, theek ha"). This plan replaces §9 (server copies),
+which stays on file in case §12 meets a wall. Nothing below is built yet; §12.9 says what the owner decides
+first.
+
+### 12.1 What changes, in one paragraph
+
+On a screen that is not `landscape`, on a Fire TV, where `VideoDecoder` exists and the switch of §12.6 is on, a
+video item (a playlist line, a channel's ad, a network advert, the holding picture) is played by a new element,
+`<decoded-video>`, instead of `<video>`: it reads the MP4 itself, decodes it with WebCodecs and draws each frame
+on a canvas of its own, so it turns with the stage like a picture and nothing goes to the plane. It looks to the
+player like a `<video>`: the same events and the few properties the loop uses. Everything else, and every set
+that does not meet all four conditions, plays exactly as today.
+
+### 12.2 `<decoded-video>`: the contract (`resources/js/core/decoded-video.js`, a custom element)
+
+What `player.js` uses of a `<video>` today, and the element gives the same:
+
+| `player.js` uses | Where | `<decoded-video>` |
+|---|---|---|
+| `src`, `muted`, `autoplay`, `playsInline`, `preload` | `buildNode` | `src` starts the load; the rest are accepted and ignored (it is silent, starts itself) |
+| `play()` (a promise), `pause()` | `playCurrent`, `pauseContent`, `resumeContent`, `playAd`, `reveal` | the clock runs or stops; the position is kept |
+| `loadeddata` | reveal | after the first frame is drawn |
+| `ended` | `advance`, an advert's `finish` | after the last frame's time has passed |
+| `error` | `broken`, an advert's `finish` | a fetch, demux or decoder failure, or no frame within 10 s |
+| `duration`, `currentTime` | `remainingOnScreen`, `resumeContent` | seconds, from the file's own times |
+| `tagName === 'VIDEO'` | five places | a helper `isVideoNode(node)` takes both tag names; the five checks call it |
+
+Inside: the file is read in pieces with `Range` requests guided by mp4box.js (`appendBuffer` returns where it
+needs to read next), so the `moov` is found wherever it is and a five-minute video is never whole in memory;
+samples are extracted in batches and released (`releaseUsedSamples`) once decoded; the decoder runs a few
+frames ahead (at most 8 `VideoFrame`s held, every one closed after its draw); frames are drawn on
+`requestAnimationFrame` when their time comes, a late one dropped. Taken off the page
+(`disconnectedCallback`), it aborts its reads, closes its decoder and frees its canvas. The element never loops
+by itself: the player decides what comes next, as it does for `<video>`.
+
+### 12.3 `player.js`
+
+- `buildNode`: a video item becomes `<decoded-video>` when `decodesTurnedVideo(item)` says so (§12.1's four
+  conditions, plus the file being MP4: `item.mime` `video/mp4`). mp4box.js and the element are a dynamic
+  `import()`, a chunk of their own that only such a set ever fetches.
+- The five `tagName === 'VIDEO'` checks go through `isVideoNode`.
+- Nothing else in the loop changes: reveal, the backstop timer, breaks, `skipBroken`, the offline timeline.
+
+### 12.4 The worker (`public/player-sw.js`)
+
+Nothing to change, to be confirmed on the stick: `media()` already answers a `Range` request by slicing the
+cached whole (`partial()`), so pieces read online and offline alike; a file not cached yet goes to the network,
+which answers ranges (Nginx).
+
+### 12.5 The server
+
+- A switch, `config('signage.decode_turned_video')` (`SIGNAGE_DECODE_TURNED_VIDEO`, in `.env.example`), sent in
+  the manifest as `screen.decode_turned_video`. Off, every set plays `<video>` as today; turned off after a bad
+  night, every set is back to today's way on its next poll, with no deploy and no reload.
+- Nothing else: no table, no ffmpeg, no copy.
+
+### 12.6 Where it applies, and where it does not (phase 1)
+
+- **Applies:** a Fire TV (`/\bAFT/` in the User-Agent), Chrome 94 or newer (`VideoDecoder`), a screen that is
+  not landscape, an MP4 video.
+- **Does not, and keeps today's `<video>`:** WebM files (mp4box reads MP4 only; a WebM demuxer is a later phase),
+  landscape screens, other devices (whether they have the plane bug at all is unknown; they can be added by
+  widening the check once seen), WebViews older than Chrome 94, and the videos inside Ad Builder pages (the ad
+  runtime is a later phase).
+
+### 12.7 Tests
+
+- **Pest:** the manifest carries `decode_turned_video` from config; `PlayerOnOldWebViewsTest` learns that
+  `VideoDecoder` and mp4box.js may appear only in the decoded chunk and only behind the feature check (§12.9, 2).
+- **Dusk** (Chrome has WebCodecs): with the decoded path forced (a test-only override), a portrait screen's video
+  is a `<decoded-video>` whose canvas draws frames, `loadeddata` swaps the layers, `ended` moves the loop on, a
+  network break pauses it and it resumes where it was, a broken file is skipped, a landscape screen still gets
+  `<video>`, and the switch off gives `<video>` everywhere. Each seen failing first.
+- **On the stick, the tests that decide** (`capture-fire-tv.ps1`, rotation 0, 60 s each): Portrait (rotated 90°),
+  Portrait (rotated 270°), Landscape (flipped 180°): no `SurfaceView` row, every screencap full and right, about 30
+  frames a second; a five-minute video for ten minutes with `dumpsys meminfo` (memory flat); a playlist of a
+  picture and two videos (the swaps); a network break over a video (pause and resume); the line pulled (offline,
+  from the cache); the switch turned off (back to `<video>` on the next poll). Then the owner's photo.
+
+### 12.8 Order of work
+
+1. The switch and its manifest field (server), with its Pest test.
+2. `decoded-video.js`, with mp4box.js added as a dependency (BSD-3-Clause), and the Dusk tests.
+3. `player.js`: `decodesTurnedVideo`, `isVideoNode`, the dynamic import.
+4. The stick tests of §12.7, the photo; deploy with the switch off, turn it on for the test screen's stick, then
+   for everyone on the owner's word.
+
+### 12.9 What the owner decides first
+
+1. **The switch's default** on the live site: off until the stick tests pass, then on (recommended), or on at
+   once.
+2. **The Chrome 80 rule.** The project's rule says nothing a television runs calls an API newer than Chrome 80.
+   This needs a stated exception: a newer API is allowed only in a chunk loaded behind its own feature check,
+   with the Chrome 80 path left whole.
+3. **Fire TV only** for now (recommended), or every Android set on a turned screen.
+4. **WebM** in phase 1, or later (recommended: later; MP4 is what phones and editors make).
