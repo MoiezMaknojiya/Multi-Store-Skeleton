@@ -72,6 +72,21 @@ it('calls no browser API newer than Chrome 80 in anything the television runs', 
     'the Ad Builder runtime' => 'public/ad-runtime/runtime.js',
 ]);
 
+it('loads its own video decoder only behind a check that WebCodecs is there, in a chunk of its own', function () {
+    // WebCodecs is Chrome 94: a turned Fire TV's decoder (docs/TV-ORIENTATION-SPEC.md §12) is the one place the
+    // player reaches past its floor, and only in a chunk it imports after asking whether the API is there.
+    $player = preg_replace(['~/\*.*?\*/~s', '~^\s*//.*$~m'], '', file_get_contents(base_path('resources/js/player.js')));
+
+    expect($player)
+        ->toContain("typeof window.VideoDecoder !== 'function'")
+        ->toContain("import('./player/decoded-video.js')")
+        ->not->toContain('new VideoDecoder(')
+        ->not->toContain('new EncodedVideoChunk(')
+        ->not->toMatch('~^\s*import\s[^(]*decoded-video~m');
+
+    expect(file_get_contents(base_path('resources/js/player/decoded-video.js')))->toContain('new VideoDecoder(');
+});
+
 it('has its script written down to Chrome 80', function () {
     expect(file_get_contents(base_path('vite.config.js')))->toContain("target: ['chrome80'");
 });

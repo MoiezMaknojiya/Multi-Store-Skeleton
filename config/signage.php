@@ -39,6 +39,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Video on a turned Fire TV
+    |--------------------------------------------------------------------------
+    */
+
+    /**
+     * Whether a Fire TV on a screen mounted another way than landscape plays its videos through the player's own
+     * decoder (resources/js/player/decoded-video.js, WebCodecs) instead of a <video>, which its WebView puts on a
+     * hardware plane no CSS turn reaches (docs/TV-ORIENTATION-SPEC.md §11, §12; owner 2026-10-28). Sent to every
+     * set in the manifest, so turning it off brings every set back to <video> on its next poll, with no deploy.
+     * Off until the owner has seen it hold on a real stick.
+     */
+    'decode_turned_video' => (bool) env('SIGNAGE_DECODE_TURNED_VIDEO', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | The server's own disk
     |--------------------------------------------------------------------------
     */

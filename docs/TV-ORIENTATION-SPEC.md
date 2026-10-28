@@ -596,3 +596,33 @@ which answers ranges (Nginx).
    with the Chrome 80 path left whole.
 3. **Fire TV only** for now (recommended), or every Android set on a turned screen.
 4. **WebM** in phase 1, or later (recommended: later; MP4 is what phones and editors make).
+
+### 12.10 Built, 2026-10-28
+
+The owner said "kardo" with §12.9's recommendations: the switch off on the live site until the stick tests pass,
+the stated exception to the Chrome 80 rule (in the rules), Fire TV only, WebM later.
+
+- `config('signage.decode_turned_video')` (`SIGNAGE_DECODE_TURNED_VIDEO`, off by default) is sent as
+  `screen.decode_turned_video` in every playlist answer (`DecodeTurnedVideoSwitchTest`).
+- `resources/js/player/decoded-video.js`: the `<decoded-video>` custom element, mp4box.js 0.5.3 (an npm dependency,
+  BSD-3-Clause), in a chunk of its own of about 156 KB (35 KB gzipped) that only a set which may use it fetches.
+  It reads the file in Range pieces of 2 MB guided by mp4box (index first or last), takes frames out as soon as the
+  index is read, holds at most 90 waiting and 6 decoded, lets mp4box drop every piece it has handed out, prefers the
+  hardware decoder and falls back to any, honours the turn in the file's own header, gives up with `error` when no
+  frame comes in 15 s, when the file has no index or ends short, and draws at most 1920 pixels a side.
+- `player.js`: `decodesTurnedVideo` (switch or the set's own `signage.decode_turned_video`, a Fire TV, WebCodecs, a
+  screen not landscape, `video/mp4`), `loadDecoder` (the chunk, at start-up when wanted and on every answer), and
+  `isVideoNode` in the five places that asked `tagName === 'VIDEO'`; the switch is part of the "nothing changed"
+  key, so turning it plays the playlist again the other way.
+- `DecodedVideoTest` (Dusk, three tests, seen failing on the player before): a portrait screen draws its video
+  through the decoder with the panel's right half red and its left half blue, pause holds and play carries on; files
+  with the index first, the index last and a turn in the header are read in 700-byte pieces and shown upright to
+  their end, a file that is no video gives `error`; a decoded video moves the loop on, while a set told '0' and a
+  landscape screen play a `<video>`. `PlayerOnOldWebViewsTest` holds the exception.
+- Not covered yet: WebM, Ad Builder pages' own videos, and a set that boots with no line before it ever fetched the
+  chunk (the worker keeps only the page's own scripts, so such a set plays `<video>` until the line comes back).
+
+**What remains is the stick (§12.7)**: deploy with the switch off, set the test stick's own override with DevTools
+(`localStorage.setItem('signage.decode_turned_video', '1')`, then reload the player), and capture each of Portrait
+(rotated 90°), Portrait (rotated 270°) and Landscape (flipped 180°), a long video for memory, a break, offline, and
+the override back to '0'. Then the owner's photo, then the switch on.

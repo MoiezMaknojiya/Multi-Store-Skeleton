@@ -108,6 +108,19 @@
             background: #000;
         }
 
+        /* A turned Fire TV's video, decoded by the player itself (resources/js/player/decoded-video.js): its canvas is
+           letterboxed like any picture, and turns with the stage. */
+        .media-layer decoded-video {
+            display: block;
+            width: 100%; height: 100%;
+            background: #000;
+        }
+        .media-layer decoded-video canvas {
+            display: block;
+            width: 100%; height: 100%;
+            object-fit: contain;
+        }
+
         /* An ad from the Ad Builder is a page of its own: it fills the screen and scales its own
            1920x1080 stage inside, so there is nothing to fit here. */
         .media-layer iframe {

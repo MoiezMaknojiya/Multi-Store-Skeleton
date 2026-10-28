@@ -19,6 +19,7 @@
         "@uppy/core": "^6.1.0",
         "@uppy/tus": "^6.0.0",
         "animejs": "^4.5.0",
-        "modern-screenshot": "^4.7.0"
+        "modern-screenshot": "^4.7.0",
+        "mp4box": "^0.5.3"
     }
 }

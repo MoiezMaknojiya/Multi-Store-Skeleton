@@ -33,6 +33,9 @@ const KNOWN_KEY = 'signage.device.known';
 // The gap between the server's clock and this set's, from the last live manifest (§15) — kept, so a set that
 // reboots with no line still reads the timeline by the server's hours.
 const CLOCK_KEY = 'signage.device.clock_offset';
+// This set's own word on decoding a turned screen's videos (docs/TV-ORIENTATION-SPEC.md §12): '1' or '0' overrides the
+// server's switch, set by hand at the set's DevTools to try it on one stick before everyone, and by the browser tests.
+const DECODE_KEY = 'signage.decode_turned_video';
 
 // While waiting to be claimed. Deliberately as slow as the playlist poll
 // (owner's decision): an unpaired player asks 2 times a minute instead of 15,
@@ -162,6 +165,11 @@ const state = {
         contentPaused: false, // an advert has appeared and the organization's content is paused under it
         pendingData: null, // a manifest that arrived mid-break, applied afterwards
     },
+
+    // A turned Fire TV's videos, decoded by the player itself (decodesTurnedVideo): the server's switch, and
+    // whether the decoder's chunk has been loaded on this set.
+    decodeTurnedVideo: false,
+    decoderReady: false,
 };
 
 /** How long past its own end a break waits for the item on screen before it interrupts it after all: a
@@ -381,6 +389,8 @@ async function pollPairStatus() {
 
 function startPlayback() {
     show('view-loading');
+    // A set that may decode its own videos has the decoder ready before its first one comes.
+    if (decoderWanted()) loadDecoder();
     fetchPlaylist();
     state.playlistTimer = setInterval(fetchPlaylist, PLAYLIST_MS);
     state.heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_MS);
@@ -410,6 +420,8 @@ async function fetchPlaylist() {
         const data = await response.json();
         if (token !== state.token) return;
         applyOrientation(data.screen?.orientation);
+        state.decodeTurnedVideo = data.screen?.decode_turned_video === true;
+        if (decoderWanted()) loadDecoder();
 
         // The worker marks an answer it served from its cache because the server could
         // not be reached (§15): the set is offline, and plays its timeline's entry for now.
@@ -453,6 +465,8 @@ function applyManifest(data, fromCache) {
     // entry of the timeline (lunch has begun) does.
     const key = JSON.stringify([
         shown.screen?.orientation ?? null,
+        // The switch turned on or off plays the playlist again, the other way.
+        shown.screen?.decode_turned_video === true,
         shown.blank === true,
         shown.items ?? [],
         shown.ad_break?.items ?? [],
@@ -675,7 +689,7 @@ function render(data) {
     const current = frontNode();
 
     if (current && state.offline && !state.items.some((item) => assetUrl(item) === current.dataset.item)) {
-        if (current.tagName === 'VIDEO') current.pause();
+        if (isVideoNode(current)) current.pause();
         layer(state.front).hidden = true;
         layer(state.front).innerHTML = '';
     }
@@ -776,7 +790,8 @@ function buildNode(item) {
     }
 
     if (item.type === 'video') {
-        const video = document.createElement('video');
+        // A turned Fire TV's video is decoded by the player itself, which draws it where the stage's turn reaches.
+        const video = document.createElement(decodesTurnedVideo(item) ? 'decoded-video' : 'video');
         video.src = assetUrl(item);
         video.muted = true;          // signage is silent, and muted always autoplays
         video.autoplay = true;
@@ -789,6 +804,56 @@ function buildNode(item) {
     image.src = assetUrl(item);
     image.alt = '';
     return image;
+}
+
+/** A video on the stage, played by a <video> or by the player's own decoder: both are paused, timed and ended alike. */
+function isVideoNode(node) {
+    return Boolean(node) && (node.tagName === 'VIDEO' || node.tagName === 'DECODED-VIDEO');
+}
+
+/**
+ * Whether this set may decode a turned screen's videos itself (docs/TV-ORIENTATION-SPEC.md §11, §12): a Fire TV,
+ * whose WebView puts a <video> on a hardware plane the stage's turn never reaches, with WebCodecs (Chrome 94; the
+ * player's floor is Chrome 80, so it is asked first), and the server's switch on — or this set's own override
+ * (DECODE_KEY), which also lets a browser test try it anywhere.
+ */
+function decoderWanted() {
+    const own = store.get(DECODE_KEY);
+
+    if (own === '0') return false;
+    if (typeof window.VideoDecoder !== 'function' || typeof window.EncodedVideoChunk !== 'function') return false;
+    if (own === '1') return true;
+
+    return state.decodeTurnedVideo && /\bAFT/.test(navigator.userAgent);
+}
+
+/** The decoder's own chunk (mp4box.js and <decoded-video>), loaded once, and only on a set that may use it. */
+let decoderLoading = null;
+
+function loadDecoder() {
+    if (decoderLoading) return decoderLoading;
+
+    decoderLoading = import('./player/decoded-video.js')
+        .then((module) => {
+            module.registerDecodedVideo();
+            state.decoderReady = true;
+        })
+        .catch(() => {
+            // Asked for again on the next poll; meanwhile every video plays as a <video>.
+            decoderLoading = null;
+        });
+
+    return decoderLoading;
+}
+
+/** A video this set decodes itself: an MP4 (mp4box.js reads MP4 alone) on a screen not landscape, once the decoder is in. */
+function decodesTurnedVideo(item) {
+    const orientation = el('stage').dataset.orientation || 'landscape';
+
+    return state.decoderReady
+        && orientation !== 'landscape'
+        && String(item.mime || '').toLowerCase() === 'video/mp4'
+        && decoderWanted();
 }
 
 /**
@@ -834,7 +899,7 @@ function playCurrent() {
         // still playing goes on DECODING — for the whole length of whatever replaced
         // it — which on a cheap television is heat, fan noise and a stutter in the
         // picture people can actually see. Stop it, then let it go.
-        if (previous && previous.tagName === 'VIDEO') previous.pause();
+        if (isVideoNode(previous)) previous.pause();
 
         outgoing.hidden = true;
         outgoing.innerHTML = '';
@@ -1046,7 +1111,7 @@ function armAdBreak(config) {
 function remainingOnScreen() {
     const node = frontNode();
 
-    if (node && node.tagName === 'VIDEO' && Number.isFinite(node.duration) && node.duration > 0) {
+    if (isVideoNode(node) && Number.isFinite(node.duration) && node.duration > 0) {
         return Math.max(0, (node.duration - node.currentTime) * 1000);
     }
 
@@ -1203,7 +1268,7 @@ function pauseContent() {
 
     // pause(), never a seek: the element keeps its position and its buffer, so
     // resuming a two-hour video costs nothing and cannot stutter.
-    if (node && node.tagName === 'VIDEO') node.pause();
+    if (isVideoNode(node)) node.pause();
 
     // An Ad Builder page cannot be paused from here — its runtime is its own — and left running
     // under the break it came back past its exit, its video decoding behind the advert all along
@@ -1229,7 +1294,7 @@ function resumeContent() {
         return;
     }
 
-    if (node.tagName === 'VIDEO') {
+    if (isVideoNode(node)) {
         node.play().catch(() => {});
         // The backstop is rearmed from what was left, not from the whole duration — with the
         // same five seconds of slack playCurrent gives a video. Exactly the time left would

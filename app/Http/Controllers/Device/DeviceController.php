@@ -109,6 +109,8 @@ class DeviceController extends Controller
                 'id' => $screen->id,
                 'name' => $screen->name,
                 'orientation' => $screen->orientation,
+                // Whether a turned Fire TV decodes its videos itself (config/signage.php, docs/TV-ORIENTATION-SPEC.md §12).
+                'decode_turned_video' => (bool) config('signage.decode_turned_video'),
             ],
             'server_time' => $now->toIso8601String(),
             'blank' => $items['blank'],
