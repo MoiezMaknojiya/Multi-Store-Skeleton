@@ -357,3 +357,36 @@ full and right way up, and the owner's photo.
 1. Are copies counted to the organization's 512 MB?
 2. Ad Builder pages with a video stay as they are for now?
 3. ffmpeg on the server (installed by the owner as root).
+
+## 10. What Xibo does (read on 2026-10-28, before deciding on §9)
+
+The owner asked how Xibo, the open-source signage product, plays video and turns a screen, before building §9.
+Read from the repositories and the vendor's forum; the Android player is closed source, so its facts come from
+the vendor's own words there.
+
+| Player | What draws the layout | Where video plays | Turning the screen |
+|---|---|---|---|
+| Xibo for Android (official, closed) | the app's own views; a WebView only for web pages and embedded HTML | **native**: `VideoView` in 2015, ExoPlayer since; into a `SurfaceView` by default, a display-profile option "Use a SurfaceView for Video Rendering?" turns it off for a `TextureView` on devices that need it | the display profile's Orientation, "only if the device supports rotation"; the app does not turn the picture itself |
+| Xibo for Linux (official, C++/GTK, archived 2024) | GTK widgets | **outside the WebView**: GStreamer `playbin` into a `gtkglsink` widget; WebKitGTK only for HTML | none in the player; the OS |
+| Electron player (official, current, Linux and Windows) with the Xibo Layout Renderer | a Chromium page | `<video>` through video.js | none in the player; the OS |
+| xiboplayer (community, 2026: PWA, Electron, Chromium kiosk) | a browser page, `renderer-lite.js` | `document.createElement('video')`, `object-fit`, autoplay, playsInline | none in the player (its only `rotate` is a spinner) |
+| Arexibo (community, Rust) | Qt WebEngine, which is Chromium | the page's `<video>` | none in the player |
+
+So no Xibo player turns a video itself. The browser players leave the turn to the operating system's display
+rotation, and the Android app to the device. On the Fire Stick the vendor's founder wrote on 2026-02-01 that
+"the device doesn't support rotation", their own Signage Stick neither, and that "Amazon recommends that you
+rotate your content, which we know is a heavy lift"; a 2021 thread about portrait on a Fire Stick ended in a
+feature request. Xogo, another signage product, documents the same for Fire TV: no portrait, pre-rotate the file.
+
+What it means here: the wall we met is the one everybody meets. Nobody turns a video inside a WebView on a
+Fire TV; the one app that plays video natively still needs the device to turn, which this device does not.
+The vendors' answer for a portrait Fire Stick is a turned video file, which §9 makes the server do and which
+§5 b) and d) rejected on the app side. Xibo's `TextureView` option shows what a native path would look like
+(a view that turns with the rest), and §5 b) rejected it.
+
+Sources: xibosignage/electron-player, xibosignage/xibo-layout-renderer (`src/Modules/Media/VideoMedia.ts`),
+xibosignage/xibo-linux (`player/control/media/player/GstMediaPlayer.cpp`, `webview/WebViewGtk.cpp`),
+xiboplayer/xiboplayer (`packages/renderer/src/renderer-lite.js`), xiboplayer/arexibo (README);
+community.xibo.org.uk threads 3688 (2015, 2017: VideoView, the WebView rejected), 37022 (2026: the Fire Stick
+and rotation), 26099 (2021: portrait on a Fire Stick), 24010 and 15391 (the SurfaceView option);
+docs.xibosignage.com display settings ("Android, webOS and Tizen can control rotation if the device supports it").
