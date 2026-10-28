@@ -175,3 +175,50 @@ and the WebView version (`adb shell dumpsys package com.amazon.webview.chromium 
 first candidate that holds for a full minute goes into the player's own CSS on `bug-fixing`, with a test, and
 is deployed on the owner's word; then the Roadstar sets "Reload player". If none holds, it goes back to the
 owner: §5 b) and d) are rejected.
+
+### 8.1 Results, 2026-10-28 (home session, the owner's Fire TV Stick 4K Max): none holds
+
+**How it was run.** WebView `132.amazon-webview-v132-6834-tv.6834.209.18`. The stick ran
+`TheDisplaySolution-debug-orientation.apk` (debuggable, with the `SignagePlayer` bridge), restarted first. Two
+departures from the plan above, both on purpose:
+
+- **The revert was not live yet**, so the live page still asked the app to turn the display. Before every
+  candidate the bridge was switched off inside the page through DevTools (`turnDisplay('landscape')`, then
+  `window.SignagePlayer = undefined` and `data-display-turned="false"`), which leaves the page doing exactly
+  what the reverted page does. Every dump of every run shows the app's window at Source Crop `1920 × 1080`,
+  so the display was at rotation 0 throughout and every screencap is the panel.
+- **The test screen was Portrait (rotated 270°), not 90°**: the owner had left it there. The overlay bug is the
+  same for both portraits (§3.2), and only a candidate that held would have needed the 90° run.
+
+Each candidate was put in a `<style id="raasta1">` through DevTools, its computed style read back from the
+playing video, then 60 s of `capture-fire-tv.ps1`. No page reload happened during any run, since the style was
+still there afterwards. Run 0 is the control, with no rule.
+
+| | Rule on `#stage .media-layer video` | Computed on the video | HWC: dumps with the `SurfaceView` row | Overlay Disp Frame | Screencaps (every ~6 s) | Holds? |
+|---|---|---|---|---|---|---|
+| 0 | none (control) | – | 13 of 18 | `0 0 2160 2160` | full, then **sideways** while the overlay is up | – |
+| A | `opacity: 0.999` | opacity 0.999 | 14 of 19 | `0 0 2160 2160` | full, then **black** while the overlay is up | no |
+| B | `mix-blend-mode: screen` | screen | 14 of 19 | `0 0 2160 2160` | full / **black** | no |
+| C | `filter: saturate(1.0001)` | saturate(1.0001) | 14 of 19 | `0 0 2160 2160` | full / **black** | no |
+| D | `clip-path: inset(0 round 1px)` | inset(0px round 1px) | 13 of 17 | `0 0 2160 2160` | full / **black** | no |
+| E | `transform: rotate(0.01deg)` | matrix(1, 0.000175, …) | 14 of 18 | `0 0 2160 2160` | full / **black** | no |
+| F | `transform: rotateX(0.01deg)` | matrix3d(…) | 13 of 17 | `0 0 2160 2160` | full / **sideways**, as the control | no |
+
+No photo was taken: a photo was asked for a candidate that held, and none did. The run folders are
+`%TEMP%\fire-tv-capture\run-20261028-011023` (control) to `run-20261028-011740` (F) on the home PC.
+
+**What the runs say about the cause.**
+
+- **CSS does not decide whether the video goes to the plane.** Every candidate, each one a reason for viz
+  (Chromium's compositor) to refuse a plane, still got the `SurfaceView` row, a few seconds after each new
+  video element, as often as the control did.
+- **The plane's box comes from the element's layout box, not from what the compositor draws.** E and F turn
+  the drawn video and A to D change how it is drawn, yet the Disp Frame stayed `0 0 2160 2160`, the un-turned
+  layout rect, every time. So this is not viz's overlay promotion: the WebView itself switches the video to
+  a `SurfaceView` placed at the element's box, and the compositor only leaves a hole there.
+- **A to E turn the hole black.** With an effect on the video, the compositor no longer leaves a clear hole: it
+  paints the box black over the plane, so the panel shows black where the video should be. This is the black
+  of `opacity: .999` on 2026-10-27, now reproduced alone. F changes nothing at all.
+
+Per the plan above, this goes back to the owner: §5 b) and d) are rejected, and a) has nothing left in this
+list.
