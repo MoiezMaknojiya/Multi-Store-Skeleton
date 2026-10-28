@@ -360,6 +360,25 @@ full and right way up, and the owner's photo.
 3. Backend (migration, model, `VideoTurns`, command, triggers, manifest), 4. the player's `#flat` box,
    5. tests, the stick, the photo, deploy on the owner's word.
 
+### 9.9.1 Step 1 done, 2026-10-28: a turned video holds on the stick
+
+The test video (`01M5RE6GHENFEA9R7BTESVK4YB.mp4`, 1080 × 1920, 10 s, H.264) was turned for Portrait (rotated 270°)
+with ffmpeg 6.1.1 on the home PC (`-vf transpose=2 -c:v libx264 -preset veryfast -crf 21 -pix_fmt yuv420p -an
+-movflags +faststart`: 1920 × 1080, 10 s, 2.2 MB, no rotation flag, 0.6 s on that many-core PC, which says nothing
+about the server's one vCPU). Its frame matched the old 270° CSS picture exactly: the logo on the left. The owner
+uploaded it, put it alone on the test screen's playlist and set the screen to Landscape. Then two 60 s captures on
+the stick, the display at rotation 0 in every dump, so every screencap is the panel:
+
+| Run | Page | Dumps with the overlay | Overlay Disp Frame | Screencaps |
+|---|---|---|---|---|
+| 1 | the live page as it was, its bridge switched off in DevTools | 16 of 17 | `0 0 3840 2160`, the whole panel | 9 of 9 full and turned right |
+| 2 | after the owner's reload, on the reverted page (`player-BPFlxHPc.js`, live since about 02:15) | 15 of 18 | `0 0 3840 2160` | 9 of 9 full |
+
+So the plane that drew the video sideways in a 1080-pixel square (§3.2) draws a video whose pixels are already
+turned across the whole panel, the right way round, for as long as it holds it. This is the proof §9 needed before
+any code: the server's turned copy, sent flat, is what a portrait Fire TV can show. Run 2 is exactly a customer's
+set today: the release page, a Landscape screen, a turned file.
+
 ### 9.10 What the owner decides before step 3
 
 1. Are copies counted to the organization's 512 MB?
