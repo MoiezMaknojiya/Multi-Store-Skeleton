@@ -301,7 +301,7 @@ own shape alone.
   (`TakesAFinishedUpload::refuseTheFileForGood`). An ad that already shows a file keeps it when it is saved.
 - **A screen is offered the channels of its shape** (`Screen::shape`): Landscape and Landscape (flipped 180°) the landscape ones,
   Portrait (rotated 90°) and Portrait (rotated 270°) the portrait ones, because the player turns the whole stage the right way up
-  (`#stage[data-orientation]` in the player's page). The Channels tab says which, and for a screen mounted the other way round that
+  (`#stage[data-orientation]` in the player's page), or, on a set whose app has turned the display, draws it flat (see the rules on a portrait Fire TV). The Channels tab says which, and for a screen mounted the other way round that
   the player turns them (`shape_note`). A save or Copy to Other Screens that would put a channel of the other shape on a screen not
   carrying it yet is refused ("GAMA is a portrait channel, and Counter TV is a landscape screen. Add its landscape channel
   instead.", `PlaylistController::assertChannelsFitTheScreen`); a line already there keeps its place and plays on, and the playlist
