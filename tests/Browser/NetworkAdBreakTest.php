@@ -232,13 +232,13 @@ class NetworkAdBreakTest extends DuskTestCase
                 'return [...document.querySelectorAll("video")].filter((v) => !v.paused).length;'
             )[0]);
 
-            // -- And after: the clip again, from its start --------------------------
-            // The playlist's one video comes round again, so it plays again in the element already on screen
-            // (SameVideoPlaysOnInPlaceTest): what is checked is that it starts over, not where.
+            // -- And after: the clip again, from its start, in an element of its own --
+            $tv->script("document.querySelector('{$onScreen}').dataset.before = 'yes';");
             $tv->waitUsing(30, 200, fn () => $tv->script('return document.getElementById("layer-ad").hidden;')[0]);
             $tv->waitUsing(10, 200, fn () => $tv->script(
-                "const v = document.querySelector('{$onScreen}'); return !!v && v.paused === false && v.currentTime < 3;"
+                "const v = document.querySelector('{$onScreen}'); return !!v && v.dataset.before !== 'yes' && v.paused === false;"
             )[0], 'the next item did not come on after the break');
+            $this->assertLessThan(3, (float) $tv->script("return document.querySelector('{$onScreen}').currentTime;")[0]);
 
             // Nothing accumulates. Two content layers means at most two video elements
             // ever exist; the advert's own is destroyed with the break, so a set left

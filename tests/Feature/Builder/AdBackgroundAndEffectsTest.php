@@ -52,8 +52,7 @@ test('the layers are stacked in order on the stage colour, each with its own opa
         ->toContain('background-size:12%;background-position:left top;background-repeat:repeat;')
         ->toContain('<video class="ad-layer" src="')
         ->toContain('loop.mp4')
-        // A video at 1 is written a touch short of opaque, on every page (AdVideoOnATurnedScreenTest).
-        ->toContain('autoplay muted loop playsinline style="opacity:0.999;mix-blend-mode:normal;object-fit:contain;"');
+        ->toContain('autoplay muted loop playsinline style="opacity:1;mix-blend-mode:normal;object-fit:contain;"');
 
     // First layer furthest back: it comes first in the page.
     expect(strpos($html, '#1e3a8a'))->toBeLessThan(strpos($html, 'linear-gradient(135deg'))
