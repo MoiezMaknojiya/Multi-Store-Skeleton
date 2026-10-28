@@ -31,6 +31,16 @@
          is built for too (build.target in vite.config.js). --}}
     @vite('resources/js/player.js')
 
+    {{-- A Fire TV on a turned screen decodes its videos itself (docs/TV-ORIENTATION-SPEC.md §12), with a chunk the
+         player imports only there. Named here, the worker keeps it with the page: a set that starts with no line (a
+         power cut takes the router too) has its decoder, and its videos never come on sideways. Asked for at once,
+         beside the player's script, it is in before the first video too. --}}
+    @if (preg_match('/\bAFT/', (string) request()->userAgent()))
+        @foreach (\App\Services\BuiltScripts::withImports('resources/js/player/decoded-video.js') as $script)
+            <link rel="modulepreload" href="{{ $script }}">
+        @endforeach
+    @endif
+
     <style>
         /* What this page used of Tailwind's reset, written out. */
         *, ::before, ::after { box-sizing: border-box; }

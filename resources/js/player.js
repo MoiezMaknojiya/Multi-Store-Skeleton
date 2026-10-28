@@ -36,8 +36,6 @@ const CLOCK_KEY = 'signage.device.clock_offset';
 // This set's own word on decoding a turned screen's videos (docs/TV-ORIENTATION-SPEC.md §12): '1' or '0' overrides the
 // server's switch, set by hand at the set's DevTools to try it on one stick before everyone, and by the browser tests.
 const DECODE_KEY = 'signage.decode_turned_video';
-// How long a set the server turns to the decoder waits for it before drawing, so its first video is decoded too.
-const DECODER_WAIT_MS = 5000;
 
 // While waiting to be claimed. Deliberately as slow as the playlist poll
 // (owner's decision): an unpaired player asks 2 times a minute instead of 15,
@@ -48,6 +46,7 @@ const POLL_MS = 30000;
 const PLAYLIST_MS = 30000;   // how often to ask what to show
 const HEARTBEAT_MS = 60000;  // how often to say "alive"
 const BROKEN_ITEM_PAUSE_MS = 1000;  // breathing room before skipping a file that will not play
+const DECODER_WAIT_MS = 5000;       // the most a set waits for its own video decoder before it plays without it
 const WORKER_UPDATE_MS = 3600000;   // a television never reloads its page, so it asks for a new worker itself
 const WORKER_PATH = '/player-sw.js';
 const WORKER_SCOPE = '/player';
@@ -423,10 +422,13 @@ async function fetchPlaylist() {
         if (token !== state.token) return;
         applyOrientation(data.screen?.orientation);
         state.decodeTurnedVideo = data.screen?.decode_turned_video === true;
-        // The first answer after the set starts is what turns a set with no word of its own to the decoder: it waits
-        // for the decoder before drawing, or the first video would be a <video> the plane takes for its round.
-        if (decoderWanted() && !state.decoderReady) await decoderOrGiveUp();
-        if (token !== state.token) return;
+        // The decoder is in before the first video is made: made without it, that video was a <video> for its whole
+        // length, sideways on a turned Fire TV after every start (2026-10-28). A chunk that never comes holds the
+        // screen DECODER_WAIT_MS at most, and its videos play as <video> until it does.
+        if (decoderWanted() && !state.decoderReady) {
+            await Promise.race([loadDecoder(), new Promise((resolve) => setTimeout(resolve, DECODER_WAIT_MS))]);
+            if (token !== state.token) return;
+        }
 
         // The worker marks an answer it served from its cache because the server could
         // not be reached (§15): the set is offline, and plays its timeline's entry for now.
@@ -849,11 +851,6 @@ function loadDecoder() {
         });
 
     return decoderLoading;
-}
-
-/** The decoder, or nothing after DECODER_WAIT_MS: a set whose chunk does not come plays its videos as <video> meanwhile. */
-function decoderOrGiveUp() {
-    return Promise.race([loadDecoder(), new Promise((resolve) => setTimeout(resolve, DECODER_WAIT_MS))]);
 }
 
 /** A video this set decodes itself: an MP4 (mp4box.js reads MP4 alone) on a screen not landscape, once the decoder is in. */

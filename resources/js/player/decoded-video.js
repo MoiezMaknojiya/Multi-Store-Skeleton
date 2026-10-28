@@ -52,6 +52,8 @@ class DecodedVideo extends HTMLElement {
         this._chunks = [];
         this._frames = [];
         this._firstTimestamp = null;
+        this._framesStart = Infinity;
+        this._framesEnd = -Infinity;
         this._extracted = 0;
         this._total = Infinity;
         this._readAll = false;
@@ -120,13 +122,13 @@ class DecodedVideo extends HTMLElement {
         this._teardown();
     }
 
-    /** Seconds played: frozen while paused, never past the end. */
+    /** Seconds played: frozen while paused, never past the end once the end is certain (every frame read). */
     _now() {
         if (this._paused) return this._position;
 
         const seconds = (performance.now() - this._clockStart) / 1000;
 
-        return Number.isFinite(this._duration) ? Math.min(seconds, this._duration) : seconds;
+        return this._readAll && Number.isFinite(this._duration) ? Math.min(seconds, this._duration) : seconds;
     }
 
     _runFrom(position) {
@@ -196,6 +198,9 @@ class DecodedVideo extends HTMLElement {
 
         if (this._torn || this._failed) return;
         file.flush();
+        // Every frame is read: the length is the longest of what the index said and what the frames run to.
+        const frames = (this._framesEnd - this._framesStart) / 1e6;
+        if (frames > 0 && !(this._duration >= frames)) this._duration = frames;
         this._readAll = true;
 
         // Read to its end with no index: no MP4 this set can read. With one, still short of frames: a file cut short.
@@ -223,7 +228,12 @@ class DecodedVideo extends HTMLElement {
             config.description = new Uint8Array(stream.buffer, 8);
         }
 
-        this._duration = info.timescale ? info.duration / info.timescale : track.duration / track.timescale;
+        // A fragmented file (what a browser or OBS records) may say 0 here, its length in a mehd box or nowhere: then
+        // its frames' own, known once every frame is read (_read). Capped at 0, its clock never moved off the first frame.
+        const said = info.timescale
+            ? Math.max(info.duration || 0, info.fragment_duration || 0) / info.timescale
+            : track.duration / track.timescale;
+        this._duration = said > 0 ? said : NaN;
         this._total = track.nb_samples;
         this._trackId = track.id;
         this._turn = turnOf(track.matrix);
@@ -278,10 +288,14 @@ class DecodedVideo extends HTMLElement {
     /** Frames mp4box has read: kept as chunks for the decoder, and their bytes let go in mp4box. */
     _take(id, samples) {
         for (const sample of samples) {
+            const timestamp = (1e6 * sample.cts) / sample.timescale;
+            const duration = (1e6 * sample.duration) / sample.timescale;
+            this._framesStart = Math.min(this._framesStart, timestamp);
+            this._framesEnd = Math.max(this._framesEnd, timestamp + duration);
             this._chunks.push(new EncodedVideoChunk({
                 type: sample.is_sync ? 'key' : 'delta',
-                timestamp: (1e6 * sample.cts) / sample.timescale,
-                duration: (1e6 * sample.duration) / sample.timescale,
+                timestamp: timestamp,
+                duration: duration,
                 data: sample.data,
             }));
         }

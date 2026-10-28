@@ -498,11 +498,12 @@ player's way, these are open:
 - **Size:** mp4box.js is about 157 KB minified; loaded only on a Fire TV that needs it.
 - **Ad Builder pages** with a video inside: the same technique would go into the ad runtime; later.
 
-## 12. Plan: the player decodes a turned screen's video itself (2026-10-28; built §12.10, on the stick §12.11)
+## 12. Plan: the player decodes a turned screen's video itself (2026-10-28; built §12.10, emulator §12.11, stick §12.12)
 
 The owner chose §11's way after seeing it on the TV ("Haan, theek ha"). This plan replaces §9 (server copies),
 which stays on file in case §12 meets a wall. §12.1 to §12.9 are the plan as written before any of it was built;
-§12.10 says what was built and §12.11 what the stick showed.
+§12.10 says what was built, §12.11 what the emulator showed, §12.12 what the stick showed and §12.13 the
+switch going on.
 
 ### 12.1 What changes, in one paragraph
 
@@ -627,7 +628,54 @@ the stated exception to the Chrome 80 rule (in the rules), Fire TV only, WebM la
 (rotated 90°), Portrait (rotated 270°) and Landscape (flipped 180°), a long video for memory, a break, offline, and
 the override back to '0'. Then the owner's photo, then the switch on.
 
-### 12.11 On the stick, 2026-10-28: every turned orientation holds
+**On by default, 2026-10-28.** The owner, after the decoder held on the stick at home: "code mein default true kardo".
+`config('signage.decode_turned_video')` now defaults to true (`DecodeTurnedVideoSwitchTest`), so every turned Fire TV
+decodes its MP4 videos itself from its next poll after the deploy; `SIGNAGE_DECODE_TURNED_VIDEO=false` in the live
+`.env` (then `php artisan config:cache`) brings every set back to `<video>` on its next poll. The checks of §12.7 on
+the owner's stick go on meanwhile.
+
+### 12.11 The stress round on the emulator, 2026-10-28
+
+The owner: "Android Studio ko localhost ya Dusk se connect karo aur multiple files daal kar saari orientations ki
+testing karo … Kuch miss mat karna". The app's debug build (a worktree whose `PLAYER_ORIGIN` was the Dusk server)
+on the TV emulator, a Dusk screen with a mixed playlist: pictures, real and recorded MP4s, a WebM, an MP4 with its
+index last, one with a turn in its header, a 45-second video, the same video twice, a broken file, Ad Builder pages
+(one with two videos inside), a channel of video ads, and two video adverts with breaks every 6 seconds. Each
+orientation was watched for a whole loop with screenshots and the page's own state read over DevTools; the emulator
+is no Fire TV, so the set's override ('1') or a Fire TV User-Agent stood in for the switch.
+
+What held: all four orientations, pictures and pages turned with the stage, every MP4 decoded on a turned screen
+and a `<video>` on a landscape one; the same video twice; the 45-second video to its end; a break between items with
+both adverts decoded; the broken file's `error` and the loop moving on after a second; an orientation changed in
+the middle of a decoded video (the next poll plays the loop again the new way, every decoder let go); six starts in a
+row, each in another orientation; playing on with the line cut. The page's heap stayed at 10–11 MB, every decoder
+made was closed and every frame handed out was closed.
+
+Three faults, each fixed and seen failing before:
+
+1. **A fragmented MP4 stood still on its first frame.** What a browser or OBS records (`ftyp moov moof mdat …`) may
+   say 0 for its length in `mvhd`, with no `mehd`; the decoder took 0 for the length and held its clock there, so the
+   frames were never due, and the backstop moved the loop on after the line's seconds. Its length is now the index's
+   when it says one (`mvhd` or `mehd`), else its frames' own end, known once every frame is read, and the clock is
+   held at the length only once it is certain. Fixture `portrait-red-top-fragmented.mp4`, recorded in one-second
+   slices by Chrome's MediaRecorder (`mvhd` 0, two fragments).
+2. **The first video after every start was a `<video>`.** On a set told by the server alone, the decoder's chunk was
+   asked for once the first playlist answer had come, and the first video was made before it was in: sideways for a
+   whole loop after every start, which is exactly what a set "reloaded" to get the fix would show. `fetchPlaylist`
+   now waits for the decoder, `DECODER_WAIT_MS` (5 s) at most, before it plays (`DecodedVideoTest`, a Fire TV's
+   User-Agent and no override of the set's own).
+3. **A set that started with no line had no decoder.** The worker keeps the built files the page names, and the chunk
+   is imported, not named: rebooted offline, the import failed and the videos came on as `<video>`. A Fire TV's
+   player page (`AFT` in the request's User-Agent) now names the decoder and the chunks it imports as
+   `modulepreload` (`App\Services\BuiltScripts::withImports`, by the build's manifest), so the worker keeps them with
+   the page and the import is at once, online or not (`DecodeTurnedVideoSwitchTest`). Seen on the emulator with the
+   page and its worker both reading as a Fire TV: the shell kept `decoded-video` and `rolldown-runtime`, and a start
+   with the line cut decoded its videos and adverts from the cache.
+
+Still not covered: WebM (a `<video>`), and the videos inside an Ad Builder page (the page's own `<video>`, in its
+frame).
+
+### 12.12 On the stick, 2026-10-28: every turned orientation holds
 
 Deployed with the switch off (live serves `player-*.js` with its `decoded-video-*.js` chunk); the test stick (Fire TV
 Stick 4K Max, Amazon WebView 132, the debuggable `TheDisplaySolution-debug-orientation.apk`) told '1' through
@@ -666,21 +714,13 @@ errors; the network given back, the server answered again.
 
 **Not tried on the stick yet:** a five-minute video (the reads come in 2 MB pieces and mp4box drops each piece once
 handed out, so memory should not depend on the length; the ten-minute run above covers the rounds), and a network
-break over a decoded video (`DecodedVideoTest` covers pause and resume in Chrome). Then the owner's photo of the TV,
-and the switch on for everyone (`SIGNAGE_DECODE_TURNED_VIDEO=true` in the live `.env`, then `php artisan optimize`;
-`false` turns it off again, every set going back to `<video>` on its next poll).
+break over a decoded video (`DecodedVideoTest` covers pause and resume in Chrome). Then the owner's photo of the TV.
 
-### 12.12 The switch on for everyone, 2026-10-28
+### 12.13 The switch on for everyone, 2026-10-28
 
-The owner set `SIGNAGE_DECODE_TURNED_VIDEO=true` in the live `shared/.env` and ran `php artisan optimize`. The test
-stick's own override was taken away so it follows the server: its next answer said `decode_turned_video: true` and
-it went on decoding.
-
-**One gap the override had hidden:** a set with no word of its own learns to decode from its first playlist answer,
-and the player drew that answer at once while the decoder's chunk was still on its way, so the first round after
-every start (a boot, the app opened again, a reload) was a `<video>`, which the plane takes a few seconds in; from
-the second round on it decoded. With the override the chunk was loaded at start-up, so it never showed. Now
-`fetchPlaylist` waits for the decoder before drawing an answer that turns the set to it, at most `DECODER_WAIT_MS`
-(5 s): the chunk comes from the browser's cache in milliseconds, a set that cannot fetch it plays `<video>` as
-before. `DecodedVideoTest::test_a_fire_tv_told_by_the_server_decodes_its_very_first_video_too` (a Fire TV's
-User-Agent, no override, the answer saying on) failed on the player before (`VIDEO` first) and passes now.
+The owner set `SIGNAGE_DECODE_TURNED_VIDEO=true` in the live `shared/.env` and ran `php artisan optimize` (the code's
+default is true too, since the end of §12.10). The test stick's own override was taken away so it follows the
+server: its next answer said `decode_turned_video: true` and it went on decoding. Its first round after that reload
+was still a `<video>`, the fault §12.11 (2) found on the emulator the same day: the stick showed it before that fix
+was deployed. The home session had made the same fix (wait for the decoder, 5 s at most) with a test of its own:
+it was dropped, test and all, in the merge for §12.11's.
