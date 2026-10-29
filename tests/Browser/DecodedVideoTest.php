@@ -68,6 +68,45 @@ class DecodedVideoTest extends DuskTestCase
         });
     }
 
+    public function test_a_decoded_video_holds_no_more_than_three_of_the_decoders_frames_at_once(): void
+    {
+        // The Fire TV Stick, 2026-10-29: a hardware decoder's frames come from a pool Chromium keeps at two images in a
+        // WebView, and with six held it now and then had none: the frame then drawn was empty, a flash of green, and the
+        // stick's log said "no buffers currently available in the reader queue". Every frame the decoder hands out is
+        // counted here, and every one closed: two held or asked for at most, and one already inside the decoder may
+        // still come out after the asking stops. The decoder before held ten.
+        [$screen] = $this->screenPlaying('portrait', ['portrait-red-top.mp4']);
+
+        $this->browse(function (Browser $tv) use ($screen) {
+            (new ChromeDevToolsDriver($tv->driver))->execute('Page.addScriptToEvaluateOnNewDocument', ['source' => <<<'JS'
+                (() => {
+                    if (typeof window.VideoDecoder !== 'function') return;
+                    const held = window.__heldFrames = { now: 0, most: 0, out: 0 };
+                    const close = VideoFrame.prototype.close;
+                    VideoFrame.prototype.close = function () {
+                        if (!this.__closed) { this.__closed = true; held.now -= 1; }
+                        return close.call(this);
+                    };
+                    const Original = window.VideoDecoder;
+                    window.VideoDecoder = function (init) {
+                        return new Original({
+                            output: (frame) => { held.out += 1; held.now += 1; held.most = Math.max(held.most, held.now); init.output(frame); },
+                            error: init.error,
+                        });
+                    };
+                    window.VideoDecoder.isConfigSupported = (config) => Original.isConfigSupported(config);
+                })();
+            JS]);
+
+            $this->startTheSet($tv, $screen, '1');
+            $this->waitForDecodedFrames($tv, 60);
+
+            [$out, $most] = $tv->script('return [window.__heldFrames.out, window.__heldFrames.most];')[0];
+            $this->assertGreaterThan(60, $out, 'the decoder handed out its frames');
+            $this->assertLessThanOrEqual(3, $most, 'no more than three of its frames are ever held at once');
+        });
+    }
+
     public function test_a_fire_tv_decodes_its_first_video_after_a_start_with_the_servers_switch_alone(): void
     {
         // Roadstar 4, 2026-10-28: a menu video alone on a turned screen. The decoder's chunk was asked for once the

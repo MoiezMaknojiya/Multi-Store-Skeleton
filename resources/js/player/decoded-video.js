@@ -21,9 +21,15 @@ const { createFile, DataStream } = MP4BoxModule;
 const PIECE_BYTES = 2 * 1024 * 1024;
 /** Frames read and waiting for the decoder: about three seconds of a 30 fps video. Reading waits beyond that. */
 const MAX_WAITING_CHUNKS = 90;
-/** Frames handed to the decoder at once, and decoded frames held for drawing (each one is closed once drawn). */
-const DECODE_AHEAD = 4;
-const FRAMES_AHEAD = 6;
+/**
+ * Frames handed to the decoder at once, and frames decoded or asked for, held for drawing (each one is closed once
+ * drawn). Two at most: a hardware decoder's frames come from a pool Chromium keeps at two images in a WebView
+ * (gpu/command_buffer/service/image_reader_gl_owner.cc), and the ten held before left it with none now and then: the
+ * frame then drawn had no picture in it, a flash of green on the Fire TV Stick (its log: "no buffers currently available
+ * in the reader queue", 2026-10-29). One already inside the decoder may still come out: three, never ten.
+ */
+const DECODE_AHEAD = 2;
+const FRAMES_AHEAD = 2;
 /** No first frame by then is a file this set cannot play: `error`, and the player moves on. */
 const FIRST_FRAME_MS = 15000;
 /** The canvas is never bigger than the panel: a 4K video is drawn at the size it is shown. */
@@ -308,7 +314,9 @@ class DecodedVideo extends HTMLElement {
         const decoder = this._decoder;
         if (!decoder || decoder.state !== 'configured') return;
 
-        while (this._chunks.length && decoder.decodeQueueSize < DECODE_AHEAD && this._frames.length < FRAMES_AHEAD) {
+        // What is still in the queue comes out as frames too: the two are counted together.
+        while (this._chunks.length && decoder.decodeQueueSize < DECODE_AHEAD
+            && this._frames.length + decoder.decodeQueueSize < FRAMES_AHEAD) {
             decoder.decode(this._chunks.shift());
         }
 
