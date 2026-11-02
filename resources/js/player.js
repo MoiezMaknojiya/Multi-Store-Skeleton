@@ -47,6 +47,7 @@ const PLAYLIST_MS = 30000;   // how often to ask what to show
 const HEARTBEAT_MS = 60000;  // how often to say "alive"
 const BROKEN_ITEM_PAUSE_MS = 1000;  // breathing room before skipping a file that will not play
 const DECODER_WAIT_MS = 5000;       // the most a set waits for its own video decoder before it plays without it
+const PREPARE_AHEAD_MS = 3500;      // how long before the item on screen ends a turned Fire TV's next video is made ready
 const WORKER_UPDATE_MS = 3600000;   // a television never reloads its page, so it asks for a new worker itself
 const WORKER_PATH = '/player-sw.js';
 const WORKER_SCOPE = '/player';
@@ -139,6 +140,12 @@ const state = {
     // image can resume with the time it had LEFT rather than starting over.
     itemStartedAt: 0,
     itemDurationMs: 0,
+    // A turned Fire TV's next video, made ready in the layer behind the one on screen ({node, url}), and the
+    // timer that makes it (prepareNext).
+    prepared: null,
+    prepareTimer: null,
+    // The element playCurrent put up last: only its own end moves the loop on.
+    current: null,
 
     // Offline (§15): whether the manifest on screen came from the worker's cache, the
     // set's clock corrected by the last live manifest's server time (so the timeline's
@@ -742,6 +749,8 @@ function stopPlayback() {
     if (state.itemTimer) clearTimeout(state.itemTimer);
     state.itemTimer = null;
     state.itemDurationMs = 0;
+    state.current = null;
+    clearPrepared();
     // An advert must not be left hanging over content that is no longer there.
     // The hourly countdown keeps running, so it comes back when the content does.
     endAdBreak({ resume: false });
@@ -887,10 +896,23 @@ function playCurrent() {
     const item = state.items[state.index % state.items.length];
     const target = state.front === 'a' ? 'b' : 'a';
     const incoming = layer(target);
+    const prepared = state.prepared;
+    let node;
 
-    incoming.innerHTML = '';
-    const node = buildElement(item);
-    incoming.appendChild(node);
+    // The next video made ready behind this one (prepareNext): it comes on the moment it is asked for. Anything else
+    // made ready — the playlist changed, a channel's next pass took another ad — goes.
+    if (prepared && prepared.url === assetUrl(item) && prepared.node.parentElement === incoming) {
+        state.prepared = null;
+        if (state.prepareTimer) clearTimeout(state.prepareTimer);
+        state.prepareTimer = null;
+        node = prepared.node;
+    } else {
+        clearPrepared();
+        incoming.innerHTML = '';
+        node = buildElement(item);
+        incoming.appendChild(node);
+    }
+    state.current = node;
 
     const reveal = () => {
         // A node no longer on the page — replaced by the next item before it finished
@@ -913,7 +935,11 @@ function playCurrent() {
 
         incoming.hidden = false;
         state.front = target;
+        // A video's backstop counts from when it came on, not from when it was asked for: a first frame slow to come
+        // (a slow line, an index at the end of a big file) took its seconds from the end of the video (2026-11-02).
+        if (item.type === 'video') startItemTimer((item.duration + 5) * 1000);
         preloadNext();
+        prepareNext(node);
     };
 
     // The same for a file that fails after it was replaced: skipping then would cut short
@@ -923,13 +949,20 @@ function playCurrent() {
     };
 
     if (item.type === 'video') {
-        node.addEventListener('loadeddata', reveal, { once: true });
+        // A video made ready behind the one before has its first frame drawn already: it comes on at once.
+        const ready = node.readyState >= 2;
+        if (!ready) node.addEventListener('loadeddata', reveal, { once: true });
         // A video advances when it actually ends; the duration is only a backstop
-        // for a file that stalls or has no end event.
-        node.addEventListener('ended', advance, { once: true });
+        // for a file that stalls or has no end event. A video the backstop has already moved on from — still on the
+        // glass while the next one loads — ends without moving the loop on again: that skipped the next item, over
+        // and over (a first frame 6 s late, 2026-11-02).
+        node.addEventListener('ended', () => {
+            if (state.current === node) advance();
+        }, { once: true });
         node.addEventListener('error', broken, { once: true });
         startItemTimer((item.duration + 5) * 1000);
         node.play().catch(() => {});
+        if (ready) reveal();
     } else if (item.type === 'html') {
         // A frame fires `load` for the empty document it starts with, before its page is even asked for:
         // showing that would blank the screen while the page is on its way. Only the page's own load reveals it.
@@ -972,6 +1005,61 @@ function preloadNext() {
     if (next.type === 'video' || next.type === 'html') return;
     const warm = new Image();
     warm.src = assetUrl(next);
+}
+
+/**
+ * A turned Fire TV's next video, made ready in the layer behind this item PREPARE_AHEAD_MS before it ends: its file
+ * read, its decoder set up and its first frame drawn, paused, so the switch is a swap (playCurrent). Made only once this
+ * item had ended, the screen held this item's last picture for 0.53 to 0.62 s every time, half of it reading the file
+ * and half the Fire TV's decoder starting (the owner's Fire TV Stick, 2026-11-02; docs/TV-ORIENTATION-SPEC.md §12.14):
+ * the jerk between two videos. The same video again — a one-video playlist — is made ready the same way.
+ *
+ * A break due when this item ends plays first, and the video after it is made as before. Called with the item on
+ * screen, as it comes on (playCurrent) or comes back after a break (resumeContent).
+ */
+function prepareNext(node) {
+    if (state.prepareTimer) clearTimeout(state.prepareTimer);
+    state.prepareTimer = null;
+    if (state.items.length === 0) return;
+
+    const item = state.items[state.index % state.items.length];
+    const next = state.items[(state.index + 1) % state.items.length];
+    if (next.type !== 'video' || !decodesTurnedVideo(next)) return;
+
+    // A video's own length less what it has played (a fragmented file says its length only once read through: the
+    // server's then); anything else, what its countdown has left.
+    let left = state.itemDurationMs - (Date.now() - state.itemStartedAt);
+    if (item.type === 'video') {
+        const length = Number.isFinite(node.duration) && node.duration > 0 ? node.duration : item.duration;
+        left = (length - (node.currentTime || 0)) * 1000;
+    }
+
+    state.prepareTimer = setTimeout(() => {
+        state.prepareTimer = null;
+        if (state.ad.due || state.ad.active || state.prepared || !node.isConnected) return;
+
+        const back = layer(state.front === 'a' ? 'b' : 'a');
+        back.innerHTML = '';
+
+        const ready = buildElement(next);
+        // Paused before its first frame: it waits on that frame, unplayed, until its turn.
+        ready.pause();
+        ready.addEventListener('error', () => {
+            if (state.prepared && state.prepared.node === ready) clearPrepared();
+        }, { once: true });
+        back.appendChild(ready);
+        state.prepared = { node: ready, url: assetUrl(next) };
+    }, Math.max(0, left - PREPARE_AHEAD_MS));
+}
+
+/** Let a video made ready for later go, and the timer that would make one. */
+function clearPrepared() {
+    if (state.prepareTimer) clearTimeout(state.prepareTimer);
+    state.prepareTimer = null;
+
+    const prepared = state.prepared;
+    state.prepared = null;
+    if (prepared && prepared.node.isConnected && prepared.node.parentElement !== layer(state.front)) prepared.node.remove();
 }
 
 /**
@@ -1194,6 +1282,8 @@ function breakBetweenItems() {
     // The item before has ended: its own backstop (a video's) must not move the loop on under the break.
     if (state.itemTimer) clearTimeout(state.itemTimer);
     state.itemTimer = null;
+    // Nothing waits behind the break with a decoder of its own: the next item is made after it.
+    clearPrepared();
     state.ad.due = false;
     state.ad.between = true;
     state.ad.active = true;
@@ -1269,6 +1359,7 @@ function pauseContent() {
 
     if (state.itemTimer) clearTimeout(state.itemTimer);
     state.itemTimer = null;
+    clearPrepared();
     state.ad.resumeMs = remainingOnScreen();
 
     const node = frontNode();
@@ -1307,12 +1398,14 @@ function resumeContent() {
         // same five seconds of slack playCurrent gives a video. Exactly the time left would
         // fire a moment before `ended` (starting again takes a moment) and cut its last frames.
         startItemTimer(Math.max(1000, state.ad.resumeMs || 1000) + 5000);
+        prepareNext(node);
 
         return;
     }
 
     // An image that had four of its ten seconds used gets the remaining six.
     startItemTimer(Math.max(500, state.ad.resumeMs || 500));
+    prepareNext(node);
 }
 
 function endAdBreak({ resume }) {

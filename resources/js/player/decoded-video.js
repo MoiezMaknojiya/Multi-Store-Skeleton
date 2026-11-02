@@ -6,9 +6,11 @@
  * 2026-10-27). This element plays the file with no media element at all: it reads the MP4 in pieces (mp4box.js),
  * decodes it with WebCodecs and draws each frame on a canvas of its own, which turns with the stage like a picture.
  *
- * To the player it is a <video>: `src`, `play()` (a promise), `pause()`, `paused`, `duration`, `currentTime`, and the
- * events `loadeddata` (its first frame is drawn), `ended` (its last frame's time has passed) and `error`. It never
- * loops by itself: the player decides what comes next. It is silent, as every video the player shows.
+ * To the player it is a <video>: `src`, `autoplay`, `play()` (a promise), `pause()`, `paused`, `readyState`, `duration`,
+ * `currentTime`, and the events `loadeddata` (its first frame is drawn), `ended` (its last frame's time has passed) and
+ * `error`. It never loops by itself: the player decides what comes next. It is silent, as every video the player shows.
+ * Paused before its first frame, it waits on that frame until it is played, as a <video> does: the player makes the
+ * next video ready that way while the one before is still on screen (player.js, prepareNext).
  *
  * Loaded only where it is needed (player.js, decodesTurnedVideo), behind a check that WebCodecs is there: the
  * player's own floor is Chrome 80, and WebCodecs is Chrome 94.
@@ -30,6 +32,8 @@ const MAX_WAITING_CHUNKS = 90;
  */
 const DECODE_AHEAD = 2;
 const FRAMES_AHEAD = 2;
+/** First frames that come out as no picture (an empty decoder image) let go before the next one is shown anyway. */
+const MAX_EMPTY_FIRST_FRAMES = 5;
 /** No first frame by then is a file this set cannot play: `error`, and the player moves on. */
 const FIRST_FRAME_MS = 15000;
 /** The canvas is never bigger than the panel: a 4K video is drawn at the size it is shown. */
@@ -73,6 +77,7 @@ class DecodedVideo extends HTMLElement {
         // Read by tests and by a person at DevTools; never by the player.
         this.drawnFrames = 0;
         this.lateFrames = 0;
+        this.emptyFirstFrames = 0;
         this.reads = 0;
         this._tick = this._tick.bind(this);
     }
@@ -80,7 +85,7 @@ class DecodedVideo extends HTMLElement {
     // What the player sets on a <video>: accepted, and only src and autoplay mean anything here.
     set src(value) { this._src = String(value || ''); }
 
-    set autoplay(value) { if (value) this._wantsToPlay = true; }
+    set autoplay(value) { this._wantsToPlay = Boolean(value); }
 
     set muted(value) { /* always silent */ }
 
@@ -89,6 +94,9 @@ class DecodedVideo extends HTMLElement {
     set preload(value) { /* it always reads ahead */ }
 
     get paused() { return this._paused; }
+
+    /** A <video>'s HAVE_CURRENT_DATA (2) once the first frame is drawn, HAVE_NOTHING (0) before. */
+    get readyState() { return this._shown ? 2 : 0; }
 
     get duration() { return this._duration; }
 
@@ -102,6 +110,8 @@ class DecodedVideo extends HTMLElement {
     }
 
     pause() {
+        // Before the first frame too: it is then not played the moment that frame is drawn (autoplay).
+        this._wantsToPlay = false;
         if (this._paused) return;
         this._position = this._now();
         this._paused = true;
@@ -110,7 +120,8 @@ class DecodedVideo extends HTMLElement {
     connectedCallback() {
         if (!this._canvas) {
             this._canvas = document.createElement('canvas');
-            this._context = this._canvas.getContext('2d');
+            // Said outright, so the canvas stays on the graphics chip when its first frame is read back (_drewAPicture).
+            this._context = this._canvas.getContext('2d', { willReadFrequently: false });
             this.appendChild(this._canvas);
         }
 
@@ -344,17 +355,51 @@ class DecodedVideo extends HTMLElement {
         this.drawnFrames += 1;
     }
 
+    /**
+     * Whether the frame just drawn is a picture: a row read back across the canvas's middle, not mostly the green of an
+     * empty decoder image (Y, U and V all nought: about 0, 135, 0). A Fire TV's decoder now and then hands out a frame
+     * whose image has not reached its queue yet ("no buffers currently available in the reader queue", then "Attempt to
+     * read from an uninitialized SharedImage" in the stick's log): drawn, it is green beside a squashed picture. For the
+     * first frame — copied into the canvas of the video made ready behind the one on screen, and shown at the switch — it
+     * was the flash of green the owner had seen (the stick, 2026-11-02, 1 switch in 18). Reading back also makes the
+     * canvas do the draw now, while the frame is still open. Once per video: the canvas stays on the graphics chip
+     * (willReadFrequently: false), and each read back holds the chip up a moment.
+     */
+    _drewAPicture() {
+        try {
+            const row = this._context.getImageData(0, this._canvas.height >> 1, this._canvas.width, 1).data;
+            let empty = 0;
+
+            for (let i = 0; i < row.length; i += 4) {
+                if (row[i] < 12 && row[i + 1] > 115 && row[i + 1] < 155 && row[i + 2] < 12) empty += 1;
+            }
+
+            return empty * 4 < row.length / 4;
+        } catch (error) {
+            // A canvas that cannot be read back is taken as drawn, as it always was.
+            return true;
+        }
+    }
+
     _tick() {
         if (this._torn || this._failed) return;
         this._feed();
         this._frames.sort((a, b) => a.timestamp - b.timestamp);
 
-        // The first frame is shown as soon as it is decoded, playing or not: `loadeddata`, as a <video> says it.
+        // The first frame is shown as soon as it is decoded, playing or not: `loadeddata`, as a <video> says it. One
+        // that is no picture (_drewAPicture) gives way to the next, a few times at most; the clock still counts from
+        // the file's first frame, so the video keeps its time.
         if (!this._shown && this._frames.length) {
             const first = this._frames.shift();
-            this._firstTimestamp = first.timestamp;
+            if (this._firstTimestamp === null) this._firstTimestamp = first.timestamp;
             this._draw(first);
+            const picture = this._drewAPicture();
             first.close();
+            if (!picture && ++this.emptyFirstFrames <= MAX_EMPTY_FIRST_FRAMES) {
+                this._raf = requestAnimationFrame(this._tick);
+
+                return;
+            }
             this._shown = true;
             clearTimeout(this._timeout);
             if (this._wantsToPlay) this._runFrom(0);

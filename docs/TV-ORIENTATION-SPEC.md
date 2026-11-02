@@ -724,3 +724,69 @@ server: its next answer said `decode_turned_video: true` and it went on decoding
 was still a `<video>`, the fault §12.11 (2) found on the emulator the same day: the stick showed it before that fix
 was deployed. The home session had made the same fix (wait for the decoder, 5 s at most) with a test of its own:
 it was dropped, test and all, in the merge for §12.11's.
+
+### 12.14 The jerk between two videos: the next one made ready before the last ends (2026-11-02)
+
+The owner saw a jerk at every change from one video to the next, on Test TV (Portrait 270, Roadstar 4) and the kitchen
+TVs (one menu video each, round and round), and confirmed it from a slow recording of the stick ("haan yahi jhatka
+ha"). Measured on the owner's Fire TV Stick 4K Max (Amazon WebView 138):
+
+- **What the screen did.** `screenrecord` reaches some 5 frames a second at 1920 x 1080 on this stick, 40 at
+  `--size 640x360`; at that size, every switch held the last picture of the video before for **0.42 to 0.58 s** and
+  the next one then came on from its first frame. `dumpsys SurfaceFlinger --latency` on the app's window showed no
+  frame for 265 to 385 ms of it. That is the screen standing still, nothing to draw, not a stall: the next video was not
+  ready yet. No black, no flash. Its last frames were mostly drawn (300 of 300 in half the rounds); a few came late.
+- **Why.** In a debug build of the app installed beside it (`com.thedisplaysolution.player.qa`, the same WebView), a
+  page with the player's two layers and the very chunk live serves, every step timed: the next `<decoded-video>` was
+  made only at the `ended` of the one before (`playCurrent`), and from there it took **535 to 624 ms** to draw its first
+  frame: about 300 ms reading its first 2 MB and its index and setting the decoder up, about 300 ms for the Fire TV's
+  decoder (OMX.MTK.VIDEO.DECODER.AVC) to start and give that frame. Flushing at the end took 23 to 52 ms: not the cause.
+- **The fix, measured on the same page:** the next video made ready 3 s before the one on screen ends, in the layer
+  behind it, paused on its first frame: the switch came **6.5 to 13 ms** after the `ended`, in every round. Two decoders
+  are then alive for those seconds: the one on screen drew 3 to 7 of its last 90 frames late in each round (24 the first
+  time after the app starts), where it drew 0 to 2 before.
+
+**Built** (`player.js`): `prepareNext` makes the next item, when it is a video this set decodes itself, `PREPARE_AHEAD_MS`
+(3.5 s) before the item on screen ends, in the back layer, paused (`<decoded-video>`'s `pause()` now cancels its
+autoplay before the first frame, as a `<video>`'s does, and it says `readyState` 2 once that frame is drawn);
+`playCurrent` takes it and swaps at once when it is the item asked for, and lets it go otherwise (the playlist changed,
+a channel's next pass took another ad). Nothing waits behind a break: `breakBetweenItems` and `pauseContent` let a
+prepared video go, `resumeContent` makes it again from what the item has left, and a break due when the item ends
+plays first. A one-video playlist makes its own video ready again the same way. Plain `<video>` (a landscape screen,
+a set told no) is made as before.
+
+**The flash of green, found on the way.** Recorded at 640 x 360 with the next video made ready, the frame that came on
+at a switch was now and then green over a squashed picture: 1 switch in 18, then 1 in 36, where 9 switches before the
+change had shown none. The stick's log said, at the moment the waiting video's first frame was copied, "no buffers
+currently available in the reader queue" and "Attempt to read from an uninitialized SharedImage": the decoder had
+handed out a frame whose image had not reached its queue, and drawn it is the green of an empty YUV image (Y, U, V
+nought: about 0, 135, 0). Shown at once, as before the change, it lasted a frame (the green the owner had seen);
+waiting behind the one on screen, it came on at the switch. `<decoded-video>` now reads back a row across the middle of
+its canvas once its first frame is drawn (`_drewAPicture`): mostly that green, the frame is let go and the next one is
+the first (`emptyFirstFrames`, at most 5); the read back also makes the canvas do the draw while the frame is open, and
+the canvas is `willReadFrequently: false` so it stays on the graphics chip. On the stick, 6 minutes recorded and 4
+more watched: no green, and neither log line once (they came 1 to 3 times every 3 minutes before). The read back
+costs the video on screen about one frame (50 to 67 ms), half a second after the next one is made ready.
+
+**Two more on the way.** A five-minute video from the QA server, which answers a range request with the whole 83 MB
+(`php artisan serve`; nginx and the worker answer 206), showed its first frame 9.5 s late, and its backstop, counted
+from when it was asked for, cut it 4.5 s before its end: the backstop is now armed again when a video comes on
+(`reveal`). And a video the backstop had moved on from, still on the glass while the next one loaded, moved the loop on
+again when it ended, which threw the next one away, round after round: only the element `playCurrent` put up last
+(`state.current`) moves the loop on when it ends.
+
+**On the stick with the real player** (`com.thedisplaysolution.player.qa`, the debug app with its own name and
+`localhost:8006`, a throwaway sqlite, the screen turned 270°, timed through DevTools): 36 switches between Tacos,
+Burger and the fragmented test video, and between Tacos and the five-minute one: the next video on screen 1.4 to 3 ms
+after the last one's end, from its first frame (0.025 s at most), two decoded videos at most; a one-video playlist
+ended every 9.975 s for a 10 s video (10.555 s on the code before); a playlist changed under it restarted from the top,
+as it always has; 1 to 4 frames of each video came late with nothing recording, as before.
+
+**Tests** (`DecodedVideoTest`): with the decoder giving its first frame 0.6 s late, as slow as the stick's, the next
+video comes on within 100 ms of the last one's end and from its first frame (two videos; one video round and round),
+and never more than two decoded videos are on the page: 658 and 652 ms on the code before. A break between two turned
+videos leaves no decoded video waiting behind it (seen failing with both of its `clearPrepared` calls taken out). A first
+frame that is the empty green is never shown (rgb(0, 135, 0) on the code before). A first frame 6 s late still lets its
+video play to its end (the old code went round and round, the two-second video never shown). The frame count of
+§12.11 (three at most) is now each decoder's own, its pool being each decoder's, and each test takes the scripts it
+put on every page away again: the browser is kept from one test to the next.
