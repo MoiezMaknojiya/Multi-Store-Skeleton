@@ -861,3 +861,19 @@ with the glass never empty; the Transition is chosen in the Edit Screen dialog. 
 code before (black between the adverts, the page made 30 ms before it came on, the video at the switch).
 `ScreenTransitionTest` (Pest) holds the setting, and `AdAnimationTest` and `AdBackgroundAndEffectsTest` the compiler's
 held page.
+
+**All four ways up, on the stick, 2026-11-03** (three minutes each, the code above; `2026-11-03-swap/orientations`).
+Portrait, portrait flipped, landscape and landscape flipped: every kind of item came on turned the screen's way, and no
+switch showed anything between (no black, no white, never the item before). With Fade, on landscape and on landscape
+flipped, every switch was a half-second dissolve with nothing black. Three findings, none from this change (the live
+player, 310243e, on the same screen did the same):
+
+- *An Ad Builder page's own video on landscape flipped shows black* for the page's whole length. The page and its
+  video run (playing, `readyState` 4), but the display draws the app's window alone (SurfaceFlinger's layer table), so
+  the hole the video's own layer should fill stays black. It is §12.6's gap, which is sideways on a portrait screen.
+- *The green in recordings.* On landscape flipped the display drew the app's window alone in 20 samples out of 20
+  while the green came and went in the recording; on landscape it drew the window and the video's own layer, whose
+  buffer is the stick's vendor YUV format (0x7F000001), which the recorder composes on the graphics chip. The green is
+  very likely the recorder's, not the TV's.
+- *A turned video's last frames* stand still only in recordings: the TV's own frame log (`dumpsys SurfaceFlinger
+  --latency` on the window) at each turned video's end shows a frame every 17 ms up to the switch, 33 ms at most.
