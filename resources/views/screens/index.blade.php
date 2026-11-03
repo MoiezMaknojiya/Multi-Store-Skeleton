@@ -339,8 +339,8 @@
                     <p class="-mt-2 text-xs text-gray-500 dark:text-gray-400">Schedules on this screen follow its time zone.</p>
 
                     {{-- How the television changes from one item to the next: either way the next one is made ready
-                         behind the one on screen first (player.js), so None is a clean cut and Fade a half-second
-                         dissolve over it. --}}
+                         behind the one on screen first (player.js), so Fade — every screen's own — is a half-second
+                         dissolve over it and None a clean cut. --}}
                     <div class="sm:w-1/2 sm:pr-2">
                         <x-crud.form-field label="Transition" field="transition" :required="true">
                             <select x-model="form.transition" dusk="screen-edit-transition" class="form-select">

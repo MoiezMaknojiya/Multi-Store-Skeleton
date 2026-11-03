@@ -25,7 +25,8 @@ class Screen extends Model
     ];
 
     /** How a screen changes from one item to the next (owner, 2026-11-02 — "fade setting mein rakho"): at once, the
-     *  next item ready behind the one before, or with the next item fading in over it (the player's FADE_MS). */
+     *  next item ready behind the one before, or with the next item fading in over it (the player's FADE_MS) — every
+     *  screen's own since 2026-11-03 ("isay default mein hi laga do"), the column's default. */
     public const TRANSITIONS = [
         'none' => 'None',
         'fade' => 'Fade',

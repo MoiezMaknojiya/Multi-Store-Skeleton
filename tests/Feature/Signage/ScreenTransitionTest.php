@@ -10,8 +10,9 @@ use App\Models\Screen;
 |--------------------------------------------------------------------------
 |
 | How a television changes from one item to the next (owner, 2026-11-02 — "fade setting mein rakho"). Either way the
-| player makes the next item ready behind the one on screen first; None is then a clean cut, Fade a half-second dissolve
-| over it. Set on the screen's Edit dialog, sent on every playlist answer.
+| player makes the next item ready behind the one on screen first; Fade is then a half-second dissolve over it, None a
+| clean cut. Fade is every screen's own (2026-11-03 — "isay default mein hi laga do"); None is chosen on the screen's Edit
+| dialog. Sent on every playlist answer.
 |
 */
 
@@ -30,33 +31,54 @@ function transitionOnTheSet(): string
         ->assertOk()->json('screen.transition');
 }
 
-it('starts every screen with None, a screen paired before included', function () {
-    expect($this->screen->fresh()->transition)->toBe('none')
-        ->and(transitionOnTheSet())->toBe('none');
+it('starts every screen with Fade', function () {
+    expect($this->screen->fresh()->transition)->toBe('fade')
+        ->and(transitionOnTheSet())->toBe('fade');
+});
+
+it('gives Fade to every screen there was, and keeps a screen chosen Fade by hand when it is taken back', function () {
+    $migration = require database_path('migrations/2026_11_03_200000_make_fade_every_screens_transition.php');
+    $migration->down();
+    $before = Screen::factory()->create(['organization_id' => $this->organization->id]);
+    expect($before->fresh()->transition)->toBe('none');
+    $this->screen->update(['transition' => 'fade']);
+
+    $migration->up();
+
+    expect($before->fresh()->transition)->toBe('fade')
+        ->and(Screen::factory()->create(['organization_id' => $this->organization->id])->fresh()->transition)->toBe('fade');
+
+    $migration->down();
+
+    // A new screen is None again; the ones there are keep what they have.
+    expect(Screen::factory()->create(['organization_id' => $this->organization->id])->fresh()->transition)->toBe('none')
+        ->and($this->screen->fresh()->transition)->toBe('fade');
+
+    $migration->up();
 });
 
 it('is changed on the screen and reaches the television on its next answer, and logged', function () {
     $this->putJson("/screens/{$this->screen->id}", [
-        'name' => 'Counter TV', 'orientation' => 'landscape', 'transition' => 'fade',
-    ])->assertOk()->assertJsonPath('screen.transition', 'fade');
+        'name' => 'Counter TV', 'orientation' => 'landscape', 'transition' => 'none',
+    ])->assertOk()->assertJsonPath('screen.transition', 'none');
 
-    expect($this->screen->fresh()->transition)->toBe('fade')
-        ->and(transitionOnTheSet())->toBe('fade')
+    expect($this->screen->fresh()->transition)->toBe('none')
+        ->and(transitionOnTheSet())->toBe('none')
         ->and(ActivityLog::where('action', 'screen.updated')->where('subject_id', $this->screen->id)->exists())->toBeTrue();
 
     $this->putJson("/screens/{$this->screen->id}", [
-        'name' => 'Counter TV', 'orientation' => 'landscape', 'transition' => 'none',
+        'name' => 'Counter TV', 'orientation' => 'landscape', 'transition' => 'fade',
     ])->assertOk();
 
-    expect(transitionOnTheSet())->toBe('none');
+    expect(transitionOnTheSet())->toBe('fade');
 });
 
 it('is left as it was by a save that does not send it', function () {
-    $this->screen->update(['transition' => 'fade']);
+    $this->screen->update(['transition' => 'none']);
 
     $this->putJson("/screens/{$this->screen->id}", ['name' => 'Front TV', 'orientation' => 'landscape'])->assertOk();
 
-    expect($this->screen->fresh())->name->toBe('Front TV')->transition->toBe('fade');
+    expect($this->screen->fresh())->name->toBe('Front TV')->transition->toBe('none');
 });
 
 it('refuses anything but None or Fade, in the form\'s words', function (mixed $sent) {
@@ -64,7 +86,7 @@ it('refuses anything but None or Fade, in the form\'s words', function (mixed $s
         'name' => 'Counter TV', 'orientation' => 'landscape', 'transition' => $sent,
     ])->assertStatus(422)->assertJsonPath('errors.transition.0', 'Choose None or Fade.');
 
-    expect($this->screen->fresh()->transition)->toBe('none');
+    expect($this->screen->fresh()->transition)->toBe('fade');
 })->with([
     'another effect' => 'slide',
     'nothing' => '',

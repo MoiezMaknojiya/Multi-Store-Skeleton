@@ -571,10 +571,11 @@ class DecodedVideoTest extends DuskTestCase
             $this->assertSame('blue', $left, 'the left half of the panel is the video\'s bottom');
             $this->assertSame('red', $right, 'the right half of the panel is the video\'s top');
 
-            // The page goes: its decoder goes with it.
+            // The page goes: its decoder goes with it, once the picture after it has faded in over it (Fade, every
+            // screen's own, takes half a second).
             $tv->waitUntil("!!document.querySelector('.media-layer:not([hidden]) img')", 20, 'the picture after the page never came on');
-            $this->assertSame(0, $tv->script("return [...document.querySelectorAll('iframe')].reduce((n, f) => n + (f.contentDocument ? f.contentDocument.querySelectorAll('decoded-video').length : 0), 0);")[0]);
-            $this->assertSame([], $tv->script("return [...document.querySelectorAll('iframe')].map((f) => f.dataset.src);")[0], 'the page\'s frame stayed behind');
+            $tv->waitUntil("[...document.querySelectorAll('iframe')].length === 0", 3, 'the page\'s frame stayed behind after its fade');
+            $this->assertSame(0, $tv->script("return document.querySelectorAll('decoded-video').length;")[0], 'a decoder outlived its page');
         });
     }
 

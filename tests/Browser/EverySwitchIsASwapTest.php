@@ -176,7 +176,8 @@ class EverySwitchIsASwapTest extends DuskTestCase
     {
         // The owner's setting (2026-11-02 — "fade setting mein rakho"): with Fade, the next item, ready behind the one on
         // screen, fades in over it in half a second, and the one before goes only then; a break's adverts fade in over
-        // the content and fade away over the item after them. With None (every other test here) a switch is a cut.
+        // the content and fade away over the item after them. Fade is every screen's own since 2026-11-03, so the other tests here
+        // play with it too.
         [$organization, $screen] = $this->screen('swap-fade-token', acceptsAds: true);
         $screen->update(['transition' => 'fade']);
         $this->picture($organization, $screen, 'before', [200, 40, 40], 0);
@@ -271,18 +272,18 @@ class EverySwitchIsASwapTest extends DuskTestCase
             $browser->loginAs($owner)->visit('/screens')
                 ->waitFor('@edit-screen-'.$screen->id)->click('@edit-screen-'.$screen->id)
                 ->waitFor('@screen-edit-transition')->pause(300)
-                ->assertSelected('@screen-edit-transition', 'none')
+                ->assertSelected('@screen-edit-transition', 'fade')
                 ->assertSee('How the screen changes from one item to the next.')
-                ->select('@screen-edit-transition', 'fade')
+                ->select('@screen-edit-transition', 'none')
                 ->click('@screen-save')
                 ->waitUntilMissing('@screen-edit-transition');
 
-            $this->assertSame('fade', $screen->fresh()->transition);
+            $this->assertSame('none', $screen->fresh()->transition);
 
             // Opened again on a fresh page, it says what was saved.
             $browser->refresh()->waitFor('@edit-screen-'.$screen->id)->click('@edit-screen-'.$screen->id)
                 ->waitFor('@screen-edit-transition')->pause(300)
-                ->assertSelected('@screen-edit-transition', 'fade');
+                ->assertSelected('@screen-edit-transition', 'none');
         });
     }
 

@@ -842,8 +842,8 @@ ready is a fade into black. So the order was: make every switch a swap, then off
   no main-thread stall showed in those runs.
 
 **The Transition setting** (`screens.transition`, migration `2026_11_03_100000`, `Screen::TRANSITIONS`: None, Fade;
-the Edit Screen dialog; `screen.transition` on every playlist answer). None, the default for every screen, is the swap
-above. Fade dissolves the next item in over the one before in `FADE_MS` (0.5 s, linear), the item before going only
+the Edit Screen dialog; `screen.transition` on every playlist answer). None is the swap above; it was every screen's
+default until 2026-11-03, when Fade became every screen's, new or old (§12.17). Fade dissolves the next item in over the one before in `FADE_MS` (0.5 s, linear), the item before going only
 then; a break's first advert fades in over the content, the next advert over the one before, and the last fades away
 over the item after it. A new change ends a fade at once (`finishFade`), never waiting on a `transitionend`, and the next
 item is never made ready in a layer still fading away.
@@ -926,3 +926,33 @@ changed nothing in the recordings, and a read back after each draw cost 25 ms a 
 page's video (cover), the page's own `<video>` holds no file, it loops (two rounds and more of a two-second file), the
 picture is turned with the stage, and it is gone with the page; on a landscape screen the page keeps its `<video>`. The
 first failed on the code before ("the page's video was not decoded on the turned screen").
+
+### 12.17 Fade for every screen, and everything on one playlist (2026-11-03)
+
+The owner: "Yeh jo fade wala kaam hai, woh screen par manually ON/OFF karna parta hai. Isay default mein hi laga do",
+and an end-to-end test of every kind of item on one playlist before the Tizen app is started (docs/TIZEN-APP-PLAN.md).
+
+**Fade is every screen's.** Migration `2026_11_03_200000` gives `screens.transition` the default `fade` and turns every
+screen at `none` to `fade` (live had 17 at None, one already set to Fade by hand); its `down()` puts the default back and
+leaves the screens' values, since it cannot tell which were None by choice. The Edit Screen dialog opens at Fade, None is
+still chosen there, and a playlist answer says `none` only for a screen at None: a player told anything else fades.
+
+**Everything on one playlist, in Chrome** (`EverythingOnOnePlaylistTest`, Dusk). The playlist: the library's picture and
+video, an Ad Builder page with a picture on its stage, one over a video, a channel of a picture, a video and an Ad Builder
+page, and a network break of a picture and a video, on a screen at Fade. A script watches every frame: what is on the
+glass, every media element and frame alive, the advert layer's leftovers, and every error. Four cases: landscape; portrait
+on a set that decodes its videos (every video, a page's own too, is a `<decoded-video>`); the screen changed while it
+plays (a line taken off and a new one put on, Fade cut to None, turned to portrait) and then the line cut, playing on
+from the worker's copies; and a picture whose file is gone, a "video" that is no video and a page whose file is gone
+among them, stepped over while the item before stays up. All four pass. The first failed on the player of 310243e (the
+glass empty between the break's picture and its video).
+
+**The same playlist on the stick** (the QA debug app, three minutes each way up, `2026-11-03-swap/deep`). Portrait,
+portrait flipped and landscape: every item came on, turned the screen's way, each switch a half-second dissolve with
+nothing black, white or green between, no error. Landscape flipped the same, but for black in the recording at two of
+its fades, while the page's layers, the pixels read back from the decoder's canvas (the outgoing item at 0, 100 and
+250 ms) and the display's layer table (the app's window alone) all had the item there: very likely the recorder's, as
+its green is (§12.16), and no live screen is landscape flipped to look at. Fifteen minutes on portrait: no error, the
+script's heap steady, at most two decoders and two frames alive at once. The line cut for three and a half minutes:
+every kind played on from the worker's copies, no error. One landscape `<video>` alone: 40 captures of the display
+itself, none green (§12.15's open point, again the recorder's).

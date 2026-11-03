@@ -153,9 +153,9 @@ const state = {
     prepareTimer: null,
     // The element playCurrent put up last: only its own end moves the loop on.
     current: null,
-    // How this screen changes from one item to the next (the panel's Transition): 'none', a swap, or 'fade'. And the
-    // fade under way ({element, done, timer, endsAt}), finished at once by the next change (finishFade).
-    transition: 'none',
+    // How this screen changes from one item to the next (the panel's Transition): 'fade', every screen's own, or 'none',
+    // a swap. And the fade under way ({element, done, timer, endsAt}), finished at once by the next change (finishFade).
+    transition: 'fade',
     fade: null,
 
     // Offline (§15): whether the manifest on screen came from the worker's cache, the
@@ -443,8 +443,8 @@ async function fetchPlaylist() {
         if (token !== state.token) return;
         applyOrientation(data.screen?.orientation);
         state.decodeTurnedVideo = data.screen?.decode_turned_video === true;
-        // From the next switch on; nothing on screen starts again for it.
-        state.transition = data.screen?.transition === 'fade' ? 'fade' : 'none';
+        // From the next switch on; nothing on screen starts again for it. Fade unless the screen says None.
+        state.transition = data.screen?.transition === 'none' ? 'none' : 'fade';
         // The decoder is in before the first video is made: made without it, that video was a <video> for its whole
         // length, sideways on a turned Fire TV after every start (2026-10-28). A chunk that never comes holds the
         // screen DECODER_WAIT_MS at most, and its videos play as <video> until it does.
