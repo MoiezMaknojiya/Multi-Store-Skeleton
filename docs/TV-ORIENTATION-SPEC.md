@@ -563,8 +563,8 @@ which answers ranges (Nginx).
   not landscape, an MP4 video.
 - **Does not, and keeps today's `<video>`:** WebM files (mp4box reads MP4 only; a WebM demuxer is a later phase),
   landscape screens, other devices (whether they have the plane bug at all is unknown; they can be added by
-  widening the check once seen), WebViews older than Chrome 94, and the videos inside Ad Builder pages (the ad
-  runtime is a later phase).
+  widening the check once seen) and WebViews older than Chrome 94. The videos inside Ad Builder pages were a later
+  phase too, and are covered since 2026-11-03 (§12.16).
 
 ### 12.7 Tests
 
@@ -877,3 +877,52 @@ player, 310243e, on the same screen did the same):
   very likely the recorder's, not the TV's.
 - *A turned video's last frames* stand still only in recordings: the TV's own frame log (`dumpsys SurfaceFlinger
   --latency` on the window) at each turned video's end shows a frame every 17 ms up to the switch, 33 ms at most.
+
+### 12.16 An Ad Builder page's own videos, decoded too (2026-11-03)
+
+On a turned Fire TV an Ad Builder page's own video — a background layer's, or one on its stage — was still a `<video>`,
+which the Fire TV takes to its hardware plane: sideways on a portrait screen, and **black for the page's whole length**
+on a flipped one (§12.15; the live player did the same). No live ad had a video yet (96 published, none with one), and
+the owner said to do it ("haan shuru kardo").
+
+**Built** (`player.js`, `decoded-video.js`; no change to the compiler, so no page is written again):
+
+- *The player swaps the video for its decoder, inside the page.* On a set that decodes (`decodesOnThisScreen`: a Fire
+  TV with WebCodecs, the switch on, a screen not landscape), once a page's frame has loaded — made ready behind the item
+  on screen, §12.15 — every MP4 `<video>` in it is taken out (`pause`, its `src` removed and `load()`, so its own
+  decoder lets the file go) and a `<decoded-video>` put in its place with the video's class, style and fit
+  (`decodePageVideos`). The element is the player's, adopted into the page's document: it runs on the player's own
+  scripts and draws on a canvas inside the page, which turns with the page's stage like a picture. The page is ready
+  once those videos have their first frames (5 s at most, `PAGE_VIDEO_WAIT_MS`); they play when the page comes on
+  (`startPage`). Only in a frame of the player's own origin (the worker keeps the set, §15); a WebM video stays the
+  page's own; one the decoder cannot play is given back (`putBackPageVideo`).
+- *Round and round.* A page's video loops, so `<decoded-video>` learnt `loop`: its frames are kept as read (an Ad
+  Builder video is 30 s at most) and fed again from the first after the last, each round's timestamps one length later,
+  so the clock simply runs on and the decoder is never flushed (`_feedAgain`).
+- *Let go with the page.* The elements inside a frame whose document goes are never told so, and their decoders would
+  have run on: the player removes them itself whenever a page leaves its layer or is let go for a break
+  (`releasePageVideos`, from `empty` and `pauseContent`).
+- *The fit read in time.* On the stick the first build gave the canvas `object-fit: fill`: the video's style had been
+  read once it was out of the page, where it is the defaults'. It is read before.
+
+**On the stick** (the QA app, page 2 over a background video; three minutes each way up, plus probes through DevTools):
+portrait, portrait flipped and landscape flipped show the page's video turned with the page (red top of the video
+where the page's own words say up), and on landscape flipped the page is on the glass at last instead of black; no
+switch shows anything between. Behind, the decoded video waits on its first frame while the page's own `<video>` has
+let its file go; on screen it draws 30 frames a second with 0 to 4 late in 8 s. With a two-second video the loop runs
+round after round (rounds 1 to 4 in 8 s, 0 to 1 late frames, no pause at the joins). Two decoders at most were alive
+(the page's and the next video made ready). A landscape screen keeps the page's `<video>` (checked in the browser
+tests; the check is the one the playlist's videos have always used).
+
+**Green in the recordings, again the recorder's.** The two-second test file is an ffmpeg H.264 with B-frames (46 of
+its 60 frames come out of order), where the generated videos have none. Played on a turned screen — in a page, or as a
+plain playlist video — it came out green-with-its-brightness in 7 to 12% of the RECORDED frames. Each decoded frame
+read back from the canvas was never green (0 of 703), and 80 captures of the display itself (`adb exec-out screencap`)
+showed the picture every time (0 green; at 8%, eighty clean captures would be a 0.1% chance). Holding each drawn frame
+open, drawing through an ImageBitmap, deciding one frame ahead instead of two or touching a pixel after each draw
+changed nothing in the recordings, and a read back after each draw cost 25 ms a frame on the stick, so none was kept.
+
+**Tests** (`DecodedVideoTest`): on a turned screen a page's video is the decoder's inside the page, fitted as the
+page's video (cover), the page's own `<video>` holds no file, it loops (two rounds and more of a two-second file), the
+picture is turned with the stage, and it is gone with the page; on a landscape screen the page keeps its `<video>`. The
+first failed on the code before ("the page's video was not decoded on the turned screen").

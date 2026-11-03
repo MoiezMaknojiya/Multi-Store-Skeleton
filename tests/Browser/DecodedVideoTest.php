@@ -2,11 +2,14 @@
 
 namespace Tests\Browser;
 
+use App\Models\BuilderAd;
+use App\Models\BuilderAsset;
 use App\Models\Campaign;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\PlaylistItem;
 use App\Models\Screen;
+use App\Services\AdPublisher;
 use Facebook\WebDriver\Chrome\ChromeDevToolsDriver;
 use Facebook\WebDriver\Exception\TimeoutException;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -523,6 +526,89 @@ class DecodedVideoTest extends DuskTestCase
                 return next ? [next[0] - at, next[1]] : [99999, 99999];
             });
         JS)[0];
+    }
+
+    public function test_an_ad_page_s_own_video_on_a_turned_screen_is_decoded_inside_the_page_turned_with_it_and_looping(): void
+    {
+        // The owner's Fire TV Stick, 2026-11-03: a page's background video was a <video>, which the Fire TV takes to its
+        // hardware plane: sideways on a portrait screen, black on a flipped one. On a set that decodes, the player puts
+        // its own decoder in the video's place inside the page: the picture turns with the stage, goes round and round
+        // as the page's video did, and is let go when the page leaves.
+        [$screen] = $this->screenPlaying('portrait', ['portrait-red-top-2s.mp4']);
+        PlaylistItem::query()->delete();
+        $page = $this->pageOverVideo($screen->organization, 'portrait-red-top-2s.mp4', BuilderAd::PORTRAIT);
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->id, 'position' => 0, 'duration_seconds' => null]);
+        $picture = Media::factory()->create([
+            'organization_id' => $screen->organization_id, 'title' => 'After', 'type' => Media::TYPE_IMAGE, 'mime_type' => 'image/png',
+            'path' => $this->putImage("media/{$screen->organization_id}/after.png", 40, 160, 60), 'thumbnail_path' => null,
+        ]);
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $picture->id, 'position' => 1, 'duration_seconds' => 10]);
+
+        $this->browse(function (Browser $tv) use ($screen) {
+            $this->startTheSet($tv, $screen, '1');
+            // A page is the player's own origin only where the worker keeps the set (§15): then its videos can be decoded.
+            $tv->waitUntil('!!navigator.serviceWorker.controller', 20, 'no worker took the page over');
+            $tv->refresh();
+
+            $frame = "document.querySelector('.media-layer:not([hidden]) iframe')";
+            $inPage = "(({$frame} || {}).contentDocument || document.createElement('i'))";
+            $tv->waitUntil("{$inPage}.querySelector('decoded-video') && {$inPage}.querySelector('decoded-video').drawnFrames > 10", 30, 'the page\'s video was not decoded on the turned screen');
+
+            // Fitted as the page's video was (a cover layer): read once the video was out of the page, it was a stretch.
+            $this->assertSame('cover', $tv->script("return getComputedStyle({$inPage}.querySelector('decoded-video canvas')).objectFit;")[0]);
+
+            // The page's own <video> let its file go: nothing but the decoder plays it.
+            $this->assertSame([], $tv->script("return [...{$inPage}.querySelectorAll('video')].map((v) => v.getAttribute('src'));")[0]);
+
+            // Round and round: the two-second file plays a second time and more, never stopping at its end.
+            $tv->waitUntil("{$inPage}.querySelector('decoded-video').rounds >= 2", 10, 'the page\'s video did not loop');
+            $drawn = $tv->script("return {$inPage}.querySelector('decoded-video').drawnFrames;")[0];
+            $tv->pause(700);
+            $this->assertGreaterThan($drawn + 10, $tv->script("return {$inPage}.querySelector('decoded-video').drawnFrames;")[0], 'it stopped drawing after a round');
+
+            // Turned with the stage: Portrait (rotated 90°) puts the picture's top, red, on the right of the panel.
+            [$left, $right] = $this->panelHalves($tv);
+            $this->assertSame('blue', $left, 'the left half of the panel is the video\'s bottom');
+            $this->assertSame('red', $right, 'the right half of the panel is the video\'s top');
+
+            // The page goes: its decoder goes with it.
+            $tv->waitUntil("!!document.querySelector('.media-layer:not([hidden]) img')", 20, 'the picture after the page never came on');
+            $this->assertSame(0, $tv->script("return [...document.querySelectorAll('iframe')].reduce((n, f) => n + (f.contentDocument ? f.contentDocument.querySelectorAll('decoded-video').length : 0), 0);")[0]);
+            $this->assertSame([], $tv->script("return [...document.querySelectorAll('iframe')].map((f) => f.dataset.src);")[0], 'the page\'s frame stayed behind');
+        });
+    }
+
+    public function test_an_ad_page_s_own_video_on_a_landscape_screen_stays_the_pages_video(): void
+    {
+        [$screen] = $this->screenPlaying('landscape', ['portrait-red-top-2s.mp4']);
+        PlaylistItem::query()->delete();
+        $page = $this->pageOverVideo($screen->organization, 'portrait-red-top-2s.mp4', BuilderAd::LANDSCAPE);
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->id, 'position' => 0, 'duration_seconds' => null]);
+
+        $this->browse(function (Browser $tv) use ($screen) {
+            $this->startTheSet($tv, $screen, '1');
+            $tv->waitUntil('!!navigator.serviceWorker.controller', 20, 'no worker took the page over');
+            $tv->refresh();
+
+            $inPage = "((document.querySelector('.media-layer:not([hidden]) iframe') || {}).contentDocument || document.createElement('i'))";
+            $tv->waitUntil("!!{$inPage}.querySelector('video') && !{$inPage}.querySelector('video').paused", 30, 'the page\'s video never played');
+            $this->assertSame(0, $tv->script("return {$inPage}.querySelectorAll('decoded-video').length;")[0]);
+        });
+    }
+
+    /** A published Ad Builder page of this shape over a background video made of the fixture, for ten seconds. */
+    private function pageOverVideo(Organization $organization, string $file, string $orientation): Media
+    {
+        $path = "builder/{$organization->id}/assets/{$file}";
+        Storage::disk('public')->put($path, file_get_contents(base_path(self::FIXTURES.$file)));
+        $clip = BuilderAsset::factory()->video()->create(['organization_id' => $organization->id, 'path' => $path, 'thumbnail_path' => null]);
+
+        $document = BuilderAd::blankDocument($orientation);
+        $document['duration'] = 10;
+        $document['stage']['background']['layers'] = [['id' => 'bg_video', 'type' => 'video', 'assetId' => $clip->id, 'fit' => 'cover', 'visible' => true, 'opacity' => 1]];
+        $ad = BuilderAd::create(['organization_id' => $organization->id, 'name' => 'Page over a video', 'orientation' => $orientation, 'document' => $document]);
+
+        return app(AdPublisher::class)->publish($ad);
     }
 
     /**

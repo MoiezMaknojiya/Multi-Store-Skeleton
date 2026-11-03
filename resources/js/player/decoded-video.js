@@ -8,7 +8,8 @@
  *
  * To the player it is a <video>: `src`, `autoplay`, `play()` (a promise), `pause()`, `paused`, `readyState`, `duration`,
  * `currentTime`, and the events `loadeddata` (its first frame is drawn), `ended` (its last frame's time has passed) and
- * `error`. It never loops by itself: the player decides what comes next. It is silent, as every video the player shows.
+ * `error`. It loops only when told (`loop`: an Ad Builder page's own video, player.js decodePageVideos); otherwise the
+ * player decides what comes next. It is silent, as every video the player shows.
  * Paused before its first frame, it waits on that frame until it is played, as a <video> does: the player makes the
  * next video ready that way while the one before is still on screen (player.js, prepareNext).
  *
@@ -73,17 +74,28 @@ class DecodedVideo extends HTMLElement {
         this._shown = false;
         this._torn = false;
         this._turn = 0;
+        // Round and round (an Ad Builder page's own video): every frame kept, fed again after the last one.
+        this._loop = false;
+        this._kept = [];
+        this._period = 0;
+        this._rounds = 0;
         this.error = null;
         // Read by tests and by a person at DevTools; never by the player.
         this.drawnFrames = 0;
         this.lateFrames = 0;
         this.emptyFirstFrames = 0;
         this.reads = 0;
+        this.rounds = 0;
         this._tick = this._tick.bind(this);
     }
 
-    // What the player sets on a <video>: accepted, and only src and autoplay mean anything here.
+    // What the player sets on a <video>: accepted, and only src, autoplay and loop mean anything here.
     set src(value) { this._src = String(value || ''); }
+
+    /** Set before it is put up: it then never ends, and plays from its first frame again after its last (feedAgain). */
+    set loop(value) { this._loop = Boolean(value); }
+
+    get loop() { return this._loop; }
 
     set autoplay(value) { this._wantsToPlay = Boolean(value); }
 
@@ -145,7 +157,7 @@ class DecodedVideo extends HTMLElement {
 
         const seconds = (performance.now() - this._clockStart) / 1000;
 
-        return this._readAll && Number.isFinite(this._duration) ? Math.min(seconds, this._duration) : seconds;
+        return this._readAll && Number.isFinite(this._duration) && !this._loop ? Math.min(seconds, this._duration) : seconds;
     }
 
     _runFrom(position) {
@@ -315,6 +327,11 @@ class DecodedVideo extends HTMLElement {
                 duration: duration,
                 data: sample.data,
             }));
+            // A video that loops is short (an Ad Builder page's, 30 s at most: BuilderAsset::MAX_VIDEO_SECONDS), so its
+            // frames are kept as read, a copy of their own: mp4box lets go of the bytes it hands out.
+            if (this._loop) {
+                this._kept.push({ type: sample.is_sync ? 'key' : 'delta', timestamp: timestamp, duration: duration, data: new Uint8Array(sample.data) });
+            }
         }
         this._extracted += samples.length;
         if (samples.length) this._file.releaseUsedSamples(id, samples[samples.length - 1].number + 1);
@@ -332,9 +349,34 @@ class DecodedVideo extends HTMLElement {
         }
 
         if (!this._flushed && this._readAll && this._chunks.length === 0 && this._extracted >= this._total) {
+            if (this._loop) {
+                this._feedAgain();
+
+                return;
+            }
             this._flushed = true;
             decoder.flush().catch(() => { /* torn down meanwhile */ });
         }
+    }
+
+    /**
+     * A looping video's frames, fed again from its first while its last ones are still coming out: each round's
+     * timestamps one length later, so the clock simply runs on and the decoder is never flushed. Flushed and started
+     * again, every round began with the decoder's own start (about 0.3 s on a Fire TV Stick) frozen on the last picture.
+     */
+    _feedAgain() {
+        if (!this._kept.length) return;
+        if (!this._period) this._period = this._framesEnd - this._framesStart;
+        if (!(this._period > 0)) return;
+
+        this._rounds += 1;
+        const shift = this._period * this._rounds;
+        for (const kept of this._kept) {
+            this._chunks.push(new EncodedVideoChunk({
+                type: kept.type, timestamp: kept.timestamp + shift, duration: kept.duration, data: kept.data,
+            }));
+        }
+        this.rounds = this._rounds;
     }
 
     _draw(frame) {
@@ -459,6 +501,7 @@ class DecodedVideo extends HTMLElement {
         if (this._abort) this._abort.abort();
         this._frames.splice(0).forEach((frame) => frame.close());
         this._chunks = [];
+        this._kept = [];
         if (this._decoder && this._decoder.state !== 'closed') {
             try { this._decoder.close(); } catch (error) { /* already closed */ }
         }

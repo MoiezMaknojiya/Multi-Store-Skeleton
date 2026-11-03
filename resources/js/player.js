@@ -50,6 +50,7 @@ const DECODER_WAIT_MS = 5000;       // the most a set waits for its own video de
 const PREPARE_AHEAD_MS = 3500;      // how long before the item on screen ends the next one is made ready behind it
 const AD_LEAVES_MS = 5000;          // the most a break's last advert stays up for the content after it to be ready
 const FADE_MS = 500;                // how long the next item takes to fade in, on a screen whose Transition is Fade
+const PAGE_VIDEO_WAIT_MS = 5000;    // the most a page made ready waits for the first frames of the videos decoded for it
 // An Ad Builder page the player opens is told when it is on screen (startPage), and starts its animations then: one made
 // ready behind the item before would otherwise have played its entrance where nobody saw it. The frame's name says so.
 const HELD_PAGE_NAME = 'signage-held';
@@ -763,6 +764,7 @@ function layer(which) {
 
 /** A layer emptied: nothing in it, and nothing laid out in it unseen. */
 function empty(target) {
+    target.querySelectorAll('iframe').forEach(releasePageVideos);
     target.innerHTML = '';
     target.removeAttribute('data-page');
 }
@@ -879,7 +881,7 @@ function readiness(node, item) {
                 if (!node.getAttribute('src')) return;
 
                 node.removeEventListener('load', loaded);
-                resolve(true);
+                decodePageVideos(node).then(() => resolve(true));
             };
 
             node.addEventListener('load', loaded);
@@ -999,14 +1001,93 @@ function loadDecoder() {
     return decoderLoading;
 }
 
-/** A video this set decodes itself: an MP4 (mp4box.js reads MP4 alone) on a screen not landscape, once the decoder is in. */
-function decodesTurnedVideo(item) {
+/** Whether this set decodes its videos itself now: on a screen not landscape, once the decoder is in (decoderWanted). */
+function decodesOnThisScreen() {
     const orientation = el('stage').dataset.orientation || 'landscape';
 
-    return state.decoderReady
-        && orientation !== 'landscape'
-        && String(item.mime || '').toLowerCase() === 'video/mp4'
-        && decoderWanted();
+    return state.decoderReady && orientation !== 'landscape' && decoderWanted();
+}
+
+/** A video this set decodes itself: an MP4 (mp4box.js reads MP4 alone), where the set decodes (decodesOnThisScreen). */
+function decodesTurnedVideo(item) {
+    return String(item.mime || '').toLowerCase() === 'video/mp4' && decodesOnThisScreen();
+}
+
+/**
+ * An Ad Builder page's own videos on a set that decodes them (docs/TV-ORIENTATION-SPEC.md §12.16): every MP4 <video>
+ * the page holds — a background layer's, one on its stage — is played by the player's decoder instead, a
+ * <decoded-video> put in its place inside the page, looping as the page's video did, and it turns with the page's
+ * stage like a picture. Left a <video>, the Fire TV took it to its hardware plane: sideways on a portrait screen, and
+ * black on a flipped one (the owner's Fire TV Stick, 2026-11-03). Only where the frame is the player's own origin (the
+ * worker keeps the set, §15); anywhere else the page plays as it is. Done as the page is made ready, so its first frames
+ * are drawn by the time it comes on (at most PAGE_VIDEO_WAIT_MS is waited), and they move when it does (startPage). A
+ * video the decoder cannot play is given back to the page (putBackPageVideo).
+ */
+function decodePageVideos(frame) {
+    let page = null;
+    try {
+        page = frame.contentDocument;
+    } catch {
+        page = null;
+    }
+    if (!page || !page.defaultView || !decodesOnThisScreen()) return Promise.resolve();
+
+    const swaps = [];
+    page.querySelectorAll('video').forEach((video) => {
+        const src = video.getAttribute('src') || '';
+        if (!/\.mp4(?:[?#]|$)/i.test(src)) return;
+
+        // Read now: a style read once the video is out of the page is the defaults' (fill), which stretched the picture.
+        const look = page.defaultView.getComputedStyle(video);
+        const fit = 'object-fit:' + look.objectFit + ';object-position:' + look.objectPosition + ';';
+        const decoded = document.createElement('decoded-video');
+        decoded.className = video.className;
+        // The page's frame, shadow, filter and flip stay on it; a rounded corner clips the picture as the video's did.
+        decoded.setAttribute('style', (video.getAttribute('style') || '') + ';overflow:hidden;');
+        decoded.loop = true;
+        decoded.src = src;
+        // The page's own <video> lets its decoder go, so only one is ever busy with the file.
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+        video.replaceWith(decoded);
+        // Its canvas, made as it went in, fills it the way the video was fitted.
+        if (decoded.firstElementChild) {
+            decoded.firstElementChild.setAttribute('style', 'display:block;width:100%;height:100%;' + fit);
+        }
+        swaps.push({ decoded, video, src });
+    });
+
+    frame.signageVideos = swaps;
+    if (swaps.length === 0) return Promise.resolve();
+
+    const firstFrames = swaps.map((swap) => new Promise((resolve) => {
+        swap.decoded.addEventListener('loadeddata', resolve, { once: true });
+        swap.decoded.addEventListener('error', () => {
+            putBackPageVideo(frame, swap);
+            resolve();
+        }, { once: true });
+    }));
+
+    return Promise.race([Promise.all(firstFrames), new Promise((resolve) => setTimeout(resolve, PAGE_VIDEO_WAIT_MS))]);
+}
+
+/** A page video the decoder could not play, given back to the page as its own <video>: it plays with the page. */
+function putBackPageVideo(frame, swap) {
+    if (!swap.decoded.isConnected) return;
+
+    swap.decoded.replaceWith(swap.video);
+    swap.video.setAttribute('src', swap.src);
+    if (frame.signageStarted) swap.video.play().catch(() => {});
+}
+
+/**
+ * A page going (emptied out of its layer, let go for a break): its decoded videos let go of their decoders. Its document
+ * going would not tell them: the elements inside a frame that goes are never told they left.
+ */
+function releasePageVideos(frame) {
+    (frame.signageVideos || []).forEach(({ decoded }) => decoded.remove());
+    frame.signageVideos = [];
 }
 
 /**
@@ -1123,8 +1204,14 @@ function playCurrent() {
     readiness(node, item).then((ready) => (ready ? reveal() : broken()));
 }
 
-/** An Ad Builder page on screen now: its animations start (the compiler's boot script waits for this word). */
+/** An Ad Builder page on screen now: its animations and its videos start (the compiler's boot and hold scripts wait for
+ *  this word), and so do the videos the player decodes for it (decodePageVideos). */
 function startPage(frame) {
+    frame.signageStarted = true;
+    (frame.signageVideos || []).forEach(({ decoded }) => {
+        if (decoded.isConnected) decoded.play();
+    });
+
     try {
         if (frame.contentWindow) frame.contentWindow.postMessage(PAGE_START_MESSAGE, '*');
     } catch {
@@ -1656,6 +1743,7 @@ function pauseContent() {
     // (the brute-force round, 2026-09-29). It is let go, hidden so nothing white shows, and shown
     // again from the start when the break is over (resumeContent).
     if (node && node.tagName === 'IFRAME') {
+        releasePageVideos(node);
         node.style.visibility = 'hidden';
         node.src = 'about:blank';
     }
