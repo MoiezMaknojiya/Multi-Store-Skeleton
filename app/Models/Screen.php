@@ -24,6 +24,13 @@ class Screen extends Model
         'portrait_flipped' => 'Portrait (rotated 270°)',
     ];
 
+    /** How a screen changes from one item to the next (owner, 2026-11-02 — "fade setting mein rakho"): at once, the
+     *  next item ready behind the one before, or with the next item fading in over it (the player's FADE_MS). */
+    public const TRANSITIONS = [
+        'none' => 'None',
+        'fade' => 'Fade',
+    ];
+
     /** A screen that has not checked in for this long is shown as offline.
      *  The player beats every 60s, so three minutes tolerates two missed beats. */
     public const OFFLINE_AFTER_MINUTES = 3;
@@ -33,7 +40,7 @@ class Screen extends Model
     public const DEFAULT_TIMEZONE = 'America/Chicago';
 
     protected $fillable = [
-        'organization_id', 'name', 'orientation', 'timezone', 'default_media_id',
+        'organization_id', 'name', 'orientation', 'transition', 'timezone', 'default_media_id',
         'accepts_network_ads', 'token_hash', 'device_uuid',
         'paired_at', 'paired_by', 'last_seen_at', 'created_by',
     ];

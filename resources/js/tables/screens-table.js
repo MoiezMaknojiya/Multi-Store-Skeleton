@@ -78,6 +78,7 @@ export function registerScreensTable(Alpine) {
         defaultForm: {
             name: '',
             orientation: 'landscape',
+            transition: 'none',
             timezone: config.defaultTimezone ?? 'America/Chicago',
             default_media_id: '',
         },
@@ -85,6 +86,7 @@ export function registerScreensTable(Alpine) {
         mapItemToForm: (screen) => ({
             name: screen.name,
             orientation: screen.orientation ?? 'landscape',
+            transition: screen.transition ?? 'none',
             timezone: screen.timezone ?? config.defaultTimezone ?? 'America/Chicago',
             /* '' rather than null, because that is what an unselected <option> is —
              * and the ConvertEmptyStringsToNull middleware turns it back on the way in. */
@@ -94,6 +96,7 @@ export function registerScreensTable(Alpine) {
         validateForm: (form) => validate(form, {
             name: [required('Screen name'), maxLen('Screen name', 255)],
             orientation: [required('Orientation')],
+            transition: [required('Transition')],
         }),
 
         extraMethods: {

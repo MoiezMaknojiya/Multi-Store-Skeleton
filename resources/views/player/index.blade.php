@@ -106,9 +106,16 @@
         /* Media fills the stage and is letterboxed rather than cropped: a portrait
            poster on a landscape screen must never lose its edges. */
         .media-layer { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
+        /* An Ad Builder page made ready behind the item on screen (player.js, putBehind) is laid out at its full size,
+           unseen, so its stage, fonts and pictures are in place the moment it comes on. Hidden as the rest are, its frame
+           had no size at all. */
+        .media-layer[hidden][data-page] { display: block !important; visibility: hidden; }
         /* The advert sits over both content layers and is opaque, so whatever is
            paused underneath is neither seen nor composited. */
         .media-layer-ad { z-index: 10; background: #000; }
+        /* The advert on screen and the next one, made ready behind it, stand in the same place: the next comes on over
+           it (or fades in over it, on a screen whose Transition is Fade). */
+        .media-layer-ad > * { position: absolute; top: 0; left: 0; }
 
         .media-layer img,
         .media-layer video {

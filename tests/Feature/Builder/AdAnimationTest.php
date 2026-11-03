@@ -57,8 +57,15 @@ test('a still advert loads nothing extra; one that moves loads Anime.js and the 
         ->toContain('window.AdRuntime.run(stage, config);')
         ->not->toContain('gsap');
 
-    // The clock starts when the stage is really on screen — a player loads the next item behind the
-    // one showing — and, whatever happens, within a few seconds.
+    // The clock starts when the stage is really on screen. A television's player makes the page ready behind
+    // the item showing, names its frame so, and says when it comes on — and if it never says, the page starts
+    // anyway, long after any wait behind another item.
+    expect($moving)->toContain("if (window.name === 'signage-held') {")
+        ->toContain("if (event.source === window.parent && event.data === 'signage-start') start();")
+        ->toContain('setTimeout(start, 30000);');
+
+    // Anywhere else — the editor's preview, the page opened on its own — the stage is watched, and the clock
+    // starts within a few seconds whatever happens.
     expect($moving)->toContain('new IntersectionObserver(')
         ->toContain('observer.observe(stage);')
         ->toContain('setTimeout(function () { observer.disconnect(); start(); }, 4000);');

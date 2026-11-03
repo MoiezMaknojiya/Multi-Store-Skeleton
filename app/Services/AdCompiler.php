@@ -96,16 +96,17 @@ class AdCompiler
      * too: every deploy then writes those pages again from the version on the screens
      * (`builder:recompile --outdated`, run by deploy/server/release.sh), and leaves the rest alone.
      */
-    public const VERSION = '2026-09-24';
+    public const VERSION = '2026-11-03';
 
     /**
      * The boot script of an advert that moves (motionScripts()). A constant, because the page's policy names
      * it by its digest (contentSecurityPolicy()): a byte of difference and it would not run.
      */
     private const BOOT_SCRIPT = <<<'JS'
-        /* Start the design's animations the moment the advert is really on screen. The player loads
-           the next item a beat early, behind the one showing, and an entrance played back there would
-           be over before anybody saw it — so the stage is watched, and the clock starts when it
+        /* Start the design's animations the moment the advert is really on screen. A television's
+           player makes the page ready seconds early, behind the item showing, where an entrance would
+           be over before anybody saw it: it names the frame so, and says when the page comes on, and
+           the clock starts then. Anywhere else the stage is watched, and the clock starts when it
            appears (at once, when the page is opened on its own). Whatever happens, every element
            ends up visible: a box that could not load the library shows the advert standing still
            rather than half of it. */
@@ -126,6 +127,14 @@ class AdCompiler
                 reveal();
             }
             if (!window.anime || !window.AdRuntime) { reveal(); return; }
+            if (window.name === 'signage-held') {
+                window.addEventListener('message', function (event) {
+                    if (event.source === window.parent && event.data === 'signage-start') start();
+                });
+                /* A player that never says still starts it, long after any page waits behind another. */
+                setTimeout(start, 30000);
+                return;
+            }
             if (!('IntersectionObserver' in window)) { start(); return; }
             var observer = new IntersectionObserver(function (entries) {
                 for (var i = 0; i < entries.length; i++) {
@@ -135,6 +144,35 @@ class AdCompiler
             observer.observe(stage);
             /* A frame that never says it is visible still starts. */
             setTimeout(function () { observer.disconnect(); start(); }, 4000);
+        })();
+        JS;
+
+    /**
+     * The script of a page with a video in it (a background layer's or one on the stage): a television's player makes
+     * the page ready seconds early, behind the item showing, and a video playing back there came on part-way through
+     * (three seconds in, on the owner's Fire TV Stick, 2026-11-03). In a frame the player names so, the videos wait at
+     * their start until it says the page is on screen, as the animations do (BOOT_SCRIPT). A constant, named by its
+     * digest in the page's policy.
+     */
+    private const HOLD_VIDEO_SCRIPT = <<<'JS'
+        (function () {
+            if (window.name !== 'signage-held') return;
+            var videos = document.querySelectorAll('video');
+            var started = false;
+            for (var i = 0; i < videos.length; i++) videos[i].pause();
+            function start() {
+                if (started) return;
+                started = true;
+                for (var j = 0; j < videos.length; j++) {
+                    if (videos[j].currentTime > 0) videos[j].currentTime = 0;
+                    var playing = videos[j].play();
+                    if (playing && playing.catch) playing.catch(function () {});
+                }
+            }
+            window.addEventListener('message', function (event) {
+                if (event.source === window.parent && event.data === 'signage-start') start();
+            });
+            setTimeout(start, 30000);
         })();
         JS;
 
@@ -246,9 +284,13 @@ class AdCompiler
         // Every script the page may run, named by its digest in the page's own policy (docs §15): the frame a
         // television plays it in is same-origin with the panel, so nothing but these may run there.
         $fit = $this->fitScript($width, $height);
-        $policy = $animations === []
-            ? $this->contentSecurityPolicy([$fit], false)
-            : $this->contentSecurityPolicy([$fit, self::BOOT_SCRIPT], true);
+        $holdsVideo = str_contains($background.$body, '<video');
+        $policy = $this->contentSecurityPolicy(array_values(array_filter([
+            $fit,
+            $holdsVideo ? self::HOLD_VIDEO_SCRIPT : null,
+            $animations === [] ? null : self::BOOT_SCRIPT,
+        ])), $animations !== []);
+        $hold = $holdsVideo ? '<script>'.self::HOLD_VIDEO_SCRIPT.'</script>' : '';
         $stamp = self::VERSION;
 
         return <<<HTML
@@ -285,6 +327,7 @@ class AdCompiler
         {$body}
         </div>
         <script>{$fit}</script>
+        {$hold}
         {$motion}
         </body>
         </html>

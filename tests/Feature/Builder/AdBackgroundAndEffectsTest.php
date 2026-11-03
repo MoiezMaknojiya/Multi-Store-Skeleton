@@ -184,3 +184,22 @@ test('numbers beyond what the compiler writes are held at its limits', function 
         ->toContain('border:200px solid #000000;')
         ->toContain('opacity:1;mix-blend-mode:normal;background-color:#000000;');
 });
+
+test('a page with a video holds it at its start while a television makes it ready behind the item before', function () {
+    // The owner's Fire TV Stick, 2026-11-03: a page made ready seconds early came on with its background video three
+    // seconds in. In a frame the player names `signage-held`, the videos wait paused until it says the page is on
+    // screen — and the script is one the page's own policy lets run.
+    $html = compileFor($this->organization, [['id' => 'v', 'type' => 'video', 'assetId' => $this->clip->id, 'fit' => 'cover']]);
+
+    expect($html)->toContain("if (window.name !== 'signage-held') return;")
+        ->toContain('for (var i = 0; i < videos.length; i++) videos[i].pause();')
+        ->toContain("if (event.source === window.parent && event.data === 'signage-start') start();");
+
+    preg_match('#<script>(\(function \(\) \{\s*if \(window\.name !== \'signage-held\'\).*?\}\)\(\);)</script>#s', $html, $script);
+    expect($script)->not->toBeEmpty();
+    preg_match('#script-src ([^;"]+)#', html_entity_decode($html), $policy);
+    expect($policy[1])->toContain("'sha256-".base64_encode(hash('sha256', $script[1], true))."'");
+
+    // A page with no video carries none of it.
+    expect(compileFor($this->organization, [['id' => 'c', 'type' => 'color', 'color' => '#1e3a8a']]))->not->toContain('signage-held');
+});

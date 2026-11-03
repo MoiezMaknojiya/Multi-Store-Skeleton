@@ -424,7 +424,10 @@ class DecodedVideo extends HTMLElement {
             const nothingLeft = this._flushed && this._frames.length === 0 && this._chunks.length === 0
                 && decoder && decoder.decodeQueueSize === 0;
 
-            if (nothingLeft && (!Number.isFinite(this._duration) || this._now() >= this._duration - 0.05)) {
+            // Ended once the last frame has had its own time on the glass: 50 ms early, it was replaced a few
+            // milliseconds after it was drawn, and never seen (the owner's Fire TV Stick, 2026-11-03). Within a tick of the
+            // end, so a set drawing 30 times a second does not wait one frame more.
+            if (nothingLeft && (!Number.isFinite(this._duration) || this._now() >= this._duration - 0.01)) {
                 this._finish();
 
                 return;

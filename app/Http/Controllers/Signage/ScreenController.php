@@ -35,6 +35,7 @@ class ScreenController extends Controller
     {
         return view('screens.index', [
             'orientations' => Screen::ORIENTATIONS,
+            'transitions' => Screen::TRANSITIONS,
             'timezones' => $this->timezoneOptions(),
             // Only the advertising panel uses this, and only a super admin inside an
             // impersonated session ever sees that panel.
@@ -253,7 +254,7 @@ class ScreenController extends Controller
         return response()->json(['message' => 'Device replaced successfully', 'screen' => $screen->fresh()]);
     }
 
-    /** Rename a screen, change how it is mounted, its clock, or what it falls back to. */
+    /** Rename a screen, change how it is mounted, how it changes between items, its clock, or what it falls back to. */
     public function update(Request $request, Screen $screen): JsonResponse
     {
         $screen = Screen::visibleTo(auth()->user())->findOrFail($screen->id);
@@ -265,6 +266,8 @@ class ScreenController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'orientation' => ['required', Rule::in(array_keys(Screen::ORIENTATIONS))],
+            // How it changes from one item to the next.
+            'transition' => ['sometimes', 'required', Rule::in(array_keys(Screen::TRANSITIONS))],
             // The clock this screen keeps — every schedule rule is read against it.
             // An IANA identifier, never an offset, so daylight saving looks after
             // itself.
@@ -274,6 +277,8 @@ class ScreenController extends Controller
             'default_media_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
         ], [
             'timezone.in' => 'That is not a timezone this server knows.',
+            'transition.required' => 'Choose None or Fade.',
+            'transition.in' => 'Choose None or Fade.',
         ]);
 
         // A foreign key a client could post any number into, so it is looked up

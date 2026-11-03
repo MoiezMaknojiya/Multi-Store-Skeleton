@@ -790,3 +790,74 @@ frame that is the empty green is never shown (rgb(0, 135, 0) on the code before)
 video play to its end (the old code went round and round, the two-second video never shown). The frame count of
 §12.11 (three at most) is now each decoder's own, its pool being each decoder's, and each test takes the scripts it
 put on every page away again: the browser is kept from one test to the next.
+
+### 12.15 Every switch a swap, and the Transition setting (2026-11-02 and 2026-11-03)
+
+The owner asked whether a fade would hide the jerk at a change, for every kind of item ("hamare pass ad builder aur
+network ads aur channel bhi ha toh usko bhi dekhna pharega"). Step 1 was to measure: one playlist on the stick with two
+videos, two pictures, two Ad Builder pages (one with a spinning shape, one over a background video), a channel with a
+picture and a video, and a network break of a picture and a video every 60 s; six minutes recorded each way up at
+640 x 360, every frame read by the colour round its edge (`storage/app/private/qa/2026-11-02-mix`). The owner's answer
+to the findings: fix them in this order, the fade a per-screen setting, last ("haan isi tarteeb se sare kaam shuru
+kardo").
+
+**What a fade could not fix.** The worst switches were the next item not being ready, and a fade over something not
+ready is a fade into black. So the order was: make every switch a swap, then offer the fade.
+
+| Switch (ms on the stick, six minutes each) | Landscape before | Landscape after | Portrait (decoder) before | Portrait after |
+|---|---|---|---|---|
+| Network advert to network advert | 232 to 316 black | nothing between | 329 to 351 black | nothing between |
+| Break end to the organization's item | black 19 to 238, or the item before back 145 to 232 | nothing (once one white frame) | the item before back 50 to 264, or 217 black | nothing between |
+| Video to Ad Builder page | 451 to 471 still | 38 to 85 still | 419 to 609 still | 55 to 156 still |
+| Video to video | 277 to 286 still, once 45 and green 356 | 47 to 82 still | 152 to 166 still, once 27 | 99 to 131 still |
+| Video to picture | 42 to 113 still, once 62 black | 37 to 67 still, once one green frame | 120 to 183 still | 116 to 174 still |
+| Ad Builder page to video | one black or white frame | nothing (once one green frame) | one black frame | nothing, once one black frame |
+| Picture to picture, picture to page, page to picture, break start | clean | clean | clean | clean |
+
+**Built** (`player.js`; the rules file says it in one paragraph, "Every switch is a swap"):
+
+- *Every item is made ready behind the one on screen.* `prepareNext` makes the next item of any kind
+  `PREPARE_AHEAD_MS` (3.5 s) before the one on screen ends, in the back layer: a picture loaded and decoded
+  (`img.decode()`), a video paused on its first frame (a `<video>` on a landscape screen too, now), an Ad Builder page
+  loaded. `readiness` is the one answer to "can it come on now" for an element made ahead or at the switch, and what is
+  on screen stays until then, never black.
+- *A page waits behind laid out, unseen, and starts when it comes on.* In a hidden layer a page's frame has no size at
+  all: its stage was scaled to nothing until the moment it came on (measured on the stick through DevTools). The back
+  layer holding a page is laid out at its full size and `visibility: hidden` (`data-page`, the player's own style). An
+  `IntersectionObserver` sees such a page as on screen, so the player names its frame `signage-held` and posts
+  `signage-start` to it the moment it comes on (`startPage`); the compiler's boot script of such a frame starts the
+  entrances then, and its videos (`HOLD_VIDEO_SCRIPT`, a page with a background or stage video) wait paused at their
+  start until then: made ready without it, page 2's background video came on three seconds in. `AdCompiler::VERSION`
+  is 2026-11-03, so every deploy writes the published pages again (`builder:recompile --outdated`). A page from an
+  older compiler still plays (its entrance may start behind); a player from before ignores the frame's name.
+- *The break.* Its first advert is made ready while the break waits for the item on screen to end, each next advert
+  behind the one on screen in the advert layer (`prepareAd`), and the organization's item after the break during the
+  last advert (`prepareAfterTheBreak`); the last advert stays up until that item is ready, and goes in the same moment
+  (`takeTheAdDown` from `playCurrent`'s swap, `AD_LEAVES_MS` = 5 s at most). Nothing waits behind the whole break: a
+  made-ready item still goes when the break starts.
+- *The decoder's last frame.* With nothing recording, the stick's decoder gave every last frame in time (297 and 300
+  of 300 drawn), but `ended` came 50 ms before the video's end, so the last frame was replaced 1 to 6 ms after it was
+  drawn and never seen; it now ends within 10 ms of the end. While `screenrecord` runs, the turned videos' last
+  100 ms or so still stand still in the recording: the recorder shares the stick's graphics chip with the canvas, and
+  no main-thread stall showed in those runs.
+
+**The Transition setting** (`screens.transition`, migration `2026_11_03_100000`, `Screen::TRANSITIONS`: None, Fade;
+the Edit Screen dialog; `screen.transition` on every playlist answer). None, the default for every screen, is the swap
+above. Fade dissolves the next item in over the one before in `FADE_MS` (0.5 s, linear), the item before going only
+then; a break's first advert fades in over the content, the next advert over the one before, and the last fades away
+over the item after it. A new change ends a fade at once (`finishFade`), never waiting on a `transitionend`, and the next
+item is never made ready in a layer still fading away.
+
+**Open.** Green frames inside a landscape `<video>` in the recordings (6 to 10% of a video's frames, before and after
+alike, no log line): the owner was asked to look at the TV itself. One white or green recorded frame now and then at a
+switch to or from a landscape `<video>`. A turned video's last frames in a recording (above). An Ad Builder page's own
+video on a turned TV is still sideways (§12.6).
+
+**Tests.** `EverySwitchIsASwapTest` (Dusk): two adverts follow each other with nothing between, and the break hands
+over to the next picture, never the one before it; a page and a picture are put behind the item before more than 2.5 s
+ahead, the page laid out at its size with its entrance and its video waiting, then started on screen; a landscape
+`<video>` is ready behind the one before; Fade dissolves an advert in and out over the pictures in about half a second
+with the glass never empty; the Transition is chosen in the Edit Screen dialog. Each of the first three failed on the
+code before (black between the adverts, the page made 30 ms before it came on, the video at the switch).
+`ScreenTransitionTest` (Pest) holds the setting, and `AdAnimationTest` and `AdBackgroundAndEffectsTest` the compiler's
+held page.

@@ -663,9 +663,12 @@ row of the decisions table), no animation timeline scrubber (the ad is not a vid
 - **Panels spread into one component share one namespace.** The view panel's `frameStyle()` and the
   editor's `frameStyle(element)` had the same name; the later one won silently and the zoomed frame lost
   its style. The canvas one is `canvasStyle()` now — check new panel methods against the others.
-- **An advert must not start its clock while it is hidden.** The player loads the next item a beat early,
-  behind the one showing, so the boot script waits for an `IntersectionObserver` to see the stage (with a
-  4 s fallback) before the entrances begin.
+- **An advert must not start its clock while it is hidden.** The player makes the next item ready seconds
+  early, behind the one showing (docs/TV-ORIENTATION-SPEC.md §12.15), laid out at its full size but unseen,
+  where an `IntersectionObserver` would see the stage at once. So the player names the frame `signage-held`
+  and posts `signage-start` to it the moment it comes on, and the boot script of such a frame starts the
+  entrances then (with a 30 s fallback, `AdCompiler::VERSION` 2026-11-03); anywhere else — the editor's
+  preview, the page on its own — it waits for an `IntersectionObserver` to see the stage (with a 4 s fallback).
 - **A poster is re-drawn, never stored as sent.** `MediaStorage::storePoster` reads the size from the
   header first (so a small file claiming 50 000 pixels is refused before GD allocates for it), decodes with
   GD, and writes GD's own JPEG — which also retired the media library's habit of storing a video poster's

@@ -47,7 +47,13 @@ const PLAYLIST_MS = 30000;   // how often to ask what to show
 const HEARTBEAT_MS = 60000;  // how often to say "alive"
 const BROKEN_ITEM_PAUSE_MS = 1000;  // breathing room before skipping a file that will not play
 const DECODER_WAIT_MS = 5000;       // the most a set waits for its own video decoder before it plays without it
-const PREPARE_AHEAD_MS = 3500;      // how long before the item on screen ends a turned Fire TV's next video is made ready
+const PREPARE_AHEAD_MS = 3500;      // how long before the item on screen ends the next one is made ready behind it
+const AD_LEAVES_MS = 5000;          // the most a break's last advert stays up for the content after it to be ready
+const FADE_MS = 500;                // how long the next item takes to fade in, on a screen whose Transition is Fade
+// An Ad Builder page the player opens is told when it is on screen (startPage), and starts its animations then: one made
+// ready behind the item before would otherwise have played its entrance where nobody saw it. The frame's name says so.
+const HELD_PAGE_NAME = 'signage-held';
+const PAGE_START_MESSAGE = 'signage-start';
 const WORKER_UPDATE_MS = 3600000;   // a television never reloads its page, so it asks for a new worker itself
 const WORKER_PATH = '/player-sw.js';
 const WORKER_SCOPE = '/player';
@@ -140,12 +146,16 @@ const state = {
     // image can resume with the time it had LEFT rather than starting over.
     itemStartedAt: 0,
     itemDurationMs: 0,
-    // A turned Fire TV's next video, made ready in the layer behind the one on screen ({node, url}), and the
-    // timer that makes it (prepareNext).
+    // The next item, made ready in the layer behind the one on screen ({node, url}), and the timer that makes it
+    // (prepare): every switch is then a swap.
     prepared: null,
     prepareTimer: null,
     // The element playCurrent put up last: only its own end moves the loop on.
     current: null,
+    // How this screen changes from one item to the next (the panel's Transition): 'none', a swap, or 'fade'. And the
+    // fade under way ({element, done, timer, endsAt}), finished at once by the next change (finishFade).
+    transition: 'none',
+    fade: null,
 
     // Offline (§15): whether the manifest on screen came from the worker's cache, the
     // set's clock corrected by the last live manifest's server time (so the timeline's
@@ -166,6 +176,9 @@ const state = {
         active: false,
         index: 0,
         playTimer: null,  // backstop for one advert that stalls or never ends
+        prepared: null,   // the next advert, made ready behind the one on screen ({node, url, index})…
+        prepareTimer: null, // …and the timer that makes it (prepareAd)
+        leaveTimer: null, // the backstop of a last advert left up for the content after it (takeTheAdDown)
         due: false,       // a break is waiting for the item on screen to end
         dueFor: 0,        // which item it waits for (when that item started)
         between: false,   // this break came between two items: the next one plays after it
@@ -429,6 +442,8 @@ async function fetchPlaylist() {
         if (token !== state.token) return;
         applyOrientation(data.screen?.orientation);
         state.decodeTurnedVideo = data.screen?.decode_turned_video === true;
+        // From the next switch on; nothing on screen starts again for it.
+        state.transition = data.screen?.transition === 'fade' ? 'fade' : 'none';
         // The decoder is in before the first video is made: made without it, that video was a <video> for its whole
         // length, sideways on a turned Fire TV after every start (2026-10-28). A chunk that never comes holds the
         // screen DECODER_WAIT_MS at most, and its videos play as <video> until it does.
@@ -703,9 +718,10 @@ function render(data) {
     const current = frontNode();
 
     if (current && state.offline && !state.items.some((item) => assetUrl(item) === current.dataset.item)) {
+        finishFade();
         if (isVideoNode(current)) current.pause();
         layer(state.front).hidden = true;
-        layer(state.front).innerHTML = '';
+        empty(layer(state.front));
     }
 
     armAdBreak(data.ad_break);
@@ -745,17 +761,73 @@ function layer(which) {
     return el(which === 'a' ? 'layer-a' : 'layer-b');
 }
 
+/** A layer emptied: nothing in it, and nothing laid out in it unseen. */
+function empty(target) {
+    target.innerHTML = '';
+    target.removeAttribute('data-page');
+}
+
+/**
+ * An item put in the layer behind the one on screen. A page is laid out there at its full size, unseen (the player's
+ * own style, `data-page`): its fonts, pictures and stage are in place when it comes on. Hidden like the rest, its frame
+ * has no size at all, and its stage was scaled to nothing until the moment it came on (the owner's Fire TV Stick,
+ * 2026-11-03).
+ */
+function putBehind(target, node) {
+    empty(target);
+    if (node.tagName === 'IFRAME') target.setAttribute('data-page', '');
+    target.appendChild(node);
+}
+
+/**
+ * A screen whose Transition is Fade (the panel): `element` goes from `from` to `to` opacity in FADE_MS, steadily, over
+ * what was on screen, and `done` tidies up after it — then, or at once when anything changes the screen before it is
+ * over (finishFade): the next switch never waits for this one, and nothing depends on a `transitionend` that may never
+ * come. The swap itself happened already: the fade only shows it gently.
+ */
+function fade(element, from, to, done) {
+    finishFade();
+
+    element.style.transition = 'none';
+    element.style.opacity = String(from);
+    // The starting opacity is drawn before the change, or there is nothing to fade from.
+    void element.offsetWidth;
+    element.style.transition = 'opacity ' + FADE_MS + 'ms linear';
+    element.style.opacity = String(to);
+
+    state.fade = { element, done, timer: setTimeout(finishFade, FADE_MS), endsAt: Date.now() + FADE_MS };
+}
+
+/** The fade under way, if any, ended where it was going, and tidied up after. */
+function finishFade() {
+    const under = state.fade;
+    if (!under) return;
+
+    state.fade = null;
+    clearTimeout(under.timer);
+    under.element.style.transition = '';
+    under.element.style.opacity = '';
+    under.element.style.zIndex = '';
+    under.done();
+}
+
+/** Whether the switch about to happen fades: the screen says so, and there is something on screen to fade from. */
+function fades(previous) {
+    return state.transition === 'fade' && Boolean(previous);
+}
+
 function stopPlayback() {
     if (state.itemTimer) clearTimeout(state.itemTimer);
     state.itemTimer = null;
     state.itemDurationMs = 0;
     state.current = null;
+    finishFade();
     clearPrepared();
     // An advert must not be left hanging over content that is no longer there.
     // The hourly countdown keeps running, so it comes back when the content does.
     endAdBreak({ resume: false });
     ['a', 'b'].forEach((which) => {
-        layer(which).innerHTML = '';
+        empty(layer(which));
         layer(which).hidden = true;
     });
 }
@@ -765,8 +837,71 @@ function buildElement(item) {
 
     // Which file it is: render() takes something that is no longer on the list off the glass by it.
     node.dataset.item = assetUrl(item);
+    // Asked at once, so none of the events it waits for is missed, however late the element is put up.
+    readiness(node, item);
 
     return node;
+}
+
+/**
+ * When an element can come on with nothing more to wait for: a picture loaded and decoded (decoded on the glass, it
+ * was a black frame there now and then), a video's first frame drawn, a page loaded. True then, false for a file that
+ * will not play. Kept on the element, so one made ready ahead and one made at the switch are waited for alike.
+ */
+function readiness(node, item) {
+    if (node.signageReady) return node.signageReady;
+
+    node.signageReady = new Promise((resolve) => {
+        const fail = () => resolve(false);
+
+        if (node.error) {
+            fail();
+
+            return;
+        }
+
+        if (item.type === 'video') {
+            if (node.readyState >= 2) {
+                resolve(true);
+
+                return;
+            }
+            node.addEventListener('loadeddata', () => resolve(true), { once: true });
+            node.addEventListener('error', fail, { once: true });
+
+            return;
+        }
+
+        if (item.type === 'html') {
+            // A frame fires `load` for the empty document it starts with, before its page is even asked for: only the
+            // page's own load counts.
+            const loaded = () => {
+                if (!node.getAttribute('src')) return;
+
+                node.removeEventListener('load', loaded);
+                resolve(true);
+            };
+
+            node.addEventListener('load', loaded);
+            node.addEventListener('error', fail, { once: true });
+
+            return;
+        }
+
+        // A picture the browser cannot decode still comes on as before: decode() is the head start, never the gate.
+        const decoded = () => node.decode().then(() => resolve(true), () => resolve(true));
+
+        if (node.complete) {
+            if (node.naturalWidth > 0) decoded();
+            else fail();
+
+            return;
+        }
+        node.addEventListener('load', decoded, { once: true });
+        node.addEventListener('error', fail, { once: true });
+    });
+
+    return node.signageReady;
 }
 
 function buildNode(item) {
@@ -791,6 +926,8 @@ function buildNode(item) {
 
         // The page's own address, whichever way it is opened — so a set can be asked what is in each frame.
         frame.dataset.src = url;
+        // It waits to be told it is on screen (startPage) before its animations start.
+        frame.name = HELD_PAGE_NAME;
         frame.setAttribute('scrolling', 'no');
         frame.setAttribute('sandbox', kept ? 'allow-scripts allow-same-origin' : 'allow-scripts');
 
@@ -892,6 +1029,8 @@ function assetUrl(item) {
 function playCurrent() {
     if (state.items.length === 0) return;
     if (state.itemTimer) clearTimeout(state.itemTimer);
+    // A fade still under way ends now: the layer it was fading from is the one this item goes into.
+    finishFade();
 
     const item = state.items[state.index % state.items.length];
     const target = state.front === 'a' ? 'b' : 'a';
@@ -899,8 +1038,8 @@ function playCurrent() {
     const prepared = state.prepared;
     let node;
 
-    // The next video made ready behind this one (prepareNext): it comes on the moment it is asked for. Anything else
-    // made ready — the playlist changed, a channel's next pass took another ad — goes.
+    // The next item made ready behind this one (prepare): it comes on the moment it is asked for. Anything else made
+    // ready — the playlist changed, a channel's next pass took another ad — goes.
     if (prepared && prepared.url === assetUrl(item) && prepared.node.parentElement === incoming) {
         state.prepared = null;
         if (state.prepareTimer) clearTimeout(state.prepareTimer);
@@ -908,11 +1047,14 @@ function playCurrent() {
         node = prepared.node;
     } else {
         clearPrepared();
-        incoming.innerHTML = '';
         node = buildElement(item);
-        incoming.appendChild(node);
+        putBehind(incoming, node);
     }
     state.current = node;
+
+    // How long it is on screen, counted from when it came on: a first frame or a page slow to come took its seconds
+    // from the end of it (2026-11-02). Counted from now too, until then, as the backstop of one that never comes.
+    const seconds = item.type === 'video' ? item.duration + 5 : Math.max(1, item.duration);
 
     const reveal = () => {
         // A node no longer on the page — replaced by the next item before it finished
@@ -920,9 +1062,11 @@ function playCurrent() {
         // layers for it would hide and empty the layer the CURRENT item was just put in: a
         // black screen until the next item.
         if (!node.isConnected) return;
+        finishFade();
 
         const outgoing = layer(state.front);
-        const previous = outgoing.firstElementChild;
+        const previous = outgoing.hidden ? null : outgoing.firstElementChild;
+        const adUp = !state.ad.active && !el('layer-ad').hidden;
 
         // Whatever was on screen is now behind the new item. A hidden <video> that is
         // still playing goes on DECODING — for the whole length of whatever replaced
@@ -930,14 +1074,28 @@ function playCurrent() {
         // picture people can actually see. Stop it, then let it go.
         if (isVideoNode(previous)) previous.pause();
 
-        outgoing.hidden = true;
-        outgoing.innerHTML = '';
+        const letGo = () => {
+            outgoing.hidden = true;
+            empty(outgoing);
+        };
 
         incoming.hidden = false;
         state.front = target;
-        // A video's backstop counts from when it came on, not from when it was asked for: a first frame slow to come
-        // (a slow line, an index at the end of a big file) took its seconds from the end of the video (2026-11-02).
-        if (item.type === 'video') startItemTimer((item.duration + 5) * 1000);
+
+        if (adUp) {
+            // A break's last advert stayed up until the item after it was ready: it goes in the same moment, or fades
+            // away over it, the swap underneath it unseen.
+            letGo();
+            letTheAdGo();
+        } else if (fades(previous)) {
+            // Over the item before, which goes once the new one is fully in.
+            incoming.style.zIndex = '1';
+            fade(incoming, 0, 1, letGo);
+        } else {
+            letGo();
+        }
+        if (node.tagName === 'IFRAME') startPage(node);
+        startItemTimer(seconds * 1000);
         preloadNext();
         prepareNext(node);
     };
@@ -949,9 +1107,6 @@ function playCurrent() {
     };
 
     if (item.type === 'video') {
-        // A video made ready behind the one before has its first frame drawn already: it comes on at once.
-        const ready = node.readyState >= 2;
-        if (!ready) node.addEventListener('loadeddata', reveal, { once: true });
         // A video advances when it actually ends; the duration is only a backstop
         // for a file that stalls or has no end event. A video the backstop has already moved on from — still on the
         // glass while the next one loads — ends without moving the loop on again: that skipped the next item, over
@@ -960,26 +1115,20 @@ function playCurrent() {
             if (state.current === node) advance();
         }, { once: true });
         node.addEventListener('error', broken, { once: true });
-        startItemTimer((item.duration + 5) * 1000);
         node.play().catch(() => {});
-        if (ready) reveal();
-    } else if (item.type === 'html') {
-        // A frame fires `load` for the empty document it starts with, before its page is even asked for:
-        // showing that would blank the screen while the page is on its way. Only the page's own load reveals it.
-        const loaded = () => {
-            if (!node.getAttribute('src')) return;
+    }
+    startItemTimer(seconds * 1000);
 
-            node.removeEventListener('load', loaded);
-            reveal();
-        };
+    // Whatever is on screen stays there until this can take its place: a hold, never a black screen.
+    readiness(node, item).then((ready) => (ready ? reveal() : broken()));
+}
 
-        node.addEventListener('load', loaded);
-        node.addEventListener('error', broken, { once: true });
-        startItemTimer(Math.max(1, item.duration) * 1000);
-    } else {
-        node.addEventListener('load', reveal, { once: true });
-        node.addEventListener('error', broken, { once: true });
-        startItemTimer(Math.max(1, item.duration) * 1000);
+/** An Ad Builder page on screen now: its animations start (the compiler's boot script waits for this word). */
+function startPage(frame) {
+    try {
+        if (frame.contentWindow) frame.contentWindow.postMessage(PAGE_START_MESSAGE, '*');
+    } catch {
+        /* A frame torn down meanwhile has nothing to start. */
     }
 }
 
@@ -997,7 +1146,7 @@ function frontNode() {
     return layer(state.front).firstElementChild;
 }
 
-/** Warm the browser cache for whatever comes next, so the swap is instant. */
+/** Warm the browser cache for the next picture at once, so it is in by the time it is made ready (prepare). */
 function preloadNext() {
     if (state.items.length < 2) return;
     const next = state.items[(state.index + 1) % state.items.length];
@@ -1008,14 +1157,16 @@ function preloadNext() {
 }
 
 /**
- * A turned Fire TV's next video, made ready in the layer behind this item PREPARE_AHEAD_MS before it ends: its file
- * read, its decoder set up and its first frame drawn, paused, so the switch is a swap (playCurrent). Made only once this
- * item had ended, the screen held this item's last picture for 0.53 to 0.62 s every time, half of it reading the file
- * and half the Fire TV's decoder starting (the owner's Fire TV Stick, 2026-11-02; docs/TV-ORIENTATION-SPEC.md §12.14):
- * the jerk between two videos. The same video again — a one-video playlist — is made ready the same way.
+ * The next item, made ready in the layer behind this one PREPARE_AHEAD_MS before this one ends, so the switch is a
+ * swap (playCurrent): a picture loaded and decoded, a page loaded and laid out (it starts when it comes on, startPage),
+ * a video's file read, its decoder set up and its first frame drawn, paused. Made only at the switch, the screen held
+ * the item before for as long as that took, or went black (the owner's Fire TV Stick, 2026-11-02: 0.53 to 0.62 s
+ * between two turned videos, docs/TV-ORIENTATION-SPEC.md §12.14; and on every kind of switch, §12.15). The same item
+ * again — a one-item playlist — is made ready the same way.
  *
- * A break due when this item ends plays first, and the video after it is made as before. Called with the item on
- * screen, as it comes on (playCurrent) or comes back after a break (resumeContent).
+ * A break due when this item ends plays first, and the item after it is made ready during its last advert
+ * (prepareAfterTheBreak). Called with the item on screen, as it comes on (playCurrent) or comes back after a break
+ * (resumeContent).
  */
 function prepareNext(node) {
     if (state.prepareTimer) clearTimeout(state.prepareTimer);
@@ -1024,42 +1175,57 @@ function prepareNext(node) {
 
     const item = state.items[state.index % state.items.length];
     const next = state.items[(state.index + 1) % state.items.length];
-    if (next.type !== 'video' || !decodesTurnedVideo(next)) return;
 
-    // A video's own length less what it has played (a fragmented file says its length only once read through: the
-    // server's then); anything else, what its countdown has left.
-    let left = state.itemDurationMs - (Date.now() - state.itemStartedAt);
-    if (item.type === 'video') {
+    prepare(next, timeLeftOf(node, item) - PREPARE_AHEAD_MS,
+        () => !state.ad.due && !state.ad.active && state.current === node && node.isConnected);
+}
+
+/**
+ * How long the item on screen still has, in ms: a video's own length less what it has played (a fragmented file
+ * says its length only once read through: the server's then); anything else, what its countdown has left.
+ */
+function timeLeftOf(node, item) {
+    if (isVideoNode(node)) {
         const length = Number.isFinite(node.duration) && node.duration > 0 ? node.duration : item.duration;
-        left = (length - (node.currentTime || 0)) * 1000;
+
+        return (length - (node.currentTime || 0)) * 1000;
     }
+
+    return state.itemDurationMs - (Date.now() - state.itemStartedAt);
+}
+
+/** `item`, made ready in the layer behind the one on screen in `inMs`, if `stillWanted()` says so then. */
+function prepare(item, inMs, stillWanted) {
+    if (state.prepareTimer) clearTimeout(state.prepareTimer);
+
+    // Never into a layer still fading away: the item made ready would go with it.
+    const fadeLeft = state.fade ? state.fade.endsAt - Date.now() : 0;
 
     state.prepareTimer = setTimeout(() => {
         state.prepareTimer = null;
-        if (state.ad.due || state.ad.active || state.prepared || !node.isConnected) return;
+        if (state.prepared || !stillWanted()) return;
+        finishFade();
 
-        const back = layer(state.front === 'a' ? 'b' : 'a');
-        back.innerHTML = '';
-
-        const ready = buildElement(next);
+        const ready = buildElement(item);
         // Paused before its first frame: it waits on that frame, unplayed, until its turn.
-        ready.pause();
+        if (isVideoNode(ready)) ready.pause();
         ready.addEventListener('error', () => {
             if (state.prepared && state.prepared.node === ready) clearPrepared();
         }, { once: true });
-        back.appendChild(ready);
-        state.prepared = { node: ready, url: assetUrl(next) };
-    }, Math.max(0, left - PREPARE_AHEAD_MS));
+        putBehind(layer(state.front === 'a' ? 'b' : 'a'), ready);
+        state.prepared = { node: ready, url: assetUrl(item) };
+    }, Math.max(0, inMs, fadeLeft));
 }
 
-/** Let a video made ready for later go, and the timer that would make one. */
+/** Let an item made ready for later go, and the timer that would make one. */
 function clearPrepared() {
     if (state.prepareTimer) clearTimeout(state.prepareTimer);
     state.prepareTimer = null;
 
     const prepared = state.prepared;
     state.prepared = null;
-    if (prepared && prepared.node.isConnected && prepared.node.parentElement !== layer(state.front)) prepared.node.remove();
+    const behind = prepared && prepared.node.parentElement;
+    if (behind && behind !== layer(state.front)) empty(behind);
 }
 
 /**
@@ -1176,6 +1342,7 @@ function armAdBreak(config) {
         state.ad.timer = null;
         state.ad.due = false;
         state.ad.nextAt = 0;
+        clearPreparedAd();
 
         return;
     }
@@ -1245,9 +1412,14 @@ function startAdBreak() {
  * that grows as it downloads, and a stalled one never ends — and a break that waited for ever would be a brand
  * paying for nothing, on a television that looked perfectly healthy. An item that came on meanwhile (a new
  * manifest started the loop again) is waited for in its turn.
+ *
+ * Its first advert is made ready meanwhile, behind the item on screen, so the break starts with a swap.
  */
 function waitForTheItemOnScreen() {
     if (state.ad.timer) clearTimeout(state.ad.timer);
+
+    const remaining = remainingOnScreen();
+    prepareAd(0, remaining - PREPARE_AHEAD_MS, () => state.ad.due && ! state.ad.active);
 
     state.ad.dueFor = state.itemStartedAt;
     state.ad.timer = setTimeout(() => {
@@ -1272,7 +1444,7 @@ function waitForTheItemOnScreen() {
         state.ad.active = true;
         state.ad.index = 0;
         playAd();
-    }, remainingOnScreen() + BREAK_WAIT_SLACK_MS);
+    }, remaining + BREAK_WAIT_SLACK_MS);
 }
 
 /** The break that waited: the item before it has ended, and the next one plays once it is over (endAdBreak). */
@@ -1282,7 +1454,7 @@ function breakBetweenItems() {
     // The item before has ended: its own backstop (a video's) must not move the loop on under the break.
     if (state.itemTimer) clearTimeout(state.itemTimer);
     state.itemTimer = null;
-    // Nothing waits behind the break with a decoder of its own: the next item is made after it.
+    // Nothing waits behind the whole break with a decoder of its own: the next item is made ready during its last advert.
     clearPrepared();
     state.ad.due = false;
     state.ad.between = true;
@@ -1295,7 +1467,9 @@ function breakBetweenItems() {
  * Build the advert first, pause the organization's content only once it is ready to show.
  *
  * The other order — pause, then load — leaves a frozen frame on the wall for as long
- * as the file takes to arrive.
+ * as the file takes to arrive. And the advert before it stays up until then: emptied first, the layer was black
+ * between two adverts for 0.23 to 0.35 s (the owner's Fire TV Stick, 2026-11-02). The next one is made ready behind
+ * it (prepareAd), so it is usually ready at once.
  */
 function playAd() {
     const item = state.ad.items[state.ad.index];
@@ -1307,10 +1481,20 @@ function playAd() {
     }
 
     const stage = el('layer-ad');
-    stage.innerHTML = '';
+    const prepared = state.ad.prepared;
+    let node;
 
-    const node = buildElement(item);
-    stage.appendChild(node);
+    if (prepared && prepared.index === state.ad.index && prepared.url === assetUrl(item) && prepared.node.parentElement === stage) {
+        state.ad.prepared = null;
+        if (state.ad.prepareTimer) clearTimeout(state.ad.prepareTimer);
+        state.ad.prepareTimer = null;
+        node = prepared.node;
+    } else {
+        clearPreparedAd();
+        node = buildElement(item);
+        node.hidden = true;
+        stage.appendChild(node);
+    }
 
     let done = false;
     const finish = () => {
@@ -1323,29 +1507,128 @@ function playAd() {
         playAd();
     };
 
+    // Its time, counted from when it came on — and from now, until then, as the backstop of one that never comes.
+    const seconds = item.type === 'video' ? item.duration + 5 : Math.max(1, item.duration);
+
     const reveal = () => {
         // An advert that finishes loading after its time was up, or after the break ended,
         // must not show itself: un-hiding the emptied layer is a black screen over the organization's
         // content, and pausing that content would freeze it with nothing to resume it.
         if (done || ! node.isConnected) return;
 
+        finishFade();
         pauseContent();
+        // The advert before goes only now, in the moment this one takes its place — or once this one has faded in
+        // over it, on a screen whose Transition is Fade.
+        const before = Array.from(stage.children).filter((child) => child !== node);
+        before.forEach((child) => {
+            if (isVideoNode(child)) child.pause();
+        });
+        const letGo = () => before.forEach((child) => child.remove());
+        const appearing = stage.hidden;
+        node.hidden = false;
         stage.hidden = false;
 
+        if (! fades(true)) {
+            letGo();
+        } else if (appearing) {
+            // The break begins: the advert fades in over the organization's item, paused under it.
+            letGo();
+            fade(stage, 0, 1, () => {});
+        } else {
+            fade(node, 0, 1, letGo);
+        }
+
         if (item.type === 'video') node.play().catch(finish);
+        if (state.ad.playTimer) clearTimeout(state.ad.playTimer);
+        state.ad.playTimer = setTimeout(finish, seconds * 1000);
+
+        // What comes after it is made ready behind it: the next advert, or after the last one the organization's item.
+        const left = isVideoNode(node) ? timeLeftOf(node, item) : seconds * 1000;
+        if (state.ad.index + 1 < state.ad.items.length) {
+            prepareAd(state.ad.index + 1, left - PREPARE_AHEAD_MS, () => state.ad.active && node.isConnected);
+        } else {
+            prepareAfterTheBreak(node, left);
+        }
     };
 
     if (item.type === 'video') {
-        node.addEventListener('loadeddata', reveal, { once: true });
         node.addEventListener('ended', finish, { once: true });
         // A file that stalls must never hold the wall hostage.
         node.addEventListener('error', finish, { once: true });
-        state.ad.playTimer = setTimeout(finish, (item.duration + 5) * 1000);
-    } else {
-        node.addEventListener('load', reveal, { once: true });
-        node.addEventListener('error', finish, { once: true });
-        state.ad.playTimer = setTimeout(finish, Math.max(1, item.duration) * 1000);
     }
+    if (state.ad.playTimer) clearTimeout(state.ad.playTimer);
+    state.ad.playTimer = setTimeout(finish, seconds * 1000);
+
+    readiness(node, item).then((ready) => (ready ? reveal() : finish()));
+}
+
+/** The advert at `index`, made ready in the advert layer, hidden, in `inMs`, if `stillWanted()` says so then. */
+function prepareAd(index, inMs, stillWanted) {
+    if (state.ad.prepareTimer) clearTimeout(state.ad.prepareTimer);
+
+    state.ad.prepareTimer = setTimeout(() => {
+        state.ad.prepareTimer = null;
+        const item = state.ad.items[index];
+        if (! item || state.ad.prepared || ! stillWanted()) return;
+
+        const node = buildElement(item);
+        node.hidden = true;
+        if (isVideoNode(node)) node.pause();
+        node.addEventListener('error', () => {
+            if (state.ad.prepared && state.ad.prepared.node === node) clearPreparedAd();
+        }, { once: true });
+        el('layer-ad').appendChild(node);
+        state.ad.prepared = { node, index, url: assetUrl(item) };
+    }, Math.max(0, inMs));
+}
+
+/** Let an advert made ready for later go, and the timer that would make one. */
+function clearPreparedAd() {
+    if (state.ad.prepareTimer) clearTimeout(state.ad.prepareTimer);
+    state.ad.prepareTimer = null;
+
+    const prepared = state.ad.prepared;
+    state.ad.prepared = null;
+    if (prepared && prepared.node.isConnected) prepared.node.remove();
+}
+
+/**
+ * The organization's item that comes on after the break, made ready behind its content during the last advert: the
+ * next one (a break between two items), or a page let go for the break (pauseContent), which comes back from its
+ * start. A video or a picture interrupted under the break carries on where it was, and needs nothing made.
+ * The advert stays up until that item is ready (playCurrent): taken down first, the item before the break came
+ * back for a moment, or black where a page had been let go (the owner's Fire TV Stick, 2026-11-02).
+ */
+function prepareAfterTheBreak(adNode, leftMs) {
+    if (state.items.length === 0) return;
+
+    const front = frontNode();
+    if (! state.ad.between && ! (front && front.tagName === 'IFRAME')) return;
+
+    prepare(state.items[state.index % state.items.length], leftMs - PREPARE_AHEAD_MS,
+        () => state.ad.active && adNode.isConnected && ! state.ad.pendingData);
+}
+
+/** The advert layer down and emptied: a hidden <video> keeps its decoder and its buffer otherwise. */
+function takeTheAdDown() {
+    if (state.ad.leaveTimer) clearTimeout(state.ad.leaveTimer);
+    state.ad.leaveTimer = null;
+
+    const stage = el('layer-ad');
+    // A fade of the advert layer, or inside it, is over: there is nothing left to fade.
+    if (state.fade && stage && stage.contains(state.fade.element)) finishFade();
+
+    if (stage) {
+        stage.hidden = true;
+        stage.innerHTML = '';
+    }
+}
+
+/** The advert layer goes: at once, or fading away over the organization's item on a screen whose Transition is Fade. */
+function letTheAdGo() {
+    if (fades(true) && ! el('layer-ad').hidden) fade(el('layer-ad'), 1, 0, takeTheAdDown);
+    else takeTheAdDown();
 }
 
 /** Stop the organization's content where it stands, remembering what it had left — once per break. */
@@ -1382,15 +1665,22 @@ function pauseContent() {
 function resumeContent() {
     const node = frontNode();
 
-    if (! node) return;
+    if (! node) {
+        takeTheAdDown();
+
+        return;
+    }
 
     // A page let go for the break: shown again from the start, for its whole length, as if it had
-    // just come on — never the rest of a run whose exit already played.
+    // just come on — never the rest of a run whose exit already played. The advert stays up until it is
+    // (playCurrent).
     if (node.tagName === 'IFRAME') {
         playCurrent();
 
         return;
     }
+
+    letTheAdGo();
 
     if (isVideoNode(node)) {
         node.play().catch(() => {});
@@ -1411,6 +1701,7 @@ function resumeContent() {
 function endAdBreak({ resume }) {
     if (state.ad.playTimer) clearTimeout(state.ad.playTimer);
     state.ad.playTimer = null;
+    clearPreparedAd();
 
     // Whether an advert ever actually appeared. If none did, nothing was paused: the content
     // kept playing on its own clock, and "resuming" it would re-arm that clock from a stale
@@ -1421,21 +1712,24 @@ function endAdBreak({ resume }) {
     const between = state.ad.between;
     state.ad.between = false;
 
-    const stage = el('layer-ad');
-
-    if (stage) {
-        stage.hidden = true;
-        // Emptied, not just hidden: a hidden <video> still holds its decoder and its
-        // buffer, and a set left running for weeks would collect one every hour.
-        stage.innerHTML = '';
+    // With no advert on screen, or no content to come back, the layer goes at once. Emptied, not just hidden: a
+    // hidden <video> still holds its decoder and its buffer, and a set left running for weeks would collect one
+    // every hour.
+    if (! state.ad.active || ! resume || el('layer-ad').hidden) {
+        takeTheAdDown();
+        if (! state.ad.active) return;
     }
-
-    if (! state.ad.active) return;
 
     state.ad.active = false;
     state.ad.index = 0;
 
     scheduleNextBreak();
+
+    // The last advert stays up until the organization's item after it is on screen (playCurrent takes it down), and
+    // never longer than this, so a file that will not come on cannot keep the brand's last picture on the wall.
+    if (! el('layer-ad').hidden) {
+        state.ad.leaveTimer = setTimeout(takeTheAdDown, AD_LEAVES_MS);
+    }
 
     // A manifest that arrived mid-break is applied now, and replaces the resume:
     // there is no point putting back content the server has already changed.
@@ -1453,13 +1747,21 @@ function endAdBreak({ resume }) {
         return;
     }
 
-    if (resume && contentWasPaused) resumeContent();
+    if (resume && contentWasPaused) {
+        resumeContent();
+
+        return;
+    }
+
+    takeTheAdDown();
 }
 
 function scheduleNextBreak() {
     if (state.ad.timer) clearTimeout(state.ad.timer);
     state.ad.timer = null;
     state.ad.due = false;
+    // An advert made ready for a break that is not coming goes.
+    clearPreparedAd();
 
     if (state.ad.everyMs === 0 || state.ad.items.length === 0) return;
 
