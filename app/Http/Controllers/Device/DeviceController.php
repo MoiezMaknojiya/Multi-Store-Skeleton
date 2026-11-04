@@ -111,8 +111,10 @@ class DeviceController extends Controller
                 'orientation' => $screen->orientation,
                 // Whether a turned Fire TV decodes its videos itself (config/signage.php, docs/TV-ORIENTATION-SPEC.md §12).
                 'decode_turned_video' => (bool) config('signage.decode_turned_video'),
-                // How it changes from one item to the next: 'fade', every screen's own, or 'none' (Screen::TRANSITIONS).
-                'transition' => $screen->transition === 'none' ? 'none' : 'fade',
+                // Every screen fades from one item to the next, and today's player does with nothing said (owner,
+                // 2026-11-04). Said all the same for a player loaded before then, still on a television until it
+                // reloads, which fades only when told.
+                'transition' => 'fade',
             ],
             'server_time' => $now->toIso8601String(),
             'blank' => $items['blank'],

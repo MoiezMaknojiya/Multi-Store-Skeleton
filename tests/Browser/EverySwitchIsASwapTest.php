@@ -172,14 +172,13 @@ class EverySwitchIsASwapTest extends DuskTestCase
         });
     }
 
-    public function test_a_screen_set_to_fade_dissolves_each_item_and_each_advert_in_over_the_one_before(): void
+    public function test_every_screen_dissolves_each_item_and_each_advert_in_over_the_one_before(): void
     {
-        // The owner's setting (2026-11-02 — "fade setting mein rakho"): with Fade, the next item, ready behind the one on
-        // screen, fades in over it in half a second, and the one before goes only then; a break's adverts fade in over
-        // the content and fade away over the item after them. Fade is every screen's own since 2026-11-03, so the other tests here
-        // play with it too.
+        // The owner's fade (2026-11-02 — "fade setting mein rakho"; every screen's, with no setting, since 2026-11-04): the
+        // next item, ready behind the one on screen, fades in over it in half a second, and the one before goes only
+        // then; a break's adverts fade in over the content and fade away over the item after them. The other tests
+        // here play with it too.
         [$organization, $screen] = $this->screen('swap-fade-token', acceptsAds: true);
-        $screen->update(['transition' => 'fade']);
         $this->picture($organization, $screen, 'before', [200, 40, 40], 0);
         $this->picture($organization, $screen, 'after', [40, 160, 60], 1);
         Campaign::factory()->lasting(10)->create([
@@ -227,7 +226,6 @@ class EverySwitchIsASwapTest extends DuskTestCase
         // cache: a picture, a page over a video, a video, a break with a picture advert, all fading. A file late to
         // arrive is waited for with the item before still up — the glass is never empty and never black.
         [$organization, $screen] = $this->screen('swap-slow-token', acceptsAds: true);
-        $screen->update(['transition' => 'fade']);
         $this->picture($organization, $screen, 'first', [200, 40, 40], 0);
         $page = $this->page($organization, 'Slow special', withVideo: true);
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $page->id, 'position' => 1, 'duration_seconds' => null]);
@@ -259,31 +257,6 @@ class EverySwitchIsASwapTest extends DuskTestCase
             }
 
             $this->network($tv);
-        });
-    }
-
-    public function test_the_transition_is_chosen_in_the_screens_edit_dialog(): void
-    {
-        $organization = Organization::factory()->create(['name' => 'Alpha Mart']);
-        $owner = $this->organizationMember($organization);
-        $screen = Screen::factory()->create(['organization_id' => $organization->id, 'name' => 'Counter TV']);
-
-        $this->browse(function (Browser $browser) use ($owner, $screen) {
-            $browser->loginAs($owner)->visit('/screens')
-                ->waitFor('@edit-screen-'.$screen->id)->click('@edit-screen-'.$screen->id)
-                ->waitFor('@screen-edit-transition')->pause(300)
-                ->assertSelected('@screen-edit-transition', 'fade')
-                ->assertSee('How the screen changes from one item to the next.')
-                ->select('@screen-edit-transition', 'none')
-                ->click('@screen-save')
-                ->waitUntilMissing('@screen-edit-transition');
-
-            $this->assertSame('none', $screen->fresh()->transition);
-
-            // Opened again on a fresh page, it says what was saved.
-            $browser->refresh()->waitFor('@edit-screen-'.$screen->id)->click('@edit-screen-'.$screen->id)
-                ->waitFor('@screen-edit-transition')->pause(300)
-                ->assertSelected('@screen-edit-transition', 'none');
         });
     }
 

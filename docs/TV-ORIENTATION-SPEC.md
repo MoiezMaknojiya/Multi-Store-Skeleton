@@ -841,9 +841,9 @@ ready is a fade into black. So the order was: make every switch a swap, then off
   100 ms or so still stand still in the recording: the recorder shares the stick's graphics chip with the canvas, and
   no main-thread stall showed in those runs.
 
-**The Transition setting** (`screens.transition`, migration `2026_11_03_100000`, `Screen::TRANSITIONS`: None, Fade;
-the Edit Screen dialog; `screen.transition` on every playlist answer). None is the swap above; it was every screen's
-default until 2026-11-03, when Fade became every screen's, new or old (§12.17). Fade dissolves the next item in over the one before in `FADE_MS` (0.5 s, linear), the item before going only
+**The fade.** From 2026-11-02 a Transition setting (`screens.transition`, migration `2026_11_03_100000`: None, the swap
+above, or Fade) in the Edit Screen dialog; Fade became every screen's on 2026-11-03 (§12.17), and the setting went on
+2026-11-04: every screen fades (§12.18). Fade dissolves the next item in over the one before in `FADE_MS` (0.5 s, linear), the item before going only
 then; a break's first advert fades in over the content, the next advert over the one before, and the last fades away
 over the item after it. A new change ends a fade at once (`finishFade`), never waiting on a `transitionend`, and the next
 item is never made ready in a layer still fading away.
@@ -856,11 +856,10 @@ video on a turned TV is still sideways (§12.6).
 **Tests.** `EverySwitchIsASwapTest` (Dusk): two adverts follow each other with nothing between, and the break hands
 over to the next picture, never the one before it; a page and a picture are put behind the item before more than 2.5 s
 ahead, the page laid out at its size with its entrance and its video waiting, then started on screen; a landscape
-`<video>` is ready behind the one before; Fade dissolves an advert in and out over the pictures in about half a second
-with the glass never empty; the Transition is chosen in the Edit Screen dialog. Each of the first three failed on the
-code before (black between the adverts, the page made 30 ms before it came on, the video at the switch).
-`ScreenTransitionTest` (Pest) holds the setting, and `AdAnimationTest` and `AdBackgroundAndEffectsTest` the compiler's
-held page.
+`<video>` is ready behind the one before; the fade dissolves an advert in and out over the pictures in about half a
+second with the glass never empty. Each of the first three failed on the code before (black between the adverts, the
+page made 30 ms before it came on, the video at the switch). `EveryScreenFadesTest` (Pest) holds the fade (§12.18), and
+`AdAnimationTest` and `AdBackgroundAndEffectsTest` the compiler's held page.
 
 **All four ways up, on the stick, 2026-11-03** (three minutes each, the code above; `2026-11-03-swap/orientations`).
 Portrait, portrait flipped, landscape and landscape flipped: every kind of item came on turned the screen's way, and no
@@ -934,15 +933,15 @@ and an end-to-end test of every kind of item on one playlist before the Tizen ap
 
 **Fade is every screen's.** Migration `2026_11_03_200000` gives `screens.transition` the default `fade` and turns every
 screen at `none` to `fade` (live had 17 at None, one already set to Fade by hand); its `down()` puts the default back and
-leaves the screens' values, since it cannot tell which were None by choice. The Edit Screen dialog opens at Fade, None is
-still chosen there, and a playlist answer says `none` only for a screen at None: a player told anything else fades.
+leaves the screens' values, since it cannot tell which were None by choice. The Edit Screen dialog opened at Fade with
+None still a choice there, which was not what the owner meant: the setting went the next day (§12.18).
 
 **Everything on one playlist, in Chrome** (`EverythingOnOnePlaylistTest`, Dusk). The playlist: the library's picture and
 video, an Ad Builder page with a picture on its stage, one over a video, a channel of a picture, a video and an Ad Builder
 page, and a network break of a picture and a video, on a screen at Fade. A script watches every frame: what is on the
 glass, every media element and frame alive, the advert layer's leftovers, and every error. Four cases: landscape; portrait
 on a set that decodes its videos (every video, a page's own too, is a `<decoded-video>`); the screen changed while it
-plays (a line taken off and a new one put on, Fade cut to None, turned to portrait) and then the line cut, playing on
+plays (a line taken off and a new one put on, turned to portrait; until §12.18 also cut over to None) and then the line cut, playing on
 from the worker's copies; and a picture whose file is gone, a "video" that is no video and a page whose file is gone
 among them, stepped over while the item before stays up. All four pass. The first failed on the player of 310243e (the
 glass empty between the break's picture and its video).
@@ -956,3 +955,22 @@ its green is (§12.16), and no live screen is landscape flipped to look at. Fift
 script's heap steady, at most two decoders and two frames alive at once. The line cut for three and a half minutes:
 every kind played on from the worker's copies, no error. One landscape `<video>` alone: 40 captures of the display
 itself, none green (§12.15's open point, again the recorder's).
+
+### 12.18 No Transition setting: every screen fades (2026-11-04)
+
+The owner, of §12.17: "jo screen ki edit mein "Transition" araha ha woo mujhe by default sub per fade hi chiya tha aur
+woo field hata deni thi" — and an installation the day before had faded only once Fade was chosen and saved by hand
+(live then still made every screen None, 9b23f88).
+
+**What went.** The Transition field of the Edit Screen dialog, `Screen::TRANSITIONS` and its rule, and the column:
+migration `2026_11_04_100000` drops `screens.transition` (live runs `2026_11_03_200000` just before it, harmless); its
+`down()` brings the column back at Fade for every screen, which is what each of them did. The player fades every switch
+with nothing said (`state.transition` and its `fades()` are gone; the very first item, with nothing before it, comes on
+at once). A save that posts `transition` changes nothing.
+
+**What stays.** Every playlist answer still says `screen.transition: 'fade'`: the player of 9b23f88, on a television
+until it reloads, fades only when told `fade`, so every screen fades from its next poll, without a reload.
+
+**Tests.** `EveryScreenFadesTest` (Pest): every television is told to fade, no screen keeps a Transition, the dialog
+offers none, a transition posted by hand changes nothing, and the migration goes both ways. `EverySwitchIsASwapTest` and
+`EverythingOnOnePlaylistTest` (Dusk) play every screen with the fade.

@@ -113,8 +113,8 @@
         /* The advert sits over both content layers and is opaque, so whatever is
            paused underneath is neither seen nor composited. */
         .media-layer-ad { z-index: 10; background: #000; }
-        /* The advert on screen and the next one, made ready behind it, stand in the same place: the next comes on over
-           it (or fades in over it, on a screen whose Transition is Fade). */
+        /* The advert on screen and the next one, made ready behind it, stand in the same place: the next fades in
+           over it. */
         .media-layer-ad > * { position: absolute; top: 0; left: 0; }
 
         .media-layer img,

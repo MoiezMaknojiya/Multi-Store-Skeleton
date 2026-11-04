@@ -338,20 +338,6 @@
                     </div>
                     <p class="-mt-2 text-xs text-gray-500 dark:text-gray-400">Schedules on this screen follow its time zone.</p>
 
-                    {{-- How the television changes from one item to the next: either way the next one is made ready
-                         behind the one on screen first (player.js), so Fade — every screen's own — is a half-second
-                         dissolve over it and None a clean cut. --}}
-                    <div class="sm:w-1/2 sm:pr-2">
-                        <x-crud.form-field label="Transition" field="transition" :required="true">
-                            <select x-model="form.transition" dusk="screen-edit-transition" class="form-select">
-                                @foreach ($transitions as $value => $label)
-                                    <option value="{{ $value }}">{{ $label }}</option>
-                                @endforeach
-                            </select>
-                        </x-crud.form-field>
-                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">How the screen changes from one item to the next.</p>
-                    </div>
-
                     {{-- What fills a gap between two schedules, or an hour nothing was
                          scheduled for. Left unset, the screen simply goes black — which
                          is what an organization usually wants overnight. --}}

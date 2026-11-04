@@ -71,12 +71,11 @@ class EverythingOnOnePlaylistTest extends DuskTestCase
             $this->startTheSet($tv, null);
             $tv->waitUntil("window.__all.seen.some((s) => s.includes('library-picture'))", 30, 'the screen never started');
 
-            // The playlist changes while it plays: the library's picture goes, a new picture comes, and the screen is
-            // cut over to None. The player asks at once when the line comes back (the online event).
+            // The playlist changes while it plays: the library's picture goes and a new picture comes. The player asks
+            // at once when the line comes back (the online event).
             $fresh = $this->picture($world['organization'], 'new-picture', [250, 140, 0]);
             PlaylistItem::where('media_id', $world['picture']->id)->delete();
             PlaylistItem::create(['screen_id' => $world['screen']->id, 'media_id' => $fresh->id, 'position' => 9, 'duration_seconds' => 10]);
-            $world['screen']->update(['transition' => 'none']);
             $tv->script("window.dispatchEvent(new Event('online'));");
             $tv->waitUntil("window.__all.seen.some((s) => s.includes('new-picture'))", 120, 'the changed playlist never reached the screen');
             $this->assertNotContains('library-picture.png', $this->namesAfter($tv, 'new-picture'), 'a line taken off kept coming on');

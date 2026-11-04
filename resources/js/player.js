@@ -49,7 +49,7 @@ const BROKEN_ITEM_PAUSE_MS = 1000;  // breathing room before skipping a file tha
 const DECODER_WAIT_MS = 5000;       // the most a set waits for its own video decoder before it plays without it
 const PREPARE_AHEAD_MS = 3500;      // how long before the item on screen ends the next one is made ready behind it
 const AD_LEAVES_MS = 5000;          // the most a break's last advert stays up for the content after it to be ready
-const FADE_MS = 500;                // how long the next item takes to fade in, on a screen whose Transition is Fade
+const FADE_MS = 500;                // how long the next item takes to fade in over the one before (every screen fades)
 const PAGE_VIDEO_WAIT_MS = 5000;    // the most a page made ready waits for the first frames of the videos decoded for it
 // An Ad Builder page the player opens is told when it is on screen (startPage), and starts its animations then: one made
 // ready behind the item before would otherwise have played its entrance where nobody saw it. The frame's name says so.
@@ -153,9 +153,7 @@ const state = {
     prepareTimer: null,
     // The element playCurrent put up last: only its own end moves the loop on.
     current: null,
-    // How this screen changes from one item to the next (the panel's Transition): 'fade', every screen's own, or 'none',
-    // a swap. And the fade under way ({element, done, timer, endsAt}), finished at once by the next change (finishFade).
-    transition: 'fade',
+    // The fade under way ({element, done, timer, endsAt}), finished at once by the next change (finishFade).
     fade: null,
 
     // Offline (§15): whether the manifest on screen came from the worker's cache, the
@@ -443,8 +441,6 @@ async function fetchPlaylist() {
         if (token !== state.token) return;
         applyOrientation(data.screen?.orientation);
         state.decodeTurnedVideo = data.screen?.decode_turned_video === true;
-        // From the next switch on; nothing on screen starts again for it. Fade unless the screen says None.
-        state.transition = data.screen?.transition === 'none' ? 'none' : 'fade';
         // The decoder is in before the first video is made: made without it, that video was a <video> for its whole
         // length, sideways on a turned Fire TV after every start (2026-10-28). A chunk that never comes holds the
         // screen DECODER_WAIT_MS at most, and its videos play as <video> until it does.
@@ -782,10 +778,11 @@ function putBehind(target, node) {
 }
 
 /**
- * A screen whose Transition is Fade (the panel): `element` goes from `from` to `to` opacity in FADE_MS, steadily, over
- * what was on screen, and `done` tidies up after it — then, or at once when anything changes the screen before it is
- * over (finishFade): the next switch never waits for this one, and nothing depends on a `transitionend` that may never
- * come. The swap itself happened already: the fade only shows it gently.
+ * Every switch fades (owner, 2026-11-04 — "by default sub per fade hi chiya tha aur woo field hata deni thi"): `element`
+ * goes from `from` to `to` opacity in FADE_MS, steadily, over what was on screen, and `done` tidies up after it — then,
+ * or at once when anything changes the screen before it is over (finishFade): the next switch never waits for this one,
+ * and nothing depends on a `transitionend` that may never come. The swap itself happened already: the fade only shows
+ * it gently.
  */
 function fade(element, from, to, done) {
     finishFade();
@@ -811,11 +808,6 @@ function finishFade() {
     under.element.style.opacity = '';
     under.element.style.zIndex = '';
     under.done();
-}
-
-/** Whether the switch about to happen fades: the screen says so, and there is something on screen to fade from. */
-function fades(previous) {
-    return state.transition === 'fade' && Boolean(previous);
 }
 
 function stopPlayback() {
@@ -1168,8 +1160,8 @@ function playCurrent() {
             // away over it, the swap underneath it unseen.
             letGo();
             letTheAdGo();
-        } else if (fades(previous)) {
-            // Over the item before, which goes once the new one is fully in.
+        } else if (previous) {
+            // Over the item before, which goes once the new one is fully in (the first item has nothing to fade from).
             incoming.style.zIndex = '1';
             fade(incoming, 0, 1, letGo);
         } else {
@@ -1605,8 +1597,7 @@ function playAd() {
 
         finishFade();
         pauseContent();
-        // The advert before goes only now, in the moment this one takes its place — or once this one has faded in
-        // over it, on a screen whose Transition is Fade.
+        // The advert before goes only once this one has faded in over it.
         const before = Array.from(stage.children).filter((child) => child !== node);
         before.forEach((child) => {
             if (isVideoNode(child)) child.pause();
@@ -1616,9 +1607,7 @@ function playAd() {
         node.hidden = false;
         stage.hidden = false;
 
-        if (! fades(true)) {
-            letGo();
-        } else if (appearing) {
+        if (appearing) {
             // The break begins: the advert fades in over the organization's item, paused under it.
             letGo();
             fade(stage, 0, 1, () => {});
@@ -1712,9 +1701,9 @@ function takeTheAdDown() {
     }
 }
 
-/** The advert layer goes: at once, or fading away over the organization's item on a screen whose Transition is Fade. */
+/** The advert layer goes, fading away over the organization's item. */
 function letTheAdGo() {
-    if (fades(true) && ! el('layer-ad').hidden) fade(el('layer-ad'), 1, 0, takeTheAdDown);
+    if (! el('layer-ad').hidden) fade(el('layer-ad'), 1, 0, takeTheAdDown);
     else takeTheAdDown();
 }
 
