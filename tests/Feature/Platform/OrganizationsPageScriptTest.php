@@ -250,5 +250,118 @@ test('while their dialog is still open the answers act on it as ever: shut on su
 test('the Organizations page sends the owner invitation with the press that sent it, so its answer knows its form', function () {
     $this->actingAs(createSuperAdmin())->get('/organizations')->assertOk()
         ->assertSee('@submit.prevent="sendOwnerInvite($event)"', false)
+        ->assertSee('@click="copyOwnerInviteLink($event)"', false)
         ->assertSee('dusk="organization-billing"', false);
+});
+
+/** The page with a clipboard that keeps what it is given (or refuses, with `refuses`), and Invite Owner open for Alpha Mart. */
+function copyLinkPage(string $then, bool $refuses = false): array
+{
+    $clipboard = $refuses
+        ? 'writeText: async () => { throw new Error("Write permission denied."); }'
+        : 'writeText: async (text) => { clipboard.push(text); }';
+
+    return organizationsPage(<<<JS
+        const clipboard = [];
+        Object.defineProperty(globalThis, 'navigator', { value: { clipboard: { {$clipboard} } }, configurable: true });
+        const posts = [];
+        const ownerForm = formOnPage();
+        const press = (detail = 1) => ({ detail, target: { closest: () => ownerForm } });
+        const link = 'https://sign.example.com/invitations/' + 'a'.repeat(64);
+        page.openInviteOwner(alpha);
+        page.ownerEmail = 'driver@example.com';
+
+        {$then}
+        JS);
+}
+
+test('Copy Invitation Link asks for the link once, copies it and shows it in the dialog', function () {
+    $result = copyLinkPage(<<<'JS'
+        axios.post = async (url, body) => {
+            posts.push([url, body]);
+            return { data: { message: 'The same link was emailed to driver@example.com.', email_sent: true, link } };
+        };
+        // A double click: the second press of it asks nothing.
+        const first = page.copyOwnerInviteLink(press(1));
+        await page.copyOwnerInviteLink(press(2));
+        await first;
+
+        report({ posts, clipboard, shown: page.ownerLink, to: page.ownerLinkEmail, copied: page.ownerLinkCopied, toasts, dispatched, busy: page.invitingOwner });
+        JS);
+
+    expect($result)->toBe([
+        'posts' => [['/organizations/1/owner-invitation/link', ['email' => 'driver@example.com']]],
+        'clipboard' => ['https://sign.example.com/invitations/'.str_repeat('a', 64)],
+        'shown' => 'https://sign.example.com/invitations/'.str_repeat('a', 64),
+        'to' => 'driver@example.com',
+        'copied' => true,
+        'toasts' => [['message' => 'Invitation link copied. The same link was emailed to driver@example.com.', 'type' => 'success']],
+        // Opened, and left open: it shows the link now.
+        'dispatched' => [['name' => 'open-modal', 'detail' => 'invite-organization-owner']],
+        'busy' => false,
+    ]);
+});
+
+test('a clipboard that refuses still leaves the link in the dialog to copy, and Copy Link says it did not copy', function () {
+    $result = copyLinkPage(<<<'JS'
+        axios.post = async () => ({ data: { message: 'The same link was emailed to driver@example.com.', email_sent: true, link } });
+        await page.copyOwnerInviteLink(press());
+        await page.copyOwnerLinkAgain();
+
+        report({ shown: page.ownerLink, copied: page.ownerLinkCopied, toasts });
+        JS, refuses: true);
+
+    expect($result)->toBe([
+        'shown' => 'https://sign.example.com/invitations/'.str_repeat('a', 64),
+        'copied' => false,
+        'toasts' => [
+            ['message' => 'Copy the invitation link from the dialog. The same link was emailed to driver@example.com.', 'type' => 'success'],
+            ['message' => 'The browser did not copy it: the link is selected, copy it from there.', 'type' => 'error'],
+        ],
+    ]);
+});
+
+test('a link answered after its dialog was shut is neither shown nor copied, and the email is said instead', function () {
+    $result = copyLinkPage(<<<'JS'
+        const answer = later();
+        axios.post = () => answer.promise;
+        const copying = page.copyOwnerInviteLink(press());
+
+        ownerForm.shown = false;
+        answer.resolve({ data: { message: 'The same link was emailed to driver@example.com.', email_sent: true, link } });
+        await copying;
+
+        report({ shown: page.ownerLink, clipboard, toasts });
+        JS);
+
+    expect($result)->toBe([
+        'shown' => '',
+        'clipboard' => [],
+        'toasts' => [['message' => 'The invitation was emailed to driver@example.com.', 'type' => 'success']],
+    ]);
+});
+
+test('a member made Owner at once has no link: the dialog shuts and says so, and a refusal stays under the field', function () {
+    $result = copyLinkPage(<<<'JS'
+        axios.post = async () => ({ data: { message: 'Sam Staff is now an Owner of Alpha Mart.' } });
+        await page.copyOwnerInviteLink(press());
+        const member = { shown: page.ownerLink, dispatched: [...dispatched], toasts: [...toasts] };
+
+        page.openInviteOwner(alpha);
+        page.ownerEmail = 'driver@example.com';
+        axios.post = async () => { throw refusal(422, { errors: { email: ['Alpha Mart already has an Owner.'] } }); };
+        await page.copyOwnerInviteLink(press());
+
+        report({ member, errors: page.ownerErrors, shown: page.ownerLink });
+        JS);
+
+    expect($result)->toBe([
+        'member' => [
+            'shown' => '',
+            'dispatched' => [['name' => 'open-modal', 'detail' => 'invite-organization-owner'], ['name' => 'close-modal', 'detail' => 'invite-organization-owner']],
+            'toasts' => [['message' => 'Sam Staff is now an Owner of Alpha Mart.', 'type' => 'success']],
+        ],
+        'errors' => ['email' => ['Alpha Mart already has an Owner.']],
+        'shown' => '',
+    ]);
 });

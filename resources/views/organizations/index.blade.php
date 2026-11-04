@@ -185,16 +185,34 @@
             </form>
         </x-modal>
 
-        {{-- Invite an owner: offered only for an organization that has none --}}
+        {{-- Invite an owner: offered only for an organization that has none. A super admin may also copy the invitation's link
+             to send it another way (OrganizationController::copyOwnerInvitationLink): the dialog then shows the link. --}}
         <x-modal name="invite-organization-owner" :show="false" maxWidth="md" focusable>
             <form @submit.prevent="sendOwnerInvite($event)" novalidate class="p-6 space-y-4" dusk="invite-owner-form">
                 <div>
                     <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">Give <span x-text="ownerOrganization?.name"></span> an owner</h2>
-                    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                    <p class="mt-2 text-sm text-gray-600 dark:text-gray-400" x-show="!ownerLink">
                         Someone already in the organization becomes its Owner at once. Anyone else gets an email invitation.
                     </p>
                 </div>
-                <div>
+                @can('super-admin-tier')
+                    <div x-show="ownerLink" x-cloak class="space-y-2" dusk="invite-owner-link-panel">
+                        <label class="form-label" for="invite-owner-link">Invitation link</label>
+                        <div class="flex gap-2">
+                            <input id="invite-owner-link" type="text" readonly maxlength="2048" class="form-input min-w-0 flex-1"
+                                x-bind:value="ownerLink" @focus="$event.target.select()" dusk="invite-owner-link"
+                                aria-describedby="invite-owner-link-note">
+                            <button type="button" class="btn-secondary shrink-0" @click="copyOwnerLinkAgain()" dusk="invite-owner-copy-again">
+                                <x-icon name="copy" class="h-4 w-4" />
+                                <span x-text="ownerLinkCopied ? 'Copied' : 'Copy Link'">Copy Link</span>
+                            </button>
+                        </div>
+                        <p id="invite-owner-link-note" class="text-xs text-gray-500 dark:text-gray-400">
+                            Send it to <span class="break-all" x-text="ownerLinkEmail"></span>. Whoever opens it sets up the Owner's account and password. It works for 7 days, until it is used or a new link is made.
+                        </p>
+                    </div>
+                @endcan
+                <div x-show="!ownerLink">
                     <label class="form-label" for="invite-owner-email">Email <span class="text-red-600 dark:text-red-400" aria-hidden="true">*</span></label>
                     <div class="mt-1" x-bind:class="ownerErrors.email ? 'crud-field-error' : ''">
                         <x-text-input id="invite-owner-email" type="email" x-model="ownerEmail" dusk="invite-owner-email" maxlength="255" autocomplete="off" placeholder="owner@example.com"
@@ -205,7 +223,25 @@
                         <p id="invite-owner-email-error" class="form-error" role="alert" x-text="ownerErrors.email[0]"></p>
                     </template>
                 </div>
-                <x-crud.form-actions cancelAction="$dispatch('close-modal', 'invite-organization-owner')" savingVar="invitingOwner" saveLabel="Send" dusk="invite-owner-send" />
+                {{-- The shared Cancel and Save pair, with Copy Invitation Link between them for a super admin; Close once the
+                     link is shown. --}}
+                <div class="flex flex-wrap justify-end gap-3 mt-6">
+                    <button type="button" @click="$dispatch('close-modal', 'invite-organization-owner')" class="btn-secondary"
+                        x-show="!ownerLink">Cancel</button>
+                    @can('super-admin-tier')
+                        <button type="button" class="btn-secondary" x-show="!ownerLink" x-bind:disabled="invitingOwner"
+                            @click="copyOwnerInviteLink($event)" dusk="invite-owner-copy-link">
+                            <x-spinner x-show="copyingOwnerLink" x-cloak />
+                            Copy Invitation Link
+                        </button>
+                    @endcan
+                    <button type="submit" class="btn-primary" x-show="!ownerLink" x-bind:disabled="invitingOwner" dusk="invite-owner-send">
+                        <x-spinner x-show="invitingOwner && !copyingOwnerLink" x-cloak />
+                        Send
+                    </button>
+                    <button type="button" class="btn-primary" x-show="ownerLink" x-cloak
+                        @click="$dispatch('close-modal', 'invite-organization-owner')" dusk="invite-owner-close">Close</button>
+                </div>
             </form>
         </x-modal>
 

@@ -161,6 +161,25 @@ class OrganizationController extends Controller
      */
     public function inviteOwner(Request $request, Organization $organization): JsonResponse
     {
+        return $this->giveAnOwner($request, $organization, withTheLink: false);
+    }
+
+    /**
+     * Copy Invitation Link, beside Send in the Invite Owner dialog (owner, 2026-11-04 — a customer driving for eight hours
+     * could not open the email): Invite Owner exactly, its email included, and the link handed to the super admin as well,
+     * to be sent another way. A new link each time, which the email carries too, so the one sent before stops working and
+     * the email and the copy never disagree. Super admins alone (the route's super-admin-tier): whoever holds the link makes
+     * the Owner's account, so it is no link for a platform role that may only invite. The token is still kept as its hash
+     * alone: the link is shown in this answer and nowhere else.
+     */
+    public function copyOwnerInvitationLink(Request $request, Organization $organization): JsonResponse
+    {
+        return $this->giveAnOwner($request, $organization, withTheLink: true);
+    }
+
+    /** Invite Owner, with or without the link in the answer (inviteOwner, copyOwnerInvitationLink). */
+    private function giveAnOwner(Request $request, Organization $organization, bool $withTheLink): JsonResponse
+    {
         $validated = $request->validate(['email' => ['required', 'string', 'email', 'max:255']]);
         $email = Invitation::normalizeEmail($validated['email']);
         $ownerRole = Role::owner();
@@ -213,6 +232,22 @@ class OrganizationController extends Controller
         // The row as the transaction left it — never read again: an organization deleted the moment this committed takes the
         // invitation with it, and a fresh copy of nothing was a 500. sendLink() answers a link it cannot send with false.
         $sent = $invitation->sendLink($token);
+
+        if ($withTheLink) {
+            ActivityLog::record('organization.owner_link_copied', $organization, ($renewed ? "Sent the invitation to own {$organization->name} to {$email} again and copied its new link" : "Invited {$email} to own {$organization->name} and copied the invitation link")
+                .$this->replacedNote($replaced));
+
+            $message = ($sent
+                ? "The same link was emailed to {$email}."
+                : "The email to {$email} could not be sent, but the link works.")
+                .$this->noLongerWorks($replaced);
+
+            return response()->json([
+                'message' => $message,
+                'email_sent' => $sent,
+                'link' => route('invitations.show', $token),
+            ], $renewed ? 200 : 201);
+        }
 
         ActivityLog::record('organization.owner_invited', $organization, ($renewed ? "Sent the invitation to own {$organization->name} to {$email} again" : "Invited {$email} to own {$organization->name}")
             .$this->replacedNote($replaced));

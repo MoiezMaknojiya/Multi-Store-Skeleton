@@ -238,6 +238,9 @@ schema and the starter data directly.
     (`organization.owner_assigned`); the same address as an open invitation gets a fresh Owner link, even when it
     had expired; a different address — or a member made Owner — **replaces** the earlier owner invitations,
     so a mistyped email stops working.
+    **Copy Invitation Link** (super admins alone, owner 2026-11-04): Invite Owner exactly, the email included, and the new
+    link handed back to be copied and sent another way (a message); whoever opens it sets up the Owner's account, so no
+    platform role that may only invite gets it (`can:super-admin-tier`). Logged `organization.owner_link_copied`.
     A member whose role carries `organization-store` opens an organization from inside theirs (Settings → Organizations → Create organization) and
     becomes its Owner at once; nobody is invited.
 19. **Platform staff** (super admin only): invite an email with a platform role; accepting creates the

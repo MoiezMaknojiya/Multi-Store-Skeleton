@@ -233,6 +233,8 @@ Route::middleware(['auth', 'verified', 'organization.active', 'throttle:admin'])
         Route::delete('/{organization}', [OrganizationController::class, 'destroy'])->whereNumber('organization')->middleware('can:organization-destroy')->name('organizations.destroy');
         // An Owner for an organization that has none: a member of it is made Owner at once, anybody else is invited
         Route::post('/{organization}/owner-invitation', [OrganizationController::class, 'inviteOwner'])->whereNumber('organization')->middleware(['can:organization-store', 'throttle:invitations'])->name('organizations.owner-invitation');
+        // The same, with the link handed back to copy (Copy Invitation Link): whoever holds it makes the Owner, so super admins alone
+        Route::post('/{organization}/owner-invitation/link', [OrganizationController::class, 'copyOwnerInvitationLink'])->whereNumber('organization')->middleware(['can:organization-store', 'can:super-admin-tier', 'throttle:invitations'])->name('organizations.owner-invitation.link');
         // Billing beside Edit (docs/BILLING-SPEC.md §4): the summary with View Billing, the two switches with Change Billing
         Route::get('/{organization}/billing', [OrganizationBillingController::class, 'show'])->whereNumber('organization')->middleware('can:billing-view')->name('organizations.billing.show');
         Route::put('/{organization}/billing', [OrganizationBillingController::class, 'update'])->whereNumber('organization')->middleware('can:billing-update')->name('organizations.billing.update');

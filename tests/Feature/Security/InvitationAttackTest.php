@@ -4,7 +4,9 @@ use App\Models\Invitation;
 use App\Models\Organization;
 use App\Models\Role;
 use App\Models\User;
+use App\Notifications\InvitationNotification;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 
 /*
 |--------------------------------------------------------------------------
@@ -225,4 +227,27 @@ test('accepting on the dashboard twice makes one membership', function () {
     $this->post("/dashboard/invitations/{$invitation->id}/accept")->assertNotFound();
 
     expect(DB::table('organization_user')->where('user_id', $person->id)->where('organization_id', $this->organization->id)->count())->toBe(1);
+});
+
+test('the link to own an organization is handed to a super admin alone, and nothing is made for anybody else who asks', function () {
+    Notification::fake();
+    $orphan = Organization::factory()->create(['name' => 'Gamma Grill']);
+    $url = "/organizations/{$orphan->id}/owner-invitation/link";
+
+    // A platform role that may invite an Owner (Send works for it) — but whoever holds the link makes the Owner's account.
+    $inviter = createPlatformUser(['organization-view', 'organization-store']);
+    $this->actingAs($inviter)->postJson($url, ['email' => 'mine@example.com'])->assertForbidden();
+    $this->actingAs($inviter)->postJson("/organizations/{$orphan->id}/owner-invitation", ['email' => 'driver@example.com'])->assertCreated();
+
+    // A person of an organization whose role there carries Create Organizations, and a guest.
+    $insider = createOrganizationUser($this->organization, ['organization-view', 'organization-store']);
+    $this->actingAs($insider)->withSession(['current_organization_id' => $this->organization->id])
+        ->postJson($url, ['email' => 'mine@example.com'])->assertForbidden();
+    auth()->logout();
+    $this->postJson($url, ['email' => 'mine@example.com'])->assertUnauthorized();
+
+    // Only Send's invitation stands, its one email sent; no link was made for anybody.
+    expect(Invitation::forOrganization($orphan)->pluck('email')->all())->toBe(['driver@example.com'])
+        ->and(Invitation::where('email', 'mine@example.com')->exists())->toBeFalse();
+    Notification::assertSentOnDemandTimes(InvitationNotification::class, 1);
 });

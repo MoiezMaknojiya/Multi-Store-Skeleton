@@ -9,6 +9,16 @@ import { createCrudTable } from '../core/crud-table-base.js';
 import { formStillAsked, notSavedWords } from '../core/form-asked.js';
 import { validate, required, maxLen, digitsOnly, emailFormat, requiredMessage, wholeNumber, minNumber, maxNumber, unreadableFields, showFirstError } from '../core/validate.js';
 import { bytesInWords } from '../core/media-file.js';
+import { isARepeatPress } from '../core/click-beside.js';
+import { copyText } from '../core/copy-text.js';
+
+/* An element x-show has just been told to show: Alpine shows it on the next frame, and until then it can take neither the
+ * focus nor a selection. Waited for a little at most. */
+async function onScreen(element) {
+    for (let wait = 0; wait < 20 && element && element.getClientRects().length === 0; wait++) {
+        await new Promise((done) => setTimeout(done, 15));
+    }
+}
 
 export function registerOrganizationsTable(Alpine) {
     Alpine.data('organizationsTable', (config = {}) => createCrudTable({
@@ -27,6 +37,13 @@ export function registerOrganizationsTable(Alpine) {
             ownerEmail: '',
             ownerErrors: {},
             invitingOwner: false,
+            // Copy Invitation Link (a super admin's): the link shown in the dialog once made, for whom, and whether it
+            // was just copied (the button says so for a moment).
+            copyingOwnerLink: false,
+            ownerLink: '',
+            ownerLinkEmail: '',
+            ownerLinkCopied: false,
+            ownerLinkCopiedTimer: null,
 
             /* Network advertising — the platform owner's bulk switch. The page renders it for a super admin
              * only (@if), and the route says no to everybody else regardless. */
@@ -249,7 +266,82 @@ export function registerOrganizationsTable(Alpine) {
                 this.ownerOrganization = organization;
                 this.ownerEmail = '';
                 this.ownerErrors = {};
+                this.ownerLink = '';
+                this.ownerLinkEmail = '';
+                this.ownerLinkCopied = false;
                 this.$dispatch('open-modal', 'invite-organization-owner');
+            },
+
+            /* Copy Invitation Link (OrganizationController::copyOwnerInvitationLink): the invitation made and emailed as
+             * Send makes it, and its link copied, to be sent another way. The dialog then shows the link, in case the
+             * clipboard refused. A new link each press, so a double click makes one. */
+            async copyOwnerInviteLink(event) {
+                if (isARepeatPress(event) || !this.ownerOrganization || this.invitingOwner) return;
+
+                const errors = validate({ email: this.ownerEmail }, { email: [required('Email'), emailFormat('Email'), maxLen('Email', 255)] });
+                if (Object.keys(errors).length) {
+                    this.ownerErrors = errors;
+                    return;
+                }
+
+                this.invitingOwner = true;
+                this.copyingOwnerLink = true;
+                this.ownerErrors = {};
+                const asked = formStillAsked(() => this.formTicket, event?.target?.closest('form'));
+                const email = this.ownerEmail;
+                try {
+                    const { data } = await axios.post('/organizations/' + this.ownerOrganization.id + '/owner-invitation/link', { email });
+                    this.refreshInPlace();  // not awaited: the button is free again the moment the request is over
+
+                    if (!data.link) {
+                        // A member of the organization made its Owner at once: there is no invitation, and no link.
+                        if (asked()) this.$dispatch('close-modal', 'invite-organization-owner');
+                        window.toast(data.message, 'success');
+                        return;
+                    }
+                    if (!asked()) {
+                        // Shut meanwhile: the link is not shown, and the email stands.
+                        window.toast(data.email_sent === false ? data.message : `The invitation was emailed to ${email}.`, data.email_sent === false ? 'error' : 'success');
+                        return;
+                    }
+
+                    this.ownerLink = data.link;
+                    this.ownerLinkEmail = email;
+                    await onScreen(document.getElementById('invite-owner-link'));
+                    const copied = await this.copyOwnerLink();
+                    window.toast((copied ? 'Invitation link copied. ' : 'Copy the invitation link from the dialog. ') + data.message, 'success');
+                    // The keyboard stays with the link: on Copy Link once copied, else on the selected link itself.
+                    if (copied) document.querySelector('[dusk="invite-owner-copy-again"]')?.focus();
+                } catch (error) {
+                    const refused = error.response?.status === 422 ? (error.response.data?.errors ?? null) : null;
+                    if (refused && asked()) {
+                        this.ownerErrors = refused;
+                    } else {
+                        window.toast(notSavedWords(refused, `The invitation link for ${email}`, 'made') ?? error.response?.data?.message ?? 'Could not make the invitation link.');
+                    }
+                } finally {
+                    this.invitingOwner = false;
+                    this.copyingOwnerLink = false;
+                }
+            },
+
+            /* The link shown, copied again (Copy Link beside it). */
+            async copyOwnerLinkAgain() {
+                if (!this.ownerLink) return;
+
+                const copied = await this.copyOwnerLink();
+                window.toast(copied ? 'Invitation link copied.' : 'The browser did not copy it: the link is selected, copy it from there.', copied ? 'success' : 'error');
+            },
+
+            /* The link onto the clipboard; the button says Copied for two seconds. */
+            async copyOwnerLink() {
+                const copied = await copyText(this.ownerLink, document.getElementById('invite-owner-link'));
+
+                clearTimeout(this.ownerLinkCopiedTimer);
+                this.ownerLinkCopied = copied;
+                if (copied) this.ownerLinkCopiedTimer = setTimeout(() => { this.ownerLinkCopied = false; }, 2000);
+
+                return copied;
             },
 
             async sendOwnerInvite(event = null) {
