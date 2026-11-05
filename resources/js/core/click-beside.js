@@ -68,6 +68,14 @@ export function registerStrayClickGuard() {
     // The first press says whether it opened the picker (read once the browser has done it); the rest of the multi-click
     // opens one it shut again. A first press that opened nothing — a day picked out of a date's text — leaves the rest alone.
     let openedByTheFirstPress = null;
+    // Chrome shuts the list on the rest of the multi-click before the page hears it, and from Chrome 156 its select's own
+    // handling of that press leaves the list unable to open again until a press elsewhere: showPicker() then opened
+    // nothing, or a list Chrome shut at once (2026-11-05, MediaAllLibrariesFlowTest). So that press is the page's alone.
+    const holdThePress = (event) => {
+        const picker = event.target.closest?.(PICKERS);
+
+        if (picker && event.detail > 1 && picker === openedByTheFirstPress) event.preventDefault();
+    };
     const keepThePickerOpen = (event) => {
         const picker = event.target.closest?.(PICKERS);
 
@@ -89,6 +97,7 @@ export function registerStrayClickGuard() {
         }
     };
 
+    document.addEventListener('mousedown', holdThePress, true);
     document.addEventListener('click', dropTheRest, true);
     document.addEventListener('click', turnOnce, true);
     document.addEventListener('click', keepThePickerOpen, true);
