@@ -25,22 +25,47 @@ const MAX_BYTES = 256000 * 1024;
 export const MAX_VIDEO_SECONDS = 300;
 
 
+/* The biggest a video stays on its way up: its long side, its short side (a portrait one 1080 × 1920). Bigger, it is made
+ * 1080p in the browser first (video-to-1080p.js). */
+export const LONG_EDGE = 1920;
+export const SHORT_EDGE = 1080;
+
 const POSTER_MAX_EDGE = 480;
 const METADATA_TIMEOUT_MS = 8000;
 
 /** Why this file cannot be uploaded, or null if it can. */
 export function fileError(file) {
-    const extension = (file.name.split('.').pop() ?? '').toLowerCase();
+    const wrongKind = formatError(file);
 
-    if (! ALLOWED_EXTENSIONS.includes(extension)) {
-        return 'Only images (JPG, PNG, GIF, WEBP) and videos (MP4, WEBM) can be uploaded.';
-    }
+    if (wrongKind) return wrongKind;
 
     if (file.size > MAX_BYTES) {
         return 'The file may not be larger than 250 MB.';
     }
 
     return null;
+}
+
+/** Whether a measured video is bigger than 1080p, and an MP4 (which video-to-1080p.js reads). */
+export function needsShrinking(file, meta) {
+    const width = Number(meta?.width) || 0;
+    const height = Number(meta?.height) || 0;
+    const mp4 = /\.mp4$/i.test(file.name) || file.type === 'video/mp4';
+
+    return mp4 && width > 0 && height > 0 && (Math.max(width, height) > LONG_EDGE || Math.min(width, height) > SHORT_EDGE);
+}
+
+/** Whether this browser can make a video 1080p at all (WebCodecs, Chrome 94, Safari 16.4, Firefox 130). */
+export function canShrink() {
+    return typeof window.VideoDecoder === 'function' && typeof window.VideoEncoder === 'function'
+        && typeof window.VideoFrame === 'function' && typeof window.OffscreenCanvas === 'function';
+}
+
+/** Why a file's kind cannot be uploaded, or null. */
+export function formatError(file) {
+    const extension = (file.name.split('.').pop() ?? '').toLowerCase();
+
+    return ALLOWED_EXTENSIONS.includes(extension) ? null : 'Only images (JPG, PNG, GIF, WEBP) and videos (MP4, WEBM) can be uploaded.';
 }
 
 /** 432 as "7:12", 3600 as "1:00:00" — as App\Rules\VideoLength::clock says it. */

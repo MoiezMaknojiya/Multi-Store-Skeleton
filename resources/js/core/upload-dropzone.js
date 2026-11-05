@@ -24,7 +24,10 @@
  * upload is gone — so its row is refused, with no Try Again that could only fail.
  */
 import axios from 'axios';
-import { bytesInWords, clock, fileError, MAX_VIDEO_SECONDS, readVideoMeta, storageError, videoLengthError } from './media-file.js';
+import {
+    bytesInWords, canShrink, clock, fileError, formatError, LONG_EDGE, MAX_VIDEO_SECONDS, needsShrinking, readVideoMeta, SHORT_EDGE,
+    storageError, videoLengthError,
+} from './media-file.js';
 
 /* Mirrors App\Services\ChunkedUploads::CHUNK_BYTES. */
 const CHUNK_BYTES = 5 * 1024 * 1024;
@@ -55,7 +58,7 @@ const ADDED_STAYS_MS = 8000;
 const FADE_MS = 300;
 
 /* Rows still doing something: the page asks before it is left while any is. */
-const BUSY = ['checking', 'waiting', 'uploading', 'paused', 'adding'];
+const BUSY = ['checking', 'converting', 'waiting', 'uploading', 'paused', 'adding'];
 
 /* Rows whose bytes are not counted in the organization's storage yet. */
 const PENDING = [...BUSY, 'ready'];
@@ -126,6 +129,8 @@ export function registerUploadDropzone(Alpine) {
         const leaving = new Set();
         // `form`: what hears the page post its form, for an upload the server gave up (noteGivenUp).
         let listening = null;
+        // What stops a video being made 1080p, by its row's key (shrink).
+        const stoppers = new Map();
 
         return {
             purpose: config.purpose,
@@ -219,7 +224,8 @@ export function registerUploadDropzone(Alpine) {
             },
 
             /** Check what can be checked before a byte is sent — then send it, to the place it was dropped for. */
-            async accept(file, place) {
+            async accept(chosen, place) {
+                let file = chosen;
                 this.uploads.push({
                     place,
                     key: `upload-${++rows}`,
@@ -245,15 +251,19 @@ export function registerUploadDropzone(Alpine) {
                     stopping: false,
                     // {from, to} in bytes once the server has made the picture lighter.
                     lighter: null,
+                    // What happened to a video bigger than 1080p on the way (shrink).
+                    notice: '',
+                    convertStartedAt: 0,
                 });
 
                 // The reactive row, as Alpine keeps it.
                 const item = this.uploads[this.uploads.length - 1];
                 this.announceBusy();
 
+                // A video's size and room are asked once it is what goes up: one bigger than 1080p is made smaller first.
                 const refused = this.kind === 'apk'
                     ? apkError(file, this.maxBytes)
-                    : (fileError(file) ?? storageError(file, this.roomLeft(item)));
+                    : (item.isVideo ? formatError(file) : (fileError(file) ?? storageError(file, this.roomLeft(item))));
 
                 if (refused) return this.refuse(item, refused);
 
@@ -268,6 +278,15 @@ export function registerUploadDropzone(Alpine) {
                     const tooLong = videoLengthError(item.meta, this.maxVideoSeconds, this.videoNoun);
 
                     if (tooLong) return this.refuse(item, tooLong);
+
+                    if (this.kind === 'media' && needsShrinking(file, item.meta)) {
+                        file = await this.shrink(item, file);
+                        if (! this.uploads.includes(item)) return;
+                    }
+
+                    const late = fileError(file) ?? storageError(file, this.roomLeft(item));
+
+                    if (late) return this.refuse(item, late);
                 }
 
                 // Taken away while it was being measured.
@@ -294,6 +313,66 @@ export function registerUploadDropzone(Alpine) {
                         ? 'This file is on its way already.'
                         : 'This file could not be sent. Try again.');
                 }
+            },
+
+            /**
+             * A video bigger than 1080p made 1080p with no sound here before it goes up (video-to-1080p.js, owner 2026-11-05):
+             * the file as it came where the browser cannot, or anything goes wrong — the server takes that as before.
+             */
+            async shrink(item, file) {
+                if (! canShrink()) {
+                    item.notice = 'Uploaded as it came: this browser cannot make it 1080p.';
+
+                    return file;
+                }
+
+                const stop = new AbortController();
+                stoppers.set(item.key, stop);
+                item.status = 'converting';
+                item.percent = 0;
+                item.eta = null;
+                item.convertStartedAt = Date.now();
+                this.say(`${item.name}: making it 1080p before it is uploaded.`);
+
+                try {
+                    const { shrinkVideo } = await import('./video-to-1080p.js');
+                    const smaller = await shrinkVideo(file, {
+                        longEdge: LONG_EDGE, shortEdge: SHORT_EDGE, signal: stop.signal, onProgress: (share) => this.onConverting(item, share),
+                    });
+
+                    if (! this.uploads.includes(item)) return file;
+
+                    // Measured again: its new shape and a poster from it, sent with it as any video's are.
+                    const meta = await readVideoMeta(smaller);
+                    item.notice = `Made 1080p with no sound: ${bytesInWords(file.size)} to ${bytesInWords(smaller.size)}.`;
+                    item.size = smaller.size;
+                    item.name = smaller.name;
+                    item.meta = meta;
+                    item.preview = meta.poster ?? item.preview;
+                    item.duration = meta.duration_seconds ?? item.duration;
+                    this.say(`${item.name}: ${item.notice}`);
+
+                    return smaller;
+                } catch {
+                    if (stop.signal.aborted || ! this.uploads.includes(item)) return file;
+                    item.notice = 'Uploaded as it came: it could not be made 1080p here.';
+
+                    return file;
+                } finally {
+                    stoppers.delete(item.key);
+                    if (this.uploads.includes(item)) {
+                        item.status = 'checking';
+                        item.percent = 0;
+                        item.eta = null;
+                    }
+                }
+            },
+
+            /** How far the video is made 1080p, and how long that has left at the pace so far. */
+            onConverting(item, share) {
+                item.percent = Math.min(100, Math.round(share * 100));
+                const seconds = (Date.now() - item.convertStartedAt) / 1000;
+                item.eta = share > 0.05 ? (seconds * (1 - share)) / share : null;
             },
 
             /** The storage of the row's place as it will be once the rows before this one, going to the same place, are in. */
@@ -596,12 +675,15 @@ export function registerUploadDropzone(Alpine) {
             /** × on a file still going up asks first — one slip beside Pause would give a long upload up; a finished or
              *  refused row goes at once. */
             askToStop(item) {
-                if (['waiting', 'uploading', 'paused'].includes(item.status)) item.stopping = true;
+                if (['converting', 'waiting', 'uploading', 'paused'].includes(item.status)) item.stopping = true;
                 else this.remove(item);
             },
 
             /** Cancel a file on its way, or take a finished or refused one off the list. */
             remove(item) {
+                // One being made 1080p stops there.
+                stoppers.get(item.key)?.abort();
+
                 if (item.fileId && uppy) {
                     // Uppy gives the upload up on the server too (tus termination).
                     uppy.removeFile(item.fileId);
@@ -674,6 +756,7 @@ export function registerUploadDropzone(Alpine) {
 
                 switch (item.status) {
                     case 'checking': return 'Checking…';
+                    case 'converting': return [`Making it 1080p ${item.percent}%`, this.leftText(item.eta)].filter(Boolean).join(' · ');
                     case 'waiting': return 'Waiting…';
                     case 'uploading': return [`Uploading ${item.percent}%`, this.speedText(item)].filter(Boolean).join(' · ');
                     case 'paused': return `Paused at ${item.percent}%`;
@@ -694,14 +777,18 @@ export function registerUploadDropzone(Alpine) {
             speedText(item) {
                 if (! item.speed) return '';
 
-                const eta = item.eta;
-                const left = eta === null ? '' : eta < 60 ? `${Math.max(1, Math.round(eta))} s left` : `${Math.round(eta / 60)} min left`;
+                return [`${bytesInWords(item.speed)}/s`, this.leftText(item.eta)].filter(Boolean).join(' · ');
+            },
 
-                return [`${bytesInWords(item.speed)}/s`, left].filter(Boolean).join(' · ');
+            /** "12 s left", "3 min left" */
+            leftText(eta) {
+                if (eta === null || eta === undefined) return '';
+
+                return eta < 60 ? `${Math.max(1, Math.round(eta))} s left` : `${Math.round(eta / 60)} min left`;
             },
 
             showsBar(item) {
-                return ['waiting', 'uploading', 'paused', 'adding'].includes(item.status);
+                return ['converting', 'waiting', 'uploading', 'paused', 'adding'].includes(item.status);
             },
 
             canPause(item) {

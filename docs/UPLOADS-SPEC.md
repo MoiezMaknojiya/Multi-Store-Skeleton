@@ -254,3 +254,38 @@ ki? break kar k dekha?"):
   not come in a minute and a half (`PICTURE_TURN_SECONDS`, so the wait and the work stay inside the two minutes
   `TakesAFinishedUpload` holds an upload) is stored as it came, the file its own preview; a video never waits. The 48 MP
   photograph held upright, stored as it came before (it did not fit when turned first), now comes out 2880 × 3840.
+
+## 8. A video bigger than 1080p made 1080p on its way up (owner, 2026-11-05)
+
+> "agar 4K ki video aye toh usko optimize kar k 1080p kardeve" — and "awaaz chiya hi nahi hata do. no sound bro."
+
+Most televisions decode one 4K video at a time (a second one froze the owner's FB 24 Deli screens, player.js "One
+decoder at a time") and show 1080p anyway. The server has no ffmpeg and one processor, so the uploading computer does
+the work, in the shared drop box, at every door but the TV app's (`upload-dropzone.js`, `shrink`):
+
+| What came | What goes up |
+| --- | --- |
+| An MP4 whose picture, as it is shown, is over 1920 on its long side or 1080 on its short one (`needsShrinking`, `LONG_EDGE`/`SHORT_EDGE` in `media-file.js`) | the same video within 1920 × 1080, upright, Baseline H.264, its index first, one video track and **no sound** |
+| A phone's 4K held upright (coded on its side, its track saying "shown turned 90°") | 1080 × 1920, turned in the pixels themselves: no turn left in the file for a television to get wrong |
+| An MP4 of 1080p or less, a WebM, a picture | the file as it came |
+| A browser without WebCodecs (`canShrink`), or anything that goes wrong on the way | the file as it came — the server takes it as before |
+
+`resources/js/core/video-to-1080p.js` is a chunk of its own, loaded only when such a video is dropped: the file is read
+with mp4box.js in 4 MB pieces (a five-minute file is never whole in memory before it is decoded), decoded with
+`VideoDecoder`, drawn on an `OffscreenCanvas` at its new size, encoded with `VideoEncoder` (hardware first) at half the
+old bitrate — at least 2.5 and at most 8 Mbit/s, never more than the old one's — with a key frame every two seconds, and
+written as a plain MP4 by its own few lines (mp4box.js writes a fragment per frame). It runs after the length check, so
+a video too long is refused before any work; once it is done the new file is measured again (its shape and poster) and
+every rule — the format, the size, the organization's wall, the length the server reads from the bytes — is asked of
+what goes up.
+
+The row says "Making it 1080p 40% · 12 s left" over its bar (the bar's name "Making … 1080p"), × asks "Stop uploading
+…?" as for a file going up and lets the decoder and the encoder go at once, and when it is done the row says "Made
+1080p with no sound: 25 MB to 6 MB." — or "Uploaded as it came: this browser cannot make it 1080p." / "… it could not be
+made 1080p here." Each is said to a screen reader too (the box's live region).
+
+`VideoMadeFullHdTest` (Dusk) holds it with two real 4K fixtures that carry an AAC sound track
+(`tests/Browser/fixtures/video/landscape-4k-with-sound.mp4`, `phone-4k-held-upright.mp4`): the stored file is 1920 ×
+1080 with one video track, the phone's is 1080 × 1920 with red on the right where its turn put it, a browser without
+`VideoEncoder` uploads the 4K as it came, and Stop part-way sends nothing and decodes no further frame. The three FB 24
+Deli videos made 1080p this way played on the Philips TV (WebView 79) and the Fire Stick with no gap past 11 s.

@@ -3,7 +3,7 @@
 <x-document-layout title="Privacy Policy">
     <h1 class="text-3xl font-bold text-gray-800 dark:text-white">Privacy Policy</h1>
     <p class="mt-2 text-sm text-gray-500 dark:text-gray-400" dusk="privacy-updated">
-        Last updated <time datetime="2026-10-21">October 21, 2026</time>
+        Last updated <time datetime="2026-11-05">November 5, 2026</time>
     </p>
 
     <p class="mt-6 leading-relaxed text-gray-700 dark:text-gray-300">
@@ -39,9 +39,10 @@
             <li><strong>Your organization:</strong> its name and its address (street, suite, city, state and ZIP code).</li>
             <li><strong>What you upload or make:</strong> pictures, videos, the ads you design, playlists, schedules and
                 channels. Files reach your screens through long, random web addresses, and anyone who has such an address
-                can open the file, so upload only what you are happy to show on a screen. A picture keeps the details its
-                camera wrote into the file, such as when and, on some phones, where it was taken, unless it was made
-                smaller or turned when it was added; remove them before uploading if that matters to you.</li>
+                can open the file, so upload only what you are happy to show on a screen. A picture or a video keeps the
+                details its camera wrote into the file, such as when and, on some phones, where it was taken, unless it
+                was made smaller or turned when it was added; remove them before uploading if that matters to you. A
+                video bigger than 1080p is made 1080p by your browser before it is uploaded, and without its sound.</li>
             <li><strong>The people you invite:</strong> the email address you invite and the role you give them.</li>
             <li><strong>What changes in your organization:</strong> an activity log of what was done (for example a file
                 deleted or a person invited), with the name and email address of the person who did it.</li>

@@ -108,9 +108,13 @@
                     <p class="truncate text-sm font-medium text-gray-800 dark:text-gray-100" x-text="item.name" :title="item.name"
                        dusk="{{ $dusk }}-upload-name"></p>
                     <p class="text-xs text-gray-500 dark:text-gray-400" x-text="details(item)"></p>
+                    {{-- A video bigger than 1080p: made 1080p here first, or why it went as it came (upload-dropzone.js, shrink). --}}
+                    <p x-show="item.notice" x-cloak class="text-xs text-gray-500 dark:text-gray-400" x-text="item.notice"
+                       dusk="{{ $dusk }}-upload-notice"></p>
 
                     <div x-show="showsBar(item)" class="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
-                         role="progressbar" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="item.percent" :aria-label="`Uploading ${item.name}`">
+                         role="progressbar" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="item.percent"
+                         :aria-label="item.status === 'converting' ? `Making ${item.name} 1080p` : `Uploading ${item.name}`">
                         <div class="h-full rounded-full transition-[width] duration-300"
                              :class="item.status === 'paused' ? 'bg-gray-400 dark:bg-gray-500' : 'bg-blue-600 dark:bg-blue-500'"
                              :style="`width: ${Math.max(item.percent, 2)}%`"></div>
