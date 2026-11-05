@@ -974,3 +974,59 @@ until it reloads, fades only when told `fade`, so every screen fades from its ne
 **Tests.** `EveryScreenFadesTest` (Pest): every television is told to fade, no screen keeps a Transition, the dialog
 offers none, a transition posted by hand changes nothing, and the migration goes both ways. `EverySwitchIsASwapTest` and
 `EverythingOnOnePlaylistTest` (Dusk) play every screen with the fade.
+
+### 12.19 One decoder at a time (2026-11-05)
+
+**What the owner saw.** "Ek screen per srif ek video dali thi, woo chalti thi phir kuch time bad black screen ati thi
+phir wapis chalne shuru ho jati thi."
+
+**The live record.**
+- FB 24 Deli Tv4 and Tv5 are ELC-Series Android 14 TVs (WebView 141). Tv5 plays one 4K video, Tv4 two.
+- From the moment each first loaded the player of 12.15 (live 2026-11-03 18:27 UTC), their page opened again about every
+  fifty seconds: a WebView renderer that fell, the app's `recreate()`. That is over 2,000 times a day.
+- On the 2 November code, which made a video ready ahead only on a turned Fire TV, they had played for a day without it.
+
+**Why.** A video made ready behind the one on screen takes a second decoder while the first still plays, and a set may
+have only one. For a 4K video most have only one.
+- Reproduced with the real file on the owner's Philips commercial TV (Android 9, WebView 79, Amlogic T963). The copy
+  made ready said "video decoder reinitialization failed".
+- At the end the next one failed too, because the video before still held the decoder. The last picture stood frozen
+  sixteen seconds, until Chrome let the idle player go, and so on round after round.
+
+**The fix (player.js, "One decoder at a time").**
+- **The same video again plays again in its own element** (`replay`): no copy, no second decoder.
+- **A video is set up beside another only when the set decodes both** (`mayMakeReadyBeside`, `oneAtATime`). Neither may
+  be bigger than full HD, by the manifest's new `width`/`height` or the video's own size, and the set must never have
+  shown otherwise.
+  - A set learns it from a video that plays only once the stage has let its decoders go (`passTheRoomTest`).
+  - It also learns it from its page falling while a second one was being set up (`signage.second_decoder`).
+  - It keeps it a week (`signage.one_decoder`).
+- **Otherwise the stage lets its decoders go at the switch** with its last pictures held as stills (`holdStill`, a page's
+  own videos too). One pixel is read back so the canvas draws while the video still has its picture: left for the next
+  paint, the still was black.
+- **A page made ready beside such a video** comes from the worker with its videos' files taken out (`&hold=1`). It gets
+  them once it is on (`giveBackPageVideos`): loaded behind, a 4K page video held the Fire TV Stick's page still for
+  twenty seconds.
+- **A video made at the switch** keeps what was on the glass until its first frame is shown (`whenItShows`,
+  `requestVideoFrameCallback`): after a break's 4K advert the stick went black for a third of a second.
+- **A break blanks a page** only once its first advert has faded in over it.
+
+**The worker (WebView 79).** A file it had not kept yet went to the server as the media element's own request, handed
+on, and that WebView sent it with no Range.
+- The whole file answering a slice from the middle (an MP4 whose index is at its end) was "data source error".
+- The address was then refused for about thirty seconds: a new video alone on a playlist was black that long.
+- The worker now asks for the slice itself (`network()`) and cuts a whole answer to it (`WorkerRangeTest`).
+
+**Seen on the TVs (QA app beside the real one, local throwaway database; storage/app/private/qa/2026-11-05-philips).**
+The rounds ran on the Philips and the AFTKA Fire TV Stick 4K Max: one 4K video, two, and every kind of item with 4K in
+the playlist, a channel, a break and a page's background.
+- No error, every video to its end, and no black frame in the Philips's recordings.
+- On the stick:
+  - Never two 4K decoders.
+  - The 1080p swaps as on 11-03: still before 17–54 ms, the next video moving in 28–69 ms.
+  - Portrait decoded as before.
+- Seen only in the stick's recordings, as on 11-03: green blocks on landscape `<video>` and an odd blank frame at a turned
+  video's end.
+
+**Tests.** `OneDecoderAtATimeTest` (Dusk, a one-decoder set played by a page script), `ManifestSizesTest`,
+`WorkerRangeTest` (the worker under Node); each was seen failing on the code before.

@@ -245,6 +245,8 @@ class DeviceController extends Controller
             'checksum' => $campaign->cacheKey(),
             'duration' => $campaign->play_seconds,
             'mime' => $campaign->mime_type,
+            'width' => $campaign->width,
+            'height' => $campaign->height,
         ];
     }
 
@@ -271,6 +273,10 @@ class DeviceController extends Controller
             'checksum' => $media->cacheKey(),
             'duration' => $duration,
             'mime' => $media->mime_type,
+            // The picture's size: a set never sets a video bigger than full HD up beside another, which most cannot
+            // decode at once (player.js, oneAtATime).
+            'width' => $media->width,
+            'height' => $media->height,
         ];
     }
 
@@ -300,6 +306,8 @@ class DeviceController extends Controller
                 'checksum' => $ad->cacheKey(),
                 'duration' => $ad->play_seconds,
                 'mime' => $ad->mime_type,
+                'width' => $ad->media?->width,
+                'height' => $ad->media?->height,
             ])->all(),
         ];
     }

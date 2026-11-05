@@ -64,7 +64,7 @@ test('a file item carries no dates of its own: when it plays is its line\'s, wor
     $item = manifestOf($this)['items'][0];
 
     expect($item)->not->toHaveKey('expires_at')
-        ->and(array_keys($item))->toBe(['id', 'type', 'url', 'checksum', 'duration', 'mime']);
+        ->and(array_keys($item))->toBe(['id', 'type', 'url', 'checksum', 'duration', 'mime', 'width', 'height']);
 });
 
 test('the holding picture travels alongside the items, so a set can fall back to it by itself', function () {

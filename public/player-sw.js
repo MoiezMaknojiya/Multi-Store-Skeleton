@@ -291,10 +291,11 @@
             return cache.match(request.url, { ignoreVary: true }).then(function (hit) {
                 if (hit) return sliced(hit, range);
 
-                return fetch(request).then(function (response) {
+                return network(request, range).then(function (response) {
                     if (response.status === 200) cache.put(request.url, response.clone()).catch(noop);
 
-                    return response;
+                    // A whole answer to a slice asked for is cut to that slice here, as the cache's would be.
+                    return sliced(response, range);
                 }, function (error) {
                     return cache.match(request.url, { ignoreSearch: true, ignoreVary: true }).then(function (older) {
                         if (!older) throw error;
@@ -304,6 +305,18 @@
                 });
             });
         });
+    }
+
+    /**
+     * A file the cache lacks, from the server. A slice is asked for with its Range written in: the media element's own
+     * request, handed on as it is, reached the server with no Range from an old WebView (79, the owner's Philips TV,
+     * 2026-11-05), and the whole file answering a slice from the middle — an index at the end of the file — was a "data
+     * source error", the address then refused for half a minute: a video alone on a playlist showed black that long.
+     */
+    function network(request, range) {
+        if (!range) return fetch(request);
+
+        return fetch(request.url, { headers: { Range: range }, credentials: 'omit' });
     }
 
     function sliced(response, range) {
@@ -322,10 +335,17 @@
             return Promise.resolve(blank(404));
         }
 
+        // Made ready beside a video that keeps the set's one decoder (player.js, holdsPageVideos): the page's own videos
+        // come without their files, which the player gives them once it is on screen — set up behind it, a 4K page
+        // video took the decoder the one on screen held.
+        var hold = url.searchParams.get('hold') === '1';
+
         return media(new Request(source.href)).then(function (response) {
             if (!response.ok) return blank(response.status);
 
             return response.text().then(function (html) {
+                if (hold) html = html.replace(/<video\b([^>]*?)\ssrc="/g, '<video$1 data-signage-src="');
+
                 return new Response(html, { status: 200, headers: PAGE_HEADERS });
             });
         }, function () {

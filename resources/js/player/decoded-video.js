@@ -9,7 +9,8 @@
  * To the player it is a <video>: `src`, `autoplay`, `play()` (a promise), `pause()`, `paused`, `readyState`, `duration`,
  * `currentTime`, and the events `loadeddata` (its first frame is drawn), `ended` (its last frame's time has passed) and
  * `error`. It loops only when told (`loop`: an Ad Builder page's own video, player.js decodePageVideos); otherwise the
- * player decides what comes next. It is silent, as every video the player shows.
+ * player decides what comes next. It is silent, as every video the player shows. Told to (`letGo()`), it lets its
+ * decoder go and keeps its last picture, for a set that decodes one video at a time (player.js, holdStill).
  * Paused before its first frame, it waits on that frame until it is played, as a <video> does: the player makes the
  * next video ready that way while the one before is still on screen (player.js, prepareNext).
  *
@@ -113,6 +114,19 @@ class DecodedVideo extends HTMLElement {
     get duration() { return this._duration; }
 
     get currentTime() { return this._now(); }
+
+    /** Whether it has let go of its decoder: failed, taken off the page, or told to (letGo). */
+    get released() { return this._torn || this._failed; }
+
+    /**
+     * Its decoder, its reads and its frames let go, its last picture kept on the canvas: another video may have the
+     * set's one decoder now, with this one's picture on the glass until that one comes on (player.js, holdStill).
+     */
+    letGo() {
+        this.pause();
+        this._torn = true;
+        this._release();
+    }
 
     play() {
         this._wantsToPlay = true;

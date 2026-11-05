@@ -232,11 +232,11 @@ class NetworkAdBreakTest extends DuskTestCase
                 'return [...document.querySelectorAll("video")].filter((v) => !v.paused).length;'
             )[0]);
 
-            // -- And after: the clip again, from its start, in an element of its own --
-            $tv->script("document.querySelector('{$onScreen}').dataset.before = 'yes';");
+            // -- And after: the clip again, from its start. The same element plays it again (player.js, replay): a copy
+            // beside it took a second decoder, which a 4K video on the owner's FB 24 Deli TVs did not have (2026-11-05). --
             $tv->waitUsing(30, 200, fn () => $tv->script('return document.getElementById("layer-ad").hidden;')[0]);
             $tv->waitUsing(10, 200, fn () => $tv->script(
-                "const v = document.querySelector('{$onScreen}'); return !!v && v.dataset.before !== 'yes' && v.paused === false;"
+                "const v = document.querySelector('{$onScreen}'); return !!v && v.paused === false && v.ended === false && v.currentTime < 3;"
             )[0], 'the next item did not come on after the break');
             $this->assertLessThan(3, (float) $tv->script("return document.querySelector('{$onScreen}').currentTime;")[0]);
 

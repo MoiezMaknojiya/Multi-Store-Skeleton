@@ -51,6 +51,14 @@ const PREPARE_AHEAD_MS = 3500;      // how long before the item on screen ends t
 const AD_LEAVES_MS = 5000;          // the most a break's last advert stays up for the content after it to be ready
 const FADE_MS = 500;                // how long the next item takes to fade in over the one before (every screen fades)
 const PAGE_VIDEO_WAIT_MS = 5000;    // the most a page made ready waits for the first frames of the videos decoded for it
+// One decoder at a time (oneAtATime): a video bigger than full HD — a 4K one — is never set up beside another, which most
+// sets cannot decode at once; nor is any video on a set that showed it cannot, remembered for a week.
+const BIG_VIDEO_PIXELS = 1920 * 1080 * 1.5;
+const ONE_DECODER_KEY = 'signage.one_decoder';    // when this set last showed it decodes one video at a time
+const TRYING_KEY = 'signage.second_decoder';      // when a second video was last set up beside one on the stage
+const ONE_DECODER_MS = 7 * 24 * 3600 * 1000;
+const FELL_WITHIN_MS = 30000;                     // a page back this soon after TRYING_KEY: it fell setting that one up
+const SHOWS_WITHIN_MS = 700;                      // the most a video set up at the switch is waited for to show (whenItShows)
 // An Ad Builder page the player opens is told when it is on screen (startPage), and starts its animations then: one made
 // ready behind the item before would otherwise have played its entrance where nobody saw it. The frame's name says so.
 const HELD_PAGE_NAME = 'signage-held';
@@ -190,7 +198,14 @@ const state = {
     // whether the decoder's chunk has been loaded on this set.
     decodeTurnedVideo: false,
     decoderReady: false,
+
+    // Whether this set decodes one video at a time (oneDecoderRemembered), and whether the next video is set up with the
+    // stage's decoders let go first, to see whether it plays then (makeRoomFor).
+    oneDecoder: false,
+    roomTest: false,
 };
+
+state.oneDecoder = oneDecoderRemembered();
 
 /** How long past its own end a break waits for the item on screen before it interrupts it after all: a
  *  video whose length reads wrong, or that stalls without ending, must not keep a brand off the wall. */
@@ -831,6 +846,11 @@ function buildElement(item) {
 
     // Which file it is: render() takes something that is no longer on the list off the glass by it.
     node.dataset.item = assetUrl(item);
+    if (item.type === 'video') {
+        node.signagePixels = itemPixels(item);
+        // A second video set up beside one on the stage: should the page fall now, the set decodes one at a time.
+        if (decodersOnStage(node).length) markTrying(node);
+    }
     // Asked at once, so none of the events it waits for is missed, however late the element is put up.
     readiness(node, item);
 
@@ -873,6 +893,7 @@ function readiness(node, item) {
                 if (!node.getAttribute('src')) return;
 
                 node.removeEventListener('load', loaded);
+                watchPageVideos(node);
                 decodePageVideos(node).then(() => resolve(true));
             };
 
@@ -925,11 +946,14 @@ function buildNode(item) {
         frame.setAttribute('scrolling', 'no');
         frame.setAttribute('sandbox', kept ? 'allow-scripts allow-same-origin' : 'allow-scripts');
 
+        // Beside a video that keeps the set's one decoder its own videos come without their files (holdsPageVideos).
+        const hold = kept && holdsPageVideos();
+
         fetch(url)
             .then((response) => {
                 if (!response.ok) throw new Error('page ' + response.status);
 
-                frame.src = kept ? PAGE_PATH + '?src=' + encodeURIComponent(url) : url;
+                frame.src = kept ? PAGE_PATH + '?src=' + encodeURIComponent(url) + (hold ? '&hold=1' : '') : url;
             })
             .catch(() => frame.dispatchEvent(new Event('error')));
 
@@ -1050,7 +1074,8 @@ function decodePageVideos(frame) {
         swaps.push({ decoded, video, src });
     });
 
-    frame.signageVideos = swaps;
+    // Added to: the videos a page was given back once the stage let its decoders go are decoded then (giveBackPageVideos).
+    frame.signageVideos = (frame.signageVideos || []).concat(swaps);
     if (swaps.length === 0) return Promise.resolve();
 
     const firstFrames = swaps.map((swap) => new Promise((resolve) => {
@@ -1106,10 +1131,22 @@ function playCurrent() {
     finishFade();
 
     const item = state.items[state.index % state.items.length];
+
+    // The same video again — a playlist of one, the same file twice running — plays again in its own element: a second
+    // copy beside it took a second decoder, which a set with one cannot give (a 4K video alone on the owner's FB 24 Deli
+    // TVs: its last picture frozen, then black, every fifty seconds, 2026-11-05).
+    const again = sameVideoOnScreen(item);
+    if (again) {
+        replay(again, item);
+
+        return;
+    }
+
     const target = state.front === 'a' ? 'b' : 'a';
     const incoming = layer(target);
     const prepared = state.prepared;
     let node;
+    let madeAtTheSwitch = false;
 
     // The next item made ready behind this one (prepare): it comes on the moment it is asked for. Anything else made
     // ready — the playlist changed, a channel's next pass took another ad — goes.
@@ -1120,7 +1157,10 @@ function playCurrent() {
         node = prepared.node;
     } else {
         clearPrepared();
+        madeAtTheSwitch = true;
+        const testing = makeRoomFor(item);
         node = buildElement(item);
+        if (testing) passTheRoomTest(node);
         putBehind(incoming, node);
     }
     state.current = node;
@@ -1136,6 +1176,13 @@ function playCurrent() {
         // black screen until the next item.
         if (!node.isConnected) return;
         finishFade();
+
+        // A page whose own videos waited for the stage's decoders (watchPageVideos): the stage lets them go, its last
+        // pictures held, and the page has them.
+        if (node.signageHeld && node.signageHeld.length) {
+            decodersOnStage(node).forEach(holdStill);
+            giveBackPageVideos(node);
+        }
 
         const outgoing = layer(state.front);
         const previous = outgoing.hidden ? null : outgoing.firstElementChild;
@@ -1155,17 +1202,35 @@ function playCurrent() {
         incoming.hidden = false;
         state.front = target;
 
-        if (adUp) {
-            // A break's last advert stayed up until the item after it was ready: it goes in the same moment, or fades
-            // away over it, the swap underneath it unseen.
-            letGo();
-            letTheAdGo();
-        } else if (previous) {
-            // Over the item before, which goes once the new one is fully in (the first item has nothing to fade from).
-            incoming.style.zIndex = '1';
-            fade(incoming, 0, 1, letGo);
+        const present = () => {
+            if (adUp) {
+                // A break's last advert stayed up until the item after it was ready: it goes in the same moment, or
+                // fades away over it, the swap underneath it unseen.
+                letGo();
+                letTheAdGo();
+            } else if (previous) {
+                // Over the item before, which goes once the new one is fully in (the first item has nothing to fade from).
+                incoming.style.zIndex = '1';
+                fade(incoming, 0, 1, letGo);
+            } else {
+                letGo();
+            }
+        };
+
+        // A video set up at the switch can take a moment on screen to show its first picture (a 4K one after a break on
+        // the owner's Fire TV Stick: the advert went over black for a third of a second, 2026-11-05). What is on the glass
+        // stays until it does, never longer than SHOWS_WITHIN_MS.
+        if (madeAtTheSwitch && node.tagName === 'VIDEO' && (adUp || previous)) {
+            if (!adUp) {
+                incoming.style.zIndex = '1';
+                incoming.style.opacity = '0.01';
+            }
+            whenItShows(node).then(() => {
+                if (state.current === node && node.isConnected) present();
+                else incoming.style.opacity = '';
+            });
         } else {
-            letGo();
+            present();
         }
         if (node.tagName === 'IFRAME') startPage(node);
         startItemTimer(seconds * 1000);
@@ -1175,8 +1240,20 @@ function playCurrent() {
 
     // The same for a file that fails after it was replaced: skipping then would cut short
     // whatever is playing now, which is not the file that broke.
+    let failed = false;
     const broken = () => {
-        if (node.isConnected) skipBroken();
+        if (failed || !node.isConnected) return;
+        failed = true;
+
+        // A video that found no decoder beside the stage's is set up once more with them let go (makeRoomFor): a file
+        // that then plays says the set decodes one at a time; one that fails again is a file that will not play.
+        if (couldHaveNoDecoder(node)) {
+            state.roomTest = true;
+            playCurrent();
+
+            return;
+        }
+        skipBroken();
     };
 
     if (item.type === 'video') {
@@ -1283,12 +1360,16 @@ function prepare(item, inMs, stillWanted) {
     state.prepareTimer = setTimeout(() => {
         state.prepareTimer = null;
         if (state.prepared || !stillWanted()) return;
+        // A video that cannot have a decoder beside the stage's is made at the switch instead (playCurrent).
+        if (!mayMakeReadyBeside(item)) return;
         finishFade();
 
         const ready = buildElement(item);
         // Paused before its first frame: it waits on that frame, unplayed, until its turn.
         if (isVideoNode(ready)) ready.pause();
         ready.addEventListener('error', () => {
+            // No decoder beside the stage's: at the switch it is set up with theirs let go (makeRoomFor).
+            if (couldHaveNoDecoder(ready)) state.roomTest = true;
             if (state.prepared && state.prepared.node === ready) clearPrepared();
         }, { once: true });
         putBehind(layer(state.front === 'a' ? 'b' : 'a'), ready);
@@ -1305,6 +1386,311 @@ function clearPrepared() {
     state.prepared = null;
     const behind = prepared && prepared.node.parentElement;
     if (behind && behind !== layer(state.front)) empty(behind);
+}
+
+/* ── One decoder at a time ─────────────────────────────────────────────────
+ *
+ * A video made ready behind the one on screen (prepare) takes a second decoder while the first still plays, and a set
+ * may have only one — for a 4K video, most have one. The owner's FB 24 Deli TVs (an ELC Android TV, 2026-11-05) fell
+ * every fifty seconds, black, from the first day they ran that: a second 4K decoder took their WebView down; the
+ * Philips TV in the office said "video decoder reinitialization failed" and froze on the last picture for sixteen
+ * seconds. So: the same video again plays again in its own element (replay); a video is set up beside another only
+ * when the set can decode both — neither bigger than full HD, and the set never showed otherwise — else at the switch,
+ * the stage's decoders let go first, their last pictures held as stills (holdStill); and a page's own videos wait the
+ * same way (watchPageVideos). A set learns it from a video that plays only once the stage has let go (passTheRoomTest),
+ * or from its page falling while a second one was being set up (TRYING_KEY), and keeps it for a week.
+ */
+
+/** Whether this set decodes one video at a time: learned within the week, or its page just fell setting a second one up. */
+function oneDecoderRemembered() {
+    const tried = Number(store.get(TRYING_KEY)) || 0;
+    store.remove(TRYING_KEY);
+    if (tried && Date.now() - tried < FELL_WITHIN_MS) store.set(ONE_DECODER_KEY, String(Date.now()));
+
+    const at = Number(store.get(ONE_DECODER_KEY)) || 0;
+
+    return at > 0 && Date.now() - at < ONE_DECODER_MS;
+}
+
+function rememberOneDecoder() {
+    state.oneDecoder = true;
+    store.set(ONE_DECODER_KEY, String(Date.now()));
+}
+
+/** A second video being set up beside one on the stage, said until it has its first frame or has failed. */
+function markTrying(node) {
+    store.set(TRYING_KEY, String(Date.now()));
+    const done = () => store.remove(TRYING_KEY);
+    node.addEventListener('loadeddata', done, { once: true });
+    node.addEventListener('error', done, { once: true });
+}
+
+/** The pixels of the video an item plays, as the server measured the file: 0 when it does not say, or for no video. */
+function itemPixels(item) {
+    return item && item.type === 'video' ? (Number(item.width) || 0) * (Number(item.height) || 0) : 0;
+}
+
+/** A page's own <video> elements that hold a file, when the page is the player's to read (the worker keeps the set). */
+function pageVideos(frame) {
+    try {
+        const page = frame.contentDocument;
+
+        return page ? Array.from(page.querySelectorAll('video')).filter((video) => video.getAttribute('src')) : [];
+    } catch {
+        return [];
+    }
+}
+
+/** Whether an element on the stage holds a video decoder now: a video with its file, a page with videos of its own. */
+function holdsADecoder(node) {
+    if (node.tagName === 'VIDEO') return !node.error && Boolean(node.getAttribute('src'));
+    if (node.tagName === 'DECODED-VIDEO') return !node.released;
+    if (node.tagName === 'IFRAME') return pageVideos(node).length > 0 || (node.signageVideos || []).some(({ decoded }) => !decoded.released);
+
+    return false;
+}
+
+/** Every element on the stage — both content layers and the advert's — that holds a decoder, but `except`. */
+function decodersOnStage(except) {
+    const held = [];
+    ['layer-a', 'layer-b', 'layer-ad'].forEach((id) => {
+        const holder = el(id);
+        if (!holder) return;
+        Array.from(holder.children).forEach((node) => {
+            if (node !== except && holdsADecoder(node)) held.push(node);
+        });
+    });
+
+    return held;
+}
+
+/** The pixels of the biggest video an element on the stage decodes. */
+function pixelsOf(node) {
+    if (node.tagName === 'VIDEO') return Math.max(node.videoWidth * node.videoHeight || 0, node.signagePixels || 0);
+    if (node.tagName === 'DECODED-VIDEO') return node.signagePixels || 0;
+    if (node.tagName === 'IFRAME') return Math.max(0, ...pageVideos(node).map((video) => video.videoWidth * video.videoHeight));
+
+    return 0;
+}
+
+/** Whether `item` (a video, or none for a page's own) must wait for `onStage` to let its decoders go. */
+function oneAtATime(item, onStage) {
+    return state.oneDecoder || itemPixels(item) > BIG_VIDEO_PIXELS || onStage.some((node) => pixelsOf(node) > BIG_VIDEO_PIXELS);
+}
+
+/** Whether `item` may be made ready behind the stage now (prepare, prepareAd): anything but a video waiting its turn. */
+function mayMakeReadyBeside(item) {
+    if (item.type !== 'video') return true;
+
+    const onStage = decodersOnStage();
+    if (onStage.length === 0) return true;
+    // The same file again plays again in its own element (replay), never as a copy beside it.
+    if (onStage.some((node) => node.tagName === 'VIDEO' && node.dataset.item === assetUrl(item))) return false;
+
+    return !state.roomTest && !oneAtATime(item, onStage);
+}
+
+/**
+ * Before `item` is set up at the switch: on a set that decodes one at a time, everything on the stage lets its decoder
+ * go, its last picture held. True when this is the test of a video that found no decoder beside them (roomTest).
+ */
+function makeRoomFor(item) {
+    const testing = state.roomTest;
+    state.roomTest = false;
+    if (item.type !== 'video') return false;
+
+    const onStage = decodersOnStage();
+    if (onStage.length === 0) return false;
+    if (testing || oneAtATime(item, onStage)) onStage.forEach(holdStill);
+
+    return testing;
+}
+
+/** A video set up with the stage's decoders let go, after it found none beside them: playing now, the set has one. */
+function passTheRoomTest(node) {
+    node.signageRoomTest = true;
+    node.addEventListener('loadeddata', rememberOneDecoder, { once: true });
+}
+
+/** Whether a video failed for want of a decoder beside those on the stage, and has not been set up without them yet. */
+function couldHaveNoDecoder(node) {
+    if (!isVideoNode(node) || node.signageRoomTest || !node.error) return false;
+    // A decoder that would not start (MEDIA_ERR_DECODE), or the player's own decoder's refusal; a file the set cannot
+    // read at all says so otherwise.
+    const failedToDecode = node.tagName === 'DECODED-VIDEO' ? /^decoder/.test(node.error.message || '') : node.error.code === 3;
+
+    return failedToDecode && decodersOnStage(node).length > 0;
+}
+
+/**
+ * The element lets its decoder go and keeps its picture: a <video>'s last frame drawn on a canvas put in its place, a
+ * decoded video's own canvas kept as it is, a page's own videos stopped (its background stays). The next video then
+ * has the set's decoder, and the glass is never black while it starts.
+ */
+function holdStill(node) {
+    if (node.tagName === 'VIDEO') {
+        stillInPlace(node, 'display:block;width:100%;height:100%;object-fit:contain;background:#000;');
+
+        return;
+    }
+
+    if (node.tagName === 'DECODED-VIDEO') {
+        node.letGo();
+
+        return;
+    }
+
+    if (node.tagName === 'IFRAME') {
+        // A page's own videos the same way, in the page: their pictures stay where they were, fitted as they were.
+        (node.signageVideos || []).forEach(({ decoded }) => decoded.isConnected && decoded.letGo());
+        pageVideos(node).forEach((video) => {
+            const look = video.ownerDocument.defaultView.getComputedStyle(video);
+            stillInPlace(video, (video.getAttribute('style') || '') + ';object-fit:' + look.objectFit + ';object-position:' + look.objectPosition + ';');
+        });
+    }
+}
+
+/** A <video> replaced by a canvas of its last frame, styled `style`, and let go of its file and its decoder. */
+function stillInPlace(video, style) {
+    const still = video.ownerDocument.createElement('canvas');
+    const scale = Math.min(1, 1920 / Math.max(video.videoWidth || 1, video.videoHeight || 1));
+    still.width = Math.max(1, Math.round((video.videoWidth || 16) * scale));
+    still.height = Math.max(1, Math.round((video.videoHeight || 9) * scale));
+    still.className = video.className;
+    still.setAttribute('style', style);
+    still.dataset.item = video.dataset.item || '';
+    still.dataset.still = '1';
+    try {
+        const context = still.getContext('2d');
+        context.drawImage(video, 0, 0, still.width, still.height);
+        // One pixel read back makes the canvas draw now, while the video still has its picture: left for the next
+        // paint, the draw found the video already let go, and the still was black (the Philips TV, 2026-11-05).
+        context.getImageData(0, 0, 1, 1);
+    } catch {
+        /* A picture that cannot be read back: the still is black for the moment the next video takes. */
+    }
+    video.pause();
+    video.replaceWith(still);
+    video.removeAttribute('src');
+    video.load();
+}
+
+/**
+ * A page made ready while videos on the stage keep their decoders: on a set that decodes one at a time its own videos
+ * wait, their files taken out, and get them back when it comes on (playCurrent, giveBackPageVideos); elsewhere they are
+ * set up beside them, and one that finds no decoder waits the same way.
+ */
+function watchPageVideos(frame) {
+    // The videos the worker sent without their files (holdsPageVideos) wait for theirs.
+    try {
+        const page = frame.contentDocument;
+        (page ? Array.from(page.querySelectorAll('video[data-signage-src]')) : []).forEach((video) => {
+            (frame.signageHeld = frame.signageHeld || []).push({ video, src: video.getAttribute('data-signage-src'), failed: false });
+            video.removeAttribute('data-signage-src');
+        });
+    } catch {
+        /* A page that is not the player's to read plays as it is. */
+    }
+
+    const videos = pageVideos(frame);
+    if (videos.length === 0) return;
+
+    const onStage = decodersOnStage(frame);
+    if (onStage.length === 0) return;
+
+    const hold = (video) => {
+        (frame.signageHeld = frame.signageHeld || []).push({ video, src: video.getAttribute('src'), failed: Boolean(video.error) });
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+    };
+
+    if (oneAtATime(null, onStage)) {
+        videos.forEach(hold);
+
+        return;
+    }
+
+    videos.forEach((video) => {
+        markTrying(video);
+        video.addEventListener('error', () => {
+            if (video.error && video.error.code === 3 && decodersOnStage(frame).length) hold(video);
+        }, { once: true });
+    });
+}
+
+/** Whether a page made ready now has its videos sent without their files: beside a video that keeps the one decoder. */
+function holdsPageVideos() {
+    const onStage = decodersOnStage();
+
+    return onStage.length > 0 && oneAtATime(null, onStage);
+}
+
+/** A page's own videos that waited for the stage, given their files back (and decoded where the set decodes them). */
+function giveBackPageVideos(frame) {
+    const held = frame.signageHeld || [];
+    frame.signageHeld = [];
+
+    held.forEach(({ video, src, failed }) => {
+        // One that had found no decoder plays now: the set decodes one at a time.
+        if (failed) video.addEventListener('loadeddata', rememberOneDecoder, { once: true });
+        // Its file given back, it loads; the page's own start plays it (startPage, after this).
+        video.setAttribute('src', src);
+        if (frame.signageStarted) video.play().catch(() => {});
+    });
+
+    if (held.length) {
+        decodePageVideos(frame).then(() => {
+            if (frame.signageStarted) (frame.signageVideos || []).forEach(({ decoded }) => decoded.isConnected && decoded.play());
+        });
+    }
+}
+
+/**
+ * When a video put up shows its first picture: its first frame handed to the screen (requestVideoFrameCallback, Chrome
+ * 83), or at once where the set cannot say — and SHOWS_WITHIN_MS at the most.
+ */
+function whenItShows(node) {
+    if (typeof node.requestVideoFrameCallback !== 'function') return Promise.resolve();
+
+    return new Promise((resolve) => {
+        const timer = setTimeout(resolve, SHOWS_WITHIN_MS);
+        node.requestVideoFrameCallback(() => {
+            clearTimeout(timer);
+            resolve();
+        });
+    });
+}
+
+/** The video on screen, when it is `item`'s own file and can simply play again (replay). */
+function sameVideoOnScreen(item) {
+    if (item.type !== 'video' || layer(state.front).hidden) return null;
+
+    const front = frontNode();
+    if (!front || front.tagName !== 'VIDEO' || front.error || !front.getAttribute('src')) return null;
+
+    return front.dataset.item === assetUrl(item) ? front : null;
+}
+
+/** The video on screen, from its start once more, as the item it is again: no second copy, no second decoder. */
+function replay(node, item) {
+    clearPrepared();
+    state.current = node;
+    // A break's last advert stayed up for the item after it: this is it.
+    if (!state.ad.active && !el('layer-ad').hidden) letTheAdGo();
+
+    node.addEventListener('ended', () => {
+        if (state.current === node) advance();
+    }, { once: true });
+    try {
+        node.currentTime = 0;
+    } catch {
+        /* A file that cannot seek plays on from where it is. */
+    }
+    node.play().catch(() => {});
+    startItemTimer((item.duration + 5) * 1000);
+    preloadNext();
+    prepareNext(node);
 }
 
 /**
@@ -1570,7 +1956,9 @@ function playAd() {
         node = prepared.node;
     } else {
         clearPreparedAd();
+        const testing = makeRoomFor(item);
         node = buildElement(item);
+        if (testing) passTheRoomTest(node);
         node.hidden = true;
         stage.appendChild(node);
     }
@@ -1582,6 +1970,15 @@ function playAd() {
         // from it then would start an advert outside any break.
         if (done || ! node.isConnected) return;
         done = true;
+
+        // An advert that found no decoder beside the stage's is set up once more with them let go (makeRoomFor).
+        if (couldHaveNoDecoder(node)) {
+            state.roomTest = true;
+            node.remove();
+            playAd();
+
+            return;
+        }
         state.ad.index += 1;
         playAd();
     };
@@ -1647,11 +2044,14 @@ function prepareAd(index, inMs, stillWanted) {
         state.ad.prepareTimer = null;
         const item = state.ad.items[index];
         if (! item || state.ad.prepared || ! stillWanted()) return;
+        // A video that cannot have a decoder beside the stage's is made when its turn comes instead (playAd).
+        if (! mayMakeReadyBeside(item)) return;
 
         const node = buildElement(item);
         node.hidden = true;
         if (isVideoNode(node)) node.pause();
         node.addEventListener('error', () => {
+            if (couldHaveNoDecoder(node)) state.roomTest = true;
             if (state.ad.prepared && state.ad.prepared.node === node) clearPreparedAd();
         }, { once: true });
         el('layer-ad').appendChild(node);
@@ -1731,10 +2131,15 @@ function pauseContent() {
     // under the break it came back past its exit, its video decoding behind the advert all along
     // (the brute-force round, 2026-09-29). It is let go, hidden so nothing white shows, and shown
     // again from the start when the break is over (resumeContent).
+    // Once the advert has faded in over it: let go at once, the page left black under the advert coming in (the owner's
+    // Fire TV Stick, 2026-11-05).
     if (node && node.tagName === 'IFRAME') {
-        releasePageVideos(node);
-        node.style.visibility = 'hidden';
-        node.src = 'about:blank';
+        setTimeout(() => {
+            if (! state.ad.contentPaused || frontNode() !== node) return;
+            releasePageVideos(node);
+            node.style.visibility = 'hidden';
+            node.src = 'about:blank';
+        }, FADE_MS);
     }
 }
 
@@ -1750,8 +2155,8 @@ function resumeContent() {
 
     // A page let go for the break: shown again from the start, for its whole length, as if it had
     // just come on — never the rest of a run whose exit already played. The advert stays up until it is
-    // (playCurrent).
-    if (node.tagName === 'IFRAME') {
+    // (playCurrent). So is a video that let its decoder go for an advert (holdStill): its picture is a still.
+    if (node.tagName === 'IFRAME' || node.dataset.still) {
         playCurrent();
 
         return;
