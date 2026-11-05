@@ -320,7 +320,21 @@
     }
 
     function sliced(response, range) {
-        return range && response.status === 200 ? partial(response, range) : response;
+        return range && response.status === 200 ? partial(response, range) : made(response);
+    }
+
+    /**
+     * The same answer as one this worker made itself (new Response): every answer to a file is, the server's and the
+     * cache's too. A media element refuses a file whose pieces mix the server's own answers with made ones — Chromium:
+     * it "disallows mixing constructed responses (new Response()) and native server responses, even if they have the
+     * same response URL" — so a video that began from the server while its file was being kept, and asked its next
+     * slice of the kept copy, failed with a "data source error" (the first video of a new playlist skipped on the
+     * Philips TV, 2026-11-05).
+     */
+    function made(response) {
+        if (response.status < 200 || response.status > 599) return response;
+
+        return new Response(response.body, { status: response.status, statusText: response.statusText, headers: response.headers });
     }
 
     /**
@@ -364,7 +378,7 @@
     function partial(response, rangeHeader) {
         var match = /bytes=(\d*)-(\d*)/.exec(rangeHeader);
 
-        if (!match) return response;
+        if (!match) return made(response);
 
         return response.blob().then(function (blob) {
             var size = blob.size;

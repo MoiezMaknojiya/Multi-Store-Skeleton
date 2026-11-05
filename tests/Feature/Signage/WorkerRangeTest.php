@@ -45,9 +45,10 @@ function runTheWorker(string $then): mixed
             const range = handedOn ? null : (init && init.headers ? (init.headers.Range || init.headers.range || null) : null);
             asked.push({ url, range, handedOn });
             if (url.endsWith('.html') || url.includes('.html?')) return new Response(PAGE, { status: 200, headers: { 'Content-Type': 'text/html' } });
-            if (range && !ignoresRanges) return cut(range);
+            const answer = range && !ignoresRanges ? cut(range) : new Response(FILE, { status: 200, headers: { 'Content-Type': 'video/mp4', 'Content-Length': String(FILE.length) } });
+            answer.native = 'server';
 
-            return new Response(FILE, { status: 200, headers: { 'Content-Type': 'video/mp4', 'Content-Length': String(FILE.length) } });
+            return answer;
         };
 
         const stores = new Map();
@@ -60,7 +61,11 @@ function runTheWorker(string $then): mixed
                 return {
                     match: async (url, options = {}) => {
                         const hit = options.ignoreSearch ? [...store.entries()].find(([key]) => keyless(key) === keyless(url)) : [null, store.get(String(url))];
-                        return hit && hit[1] ? hit[1].clone() : undefined;
+                        if (!hit || !hit[1]) return undefined;
+                        const copy = hit[1].clone();
+                        copy.native = 'cache';
+
+                        return copy;
                     },
                     put: async (url, response) => { store.set(String(url), response); },
                     keys: async () => [...store.keys()].map((url) => new Request(url)),
@@ -88,7 +93,7 @@ function runTheWorker(string $then): mixed
             listeners.fetch({ request: new Request(url, { headers }), respondWith: (promise) => { answer = promise; } });
             const response = await answer;
 
-            return { status: response.status, range: response.headers.get('Content-Range'), body: new Uint8Array(await response.arrayBuffer()) };
+            return { status: response.status, range: response.headers.get('Content-Range'), native: response.native || null, body: new Uint8Array(await response.arrayBuffer()) };
         };
 
         {$then}
@@ -137,4 +142,23 @@ test('a page made ready beside a video that keeps the one decoder comes without 
         ->and($result['held'])->toContain('<video class="ad-layer" data-signage-src="/storage/builder/1/assets/clip.mp4"')
         ->and($result['held'])->toContain('<video class="ad-content" data-signage-src="/storage/builder/1/assets/two.mp4"')
         ->and($result['plain'])->toContain('<video class="ad-layer" src="/storage/builder/1/assets/clip.mp4"');
+});
+
+test("every answer to a file is one the worker made, never the server's or the cache's own, so a video never mixes them", function () {
+    // Chromium refuses a video whose pieces mix the server's own answers with made ones: a video begun from the server
+    // while its file was being kept, its next slice from the kept copy, failed with a "data source error".
+    $result = runTheWorker(<<<'JS'
+        const url = ORIGIN + '/storage/media/1/menu.mp4?c=d';
+        const first = await ask(url, { Range: 'bytes=0-' });
+        await (await caches.open('signage-media')).put(url, new Response(FILE, { status: 200, headers: { 'Content-Type': 'video/mp4' } }));
+        const next = await ask(url, { Range: 'bytes=600-' });
+        const whole = await ask(url);
+        const missed = await ask(ORIGIN + '/storage/media/1/other.mp4?c=e');
+        report({ first: [first.status, first.native, first.body.length], next: [next.status, next.native, next.body[0]], whole: [whole.status, whole.native, whole.body.length], missed: [missed.status, missed.native] });
+        JS);
+
+    expect($result['first'])->toBe([206, null, 1000])
+        ->and($result['next'])->toBe([206, null, 600 % 251])
+        ->and($result['whole'])->toBe([200, null, 1000])
+        ->and($result['missed'])->toBe([200, null]);
 });
