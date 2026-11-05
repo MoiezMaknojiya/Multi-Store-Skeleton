@@ -27,7 +27,7 @@
          the device token it was handed at pairing, never with a cookie.
 
          And no stylesheet but its own: the panel's is Tailwind v4, which needs Chrome 111, while a
-         Fire TV or a cheap Android box runs a WebView as old as Chrome 80 — which the player's script
+         Fire TV or a cheap Android box runs a WebView as old as Chrome 79 — which the player's script
          is built for too (build.target in vite.config.js). --}}
     @vite('resources/js/player.js')
 

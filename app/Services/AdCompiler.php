@@ -96,7 +96,7 @@ class AdCompiler
      * too: every deploy then writes those pages again from the version on the screens
      * (`builder:recompile --outdated`, run by deploy/server/release.sh), and leaves the rest alone.
      */
-    public const VERSION = '2026-11-03';
+    public const VERSION = '2026-11-04';
 
     /**
      * The boot script of an advert that moves (motionScripts()). A constant, because the page's policy names

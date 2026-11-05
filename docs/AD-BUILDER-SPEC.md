@@ -462,7 +462,9 @@ rewrite what is already there and are not asked.
 - **The motion files live at a fixed address, `public/ad-runtime/`** — never under a route's name (see §11) —
   copied from npm's `animejs` package (its official MIT bundle, licence header and all) by
   `scripts/copy-builder-vendor.mjs` on every `npm run build`, each addressed with a fingerprint of its
-  contents so no screen keeps a stale copy. A still ad loads none of it.
+  contents so no screen keeps a stale copy. A still ad loads none of it. The copy writes out Anime.js's one
+  optional chaining (Chrome 80) in older syntax, so an advert moves on a WebView 79 too (the player's floor,
+  2026-11-04), and stops the build when a new version changes that line or brings more of that syntax.
 
 - The stage is the ad's own size — `1920×1080`, or `1080×1920` for a portrait ad (§12) — and the page scales
   it with a CSS transform to whatever the screen is, centred, so a television of that shape is pixel-exact

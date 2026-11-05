@@ -14,7 +14,7 @@
  * next video ready that way while the one before is still on screen (player.js, prepareNext).
  *
  * Loaded only where it is needed (player.js, decodesTurnedVideo), behind a check that WebCodecs is there: the
- * player's own floor is Chrome 80, and WebCodecs is Chrome 94.
+ * player's own floor is Chrome 79, and WebCodecs is Chrome 94.
  */
 import MP4BoxModule from 'mp4box';
 

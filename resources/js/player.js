@@ -961,7 +961,7 @@ function isVideoNode(node) {
 /**
  * Whether this set may decode a turned screen's videos itself (docs/TV-ORIENTATION-SPEC.md §11, §12): a Fire TV,
  * whose WebView puts a <video> on a hardware plane the stage's turn never reaches, with WebCodecs (Chrome 94; the
- * player's floor is Chrome 80, so it is asked first), and the server's switch on — or this set's own override
+ * player's floor is Chrome 79, so it is asked first), and the server's switch on — or this set's own override
  * (DECODE_KEY), which also lets a browser test try it anywhere.
  */
 function decoderWanted() {
