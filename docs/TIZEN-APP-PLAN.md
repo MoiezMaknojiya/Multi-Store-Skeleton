@@ -10,24 +10,24 @@ Samsung, Web Engine Specifications, Table 1
 (https://developer.samsung.com/smarttv/develop/specifications/web-engine-specifications.html). A 2023 or later set can
 move to a newer Tizen by an OS upgrade (a 2024 UN60DU7200 reported Tizen 9.0 / Chromium 120 in October 2026, third party).
 
-| Model year | Tizen | Engine | The player as built today (`build.target` chrome80) |
+| Model year | Tizen | Engine | The player as built today (`build.target` chrome79, since 2026-11-04) |
 |---|---|---|---|
 | 2026 | 10.0 | Chromium 130 | runs |
 | 2025 | 9.0 | Chromium 120 | runs |
 | 2024 | 8.0 | Chromium 108 | runs |
 | 2023 | 7.0 | Chromium 94 | runs; the first with WebCodecs, in principle |
 | 2022 | 6.5 | Chromium 85 | runs |
-| 2021 | 6.0 | Chromium 76 | **does not start**: the built script keeps `??` (25 times), a syntax error before Chromium 80 |
-| 2020 | 5.5 | Chromium 69 | **does not start** (`??`); `String.prototype.matchAll` (73) is used once too (`pageSubresources`) |
+| 2021 | 6.0 | Chromium 76 | not tried: the `??` that stopped it (25 in the chrome80 build) is written out now; `clamp()` (79) is ignored, so the pairing words are small |
+| 2020 | 5.5 | Chromium 69 | not tried: `String.prototype.matchAll` (73) is used once (`pageSubresources`), and every API wants a check against 69 |
 | 2019 and older | 5.0 and below | Chromium 63 and below | no: ES modules partly or not at all, `img.decode()` (64), optional catch binding (66) |
 
 The User-Agent carries no `Chrome/` token (`Mozilla/5.0 (SMART-TV; LINUX; Tizen 9.0) AppleWebKit/537.36 (KHTML, like
 Gecko) 120.0.6099.5/9.0 TV Safari/537.36`): a Tizen set is told by `Tizen` in it. The player's Fire TV check (`AFT`)
 never matches one, so every Tizen set plays `<video>` as a landscape screen does today.
 
-**To decide:** the oldest Samsung TV to support. 2022 and later (Tizen 6.5) needs no change to the build; 2021 needs the
-player's scripts written down to Chromium 76 (the `??` operators, one build setting); 2020 adds `matchAll` and a check of
-every API against Chromium 69.
+**To decide:** the oldest Samsung TV to support. 2022 and later (Tizen 6.5) needs no change to the build; 2021 may need
+none either now that the build is chrome79 (Chromium 79 itself played everything, 2026-11-04), to be seen on a 76; 2020
+adds `matchAll` and a check of every API against Chromium 69.
 
 ## 2. How the app loads the player
 
@@ -80,3 +80,113 @@ every API against Chromium 69.
 3. A portrait screen: a CSS-turned `<video>`, and on Tizen 7 or later whether `VideoDecoder` is there (risk 2).
 4. `setScreenSaver` held for hours; memory over a day (an app installed from Tizen Studio gets 120 MB).
 5. The Tizen version of every TV the customers have, to settle §1's decision.
+
+## 6. Working on it by hand (set up 2026-11-04)
+
+**What is installed.** VS Code's "Tizen Extension" (Samsung's, `tizen.vscode-tizen-csharp`; it does web apps too) keeps the
+whole SDK in `%USERPROFILE%\.tizen-extension-platform\server\sdktools`:
+- `data\tools`: `sdb.exe` and `tizen-core\tz.exe`.
+- `sdk-data`: the emulators, and `profile\profiles.xml`, the signing profiles.
+
+On top of it: the Samsung TV SDK 10.0, both web development and the emulator. That came from Ctrl+Shift+P → "Tizen:
+Package Manager", or the same call made for it. The emulator is `T-samsung-10.0-x86_64` (1080p, Tizen 10.0, Chromium 130).
+It runs on Windows' Hypervisor Platform (WHPX). Intel HAXM cannot run beside it, and is not needed.
+
+**The step-by-step guide with pictures** is the project's `docs\setup-guide\index.html` (see **The app's project** below).
+It covers VS Code, the extension, the TV SDK, the certificates back from the zip, the emulator and Run Project. The backup
+zip carries it as `Restore-Guide`.
+
+**Starting the emulator.** Double-click the project's `tools\Start-Samsung-TV-Emulator.bat`. It waits until the TV answers
+`sdb`, about a minute.
+- **Where it works:** any Windows 10/11 PC where the extension installed the TV SDK and an emulator. It finds the SDK by
+  the extension's own `TIZEN_SDK` variable and `sdk.info`, else the default place.
+- **Before starting:** it asks the emulator's `check-whpx.exe` whether Windows Hypervisor Platform is on, and says how to
+  switch it on if not.
+- **A second copy:** it refuses one.
+- **Why a file and not the button:** the extension's own Launch button fails on a Windows user folder with a space in it. It
+  hands `emulator.cmd` to cmd without quotes: "'C:\Users\Moiez' is not recognized", in the emulator's
+  `logs\T-samsung-10.0-x86_64-stderr.log`. Its Stop button answers "Route not found".
+- **To close it:** press the X on its window and answer Yes to "If you force stop an emulator…". That is the normal way.
+
+**Certificates.** A Samsung TV, and since TV Extension 7.0.1 the TV emulator too, installs only what a **Samsung**
+certificate signed.
+- A Tizen certificate is refused with "Invalid certificate chain with certificate in signature" [118, -12]. Tried
+  2026-11-04.
+- **Making one:** Ctrl+Shift+P → "Tizen: Create Certificate" → Samsung → TV. The author part signs in with the Samsung
+  account. The distributor part lists the devices it may install on, by DUID: the emulator's and each real TV's.
+- **The profile made:** "The Display Solution", in `%USERPROFILE%\SamsungCertificate\The Display Solution\`.
+- **Keep the author certificate and its password for good.** An update in the Samsung store must be signed with the same
+  author.
+- A distributor certificate cannot take more devices later: a new TV means a new distributor certificate, with the TV's
+  DUID beside the emulator's.
+- **What the first certificates hold:** made 2026-11-04 with thedisplaysolutions@gmail.com, Public privilege, both valid
+  until 2027-11-04. The distributor holds one DUID, this PC's emulator (`XTCJYJZXZBZVK`).
+- **Backup:** the project's `tools\Backup-Samsung-Certificate.bat` zips the whole `SamsungCertificate` folder onto the
+  Desktop, with the setup guide inside as `Restore-Guide`.
+  - It has no password, the owner's choice of 2026-11-04, so keep it private.
+  - It uses Windows' own `tar`, which writes standard "/" names; the zips of Windows PowerShell 5.1 write "\".
+- **Restoring on another PC:** "Tizen: Create Certificate" → "Import an existing author key file" / "… distributor key
+  file", with their passwords. Keep those passwords: whether the folder's `.pwd` files work on another Windows account is
+  not known.
+
+**The app's project.** It is its own folder, outside this repository: `D:\TizenStudioProjects\TheDisplaySolutionPlayer`.
+Every file of the TV app lives there.
+- **How it was made:** `tz new … -t Basic_Empty -T web -p tv-samsung-10.0`.
+- **Identity:** the app id is `ynKUOvnETZ.TheDisplaySolutionPlayer`, and the TV shows the name "The Display Solution",
+  version 1.0.0.
+- **The folders:** `tools\` holds the two helpers above, and `docs\setup-guide\` the guide with its `img\`.
+- **What goes to a TV:** `tz pack` puts EVERY file of the folder into the package unless `tizen_web_project.yaml`'s
+  `excludes:` names it. A whole 300 KB guide and the `.bat` files went in before `docs/*` and `tools/*` were added
+  there; a new folder that is not the app's joins that list.
+- **The build list:** `tizen_web_project.yaml` lists the files that go into the package. A new file is added to its
+  `files:`.
+
+**Building and running.** With the emulator (or a TV) up: in VS Code, the Tizen icon → Build Project, then Run Project.
+Or by hand, in the project's folder:
+- `tz build`
+- `tz pack` (signs with the active profile)
+- `tz install -e emulator-26101`
+- `tz run -e emulator-26101`
+
+`sdb devices` lists what is connected. A new web project is `tz new -n Name -t Basic_Empty -T web -p tv-samsung-10.0`
+(`-T web`, not `web_app`).
+
+**Seeing inside the app (Web Inspector).**
+1. `sdb shell 0 was_kill <package id>`. The next command waits for ever while the app is already running.
+2. `sdb shell 0 debug <app id>`. It answers "port: N".
+3. `sdb forward tcp:N tcp:N`.
+4. In Chrome, go to `chrome://inspect` → Configure → add `localhost:N`, then inspect the app's page. The Samsung TV's shell
+   is closed (`intershell_support:disabled`): only `sdb shell 0 …` commands like these work.
+
+**A real Samsung TV.**
+1. On the TV: open Apps, type 12345 on the remote, switch Developer mode on, enter this PC's IP address, then restart the
+   TV.
+2. On the PC: `sdb connect <TV's IP>`, or "Tizen: Device Manager" → add the TV.
+3. Make a distributor certificate with its DUID (see above).
+
+## 7. The first version, and what the emulator answered (2026-11-04)
+
+The app's commit `4ebf437` (its own repository) works like this. Its page switches the screensaver off, checks that
+the server answers at `/up` (200, no session started), and opens `https://sign.thedisplaysolution.com/player` as the
+page itself. With no network it shows "No internet connection. Trying again…" and tries every 10 s. The player then
+pairs and plays as on every other set; on the emulator it showed its pairing code.
+
+**Answers that settle §2–§4:**
+
+| Question | Answer on the TV 10.0 emulator |
+|---|---|
+| The player in a frame of the app's page | Refused before it starts: nginx sends `X-Frame-Options: SAMEORIGIN` on every page, and a page the worker serves says `frame-ancestors 'self'`. Framing would need both changed, and the app's page is `file:///index.html`, an opaque origin, whose third-party storage may not last. |
+| The player opened as the app's page | Works: same origin, its own `localStorage` (the `signage.device.*` keys), pairing code shown. |
+| Service worker | **None.** `register()` fails with "The Service Worker system has shutdown", whether the player is opened from the app's page or is the app's own `<content>`. `'serviceWorker' in navigator` is still true, so feature detection lies. With no worker there is no offline play, and the warm-up and versioned caches of AD-BUILDER-SPEC §15 do nothing. |
+| Storage | `navigator.storage.estimate()` gives a quota of 80 MB, less than a few videos. |
+| Screensaver | `webapis.appcommon.setScreenSaver(SCREEN_SAVER_OFF)` answers OK on the app's page. Whether it holds after the page has gone to the player is for a real TV. `webapis` is not there on the player's page. |
+| Cache API from a page | `caches.keys()` answers (an empty list), so the Cache API is there without a worker. |
+
+**Still open, for a real Samsung TV:**
+- Is a real set's web runtime as closed to service workers as the emulator's?
+- Does the screensaver stay off once the player has replaced the app's page?
+- One decoder (§4.1), the turned video (§4.2) and auto power off (§4.3).
+
+**If a real set also has no worker, offline play on Samsung needs a player of its own kind.** It would keep the files
+itself, through the page's Cache API or Tizen's own file storage (beyond 80 MB), and play them from there, instead of
+leaning on a worker. That is a change to the player, not to this app.
