@@ -40,13 +40,29 @@ it('draws the question, its look and the Samsung part on a Samsung TV page alone
     }
 });
 
-it('preloads the Fire TV decoder on a Fire TV page alone, never on a Samsung TV', function () {
+it('preloads the Fire TV decoder and the Fire TV part on a Fire TV page alone, never on a Samsung TV', function () {
     $decoder = playerManifest()['resources/js/player/decoded-video.js']['file'];
+    $fireTv = playerManifest()['resources/js/player/fire-tv.js']['file'];
 
-    expect(playerPageFor(FIRE_TV))->toContain($decoder);
+    expect(playerPageFor(FIRE_TV))->toContain($decoder)->toContain($fireTv);
     foreach ([SAMSUNG_TV, ANDROID_TV, DESK] as $userAgent) {
-        expect(playerPageFor($userAgent))->not->toContain($decoder);
+        expect(playerPageFor($userAgent))->not->toContain($decoder)->not->toContain($fireTv);
     }
+});
+
+it('loads the Fire TV part only as a chunk of its own, behind the Fire TV check', function () {
+    $manifest = playerManifest();
+
+    expect($manifest['resources/js/player.js']['dynamicImports'] ?? [])->toContain('resources/js/player/fire-tv.js')
+        ->and($manifest['resources/js/player.js']['imports'] ?? [])->not->toContain('resources/js/player/fire-tv.js')
+        ->and($manifest['resources/js/player/fire-tv.js']['isDynamicEntry'] ?? false)->toBeTrue();
+
+    $source = (string) file_get_contents(base_path('resources/js/player.js'));
+    expect($source)
+        ->toContain('const ON_A_FIRE_TV = /\bAFT/.test(navigator.userAgent);')
+        ->toContain("const ownPartLoading = ON_A_FIRE_TV\n    ? import('./player/fire-tv.js')")
+        ->toContain("    /** A video that may stop before its first frame with nothing said, watched: `giveUp` once it has. */\n    watchFirstFrame() {},")
+        ->not->toMatch('~^\s*import\s[^(]*fire-tv~m');
 });
 
 it('sends every television the same player, the Samsung part only as a chunk it loads on a Samsung TV', function () {

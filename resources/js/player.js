@@ -102,15 +102,24 @@ const el = (id) => document.getElementById(id);
 
 // What only one kind of television needs is in a chunk of its own that the player loads there alone, so a change made
 // for one kind never reaches another, which never downloads it (owner, 2026-11-06): a Samsung TV's (player/samsung.js),
-// a turned Fire TV's decoder (player/decoded-video.js). What such a set does its own way it puts into `own`; anywhere
-// else it is done as written here.
+// a Fire TV's (player/fire-tv.js), a turned Fire TV's decoder (player/decoded-video.js). What such a set does its own
+// way it puts into `own`; anywhere else it is done as written here.
 const ON_A_SAMSUNG_TV = /\bTizen\b/i.test(navigator.userAgent);
+const ON_A_FIRE_TV = /\bAFT/.test(navigator.userAgent);
+const OWN_PART_WAIT_MS = 3000;      // the most the first item waits for a Fire TV's own part
 const own = {
     /** A page's frame emptied for a break. */
     emptyFrame(frame) {
         frame.src = 'about:blank';
     },
+    /** A video that may stop before its first frame with nothing said, watched: `giveUp` once it has. */
+    watchFirstFrame() {},
 };
+// A Fire TV's own part watches every video's first frame, so it is in before the first one is made (refreshPlaylist).
+let ownPartIn = !ON_A_FIRE_TV;
+const ownPartLoading = ON_A_FIRE_TV
+    ? import('./player/fire-tv.js').then((fireTv) => fireTv.startOnAFireTv(own)).catch(() => {}).then(() => { ownPartIn = true; })
+    : null;
 
 /**
  * Which route through the panel this television should be sent down.
@@ -473,6 +482,10 @@ async function fetchPlaylist() {
         // screen DECODER_WAIT_MS at most, and its videos play as <video> until it does.
         if (decoderWanted() && !state.decoderReady) {
             await Promise.race([loadDecoder(), new Promise((resolve) => setTimeout(resolve, DECODER_WAIT_MS))]);
+            if (token !== state.token) return;
+        }
+        if (!ownPartIn) {
+            await Promise.race([ownPartLoading, new Promise((resolve) => setTimeout(resolve, OWN_PART_WAIT_MS))]);
             if (token !== state.token) return;
         }
 
@@ -894,6 +907,7 @@ function readiness(node, item) {
             }
             node.addEventListener('loadeddata', () => resolve(true), { once: true });
             node.addEventListener('error', fail, { once: true });
+            own.watchFirstFrame(node, fail);
 
             return;
         }

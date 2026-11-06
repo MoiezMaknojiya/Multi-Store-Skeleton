@@ -662,6 +662,10 @@ abstract class DuskTestCase extends BaseTestCase
      * The television this tab says it is (SAMSUNG_TV, FIRE_TV, ANDROID_TV), from now until it is called again — with
      * none, Chrome itself: in every request it sends, so the server draws that set's page, and in `navigator.userAgent`,
      * so the player runs that set's own part. It holds across navigations, and the test's end puts Chrome's back.
+     *
+     * A worker an earlier page left goes first (unregistered from the sign-in page, the tab's origin): the override
+     * reaches the tab and never its worker, which would fetch the player's page with the browser's own user agent, and
+     * so draw another set's page (DUSK_PLAY_AS makes that browser a television of its own).
      */
     protected function playAs(Browser $browser, ?string $userAgent = null): void
     {
@@ -671,12 +675,18 @@ abstract class DuskTestCase extends BaseTestCase
             'userAgent' => $userAgent ?? (string) $tools->execute('Browser.getVersion')['userAgent'],
         ]);
         $this->playingAs = $userAgent !== null ? $browser : null;
+
+        if ($userAgent !== null) {
+            $browser->visit('/login');
+            $browser->script('window.__gone = false; (navigator.serviceWorker ? navigator.serviceWorker.getRegistrations() : Promise.resolve([]))
+                .then((all) => Promise.all(all.map((r) => r.unregister()))).then(() => { window.__gone = true; });');
+            $browser->waitUntil('window.__gone === true', 10, 'an old worker would not go');
+        }
     }
 
     /**
-     * A Samsung TV, until the test's end: its user agent (playAs), and no service worker, which its web runtime runs none
-     * of. Any worker an earlier test left is unregistered first (from the sign-in page, the tab's origin) and the API
-     * taken away: kept, a worker would also fetch the player's page with Chrome's own user agent, not the TV's.
+     * A Samsung TV, until the test's end: its user agent (playAs, which takes away any worker left), and no service
+     * worker after it either, which its web runtime runs none of: the API is taken away from every page.
      */
     protected function playAsASamsungTv(Browser $browser): void
     {
@@ -684,11 +694,6 @@ abstract class DuskTestCase extends BaseTestCase
         if ($this->withoutWorker !== null) {
             return;
         }
-
-        $browser->visit('/login');
-        $browser->script('window.__gone = false; (navigator.serviceWorker ? navigator.serviceWorker.getRegistrations() : Promise.resolve([]))
-            .then((all) => Promise.all(all.map((r) => r.unregister()))).then(() => { window.__gone = true; });');
-        $browser->waitUntil('window.__gone === true', 10, 'an old worker would not go');
 
         $tools = new ChromeDevToolsDriver($browser->driver);
         $this->withoutWorker = [$tools, (string) $tools->execute('Page.addScriptToEvaluateOnNewDocument', [
@@ -701,11 +706,15 @@ abstract class DuskTestCase extends BaseTestCase
      */
     protected function driver(): RemoteWebDriver
     {
+        // DUSK_PLAY_AS=firetv|android|samsung: the whole run as that television, a shared change tried as each of them
+        // (a test's own playAs still wins).
+        $playAs = ['firetv' => self::FIRE_TV, 'android' => self::ANDROID_TV, 'samsung' => self::SAMSUNG_TV][(string) getenv('DUSK_PLAY_AS')] ?? null;
+
         $options = (new ChromeOptions)->addArguments(collect([
             $this->shouldStartMaximized() ? '--start-maximized' : '--window-size=1920,1080',
             '--disable-search-engine-choice-screen',
             '--disable-smooth-scrolling',
-        ])->unless($this->hasHeadlessDisabled(), function (Collection $items) {
+        ])->when($playAs !== null, fn (Collection $items) => $items->push('--user-agent='.$playAs))->unless($this->hasHeadlessDisabled(), function (Collection $items) {
             return $items->merge([
                 '--disable-gpu',
                 '--headless=new',

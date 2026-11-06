@@ -39,6 +39,10 @@
         @foreach (\App\Services\BuiltScripts::withImports('resources/js/player/decoded-video.js') as $script)
             <link rel="modulepreload" href="{{ $script }}">
         @endforeach
+        {{-- And a Fire TV's own part (player/fire-tv.js), which the first video waits for. --}}
+        @foreach (\App\Services\BuiltScripts::withImports('resources/js/player/fire-tv.js') as $script)
+            <link rel="modulepreload" href="{{ $script }}">
+        @endforeach
     @endif
 
     <style>

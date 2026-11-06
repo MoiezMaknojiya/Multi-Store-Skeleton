@@ -1074,3 +1074,38 @@ storage/app/private/qa/2026-11-06-race-tvs). A television's processor is slower,
 - Seen there, not caused by this, and on the live player too: on the stick the first video after the page starts never
   gets a decoder (`loadedmetadata`, then nothing, and no error), and its backstop moves on after its length and 5 s. The
   next video plays. The Philips plays its first one.
+
+### 12.21 A Fire TV's first video that never comes: set up once more, then given up (2026-11-06)
+
+**What was seen.** On the office Fire TV Stick 4K Max, for an hour (19:13 to 20:01 UTC), the first video after the player
+page started stopped after its metadata in every start, 9 of 9, the live player's included: `loadedmetadata`
+(readyState 1), nothing loading (networkState 1), no first frame and no error, and the decoder never even asked for in
+the TV's log. The player waits for a video's first frame before it shows it (`readiness`), so the glass stayed empty
+until the item's backstop, its length and 5 s. The next video, made the same way, played. The Philips never did it.
+
+**Not found since.** After the QA app was installed again it never came back, 12 of 12: a start after a reload, after
+the site's data cleared, on a slow server (half a second on every answer), on a portrait screen, with 4K and after an
+offline restart. Neither is it the decoder's chunk: it did the same with `decode_turned_video` off. The cause is not
+known.
+
+**The safety net (`player/fire-tv.js`, a Fire TV's own part).** The player imports it where the user agent says AFT, and
+waits for it before the first item, at most `OWN_PART_WAIT_MS`. The page preloads it, so the worker keeps it with the
+page. It puts `own.watchFirstFrame` in place, which `readiness` asks for every video; the default does nothing, so an
+Android TV and a Samsung TV are as they were and never download it.
+- A `<video>` that 3 s after its metadata still has no first frame and is loading nothing is set up once more: `load()`,
+  then playing again, or paused again if it was made ready behind.
+- One still in that state 3 s after its metadata again is given up: `readiness` says no, and the next item comes on a
+  second later, instead of an empty glass for the video's whole length.
+- A video still loading on a slow line is left alone, and so are the player's own decoder (`<decoded-video>`), one that
+  has failed and one gone from the page.
+
+**Sizes.** The part is 0.48 kB, on a Fire TV alone. Every set's player is 26.81 kB, against 26.52 before it and 26.29
+live.
+
+**Tests.**
+- `FireTvFirstFrameTest` (Pest, the module under Node with a clock of its own) holds each case.
+- `StoppedFirstFrameTest` (Dusk) plays the stop with a page script: as a Fire TV, the next item came on within 9 s of a
+  video the server says lasts 30 (on the code before: never in 20 s); as an Android TV it still waits for the backstop.
+- `EachTelevisionGetsItsOwnPartTest`: the part is on a Fire TV's page alone.
+- On the stick: 3 fresh starts and the whole mix, every first video on and nothing set up again. On the Philips: the
+  mix.
