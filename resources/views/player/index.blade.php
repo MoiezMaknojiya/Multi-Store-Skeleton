@@ -146,10 +146,15 @@
             width: 100%; height: 100%;
             border: 0; display: block;
             background: #000;
+            /* Nothing on a page is pressed: a press on it (a mouse, a Smart Remote's pointer) took the keyboard into the
+               frame, and RETURN never reached the player again. */
+            pointer-events: none;
         }
 
         /* The Samsung app's exit question (resources/js/player/exit-question.js): over whatever plays, inside the stage
-           so it turns with it. Margins rather than gap, which a flex box older than Chrome 84 ignores. */
+           so it turns with it. Measured by the panel's short side (vmin, 1080 px on a TV's 1920 x 1080 page), which is
+           also a turned stage's width, so it is the same in every orientation and on every size of page. Margins rather
+           than gap, which a flex box older than Chrome 84 ignores. */
         #stage { position: relative; }
         .exit-question {
             position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 50;
@@ -157,28 +162,17 @@
             background: rgba(0, 0, 0, 0.72);
         }
         .exit-question-box {
-            max-width: 80%; padding: 48px 64px; text-align: center;
-            background: #111827; border: 2px solid #374151; border-radius: 16px;
+            max-width: 80%; padding: 4.444vmin 5.926vmin; text-align: center;
+            background: #111827; border: 2px solid #374151; border-radius: 1.481vmin;
         }
-        .exit-question-title {
-            font-size: 48px;
-            font-size: clamp(26px, 3.4vw, 48px);
-            font-weight: 700; line-height: 1.2;
-        }
-        .exit-question-note {
-            margin-top: 14px;
-            font-size: 24px;
-            font-size: clamp(15px, 1.7vw, 24px);
-        }
-        .exit-question-buttons { margin-top: 40px; display: flex; justify-content: center; }
+        .exit-question-title { font-size: 4.444vmin; font-weight: 700; line-height: 1.2; }
+        .exit-question-note { margin-top: 1.296vmin; font-size: 2.222vmin; }
+        .exit-question-buttons { margin-top: 3.704vmin; display: flex; justify-content: center; }
         .exit-question-buttons button {
-            min-width: 220px; margin: 0 14px; padding: 14px 32px;
-            font-family: inherit;
-            font-size: 30px;
-            font-size: clamp(18px, 2.1vw, 30px);
-            font-weight: 700;
+            min-width: 20.37vmin; margin: 0 1.296vmin; padding: 1.296vmin 2.963vmin;
+            font-family: inherit; font-size: 2.778vmin; font-weight: 700;
             color: #e5e7eb; background: #1f2937;
-            border: 3px solid #4b5563; border-radius: 12px; outline: none; cursor: pointer;
+            border: 3px solid #4b5563; border-radius: 1.111vmin; outline: none; cursor: pointer;
         }
         /* The chosen button is said by its colour, the way a TV's own menus say it: the remote has no pointer. */
         .exit-question-buttons button.chosen { color: #fff; background: #2563eb; border-color: #93c5fd; }

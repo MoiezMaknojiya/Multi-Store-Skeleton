@@ -28,6 +28,8 @@ export function registerExitQuestion(store) {
     if (! wanted || ! box) return;
 
     const buttons = [document.getElementById('exit-question-stay'), document.getElementById('exit-question-exit')];
+    // The page the player was opened from is this many entries back once anything is written after it.
+    const lengthAtStart = window.history.length;
     let chosen = 0;
     let timer = null;
 
@@ -70,8 +72,10 @@ export function registerExitQuestion(store) {
         } catch (e) {
             // Not there after all: go back instead.
         }
-        if (window.history.length > 1) {
-            window.history.back();
+        if (lengthAtStart > 1) {
+            // Back past whatever was written since the player started (a frame's own page, should one ever write one),
+            // to the page it was opened from: one step when nothing was.
+            window.history.go(-(window.history.length - lengthAtStart + 1));
 
             return;
         }
@@ -83,6 +87,15 @@ export function registerExitQuestion(store) {
     // A pointer remote's press beside the question keeps the TV playing, as Stay does.
     box.addEventListener('click', (event) => {
         if (event.target === box) close();
+    });
+
+    // The keyboard taken into an Ad Builder page's frame is taken back: RETURN pressed there never reaches this page.
+    window.addEventListener('blur', () => {
+        setTimeout(() => {
+            const focused = document.activeElement;
+
+            if (focused && focused.tagName === 'IFRAME') focused.blur();
+        }, 0);
     });
 
     document.addEventListener('keydown', (event) => {

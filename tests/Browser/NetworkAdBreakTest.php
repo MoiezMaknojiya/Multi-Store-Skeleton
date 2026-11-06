@@ -283,14 +283,15 @@ class NetworkAdBreakTest extends DuskTestCase
             $frame = 'document.querySelector("#layer-a:not([hidden]) iframe, #layer-b:not([hidden]) iframe")';
             $isThePage = "(({$frame} || {}).dataset || {}).src && {$frame}.dataset.src.includes('/ads/{$ad->storage_key}/')";
 
-            // The page comes on, and its frame is noted.
+            // The page comes on, and its frame is noted. Let go later, its page is replaced by an empty one (player.js,
+            // emptyFrame): the frame loads again with its address unchanged, so no history entry is written.
             $tv->waitUsing(30, 200, fn () => (bool) $tv->script("return {$isThePage};")[0]);
-            $tv->script("window.__first = {$frame}; window.__firstAt = Date.now();");
+            $tv->script("window.__first = {$frame}; window.__firstAt = Date.now(); window.__first.addEventListener('load', () => { window.__firstEmptied = true; });");
 
             // The break comes after the page's ten seconds, never in them — and the page is let go under it, hidden.
             $tv->waitUsing(30, 100, fn () => $tv->script('return !document.getElementById("layer-ad").hidden;')[0]);
             $this->assertGreaterThanOrEqual(9000, $tv->script('return Date.now() - window.__firstAt;')[0], 'the break cut the page short');
-            $tv->waitUsing(5, 100, fn () => $tv->script('return window.__first.getAttribute("src") === "about:blank";')[0]);
+            $tv->waitUsing(5, 100, fn () => $tv->script('return window.__firstEmptied === true;')[0]);
             $this->assertSame('hidden', $tv->script('return window.__first.style.visibility;')[0]);
 
             // After it: the page again, from the start, in a frame of its own — shown.

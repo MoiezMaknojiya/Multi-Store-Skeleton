@@ -213,3 +213,22 @@ must not close at a stray press, so RETURN asks first, on the player and on the 
   plays on under it); RIGHT then OK closed the app to Smart Hub; opened again, the app went straight to the player.
 - **Emulator gotcha:** its network leaves a connection to a closed port hanging instead of refusing it, and a hanging
   probe answers much later. A test of "the line comes back while the question is open" is run in Chrome instead.
+- **Every orientation, everything on the screen (owner, 2026-11-06 — "sari orientation with ever possible way with
+  putting everything too"):** the box turns with the stage, so on the glass Exit stands right of Stay on a landscape
+  screen, left of it turned over, below it on a portrait screen and above it turned the other way: upright on the set as
+  it hangs. It is measured by the panel's short side (`vmin`, 1080 px on a TV's 1920 × 1080 page), which is also a
+  turned stage's width, so it is the same in every orientation and fits a smaller page too (1366 × 768, 1280 × 720,
+  960 × 540 checked). `ExitQuestionEverywhereTest` asks over a picture, a video, two Ad Builder pages, a channel's
+  picture, video and page and a break's picture and video, in all four orientations, as a Samsung TV plays them (no
+  worker: pages from the server in a frame of their own origin) and as the worker keeps them, and over No content, a dark
+  screen, the holding picture, a pairing code and no connection — the box covering the glass with nothing drawn over it,
+  its words inside, LEFT, RIGHT and ENTER answering, the screen playing on under it, and Exit leaving at once at the end.
+- **Two faults it found, fixed the same day:** (1) a press on an Ad Builder page (a mouse, a Smart Remote's pointer)
+  took the keyboard into its frame, and RETURN never reached the player again: a page's frame now takes no pointer and
+  no Tab stop, and the question takes the keyboard back should it get in anyway. (2) A break over an Ad Builder page
+  emptied the frame by its `src`, which wrote a history entry each time: Exit's one step back only went back inside the
+  frame, and with a break an hour the browser's 50 entries no longer held the app's page after about two days. The frame
+  is now emptied with `location.replace` (no entry), and Exit goes back past anything written since the player started.
+- **Not turned: the app's own page.** Its Starting and No internet screens, and their question, know no orientation (the
+  player's storage belongs to the server's origin, not the app's), so on a TV hung in portrait they read sideways, as
+  they always have. The player itself, where a TV spends its days, turns.

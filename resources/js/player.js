@@ -946,6 +946,8 @@ function buildNode(item) {
         // It waits to be told it is on screen (startPage) before its animations start.
         frame.name = HELD_PAGE_NAME;
         frame.setAttribute('scrolling', 'no');
+        // Never the keyboard's: a remote's keys belong to the player (the Samsung app's RETURN, player/exit-question.js).
+        frame.tabIndex = -1;
         frame.setAttribute('sandbox', kept ? 'allow-scripts allow-same-origin' : 'allow-scripts');
 
         // Beside a video that keeps the set's one decoder its own videos come without their files (holdsPageVideos).
@@ -2140,8 +2142,21 @@ function pauseContent() {
             if (! state.ad.contentPaused || frontNode() !== node) return;
             releasePageVideos(node);
             node.style.visibility = 'hidden';
-            node.src = 'about:blank';
+            emptyFrame(node);
         }, FADE_MS);
+    }
+}
+
+/**
+ * A frame emptied in place, its page REPLACED: setting its src wrote a history entry at every break, so the Samsung app's
+ * Exit (history back) only went back inside the frame, and after a few days of breaks the browser's 50 entries no longer
+ * held the app's own page at all. Location.replace may be called on a frame of another origin too.
+ */
+function emptyFrame(frame) {
+    try {
+        frame.contentWindow.location.replace('about:blank');
+    } catch {
+        frame.src = 'about:blank';
     }
 }
 
