@@ -1056,3 +1056,21 @@ the playlist, a channel, a break and a page's background.
 **Tests.** `EverySwitchIsASwapTest` (its video test: 3 failures in 15 runs before, none in 20 after, nor in 10 with the CPU
 slowed six times) and `OneDecoderAtATimeTest`'s short video set up at the switch, which failed on the code before every
 time.
+
+**On the office TVs, the same day** (the QA app beside the real one, a throwaway database;
+storage/app/private/qa/2026-11-06-race-tvs). A television's processor is slower, and the race was lost far more often:
+
+| Set | The two videos: made at the switch, live player | worst gap | the new player | worst gap |
+|---|---|---|---|---|
+| Philips (WebView 79) | 59 of 60 switches, from the second | 272 ms | 0 of 60 | 17 ms |
+| Fire TV Stick 4K Max | 46 of 60, from the thirteenth | 568 ms | 0 of 60 | 18 ms |
+
+- Told it decodes one video at a time, the live player on the stick put the picture on the glass before the 2 s video in
+  every round (11 of 11), its still gone under a video still at 0.01. The new player never did, on either set.
+- The Philips never showed that one: its WebView 79 has no `requestVideoFrameCallback`, so nothing waits for the first
+  frame.
+- The whole mix on the new player, six minutes on each set: every item made ready ahead, four breaks, no error, no empty
+  frame.
+- Seen there, not caused by this, and on the live player too: on the stick the first video after the page starts never
+  gets a decoder (`loadedmetadata`, then nothing, and no error), and its backstop moves on after its length and 5 s. The
+  next video plays. The Philips plays its first one.
