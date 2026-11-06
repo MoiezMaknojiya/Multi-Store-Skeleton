@@ -147,6 +147,41 @@
             border: 0; display: block;
             background: #000;
         }
+
+        /* The Samsung app's exit question (resources/js/player/exit-question.js): over whatever plays, inside the stage
+           so it turns with it. Margins rather than gap, which a flex box older than Chrome 84 ignores. */
+        #stage { position: relative; }
+        .exit-question {
+            position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 50;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(0, 0, 0, 0.72);
+        }
+        .exit-question-box {
+            max-width: 80%; padding: 48px 64px; text-align: center;
+            background: #111827; border: 2px solid #374151; border-radius: 16px;
+        }
+        .exit-question-title {
+            font-size: 48px;
+            font-size: clamp(26px, 3.4vw, 48px);
+            font-weight: 700; line-height: 1.2;
+        }
+        .exit-question-note {
+            margin-top: 14px;
+            font-size: 24px;
+            font-size: clamp(15px, 1.7vw, 24px);
+        }
+        .exit-question-buttons { margin-top: 40px; display: flex; justify-content: center; }
+        .exit-question-buttons button {
+            min-width: 220px; margin: 0 14px; padding: 14px 32px;
+            font-family: inherit;
+            font-size: 30px;
+            font-size: clamp(18px, 2.1vw, 30px);
+            font-weight: 700;
+            color: #e5e7eb; background: #1f2937;
+            border: 3px solid #4b5563; border-radius: 12px; outline: none; cursor: pointer;
+        }
+        /* The chosen button is said by its colour, the way a TV's own menus say it: the remote has no pointer. */
+        .exit-question-buttons button.chosen { color: #fff; background: #2563eb; border-color: #93c5fd; }
     </style>
 </head>
 <body>
@@ -222,6 +257,18 @@
             {{-- Cannot reach the server --}}
             <div id="view-error" hidden class="text-center">
                 <p id="error-message" class="muted" style="font-size:32px;font-size:clamp(18px,2.2vw,32px)"></p>
+            </div>
+            {{-- The Samsung app's RETURN asks before it closes the app (resources/js/player/exit-question.js). --}}
+            <div id="exit-question" class="exit-question" hidden role="dialog" aria-modal="true"
+                 aria-labelledby="exit-question-title" dusk="exit-question">
+                <div class="exit-question-box">
+                    <p id="exit-question-title" class="exit-question-title">Exit {{ config('app.name') }}?</p>
+                    <p class="exit-question-note muted">This screen stops playing until the app is opened again.</p>
+                    <div class="exit-question-buttons">
+                        <button type="button" id="exit-question-stay" dusk="exit-question-stay">Stay</button>
+                        <button type="button" id="exit-question-exit" dusk="exit-question-exit">Exit</button>
+                    </div>
+                </div>
             </div>
 
         </div>

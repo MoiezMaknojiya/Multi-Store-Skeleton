@@ -24,6 +24,8 @@
  * Anywhere else the player is online only, exactly as before.
  */
 
+import { registerExitQuestion } from './player/exit-question.js';
+
 const TOKEN_KEY = 'signage.device.token';
 const UUID_KEY = 'signage.device.uuid';
 const SECRET_KEY = 'signage.device.poll_secret';
@@ -2258,6 +2260,8 @@ function showError(message) {
 
 /* ── Boot ──────────────────────────────────────────────────────────────── */
 
+// The Samsung app's RETURN asks before it closes the app (player/exit-question.js).
+registerExitQuestion(store);
 registerWorker();
 
 if (state.token) {

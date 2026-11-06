@@ -188,3 +188,28 @@ pairs and plays as on every other set; on the emulator it showed its pairing cod
 **If a real set also has no worker, offline play on Samsung needs a player of its own kind.** It would keep the files
 itself, through the page's Cache API or Tizen's own file storage (beyond 80 MB), and play them from there, instead of
 leaning on a worker. That is a change to the player, not to this app.
+
+## 8. RETURN, EXIT and the exit question (owner, 2026-11-06)
+
+Samsung's Key Policy is mandatory: RETURN must do something on every screen, and EXIT closes the app. A shop's TV
+must not close at a stray press, so RETURN asks first, on the player and on the app's own page alike:
+
+- **The question:** "Exit The Display Solution?" over whatever plays, with **Stay** chosen and **Exit** beside it, and
+  "This screen stops playing until the app is opened again." LEFT and RIGHT choose, ENTER presses, a pointer remote
+  clicks. RETURN again, or 10 seconds with no key, closes it, and the TV goes on where it was. A held key opens it once.
+- **Where it lives:** on the player, `resources/js/player/exit-question.js` and its box inside `#stage` (it turns with
+  the stage). It is on where the user agent says Tizen, or where the set's `localStorage` says
+  `signage.exit_question = '1'` (`'0'` turns it off): how `ExitQuestionTest` tries it in Chrome. Other televisions keep
+  their own ways (the Android app's menu holds Back). The app's own page (`main.js`, `index.html`) draws the same
+  question for its Starting and No internet screens, and opens the player only once it is answered.
+- **How Exit closes the app:** the player's page comes from the server, and the runtime gives such a page **no `tizen`
+  and no `webapis`** (TV 10.0 emulator: both `undefined` on `/player`, `history.length` 2). The app's page has them. So
+  the player's Exit goes `history.back()`, to `file:///index.html`, and that page, opened by going back (Navigation
+  Timing's `back_forward`, or a `pageshow` from the back-forward cache), calls
+  `tizen.application.getCurrentApplication().exit()` before anything else.
+- **Seen on the TV 10.0 emulator, 2026-11-06,** with a test copy of the app pointing at a throwaway server
+  (`storage/app/private/qa/2026-11-06-tizen`): the emulator's own remote sends RETURN as keyCode 10009, "XF86Back",
+  and the runtime does nothing with it by itself; the question opens over a picture and over a playing video (which
+  plays on under it); RIGHT then OK closed the app to Smart Hub; opened again, the app went straight to the player.
+- **Emulator gotcha:** its network leaves a connection to a closed port hanging instead of refusing it, and a hanging
+  probe answers much later. A test of "the line comes back while the question is open" is run in Chrome instead.
