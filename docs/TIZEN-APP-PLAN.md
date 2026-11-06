@@ -17,7 +17,7 @@ move to a newer Tizen by an OS upgrade (a 2024 UN60DU7200 reported Tizen 9.0 / C
 | 2024 | 8.0 | Chromium 108 | runs |
 | 2023 | 7.0 | Chromium 94 | runs; the first with WebCodecs, in principle |
 | 2022 | 6.5 | Chromium 85 | runs |
-| 2021 | 6.0 | Chromium 76 | not tried: the `??` that stopped it (25 in the chrome80 build) is written out now; `clamp()` (79) is ignored, so the pairing words are small |
+| 2021 | 6.0 | Chromium 76 | runs: seen in Chromium 76.0.3809.0 itself (2026-11-05), pairing, every kind of item, a break, offline after a restart; every `clamp()` has a plain size before it |
 | 2020 | 5.5 | Chromium 69 | not tried: `String.prototype.matchAll` (73) is used once (`pageSubresources`), and every API wants a check against 69 |
 | 2019 and older | 5.0 and below | Chromium 63 and below | no: ES modules partly or not at all, `img.decode()` (64), optional catch binding (66) |
 
@@ -25,9 +25,7 @@ The User-Agent carries no `Chrome/` token (`Mozilla/5.0 (SMART-TV; LINUX; Tizen 
 Gecko) 120.0.6099.5/9.0 TV Safari/537.36`): a Tizen set is told by `Tizen` in it. The player's Fire TV check (`AFT`)
 never matches one, so every Tizen set plays `<video>` as a landscape screen does today.
 
-**To decide:** the oldest Samsung TV to support. 2022 and later (Tizen 6.5) needs no change to the build; 2021 may need
-none either now that the build is chrome79 (Chromium 79 itself played everything, 2026-11-04), to be seen on a 76; 2020
-adds `matchAll` and a check of every API against Chromium 69.
+**Decided (owner, 2026-11-05): 2021 (Tizen 6.0) and later.** The app's `config.xml` says `required_version="6.0"`, so the store offers it to no older set. Samsung offers emulators for Tizen 7.0 to 10.0 alone (its `tv_extensions` server, 2026-11-05), so 2021 is checked in a Chromium 76 snapshot (Google's `chromium-browser-snapshots`, Win_x64/664998, 76.0.3809.0) and on a real set when one is at hand. A Chromium snapshot plays no H.264, so its videos there are WebM; a Samsung TV plays MP4 with its own decoder. 2020 would need Anime.js's `globalThis` (Chrome 71) and the player's `matchAll` (73) written out, and every API checked against 69.
 
 ## 2. How the app loads the player
 

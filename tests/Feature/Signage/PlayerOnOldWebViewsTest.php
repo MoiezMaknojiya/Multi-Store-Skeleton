@@ -16,6 +16,12 @@ use App\Services\AdCompiler;
 | file it never builds: the worker, the runtime and Anime.js, whose one optional chaining (Chrome 80) is written
 | out by hand. The Android app blames the WebView only below 80, and only when the player did not start.
 |
+| And a Samsung TV of 2021 (Tizen 6.0) runs Chromium 76, the Tizen app's floor (owner, 2026-11-05: "2021 minimum
+| rakho"). Chrome 77 to 79 brought no new syntax, so the chrome79 build parses there; of what they brought, only CSS's
+| clamp(), min() and max() (79) reached the player, and each has a plain value before it, which an engine without them
+| keeps: the pairing code was body-text size in Chromium 76.0.3809.0 itself until it had one, and the whole mix played
+| there, offline too.
+|
 */
 
 /** A script's code without its comments, which may name anything. */
@@ -61,6 +67,36 @@ it('uses no CSS an old WebView ignores', function () {
     foreach (['inset:', 'aspect-ratio', '@layer', 'oklch(', 'color-mix(', '@property', ':is(', ':where(', 'dvh', 'svh', 'lvh'] as $feature) {
         expect(str_contains($css, $feature))->toBeFalse("The player's CSS uses {$feature}");
     }
+});
+
+it('gives every clamp(), min() and max() a plain value before it, for a Samsung TV of 2021', function () {
+    // Chromium 76 drops a declaration it cannot read and keeps the one before it, in a <style> as in a style="".
+    $html = $this->get('/player')->assertOk()->getContent();
+    preg_match_all('~<style>(.*?)</style>~s', $html, $styles);
+    preg_match_all('~\sstyle="([^"]*)"~', $html, $inline);
+    $checked = 0;
+
+    // Each <style> and each style="" on its own, its comments taken out.
+    foreach (array_merge($styles[1], $inline[1]) as $source) {
+        $css = (string) preg_replace('~/\*.*?\*/~s', '', $source);
+        preg_match_all('~([a-z-]+)\s*:\s*(?:clamp|min|max)\(~', $css, $uses, PREG_OFFSET_CAPTURE);
+
+        foreach ($uses[0] as $index => [$use, $offset]) {
+            $property = $uses[1][$index][0];
+            // The declaration before this one in its rule: between the delimiter before it and its own semicolon.
+            $declarations = preg_split('~[;{}]~', rtrim(substr($css, 0, $offset)));
+            array_pop($declarations);
+            $previous = trim((string) end($declarations));
+
+            expect($previous)->toMatch(
+                '~^'.preg_quote($property, '~').'\s*:\s*[^()]+$~',
+                "{$use} has no plain {$property} before it (it reads \"{$previous}\"): a Samsung TV of 2021 shows its default"
+            );
+            $checked++;
+        }
+    }
+
+    expect($checked)->toBeGreaterThan(0);
 });
 
 it('calls no browser API newer than Chrome 79 in anything the television runs', function (string $file) {

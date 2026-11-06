@@ -84,6 +84,8 @@
 
         .pairing-code {
             font-family: ui-monospace, "SF Mono", Menlo, monospace;
+            /* A Samsung TV of 2021 (Chromium 76) has no clamp(): it keeps the size before it. */
+            font-size: 180px;
             font-size: clamp(56px, 14vw, 180px);
             letter-spacing: 0.12em;
             font-weight: 700;
@@ -153,7 +155,7 @@
 
             {{-- Booting / talking to the server --}}
             <div id="view-loading" class="text-center">
-                <p class="muted" style="font-size:clamp(18px,2.2vw,32px)">Starting up...</p>
+                <p class="muted" style="font-size:32px;font-size:clamp(18px,2.2vw,32px)">Starting up...</p>
             </div>
 
             {{-- Waiting to be adopted by an organization owner --}}
@@ -163,7 +165,7 @@
                      device, not Add Screen, or the organization ends up with a duplicate
                      screen and its real one stranded. Never innerHTML — this text
                      is chosen by the server. --}}
-                <p class="muted" style="font-size:clamp(16px,2.2vw,26px); margin:0 0 3vh">
+                <p class="muted" style="font-size:26px;font-size:clamp(16px,2.2vw,26px); margin:0 0 3vh">
                     <span id="pairing-lead" dusk="pairing-lead">Open your dashboard, go to</span>
                     <strong id="pairing-where" dusk="pairing-where" style="color:#fff">Screens &rarr; Add Screen</strong>,
                     and enter this code:
@@ -172,11 +174,11 @@
                 <p id="pairing-code" class="pairing-code" dusk="pairing-code">------</p>
 
                 {{-- Where the dashboard is: the person at the set may be holding a phone and nothing else. --}}
-                <p class="muted" style="font-size:clamp(13px,1.4vw,18px); margin:3vh 0 0" dusk="pairing-panel-address">
+                <p class="muted" style="font-size:18px;font-size:clamp(13px,1.4vw,18px); margin:3vh 0 0" dusk="pairing-panel-address">
                     The dashboard: <strong style="color:#fff">{{ request()->getHost() }}</strong>
                 </p>
 
-                <p id="pairing-note" class="muted" style="font-size:clamp(13px,1.4vw,18px); margin:2vh 0 0">
+                <p id="pairing-note" class="muted" style="font-size:18px;font-size:clamp(13px,1.4vw,18px); margin:2vh 0 0">
                     This code changes every 15 minutes.
                 </p>
 
@@ -185,7 +187,7 @@
                      It is here to tell one television from another when matching a
                      set against its row in the database. Labelled beside it: player.js
                      writes the id alone into its own span. --}}
-                <p style="font-family:ui-monospace,Menlo,monospace; font-size:clamp(10px,1vw,14px);
+                <p style="font-family:ui-monospace,Menlo,monospace; font-size:14px;font-size:clamp(10px,1vw,14px);
                           color:#fff; opacity:.75; margin:2.5vh 0 0; word-break:break-all">
                     Device ID <span id="pairing-uuid" dusk="pairing-uuid"></span>
                 </p>
@@ -206,12 +208,12 @@
                 <div id="layer-ad" class="media-layer media-layer-ad" hidden dusk="layer-ad"></div>
 
                 <div id="no-content" hidden class="centred">
-                    <p style="font-size:clamp(24px,4vw,54px); font-weight:600">No content</p>
-                    <p class="muted" style="font-size:clamp(14px,1.6vw,20px); margin-top:2vh">
+                    <p style="font-size:54px;font-size:clamp(24px,4vw,54px); font-weight:600">No content</p>
+                    <p class="muted" style="font-size:20px;font-size:clamp(14px,1.6vw,20px); margin-top:2vh">
                         <span id="screen-name" dusk="screen-name"></span> is paired and waiting for a playlist.
                     </p>
                     {{-- What to do about it, on the set where somebody is looking at it. --}}
-                    <p class="muted" style="font-size:clamp(12px,1.3vw,17px); margin-top:1.5vh">
+                    <p class="muted" style="font-size:17px;font-size:clamp(12px,1.3vw,17px); margin-top:1.5vh">
                         Add files to its playlist in the dashboard, under Screens.
                     </p>
                 </div>
@@ -219,7 +221,7 @@
 
             {{-- Cannot reach the server --}}
             <div id="view-error" hidden class="text-center">
-                <p id="error-message" class="muted" style="font-size:clamp(18px,2.2vw,32px)"></p>
+                <p id="error-message" class="muted" style="font-size:32px;font-size:clamp(18px,2.2vw,32px)"></p>
             </div>
 
         </div>
