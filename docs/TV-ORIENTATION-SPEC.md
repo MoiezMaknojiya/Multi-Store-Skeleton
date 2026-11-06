@@ -1030,3 +1030,29 @@ the playlist, a channel, a break and a page's background.
 
 **Tests.** `OneDecoderAtATimeTest` (Dusk, a one-decoder set played by a page script), `ManifestSizesTest`,
 `WorkerRangeTest` (the worker under Node); each was seen failing on the code before.
+
+### 12.20 The next item is made ready once the switch is over (2026-11-06)
+
+**What was seen.** `EverySwitchIsASwapTest`'s two videos taking turns (2 s and 4 s, the next one made ready behind) failed
+3 runs in 15. The first switches were swaps; from one on, every switch was made at the switch.
+
+**Why.** A probe of every decision in the run found no video error and no "one decoder" learned in any run.
+- The next item is made ready `PREPARE_AHEAD_MS` before the one on screen ends, and never before the fade of its switch
+  is over (the timer waited `fadeLeft`). For a video of 4 s or less both fall due at the same moment, half a second in.
+- Which ran first was the clock's choice. With 500 ms against the fade's 500, the fade ended first. With 499 ms (the
+  millisecond ticked between the two), the prepare came first.
+- The item faded from was then still on the stage, and with two videos taking turns it is the very video to make ready:
+  refused as the same video again (`mayMakeReadyBeside`), it was made at its own switch.
+- A video made at the switch made the next item ready before its fade had even begun (it waits for its first frame,
+  `whenItShows`): the same refusal at once, and at every switch after.
+- The next item of any other kind went into the layer still showing the item before. On a set that decodes one video at
+  a time, the picture after a short video came on the glass before the video had played, then went with that layer, and
+  was made again only at its own switch.
+- With the CPU slowed six times, as a television's is, the race was lost in 2 runs of 10.
+
+**The fix (`player.js`).** `playCurrent` makes the next item ready once its switch is over, the item before gone
+(`prepareTheNext`, from the fade's end). A prepare that fires ends the fade it waited for before it reads the stage.
+
+**Tests.** `EverySwitchIsASwapTest` (its video test: 3 failures in 15 runs before, none in 20 after, nor in 10 with the CPU
+slowed six times) and `OneDecoderAtATimeTest`'s short video set up at the switch, which failed on the code before every
+time.

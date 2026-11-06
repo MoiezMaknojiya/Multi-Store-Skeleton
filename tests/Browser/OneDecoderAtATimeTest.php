@@ -131,6 +131,38 @@ class OneDecoderAtATimeTest extends DuskTestCase
         });
     }
 
+    public function test_a_short_video_set_up_at_the_switch_keeps_the_still_until_it_shows_and_the_picture_after_it_waits_behind(): void
+    {
+        // On a set that decodes one at a time a video after another is set up at the switch, the still of the one before
+        // kept on the glass until its first frame shows. The picture after a video shorter than the 3.5 s it is made
+        // ready ahead was made in that moment, into the layer still showing the still: the picture came on before the
+        // video had played, and went with that layer as the video faded in, made again only at its own switch.
+        [$organization, $screen] = $this->screen('short-video-token');
+        $this->video($organization, $screen, 'portrait-red-top.mp4', 0, 4);
+        $this->video($organization, $screen, 'portrait-red-top-2s.mp4', 1, 2);
+        $picture = Media::factory()->create([
+            'organization_id' => $organization->id, 'title' => 'After', 'type' => Media::TYPE_IMAGE, 'mime_type' => 'image/png',
+            'path' => $this->putImage("media/{$organization->id}/after.png", 40, 160, 60), 'thumbnail_path' => null,
+        ]);
+        PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $picture->id, 'position' => 2, 'duration_seconds' => 10]);
+
+        $this->browse(function (Browser $tv) {
+            $this->watchTheSwitches($tv);
+            $this->startTheSet($tv, 'short-video-token', ['signage.one_decoder' => 'NOW']);
+
+            $tv->waitUntil("window.__switches.cameOn.some((c) => c.name === 'after.png')", 40, 'the picture after the short video never came on');
+            $g = $tv->script('return window.__switches;')[0];
+            $after = collect($g['cameOn'])->first(fn (array $on): bool => $on['name'] === 'after.png');
+
+            $this->assertSame(2, $after['videosEnded'], 'the picture came on before the short video had played: '.json_encode($g));
+            $this->assertGreaterThan(500, $after['behindFor'], 'the picture was made only at its switch: '.json_encode($g));
+            $this->assertNotEmpty($g['stillsGone'], 'the first video was never held as a still: '.json_encode($g));
+            foreach ($g['stillsGone'] as $gone) {
+                $this->assertNotSame('0.01', $gone['videoOpacity'], 'the still went before the video over it showed: '.json_encode($g));
+            }
+        });
+    }
+
     public function test_a_page_that_fell_while_a_second_video_was_set_up_makes_the_set_decode_one_at_a_time(): void
     {
         // An ELC TV's WebView fell setting the second decoder up, before any error could say so: the page coming back
@@ -258,6 +290,50 @@ class OneDecoderAtATimeTest extends DuskTestCase
                         }
                     }).observe(document.body, { childList: true, subtree: true });
                     requestAnimationFrame(watch);
+                });
+            })();
+        JS])['identifier']];
+    }
+
+    /**
+     * Before the page loads: each picture as it comes on the glass (its layer no longer hidden) — how long it had been
+     * behind, and how many videos had ended by then — and, as each still goes, the opacity of the layer of the video
+     * over it: '0.01' while that video is still waiting for its first frame.
+     */
+    private function watchTheSwitches(Browser $tv): void
+    {
+        $tools = new ChromeDevToolsDriver($tv->driver);
+        $this->pageScripts[] = [$tools, (string) $tools->execute('Page.addScriptToEvaluateOnNewDocument', ['source' => <<<'JS'
+            (() => {
+                if (window.top !== window) return;
+                const g = window.__switches = { cameOn: [], stillsGone: [], ended: 0 };
+                const nameOf = (n) => ((n.dataset && n.dataset.item) || n.getAttribute('src') || n.tagName).split('?')[0].split('/').pop();
+                const added = new WeakMap();
+                document.addEventListener('ended', (event) => { if (event.target.tagName === 'VIDEO') g.ended += 1; }, true);
+                const look = () => {
+                    for (const id of ['layer-a', 'layer-b']) {
+                        const layer = document.getElementById(id);
+                        for (const n of layer.children) {
+                            if (n.tagName !== 'IMG' || layer.hidden || n.__on) continue;
+                            n.__on = true;
+                            g.cameOn.push({ name: nameOf(n), behindFor: performance.now() - (added.get(n) || performance.now()), videosEnded: g.ended });
+                        }
+                    }
+                };
+                document.addEventListener('DOMContentLoaded', () => {
+                    for (const id of ['layer-a', 'layer-b']) {
+                        new MutationObserver((records) => {
+                            for (const r of records) {
+                                for (const n of r.addedNodes) if (n.tagName) added.set(n, performance.now());
+                                for (const n of r.removedNodes) {
+                                    if (n.tagName !== 'CANVAS' || !n.dataset.still) continue;
+                                    const video = document.querySelector('#layer-a:not([hidden]) > video, #layer-b:not([hidden]) > video');
+                                    g.stillsGone.push({ videoOpacity: video ? video.parentElement.style.opacity : null });
+                                }
+                            }
+                            look();
+                        }).observe(document.getElementById(id), { attributes: true, attributeFilter: ['hidden'], childList: true });
+                    }
                 });
             })();
         JS])['identifier']];

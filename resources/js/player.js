@@ -1206,18 +1206,32 @@ function playCurrent() {
         incoming.hidden = false;
         state.front = target;
 
+        // The item after this one is made ready behind it once the switch is over, the item before gone (prepareNext).
+        // Made while that was still on the glass (its fade a moment from its end, or this video, set up at the switch,
+        // still waiting for its first frame), it went into the layer still showing it, which the switch then emptied;
+        // or it found the video faded from still on the stage, the very file it was when two videos take turns, and
+        // was made only at its own switch, as was every switch after (2026-11-06).
+        const prepareTheNext = () => {
+            if (state.current === node && node.isConnected) prepareNext(node);
+        };
+
         const present = () => {
             if (adUp) {
                 // A break's last advert stayed up until the item after it was ready: it goes in the same moment, or
                 // fades away over it, the swap underneath it unseen.
                 letGo();
                 letTheAdGo();
+                prepareTheNext();
             } else if (previous) {
                 // Over the item before, which goes once the new one is fully in (the first item has nothing to fade from).
                 incoming.style.zIndex = '1';
-                fade(incoming, 0, 1, letGo);
+                fade(incoming, 0, 1, () => {
+                    letGo();
+                    prepareTheNext();
+                });
             } else {
                 letGo();
+                prepareTheNext();
             }
         };
 
@@ -1239,7 +1253,6 @@ function playCurrent() {
         if (node.tagName === 'IFRAME') startPage(node);
         startItemTimer(seconds * 1000);
         preloadNext();
-        prepareNext(node);
     };
 
     // The same for a file that fails after it was replaced: skipping then would cut short
@@ -1325,8 +1338,8 @@ function preloadNext() {
  * again — a one-item playlist — is made ready the same way.
  *
  * A break due when this item ends plays first, and the item after it is made ready during its last advert
- * (prepareAfterTheBreak). Called with the item on screen, as it comes on (playCurrent) or comes back after a break
- * (resumeContent).
+ * (prepareAfterTheBreak). Called with the item on screen, once its switch is over and the item before has gone
+ * (playCurrent), as it plays again (replay) or as it comes back after a break (resumeContent).
  */
 function prepareNext(node) {
     if (state.prepareTimer) clearTimeout(state.prepareTimer);
@@ -1364,9 +1377,11 @@ function prepare(item, inMs, stillWanted) {
     state.prepareTimer = setTimeout(() => {
         state.prepareTimer = null;
         if (state.prepared || !stillWanted()) return;
+        // The fade this waited for ends now, before the stage is read: a moment from its end, the item it fades from is
+        // still on the stage until then, and may be the very video to make ready (two videos taking turns).
+        finishFade();
         // A video that cannot have a decoder beside the stage's is made at the switch instead (playCurrent).
         if (!mayMakeReadyBeside(item)) return;
-        finishFade();
 
         const ready = buildElement(item);
         // Paused before its first frame: it waits on that frame, unplayed, until its turn.
