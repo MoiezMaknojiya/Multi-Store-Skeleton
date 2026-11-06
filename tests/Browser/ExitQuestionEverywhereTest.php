@@ -24,8 +24,8 @@ use Tests\DuskTestCase;
  * Stay on a landscape screen, left of it turned over, below it on a portrait screen and above it turned the other way,
  * which is upright on the set as it hangs. Over each kind of item it is checked for that turn, for covering the whole
  * glass with nothing drawn over it, for its words and buttons inside its box and its box on the glass, and for answering
- * LEFT, RIGHT and ENTER, the item playing on under it. Samsung's own way first: a Samsung TV runs no worker, so its Ad
- * Builder pages play from the server in a frame of an origin of their own; then as a set the worker keeps plays them.
+ * LEFT, RIGHT and ENTER, the item playing on under it. As a Samsung TV plays: its user agent, and no worker, which its
+ * web runtime runs none of, so its Ad Builder pages play from the server in a frame of an origin of their own.
  * ExitQuestionTest holds the keys themselves.
  */
 class ExitQuestionEverywhereTest extends DuskTestCase
@@ -56,9 +56,6 @@ class ExitQuestionEverywhereTest extends DuskTestCase
     /** @var list<ChromeDevToolsDriver> browsers whose requests or size a test changed */
     private array $blocked = [];
 
-    /** @var array{0: ChromeDevToolsDriver, 1: string}|null the script that takes the worker away, while it is in */
-    private ?array $withoutWorker = null;
-
     protected function tearDown(): void
     {
         foreach ($this->blocked as $tools) {
@@ -70,39 +67,34 @@ class ExitQuestionEverywhereTest extends DuskTestCase
             }
         }
         $this->blocked = [];
-        $this->letTheWorkerBack();
         $this->forgetPageScripts();
 
         parent::tearDown();
     }
 
-    /** @return array<string, array{0: string, 1: bool, 2: ?string}> */
+    /** @return array<string, array{0: string, 1: ?string}> */
     public static function turnsAndWays(): array
     {
         return [
-            'landscape, as a Samsung TV plays it' => ['landscape', false, null],
-            'landscape flipped, as a Samsung TV plays it' => ['landscape_flipped', false, null],
-            'portrait, as a Samsung TV plays it' => ['portrait', false, null],
-            'portrait flipped, as a Samsung TV plays it' => ['portrait_flipped', false, null],
-            'landscape, kept by the worker' => ['landscape', true, null],
-            'landscape flipped, kept by the worker' => ['landscape_flipped', true, null],
-            'portrait, kept by the worker' => ['portrait', true, null],
-            'portrait flipped, kept by the worker' => ['portrait_flipped', true, null],
-            'portrait, on a set that decodes its videos' => ['portrait', true, '1'],
+            'landscape' => ['landscape', null],
+            'landscape flipped' => ['landscape_flipped', null],
+            'portrait' => ['portrait', null],
+            'portrait flipped' => ['portrait_flipped', null],
+            'portrait, on a set told to decode its videos' => ['portrait', '1'],
         ];
     }
 
     #[DataProvider('turnsAndWays')]
-    public function test_over_everything_a_screen_plays_the_question_stands_with_the_screen_and_answers(string $orientation, bool $worker, ?string $decode): void
+    public function test_over_everything_a_screen_plays_the_question_stands_with_the_screen_and_answers(string $orientation, ?string $decode): void
     {
         $this->world($orientation);
         // Every ad of the channel in every pass, so one round of the playlist shows them all.
         Channel::query()->update(['ads_per_pass' => 3]);
         $names = $this->pageNames();
 
-        $this->browse(function (Browser $tv) use ($orientation, $worker, $decode, $names) {
+        $this->browse(function (Browser $tv) use ($orientation, $decode, $names) {
             $this->watch($tv);
-            $this->startTheSet($tv, 'everything-token', $worker, $decode);
+            $this->startTheSet($tv, 'everything-token', $decode);
 
             $asked = [];
             $shot = false;
@@ -120,7 +112,7 @@ class ExitQuestionEverywhereTest extends DuskTestCase
                 $over = $this->kindOf((string) $look['glass'], $names) ?? $now;
                 $this->assertStandsWithTheScreen($orientation, $look, "over {$over}");
                 if (! $shot && str_starts_with($over, 'page:')) {
-                    $tv->screenshot('exit-question-'.$orientation.($worker ? '-worker' : '-samsung').($decode ? '-decoded' : ''));
+                    $tv->screenshot('exit-question-'.$orientation.($decode ? '-decoded' : ''));
                     $shot = true;
                 }
                 $this->answersAndPlaysOn($tv, "over {$over}");
@@ -130,7 +122,7 @@ class ExitQuestionEverywhereTest extends DuskTestCase
             $this->assertSame([], array_values(array_diff(self::EVERY_KIND, $asked)),
                 'never asked over: '.json_encode(array_values(array_diff(self::EVERY_KIND, $asked))).', seen: '.json_encode(array_values(array_unique($tv->script('return window.__all.seen;')[0]))));
             $this->assertSame($orientation, $tv->script("return document.getElementById('stage').dataset.orientation;")[0]);
-            $this->assertSame($worker, $tv->script('return !! (navigator.serviceWorker && navigator.serviceWorker.controller);')[0]);
+            $this->assertFalse($tv->script('return !! (navigator.serviceWorker && navigator.serviceWorker.controller);')[0], 'a worker kept the set');
             $this->assertSame([], $tv->script('return window.__all.errors;')[0], 'the player threw');
 
             // After all of it, breaks that let pages go among it, Exit still leaves at once, for the page before.
@@ -150,7 +142,7 @@ class ExitQuestionEverywhereTest extends DuskTestCase
                 ]);
 
                 // Paired, with nothing on its playlist: "No content".
-                $this->startTheSet($tv, "states-{$orientation}", worker: false);
+                $this->startTheSet($tv, "states-{$orientation}");
                 $tv->waitUntil("! document.getElementById('no-content').hidden", 15, 'No content never showed');
                 $this->asksOver($tv, $orientation, "No content, {$orientation}");
 
@@ -178,7 +170,6 @@ class ExitQuestionEverywhereTest extends DuskTestCase
             // A set never paired cannot reach the server: it says so, and RETURN still asks. Its stage is as it starts.
             $tv->visit('/login');
             $tv->script('localStorage.clear();');
-            $tv->script("localStorage.setItem('signage.exit_question', '1');");
             $this->blockRequests($tv, ['*/device/register*']);
             $tv->visit('/player');
             $tv->waitUntil("! document.getElementById('view-error').hidden", 20, 'the set never said it has no connection');
@@ -196,7 +187,7 @@ class ExitQuestionEverywhereTest extends DuskTestCase
         $this->browse(function (Browser $tv) use ($screen) {
             foreach (array_keys(self::TURNS) as $orientation) {
                 $screen->update(['orientation' => $orientation]);
-                $this->startTheSet($tv, 'sizes-token', worker: false);
+                $this->startTheSet($tv, 'sizes-token');
                 $tv->waitUntil("document.getElementById('stage').dataset.orientation === '{$orientation}'", 15, 'the stage never turned');
 
                 // A TV's page is 1920 x 1080 whatever its panel; the smaller ones are the boxes whose WebView is smaller.
@@ -217,24 +208,22 @@ class ExitQuestionEverywhereTest extends DuskTestCase
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $this->page($organization, 'Pressed page', 'landscape', picture: null, video: null)->id, 'position' => 0]);
 
         $this->browse(function (Browser $tv) {
-            foreach ([false, true] as $worker) {
-                $this->startTheSet($tv, 'pointer-token', $worker);
-                $tv->waitUntil("!! document.querySelector('.media-layer:not([hidden]) iframe[src]')", 20, 'the page never came on');
-                $tv->pause(1500);
+            $this->startTheSet($tv, 'pointer-token');
+            $tv->waitUntil("!! document.querySelector('.media-layer:not([hidden]) iframe[src]')", 20, 'the page never came on');
+            $tv->pause(1500);
 
-                // A Smart Remote's pointer or a mouse in the set's USB port, pressed on the page.
-                $tools = new ChromeDevToolsDriver($tv->driver);
-                foreach (['mousePressed', 'mouseReleased'] as $type) {
-                    $tools->execute('Input.dispatchMouseEvent', ['type' => $type, 'x' => 960, 'y' => 540, 'button' => 'left', 'clickCount' => 1]);
-                }
-                $tv->pause(300);
-                $this->asksOver($tv, 'landscape', $worker ? 'a page kept by the worker, pressed' : 'a page from the server, pressed');
-
-                // However the keyboard gets into the frame, it is taken back.
-                $tv->script("document.querySelector('.media-layer:not([hidden]) iframe').focus();");
-                $tv->pause(300);
-                $this->asksOver($tv, 'landscape', $worker ? 'a page kept by the worker, focused' : 'a page from the server, focused');
+            // A Smart Remote's pointer or a mouse in the set's USB port, pressed on the page.
+            $tools = new ChromeDevToolsDriver($tv->driver);
+            foreach (['mousePressed', 'mouseReleased'] as $type) {
+                $tools->execute('Input.dispatchMouseEvent', ['type' => $type, 'x' => 960, 'y' => 540, 'button' => 'left', 'clickCount' => 1]);
             }
+            $tv->pause(300);
+            $this->asksOver($tv, 'landscape', 'a page, pressed');
+
+            // However the keyboard gets into the frame, it is taken back.
+            $tv->script("document.querySelector('.media-layer:not([hidden]) iframe').focus();");
+            $tv->pause(300);
+            $this->asksOver($tv, 'landscape', 'a page, focused');
         });
     }
 
@@ -252,21 +241,18 @@ class ExitQuestionEverywhereTest extends DuskTestCase
         ])->screens()->attach($screen);
 
         $this->browse(function (Browser $tv) {
-            foreach ([false, true] as $worker) {
-                $this->watch($tv);
-                $this->startTheSet($tv, 'break-token', $worker);
-                $before = $tv->script('return history.length;')[0];
+            $this->watch($tv);
+            $this->startTheSet($tv, 'break-token');
+            $before = $tv->script('return history.length;')[0];
 
-                // Two breaks, each letting the page go and bringing it back from its start.
-                $tv->waitUntil("window.__all.seen.filter((s) => s.startsWith('ad ')).length >= 2 && window.__all.glass().startsWith('page:')", 90, 'two breaks never came after the page: '.json_encode($tv->script('return window.__all.seen;')[0]));
-                $this->assertSame($before, $tv->script('return history.length;')[0], 'the breaks wrote history the Exit button would have to go back through');
+            // Two breaks, each letting the page go and bringing it back from its start.
+            $tv->waitUntil("window.__all.seen.filter((s) => s.startsWith('ad ')).length >= 2 && window.__all.glass().startsWith('page:')", 90, 'two breaks never came after the page: '.json_encode($tv->script('return window.__all.seen;')[0]));
+            $this->assertSame($before, $tv->script('return history.length;')[0], 'the breaks wrote history the Exit button would have to go back through');
 
-                // And should a frame ever write some, Exit goes back past it to the page the player was opened from.
-                $tv->script("const frame = document.querySelector('.media-layer:not([hidden]) iframe'); frame.src = frame.src.split('#')[0] + '#written';");
-                $tv->waitUntil('history.length === '.($before + 1), 5, 'the frame wrote no history');
-                $this->leaves($tv);
-                $this->forgetPageScripts();
-            }
+            // And should a frame ever write some, Exit goes back past it to the page the player was opened from.
+            $tv->script("const frame = document.querySelector('.media-layer:not([hidden]) iframe'); frame.src = frame.src.split('#')[0] + '#written';");
+            $tv->waitUntil('history.length === '.($before + 1), 5, 'the frame wrote no history');
+            $this->leaves($tv);
         });
     }
 
@@ -393,54 +379,19 @@ class ExitQuestionEverywhereTest extends DuskTestCase
             ->all();
     }
 
-    /**
-     * The player opened after /login, as the Samsung app opens it after its own page. Without the worker as a Samsung
-     * TV is (its web runtime runs none): any worker an earlier test left is unregistered first and the API taken away.
-     */
-    private function startTheSet(Browser $tv, string $token, bool $worker, ?string $decode = null): void
+    /** The player opened after /login, as the Samsung app opens it after its own page, on a Samsung TV (playAsASamsungTv). */
+    private function startTheSet(Browser $tv, string $token, ?string $decode = null): void
     {
-        if ($worker) {
-            $this->letTheWorkerBack();
-        }
+        $this->playAsASamsungTv($tv);
         $tv->resize(1920, 1080);
         $tv->visit('/login');
-        $tv->script('window.__gone = false; (navigator.serviceWorker ? navigator.serviceWorker.getRegistrations() : Promise.resolve([]))
-            .then((all) => Promise.all(all.map((r) => r.unregister()))).then(() => { window.__gone = true; });');
-        $tv->waitUntil('window.__gone === true', 10, 'an old worker would not go');
         $tv->script('localStorage.clear();');
-        $tv->script("localStorage.setItem('signage.device.token', '{$token}'); localStorage.setItem('signage.exit_question', '1');");
+        $tv->script("localStorage.setItem('signage.device.token', '{$token}');");
         if ($decode !== null) {
             $tv->script("localStorage.setItem('signage.decode_turned_video', '{$decode}');");
         }
-
-        if (! $worker) {
-            if ($this->withoutWorker === null) {
-                $tools = new ChromeDevToolsDriver($tv->driver);
-                $this->withoutWorker = [$tools, (string) $tools->execute('Page.addScriptToEvaluateOnNewDocument', [
-                    'source' => 'delete Navigator.prototype.serviceWorker;',
-                ])['identifier']];
-            }
-            $tv->visit('/player');
-        } else {
-            $tv->visit('/player');
-            $tv->waitUntil('!! navigator.serviceWorker.controller', 20, 'no worker took the page over');
-            $tv->refresh();
-        }
+        $tv->visit('/player');
         $tv->waitUntil('window.signagePlayerStarted === true', 15, 'the player never started');
-    }
-
-    private function letTheWorkerBack(): void
-    {
-        if ($this->withoutWorker === null) {
-            return;
-        }
-        [$tools, $identifier] = $this->withoutWorker;
-        $this->withoutWorker = null;
-        try {
-            $tools->execute('Page.removeScriptToEvaluateOnNewDocument', ['identifier' => $identifier]);
-        } catch (\Throwable) {
-            // The browser is gone already, and the script with it.
-        }
     }
 
     /** @param  list<string>  $urls */

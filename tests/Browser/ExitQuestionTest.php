@@ -18,8 +18,8 @@ use Tests\DuskTestCase;
  * Samsung requires RETURN to do something on every screen, and a shop's TV must not close at a stray press: RETURN
  * asks "Exit …?" with Stay chosen, LEFT and RIGHT move between Stay and Exit, ENTER presses the chosen one, and RETURN
  * again or 10 seconds with no key close it. Exit goes back to the page before, which on the TV is the app's own page
- * and closes the app (seen on the TV 10.0 emulator with its remote). On a Samsung TV it is on by itself (Tizen in the
- * user agent); here the set's own switch turns it on, as it can on any set. Keys are pressed as a remote sends them,
+ * and closes the app (seen on the TV 10.0 emulator with its remote). It is a Samsung TV's alone (Tizen in the user
+ * agent, which the tab says here as such a TV does), and no other set has it. Keys are pressed as a remote sends them,
  * through Chrome itself (Input.dispatchKeyEvent): RETURN is keyCode 10009, "XF86Back".
  */
 class ExitQuestionTest extends DuskTestCase
@@ -168,17 +168,16 @@ class ExitQuestionTest extends DuskTestCase
     public function test_other_televisions_never_ask(): void
     {
         $this->browse(function (Browser $tv) {
-            // Chrome's own user agent, no switch: not a Samsung TV.
-            $this->startTheSet($tv, switch: null);
+            // An Android TV, a Fire TV and Chrome itself: no question, no box on the page, no Samsung part loaded, and
+            // RETURN leaves the page where it is.
+            foreach ([self::ANDROID_TV, self::FIRE_TV, null] as $userAgent) {
+                $this->startTheSet($tv, as: $userAgent);
 
-            $this->press($tv, self::RETURN);
-            $this->assertFalse($this->question($tv)['open']);
-
-            // And a set told no keeps it off even on Samsung.
-            $this->startTheSet($tv, switch: '0');
-            $this->press($tv, self::RETURN);
-            $this->assertFalse($this->question($tv)['open']);
-            $tv->assertPathIs('/player');
+                $this->press($tv, self::RETURN);
+                $this->assertSame(0, $tv->script("return document.querySelectorAll('#exit-question, .exit-question-box').length;")[0], 'the box of the question is on the page: '.$userAgent);
+                $this->assertSame([], $tv->script("return performance.getEntriesByType('resource').map((e) => e.name).filter((n) => /samsung|exit-question/.test(n));")[0], 'the Samsung part was loaded: '.$userAgent);
+                $tv->assertPathIs('/player');
+            }
         });
     }
 
@@ -204,16 +203,18 @@ class ExitQuestionTest extends DuskTestCase
         PlaylistItem::create(['screen_id' => $screen->id, 'media_id' => $media->id, 'position' => 0, 'duration_seconds' => 60]);
     }
 
-    /** The player opened after /login, as the Samsung app opens it after its own page; the switch on unless said. */
-    private function startTheSet(Browser $tv, ?string $token = null, ?string $switch = '1'): void
+    /** The player opened after /login, as the Samsung app opens it after its own page, on a Samsung TV unless said. */
+    private function startTheSet(Browser $tv, ?string $token = null, ?string $as = self::SAMSUNG_TV): void
     {
+        if ($as === self::SAMSUNG_TV) {
+            $this->playAsASamsungTv($tv);
+        } else {
+            $this->playAs($tv, $as);
+        }
         $tv->visit('/login');
         $tv->script('localStorage.clear();');
         if ($token !== null) {
             $tv->script("localStorage.setItem('signage.device.token', '{$token}');");
-        }
-        if ($switch !== null) {
-            $tv->script("localStorage.setItem('signage.exit_question', '{$switch}');");
         }
         $tv->visit('/player');
         $tv->waitUntil('window.signagePlayerStarted === true', 15, 'the player never started');

@@ -9,23 +9,19 @@
  * Exit goes BACK to the app's own page, which closes the app: this page comes from the server, and the Tizen runtime
  * gives such a page no tizen API (seen on the TV 10.0 emulator, 2026-11-06), while the app's page has it.
  *
- * Only on Samsung (Tizen in the user agent), or where this set says otherwise (EXIT_QUESTION_KEY '1' or '0'), which is
- * how a browser test tries it. Other televisions keep their own ways: the Android app's menu holds Back.
+ * A Samsung TV's alone (player/samsung.js, and its box on the page only there): other televisions keep their own ways,
+ * the Android app's menu holds Back.
  */
-const EXIT_QUESTION_KEY = 'signage.exit_question';
 const RETURN_KEY = 10009;
 const LEFT_KEY = 37;
 const RIGHT_KEY = 39;
 const ENTER_KEY = 13;
 const STAYS_OPEN_MS = 10000;
 
-/** @param {{get: function(string): (string|null)}} store */
-export function registerExitQuestion(store) {
-    const own = store.get(EXIT_QUESTION_KEY);
-    const wanted = own === '1' || (own !== '0' && /\bTizen\b/i.test(navigator.userAgent));
+export function registerExitQuestion() {
     const box = document.getElementById('exit-question');
 
-    if (! wanted || ! box) return;
+    if (! box) return;
 
     const buttons = [document.getElementById('exit-question-stay'), document.getElementById('exit-question-exit')];
     // The page the player was opened from is this many entries back once anything is written after it.

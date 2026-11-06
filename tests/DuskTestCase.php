@@ -34,6 +34,21 @@ abstract class DuskTestCase extends BaseTestCase
     /** @var list<string> upload parts present before this test ran */
     private array $uploadPartsAtStart = [];
 
+    /** What a Samsung TV of 2021 says it is (Tizen 6.0, Chromium 76): the player runs its own part there (player/samsung.js). */
+    protected const SAMSUNG_TV = 'Mozilla/5.0 (SMART-TV; LINUX; Tizen 6.0) AppleWebKit/537.36 (KHTML, like Gecko) 76.0.3809.146/6.0 TV Safari/537.36';
+
+    /** What the Android app says on a Fire TV Stick 4K Max (AFT in its model). */
+    protected const FIRE_TV = 'Mozilla/5.0 (Linux; Android 11; AFTKA Build/RS8150.2953N; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.6723.102 Safari/537.36';
+
+    /** What the Android app says on an Android TV (the office's Philips, WebView 79). */
+    protected const ANDROID_TV = 'Mozilla/5.0 (Linux; Android 9; 55BDL4511D Build/PPR1.180610.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/79.0.3945.136 Safari/537.36';
+
+    /** The browser told to say it is a television (playAs), put back to Chrome's own at the end of the test. */
+    private ?Browser $playingAs = null;
+
+    /** @var array{0: ChromeDevToolsDriver, 1: string}|null the script that takes the worker away (playAsASamsungTv) */
+    private ?array $withoutWorker = null;
+
     /**
      * Prepare for Dusk test execution.
      */
@@ -90,6 +105,24 @@ abstract class DuskTestCase extends BaseTestCase
      */
     protected function tearDown(): void
     {
+        // Dusk keeps its browser for the next test: it says it is Chrome again, and has its worker back.
+        if ($this->playingAs !== null) {
+            try {
+                $this->playAs($this->playingAs);
+            } catch (\Throwable) {
+                // The browser is gone already, and what it said with it.
+            }
+        }
+        if ($this->withoutWorker !== null) {
+            [$tools, $identifier] = $this->withoutWorker;
+            $this->withoutWorker = null;
+            try {
+                $tools->execute('Page.removeScriptToEvaluateOnNewDocument', ['identifier' => $identifier]);
+            } catch (\Throwable) {
+                // The browser is gone already, and the script with it.
+            }
+        }
+
         $appeared = array_values(array_diff($this->mediaFilesOnDisk(), $this->mediaFilesAtStart));
 
         if ($appeared !== []) {
@@ -623,6 +656,44 @@ abstract class DuskTestCase extends BaseTestCase
             'matchedNetworkConditions' => $normal ? [] : [['urlPattern' => ''] + $line],
         ]);
         $tools->execute('Network.overrideNetworkState', $line);
+    }
+
+    /**
+     * The television this tab says it is (SAMSUNG_TV, FIRE_TV, ANDROID_TV), from now until it is called again — with
+     * none, Chrome itself: in every request it sends, so the server draws that set's page, and in `navigator.userAgent`,
+     * so the player runs that set's own part. It holds across navigations, and the test's end puts Chrome's back.
+     */
+    protected function playAs(Browser $browser, ?string $userAgent = null): void
+    {
+        $tools = new ChromeDevToolsDriver($browser->driver);
+        $tools->execute('Network.enable');
+        $tools->execute('Network.setUserAgentOverride', [
+            'userAgent' => $userAgent ?? (string) $tools->execute('Browser.getVersion')['userAgent'],
+        ]);
+        $this->playingAs = $userAgent !== null ? $browser : null;
+    }
+
+    /**
+     * A Samsung TV, until the test's end: its user agent (playAs), and no service worker, which its web runtime runs none
+     * of. Any worker an earlier test left is unregistered first (from the sign-in page, the tab's origin) and the API
+     * taken away: kept, a worker would also fetch the player's page with Chrome's own user agent, not the TV's.
+     */
+    protected function playAsASamsungTv(Browser $browser): void
+    {
+        $this->playAs($browser, self::SAMSUNG_TV);
+        if ($this->withoutWorker !== null) {
+            return;
+        }
+
+        $browser->visit('/login');
+        $browser->script('window.__gone = false; (navigator.serviceWorker ? navigator.serviceWorker.getRegistrations() : Promise.resolve([]))
+            .then((all) => Promise.all(all.map((r) => r.unregister()))).then(() => { window.__gone = true; });');
+        $browser->waitUntil('window.__gone === true', 10, 'an old worker would not go');
+
+        $tools = new ChromeDevToolsDriver($browser->driver);
+        $this->withoutWorker = [$tools, (string) $tools->execute('Page.addScriptToEvaluateOnNewDocument', [
+            'source' => 'delete Navigator.prototype.serviceWorker;',
+        ])['identifier']];
     }
 
     /**

@@ -197,10 +197,10 @@ must not close at a stray press, so RETURN asks first, on the player and on the 
 - **The question:** "Exit The Display Solution?" over whatever plays, with **Stay** chosen and **Exit** beside it, and
   "This screen stops playing until the app is opened again." LEFT and RIGHT choose, ENTER presses, a pointer remote
   clicks. RETURN again, or 10 seconds with no key, closes it, and the TV goes on where it was. A held key opens it once.
-- **Where it lives:** on the player, `resources/js/player/exit-question.js` and its box inside `#stage` (it turns with
-  the stage). It is on where the user agent says Tizen, or where the set's `localStorage` says
-  `signage.exit_question = '1'` (`'0'` turns it off): how `ExitQuestionTest` tries it in Chrome. Other televisions keep
-  their own ways (the Android app's menu holds Back). The app's own page (`main.js`, `index.html`) draws the same
+- **Where it lives:** in the Samsung TV's own part of the player (`resources/js/player/samsung.js`, which loads
+  `exit-question.js`), with its box inside `#stage` (it turns with the stage) and its look: the player imports that
+  chunk, and the page draws its box and look, only where the user agent says Tizen (see "Each kind of television has
+  its own part" below). Other televisions keep their own ways (the Android app's menu holds Back) and never download it. The app's own page (`main.js`, `index.html`) draws the same
   question for its Starting and No internet screens, and opens the player only once it is answered.
 - **How Exit closes the app:** the player's page comes from the server, and the runtime gives such a page **no `tizen`
   and no `webapis`** (TV 10.0 emulator: both `undefined` on `/player`, `history.length` 2). The app's page has them. So
@@ -219,16 +219,23 @@ must not close at a stray press, so RETURN asks first, on the player and on the 
   it hangs. It is measured by the panel's short side (`vmin`, 1080 px on a TV's 1920 × 1080 page), which is also a
   turned stage's width, so it is the same in every orientation and fits a smaller page too (1366 × 768, 1280 × 720,
   960 × 540 checked). `ExitQuestionEverywhereTest` asks over a picture, a video, two Ad Builder pages, a channel's
-  picture, video and page and a break's picture and video, in all four orientations, as a Samsung TV plays them (no
-  worker: pages from the server in a frame of their own origin) and as the worker keeps them, and over No content, a dark
+  picture, video and page and a break's picture and video, in all four orientations, as a Samsung TV plays them (its
+  user agent and no worker: pages from the server in a frame of their own origin), and over No content, a dark
   screen, the holding picture, a pairing code and no connection — the box covering the glass with nothing drawn over it,
   its words inside, LEFT, RIGHT and ENTER answering, the screen playing on under it, and Exit leaving at once at the end.
 - **Two faults it found, fixed the same day:** (1) a press on an Ad Builder page (a mouse, a Smart Remote's pointer)
-  took the keyboard into its frame, and RETURN never reached the player again: a page's frame now takes no pointer and
-  no Tab stop, and the question takes the keyboard back should it get in anyway. (2) A break over an Ad Builder page
+  took the keyboard into its frame, and RETURN never reached the player again: on a Samsung TV a page's frame now
+  takes no pointer, and the question takes the keyboard back should it get in anyway. (2) A break over an Ad Builder page
   emptied the frame by its `src`, which wrote a history entry each time: Exit's one step back only went back inside the
   frame, and with a break an hour the browser's 50 entries no longer held the app's page after about two days. The frame
-  is now emptied with `location.replace` (no entry), and Exit goes back past anything written since the player started.
+  is now emptied with `location.replace` on a Samsung TV (no entry), and Exit goes back past anything written since
+  the player started.
+- **Each kind of television has its own part (owner, 2026-11-06):** a change made for a Samsung TV must never reach an
+  Android TV or a Fire TV, and the other way round, with no code written twice and no bigger player. So the player is
+  one file for every set, and the Samsung TV's part (the question, its look, its box, and how it empties a frame) is a
+  chunk of 1.45 kB that the player imports, and the page draws, only on a Samsung TV; a Fire TV's decoder is the same
+  for a Fire TV. The other sets' player came back to what is live plus the shared race fix (26.52 kB against the live
+  26.29 kB; 27.90 kB with the question inside). `EachTelevisionGetsItsOwnPartTest` holds it.
 - **Not turned: the app's own page.** Its Starting and No internet screens, and their question, know no orientation (the
   player's storage belongs to the server's origin, not the app's), so on a TV hung in portrait they read sideways, as
   they always have. The player itself, where a TV spends its days, turns.

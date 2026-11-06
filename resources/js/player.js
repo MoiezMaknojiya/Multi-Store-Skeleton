@@ -24,8 +24,6 @@
  * Anywhere else the player is online only, exactly as before.
  */
 
-import { registerExitQuestion } from './player/exit-question.js';
-
 const TOKEN_KEY = 'signage.device.token';
 const UUID_KEY = 'signage.device.uuid';
 const SECRET_KEY = 'signage.device.poll_secret';
@@ -101,6 +99,18 @@ const store = {
 };
 
 const el = (id) => document.getElementById(id);
+
+// What only one kind of television needs is in a chunk of its own that the player loads there alone, so a change made
+// for one kind never reaches another, which never downloads it (owner, 2026-11-06): a Samsung TV's (player/samsung.js),
+// a turned Fire TV's decoder (player/decoded-video.js). What such a set does its own way it puts into `own`; anywhere
+// else it is done as written here.
+const ON_A_SAMSUNG_TV = /\bTizen\b/i.test(navigator.userAgent);
+const own = {
+    /** A page's frame emptied for a break. */
+    emptyFrame(frame) {
+        frame.src = 'about:blank';
+    },
+};
 
 /**
  * Which route through the panel this television should be sent down.
@@ -946,8 +956,6 @@ function buildNode(item) {
         // It waits to be told it is on screen (startPage) before its animations start.
         frame.name = HELD_PAGE_NAME;
         frame.setAttribute('scrolling', 'no');
-        // Never the keyboard's: a remote's keys belong to the player (the Samsung app's RETURN, player/exit-question.js).
-        frame.tabIndex = -1;
         frame.setAttribute('sandbox', kept ? 'allow-scripts allow-same-origin' : 'allow-scripts');
 
         // Beside a video that keeps the set's one decoder its own videos come without their files (holdsPageVideos).
@@ -2157,21 +2165,8 @@ function pauseContent() {
             if (! state.ad.contentPaused || frontNode() !== node) return;
             releasePageVideos(node);
             node.style.visibility = 'hidden';
-            emptyFrame(node);
+            own.emptyFrame(node);
         }, FADE_MS);
-    }
-}
-
-/**
- * A frame emptied in place, its page REPLACED: setting its src wrote a history entry at every break, so the Samsung app's
- * Exit (history back) only went back inside the frame, and after a few days of breaks the browser's 50 entries no longer
- * held the app's own page at all. Location.replace may be called on a frame of another origin too.
- */
-function emptyFrame(frame) {
-    try {
-        frame.contentWindow.location.replace('about:blank');
-    } catch {
-        frame.src = 'about:blank';
     }
 }
 
@@ -2290,8 +2285,10 @@ function showError(message) {
 
 /* ── Boot ──────────────────────────────────────────────────────────────── */
 
-// The Samsung app's RETURN asks before it closes the app (player/exit-question.js).
-registerExitQuestion(store);
+if (ON_A_SAMSUNG_TV) {
+    // Its RETURN asks before it closes the app, and it empties a page's frame its own way (player/samsung.js).
+    import('./player/samsung.js').then((samsung) => samsung.startOnASamsungTv(own)).catch(() => {});
+}
 registerWorker();
 
 if (state.token) {
