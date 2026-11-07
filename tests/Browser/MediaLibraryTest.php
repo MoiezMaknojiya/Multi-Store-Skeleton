@@ -7,8 +7,12 @@ use App\Models\ChannelAd;
 use App\Models\Media;
 use App\Models\Organization;
 use App\Models\Role;
+use Facebook\WebDriver\Chrome\ChromeDevToolsDriver;
+use Facebook\WebDriver\Exception\TimeoutException;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
 
@@ -120,6 +124,52 @@ class MediaLibraryTest extends DuskTestCase
             $browser->waitForText('No files yet.')
                 ->assertDontSee('Alpha Only Poster');
         });
+    }
+
+    /**
+     * Download on a row (a customer who had lost their own copy, 2026-11-06): pressed with the mouse, the browser saves the
+     * file as it is kept, under its title, and the page stays where it was.
+     */
+    public function test_download_on_a_row_saves_the_file_as_it_is_kept_under_its_title(): void
+    {
+        $this->seedSuperAdmin();
+        $alpha = Organization::factory()->create(['name' => 'Alpha Mart']);
+        $owner = $this->organizationMember($alpha, Role::OWNER);
+        $path = $this->putImage("media/{$alpha->id}/".Str::ulid().'.png', 40, 160, 60);
+        $file = Media::factory()->create([
+            'organization_id' => $alpha->id, 'title' => 'Lunch menu', 'path' => $path, 'thumbnail_path' => null,
+            'mime_type' => 'image/png', 'size' => Storage::disk('public')->size($path),
+        ]);
+        // Chrome takes a folder written the system's own way (on Windows: backslashes alone).
+        $downloads = str_replace('/', DIRECTORY_SEPARATOR, storage_path('framework/testing/dusk-downloads/'.Str::ulid()));
+        File::ensureDirectoryExists($downloads);
+
+        try {
+            $this->browse(function (Browser $browser) use ($owner, $alpha, $file, $downloads) {
+                $this->freshSession($browser);
+                $browser->loginAs($owner);
+                $this->switchToOrganization($browser, $alpha);
+                (new ChromeDevToolsDriver($browser->driver))->execute('Browser.setDownloadBehavior', ['behavior' => 'allow', 'downloadPath' => $downloads]);
+
+                $browser->visit('/media');
+                $this->waitForAlpine($browser);
+                $browser->waitFor('@download-media-'.$file->id)
+                    ->assertAttribute('@download-media-'.$file->id, 'aria-label', 'Download Lunch menu')
+                    ->click('@download-media-'.$file->id);
+
+                $saved = $downloads.DIRECTORY_SEPARATOR.'Lunch menu.png';
+                try {
+                    $browser->waitUsing(10, 200, fn (): bool => is_file($saved) && filesize($saved) === $file->size);
+                } catch (TimeoutException) {
+                    $this->fail('the file was never saved; the folder holds: '.json_encode(array_values(array_diff(scandir($downloads) ?: [], ['.', '..']))));
+                }
+                $this->assertSame(Storage::disk('public')->get($file->path), file_get_contents($saved));
+                $browser->assertPathIs('/media');
+            });
+        } finally {
+            (new ChromeDevToolsDriver(static::$browsers->first()->driver))->execute('Browser.setDownloadBehavior', ['behavior' => 'default']);
+            File::deleteDirectory($downloads);
+        }
     }
 
     /**

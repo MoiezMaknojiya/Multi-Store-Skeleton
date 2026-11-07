@@ -135,10 +135,18 @@
                             </td>
                         @endif
                         <td class="px-5 py-4">
-                            {{-- askToDelete: a file a channel shows is refused at once, before any confirmation. --}}
-                            {{-- A file keeps its name alone (owner, 2026-10-01): when it plays is said on its playlist line. --}}
-                            <x-crud.table-actions editClick="openFormModal(item)" deleteClick="askToDelete(item)" editLabel="Rename"
-                                editCan="media-update" deleteCan="media-destroy" dusk="media" />
+                            <div class="flex items-center justify-end gap-2">
+                                {{-- The file as it is kept, to keep (MediaController::download): a link, so the browser shows
+                                     its own progress, first of the row's actions, Delete last. --}}
+                                @can('media-view')
+                                    <a x-bind:href="'/media/' + item.id + '/download'" class="btn-row-neutral"
+                                       x-bind:aria-label="'Download ' + item.title" x-bind:dusk="'download-media-' + item.id">Download</a>
+                                @endcan
+                                {{-- askToDelete: a file a channel shows is refused at once, before any confirmation. --}}
+                                {{-- A file keeps its name alone (owner, 2026-10-01): when it plays is said on its playlist line. --}}
+                                <x-crud.table-actions editClick="openFormModal(item)" deleteClick="askToDelete(item)" editLabel="Rename"
+                                    editCan="media-update" deleteCan="media-destroy" dusk="media" />
+                            </div>
                         </td>
                     </tr>
                 </template>

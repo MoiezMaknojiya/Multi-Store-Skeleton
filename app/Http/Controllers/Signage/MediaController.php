@@ -17,9 +17,12 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MediaController extends Controller
 {
@@ -151,6 +154,35 @@ class MediaController extends Controller
             // How much lighter the picture was made, for the uploader to say.
             'lighter' => $media->size < $uploaded ? ['from' => $uploaded, 'to' => $media->size] : null,
         ]);
+    }
+
+    /**
+     * A file of the library, to keep (a customer who had lost their own copy, 2026-11-06): as it is kept, which is what
+     * the screens play (a picture made lighter on its way in, a video bigger than 1080p made 1080p), under its title. A
+     * file outside the library the person works in is not there for them (404), and an Ad Builder page is the Ad
+     * Builder's, as it is for renaming and deleting.
+     */
+    public function download(Media $media): StreamedResponse
+    {
+        $media = Media::visibleTo(auth()->user())->withoutAdPages()->findOrFail($media->id);
+        $disk = Storage::disk($media->disk ?: 'public');
+        abort_unless($disk->exists($media->path), 404);
+
+        return $disk->download($media->path, $this->downloadName($media));
+    }
+
+    /**
+     * A name a computer takes: the title without what no file name may hold, and the kept file's own ending, which a
+     * title's own (a picture uploaded as .jpg and kept as .webp) gives way to.
+     */
+    private function downloadName(Media $media): string
+    {
+        $extension = strtolower(pathinfo($media->path, PATHINFO_EXTENSION));
+        $title = preg_replace('/[\x00-\x1F\x7F\/\\\\:*?"<>|]+/u', '-', $media->title) ?? '';
+        $title = preg_replace('/\.(jpe?g|png|gif|webp|mp4|webm)$/i', '', trim($title, ' .-')) ?? '';
+        $title = Str::limit($title !== '' ? $title : 'file', 200, '');
+
+        return $extension !== '' ? "{$title}.{$extension}" : $title;
     }
 
     /** Rename a file, describe it, or set its schedule window. */

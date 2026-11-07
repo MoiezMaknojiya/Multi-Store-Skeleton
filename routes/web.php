@@ -286,6 +286,8 @@ Route::middleware(['auth', 'verified', 'organization.active', 'throttle:admin'])
         Route::get('/', [MediaController::class, 'index'])->middleware('can:media-view')->name('media.view');
         // Get Paginated Media Data (AJAX)
         Route::get('/data', [MediaController::class, 'data'])->middleware('can:media-view')->name('media.data');
+        // Download A File, as it is kept (whoever may see the library may keep a copy)
+        Route::get('/{media}/download', [MediaController::class, 'download'])->middleware('can:media-view')->name('media.download');
         // Upload A New File (multipart)
         Route::post('/', [MediaController::class, 'store'])->middleware('can:media-store')->name('media.store');
         // Update Title / Description / Schedule

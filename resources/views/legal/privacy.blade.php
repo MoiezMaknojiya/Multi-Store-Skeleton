@@ -3,7 +3,7 @@
 <x-document-layout title="Privacy Policy">
     <h1 class="text-3xl font-bold text-gray-800 dark:text-white">Privacy Policy</h1>
     <p class="mt-2 text-sm text-gray-500 dark:text-gray-400" dusk="privacy-updated">
-        Last updated <time datetime="2026-11-05">November 5, 2026</time>
+        Last updated <time datetime="2026-11-06">November 6, 2026</time>
     </p>
 
     <p class="mt-6 leading-relaxed text-gray-700 dark:text-gray-300">
@@ -122,6 +122,9 @@
     <x-legal.section id="your-choices" title="Your choices">
         <ul>
             <li>Correct your name, phone number and email address in the dashboard, under Settings, Profile.</li>
+            <li><strong>Download your files:</strong> any picture or video of your organization's Media library, with
+                Download on its row, as we keep it: a picture made lighter when it was uploaded, a video bigger than 1080p
+                made 1080p.</li>
             <li><strong>Delete your account:</strong> sign in at {{ parse_url(config('app.url'), PHP_URL_HOST) }}, open
                 Settings, Profile, choose Delete Account and confirm with your password. What you made stays with your
                 organization, and past entries of its activity log keep the name and email address they were written with.</li>
