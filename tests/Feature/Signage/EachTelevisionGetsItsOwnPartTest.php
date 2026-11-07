@@ -84,6 +84,6 @@ it('sends every television the same player, the Samsung part only as a chunk it 
     $source = (string) file_get_contents(base_path('resources/js/player.js'));
     expect($source)
         ->toContain('const ON_A_SAMSUNG_TV = /\bTizen\b/i.test(navigator.userAgent);')
-        ->toContain("if (ON_A_SAMSUNG_TV) {\n    // Its RETURN asks before it closes the app, and it empties a page's frame its own way (player/samsung.js).\n    import('./player/samsung.js')")
+        ->toContain("    : ON_A_SAMSUNG_TV ? import('./player/samsung.js').then((samsung) => samsung.startOnASamsungTv(own)) : null;")
         ->not->toMatch('~^\s*import\s[^(]*(samsung|exit-question)~m');
 });

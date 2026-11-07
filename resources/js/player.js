@@ -106,7 +106,7 @@ const el = (id) => document.getElementById(id);
 // way it puts into `own`; anywhere else it is done as written here.
 const ON_A_SAMSUNG_TV = /\bTizen\b/i.test(navigator.userAgent);
 const ON_A_FIRE_TV = /\bAFT/.test(navigator.userAgent);
-const OWN_PART_WAIT_MS = 3000;      // the most the first item waits for a Fire TV's own part
+const OWN_PART_WAIT_MS = 3000;      // the most the first item waits for the set's own part
 const own = {
     /** A page's frame emptied for a break. */
     emptyFrame(frame) {
@@ -114,12 +114,16 @@ const own = {
     },
     /** A video that may stop before its first frame with nothing said, watched: `giveUp` once it has. */
     watchFirstFrame() {},
+    /** A set that plays one video at a time whatever its videos' size (oneAtATime). */
+    oneVideoAtATime: false,
 };
-// A Fire TV's own part watches every video's first frame, so it is in before the first one is made (refreshPlaylist).
-let ownPartIn = !ON_A_FIRE_TV;
+// The set's own part decides how its first video is made (a Samsung TV's one at a time, a Fire TV's watched first
+// frame), so it is in before the first one is (refreshPlaylist).
+let ownPartIn = !ON_A_FIRE_TV && !ON_A_SAMSUNG_TV;
 const ownPartLoading = ON_A_FIRE_TV
-    ? import('./player/fire-tv.js').then((fireTv) => fireTv.startOnAFireTv(own)).catch(() => {}).then(() => { ownPartIn = true; })
-    : null;
+    ? import('./player/fire-tv.js').then((fireTv) => fireTv.startOnAFireTv(own))
+    : ON_A_SAMSUNG_TV ? import('./player/samsung.js').then((samsung) => samsung.startOnASamsungTv(own)) : null;
+if (ownPartLoading) ownPartLoading.catch(() => {}).then(() => { ownPartIn = true; });
 
 /**
  * Which route through the panel this television should be sent down.
@@ -1516,7 +1520,7 @@ function pixelsOf(node) {
 
 /** Whether `item` (a video, or none for a page's own) must wait for `onStage` to let its decoders go. */
 function oneAtATime(item, onStage) {
-    return state.oneDecoder || itemPixels(item) > BIG_VIDEO_PIXELS || onStage.some((node) => pixelsOf(node) > BIG_VIDEO_PIXELS);
+    return state.oneDecoder || own.oneVideoAtATime || itemPixels(item) > BIG_VIDEO_PIXELS || onStage.some((node) => pixelsOf(node) > BIG_VIDEO_PIXELS);
 }
 
 /** Whether `item` may be made ready behind the stage now (prepare, prepareAd): anything but a video waiting its turn. */
@@ -2299,10 +2303,6 @@ function showError(message) {
 
 /* ── Boot ──────────────────────────────────────────────────────────────── */
 
-if (ON_A_SAMSUNG_TV) {
-    // Its RETURN asks before it closes the app, and it empties a page's frame its own way (player/samsung.js).
-    import('./player/samsung.js').then((samsung) => samsung.startOnASamsungTv(own)).catch(() => {});
-}
 registerWorker();
 
 if (state.token) {

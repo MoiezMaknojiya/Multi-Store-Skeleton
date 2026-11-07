@@ -163,6 +163,35 @@ class OneDecoderAtATimeTest extends DuskTestCase
         });
     }
 
+    public function test_a_samsung_tv_plays_one_video_at_a_time_from_its_first_video(): void
+    {
+        // A Samsung TV gives a web page one video decoder: on the TV 10.0 emulator a video made ready behind the one
+        // playing froze that one at 0.7 s, with no error to learn it from, and every video waited for its backstop. Its
+        // own part says so from the start (player/samsung.js, own.oneVideoAtATime): never two videos, a still between.
+        [$organization, $screen] = $this->screen('samsung-one-token');
+        $this->video($organization, $screen, 'portrait-red-top-2s.mp4', 0, 2);
+        $this->video($organization, $screen, 'portrait-red-top.mp4', 1, 4);
+
+        $this->browse(function (Browser $tv) {
+            $this->watch($tv);
+            $this->playAsASamsungTv($tv);
+            $this->startTheSet($tv, 'samsung-one-token');
+
+            $tv->waitUntil('window.__decoders.ended.length >= 4', 60, 'the videos never ended four times');
+            $g = $tv->script('return window.__decoders;')[0];
+
+            $this->assertSame(1, $g['mostAtOnce'], 'two videos held a decoder at once on a Samsung TV');
+            $this->assertGreaterThanOrEqual(3, $g['stills'], 'the video before was held as a still at each switch');
+            $this->assertSame(0, $g['emptyAfterStart'], 'the glass was never empty');
+            foreach (array_slice($g['ended'], 0, 3) as $end) {
+                $next = collect($g['playing'])->first(fn (array $play): bool => $play[0] >= $end);
+                $this->assertNotNull($next, 'the next video never played');
+                $this->assertLessThan(2000, $next[0] - $end, 'the next video played '.round($next[0] - $end).' ms after the end');
+            }
+            $this->assertNull($tv->script("return localStorage.getItem('signage.one_decoder');")[0], 'the set had to learn it after all');
+        });
+    }
+
     public function test_a_page_that_fell_while_a_second_video_was_set_up_makes_the_set_decode_one_at_a_time(): void
     {
         // An ELC TV's WebView fell setting the second decoder up, before any error could say so: the page coming back

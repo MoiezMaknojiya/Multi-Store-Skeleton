@@ -239,3 +239,42 @@ must not close at a stray press, so RETURN asks first, on the player and on the 
 - **Not turned: the app's own page.** Its Starting and No internet screens, and their question, know no orientation (the
   player's storage belongs to the server's origin, not the app's), so on a TV hung in portrait they read sideways, as
   they always have. The player itself, where a TV spends its days, turns.
+
+## 9. Every year from 2021, and one video at a time (2026-11-06)
+
+The owner: "tizen per 2021 se leke ab tak sub per test karna ha aur woo sub test karna ha jo hum ne android aur
+firestick per kare".
+
+**The engines** (developer.samsung.com, Web Engine Specifications): 2021 Tizen 6.0 M76, 2022 6.5 M85, 2023 7.0 M94, 2024 8.0
+M108, 2025 9.0 M120, 2026 10.0 M130.
+- Samsung's emulators come only from 7.0. The extension's install of 7.0, 8.0 and 9.0 brought no system image: those years
+  are 32-bit images, and the 10.0 one is 64-bit.
+- So 2021 to 2025 were played in that year's Chromium, a snapshot (Win_x64 664998, 782797, 911519, 1058903, 1217305),
+  as a Samsung TV plays: that year's Tizen user agent and no worker.
+- 2026 was played on the TV 10.0 emulator itself: the app's test copy pointing at the PC (`10.0.2.2`), and its remote.
+- The tools are in storage/app/private/qa/2026-11-06-race-tvs: `samsung-engines.ps1`, `samsung-rounds.sh`,
+  `samsung-exit.sh` and `tizen10-exit.mjs`.
+
+**What was played, as on the Android TV and the Fire TV Stick.** WebM videos in the snapshots, which play no H.264, and
+MP4 on the emulator.
+- Two short videos taking turns (the race).
+- A set told it decodes one video at a time.
+- The whole mix: pictures, videos, two Ad Builder pages, a channel and a break every minute.
+- The first video after a start.
+- The exit question in every orientation over nine kinds of item, Exit at the end, and every Ad Builder page by itself.
+
+**One video at a time: the bug the emulator found.** A Samsung TV gives a web page one video decoder. signageOS and
+Signagelive say so of Tizen, and a Samsung forum post says a page with two videos "worked in the emulator but failed on a
+real TV".
+- On the TV 10.0 emulator, a video made ready behind the one playing froze that one at 0.7 s. There was no error to learn
+  it from, so every video waited for its backstop (0 of 40 ends in 4 minutes).
+- The Samsung part now says so from the start (`own.oneVideoAtATime` in player/samsung.js, which `oneAtATime` asks). The
+  player waits for that part before the first item, as for a Fire TV's.
+- So every video after another is made at the switch, the last picture held as a still for 0.3 to 0.6 s, never black.
+  This is the 4K sets' way.
+- On the emulator: 30 of 30 videos played to their end, and the whole mix ran (27 items, 3 breaks, no error).
+- `OneDecoderAtATimeTest`'s Samsung TV fails on the code before it, with two videos holding a decoder at once.
+
+**Not seen without a real TV.** The player cannot look into an Ad Builder page's frame on a Samsung TV: with no worker it
+plays from the server, in a frame of its own origin. So a page with its own background video, followed by a video, still
+has two videos for a moment. The emulator played it without an error; a real TV must say whether its one decoder does.
